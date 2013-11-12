@@ -596,7 +596,7 @@ gdbsim_target::load (const char *args, int fromtty)
   /* FIXME: We will print two messages on error.
      Need error to either not print anything if passed NULL or need
      another routine that doesn't take any arguments.  */
-  if (sim_load (sim_data->gdbsim_desc, prog, NULL, fromtty) == SIM_RC_FAIL)
+  if (sim_load (sim_data->gdbsim_desc, prog, current_program_space->exec_bfd (), fromtty) == SIM_RC_FAIL)
     error (_("unable to load program"));
 
   /* FIXME: If a load command should reset the targets registers then
