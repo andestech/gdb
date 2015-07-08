@@ -20,6 +20,7 @@
 #ifndef utils_h
 #define utils_h
 
+extern char *get_name (char *name);
 extern int print_name_only (Sym * self);
 extern void print_name (Sym * self);
 

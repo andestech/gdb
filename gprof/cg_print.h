@@ -23,9 +23,13 @@
 #define cg_print_h
 
 extern double print_time;	/* Total of time being printed.  */
+extern unsigned long long print_insn_cnt;
+extern unsigned long long print_cycle_cnt;
 
 extern void cg_print                    (Sym **);
+extern void tl_cg_print                 (Sym **);
 extern void cg_print_index              (void);
+extern void tl_cg_print_index           (void);
 extern void cg_print_file_ordering      (void);
 extern void cg_print_function_ordering  (void);
 

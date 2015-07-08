@@ -52,7 +52,8 @@ typedef struct sym
       is_static:1,		/*  Is this a local (static) symbol?  */
       is_bb_head:1,		/*  Is this the head of a basic-blk?  */
       mapped:1,			/*  This symbol was mapped to another name.  */
-      has_been_placed:1;	/*  Have we placed this symbol?  */
+      has_been_placed:1,	/*  Have we placed this symbol?  */
+      is_unmapped:1;            // IT toggle? 1 - off or 0 - on
     unsigned long ncalls;	/* How many times executed  */
     int nuses;			/* How many times this symbol appears in
 				   a particular context.  */
@@ -67,6 +68,8 @@ typedef struct sym
     struct
       {
 	double time;		/* (Weighted) ticks in this routine.  */
+        unsigned long long total_insn_cnt;
+        unsigned long long total_cycle_cnt;
 	bfd_vma scaled_addr;	/* Scaled entry point.  */
       }
     hist;
@@ -76,6 +79,8 @@ typedef struct sym
       {
 	unsigned long self_calls; /* How many calls to self.  */
 	double child_time;	/* Cumulative ticks in children.  */
+        unsigned long long child_insn_cnt;
+        unsigned long long child_cycle_cnt;
 	int index;		/* Index in the graph list.  */
 	int top_order;		/* Graph call chain top-sort order.  */
 	bfd_boolean print_flag;	/* Should this be printed?  */
@@ -83,7 +88,11 @@ typedef struct sym
 	  {
 	    double fract;	/* What % of time propagates.  */
 	    double self;	/* How much self time propagates.  */
+            unsigned long long self_insn_cnt;
+            unsigned long long self_cycle_cnt;
 	    double child;	/* How much child time propagates.  */
+            unsigned long long child_insn_cnt;
+            unsigned long long child_cycle_cnt;
 	  }
 	prop;
 	struct
@@ -119,5 +128,22 @@ extern Sym *dbg_sym_lookup  (Sym_Table *, bfd_vma);
 #endif
 extern Sym *sym_lookup      (Sym_Table *, bfd_vma);
 extern void find_call       (Sym *, bfd_vma, bfd_vma);
+
+#define SYM_HTSIZE    64
+#define SYM_HTFUNC(a) ((a>>2)%SYM_HTSIZE)
+
+typedef struct Sym_HTEntryT
+{   Sym *sym;
+    struct Sym_HTEntryT *next;
+} Sym_HTEntry;
+
+extern Sym_HTEntry *Sym_HT[SYM_HTSIZE];
+extern int Sym_HTCount;
+
+extern int current_unmapped;
+
+extern void symht_init(void);
+extern Sym *symht_lookup(bfd_vma);
+extern int symht_add(Sym*);
 
 #endif /* symtab_h */
