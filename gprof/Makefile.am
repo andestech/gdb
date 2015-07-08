@@ -43,6 +43,7 @@ bin_PROGRAMS = gprof
 sources = basic_blocks.c call_graph.c cg_arcs.c cg_dfn.c \
 	cg_print.c corefile.c gmon_io.c gprof.c hertz.c hist.c source.c \
 	search_list.c symtab.c sym_ids.c utils.c \
+	prof_io.c timeline.c \
 	i386.c alpha.c vax.c sparc.c mips.c aarch64.c
 gprof_SOURCES = $(sources) flat_bl.c bsd_callg_bl.c fsf_callg_bl.c
 gprof_DEPENDENCIES = ../bfd/libbfd.la ../libiberty/libiberty.a $(LIBINTL_DEP)
@@ -51,7 +52,8 @@ gprof_LDADD = ../bfd/libbfd.la ../libiberty/libiberty.a $(LIBINTL)
 noinst_HEADERS = \
 	basic_blocks.h call_graph.h cg_arcs.h cg_dfn.h cg_print.h \
 	corefile.h gmon.h gmon_io.h gmon_out.h gprof.h hertz.h hist.h \
-	search_list.h source.h sym_ids.h symtab.h utils.h
+	search_list.h source.h sym_ids.h symtab.h utils.h \
+        prof_io.h timeline.h
 
 BUILT_SOURCES = flat_bl.c bsd_callg_bl.c fsf_callg_bl.c
 EXTRA_DIST    = $(BUILT_SOURCES) bbconv.pl $(man_MANS)
