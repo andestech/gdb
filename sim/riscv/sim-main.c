@@ -801,11 +801,12 @@ execute_a (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
   const char *rs1_name = riscv_gpr_names_abi[rs1];
   const char *rs2_name = riscv_gpr_names_abi[rs2];
   struct atomic_mem_reserved_list *amo_prev, *amo_curr;
+  insn_t aqrl_mask = (OP_MASK_AQ << OP_SH_AQ) | (OP_MASK_RL << OP_SH_RL);
   unsigned_word tmp;
   sim_cia pc = cpu->pc + 4;
 
   /* Handle these two load/store operations specifically.  */
-  switch (op->match)
+  switch (op->match & ~aqrl_mask)
     {
     case MATCH_LR_W:
       TRACE_INSN (cpu, "%s %s, (%s);", op->name, rd_name, rs1_name);
@@ -867,15 +868,15 @@ execute_a (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 					       cpu->regs[rs1]));
   store_rd (cpu, rd, tmp);
 
-  switch (op->match)
+  switch (op->match & ~aqrl_mask)
     {
     case MATCH_AMOADD_D:
     case MATCH_AMOADD_W:
-      tmp = cpu->regs[rd] + cpu->regs[rs2];
+      tmp = tmp + cpu->regs[rs2];
       break;
     case MATCH_AMOAND_D:
     case MATCH_AMOAND_W:
-      tmp = cpu->regs[rd] & cpu->regs[rs2];
+      tmp = tmp & cpu->regs[rs2];
       break;
     case MATCH_AMOMAX_D:
     case MATCH_AMOMAX_W:
@@ -895,7 +896,7 @@ execute_a (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
       break;
     case MATCH_AMOOR_D:
     case MATCH_AMOOR_W:
-      tmp = cpu->regs[rd] | cpu->regs[rs2];
+      tmp = tmp | cpu->regs[rs2];
       break;
     case MATCH_AMOSWAP_D:
     case MATCH_AMOSWAP_W:
@@ -903,7 +904,7 @@ execute_a (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
       break;
     case MATCH_AMOXOR_D:
     case MATCH_AMOXOR_W:
-      tmp = cpu->regs[rd] ^ cpu->regs[rs2];
+      tmp = tmp ^ cpu->regs[rs2];
       break;
     default:
       TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
