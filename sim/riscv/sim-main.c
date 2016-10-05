@@ -26,7 +26,8 @@
 
 #include <inttypes.h>
 #include <time.h>
-
+#include <unistd.h>
+#include "sim/callback.h"
 #include "sim-main.h"
 #include "sim-signal.h"
 #include "sim-fpu.h"
@@ -652,6 +653,21 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
   unsigned_word shamt_imm = ((iw >> OP_SH_SHAMT) & OP_MASK_SHAMT);
   unsigned_word tmp;
   sim_cia pc = cpu->pc + 4;
+  host_callback *cb = STATE_CALLBACK (sd);
+  CB_SYSCALL sc;
+
+  CB_SYSCALL_INIT (&sc);
+
+  sc.func = cpu->a7;
+  sc.arg1 = cpu->a0;
+  sc.arg2 = cpu->a1;
+  sc.arg3 = cpu->a2;
+  sc.arg4 = cpu->a3;
+
+  sc.p1 = (PTR) sd;
+  sc.p2 = (PTR) cpu;
+  sc.read_mem = sim_syscall_read_mem;
+  sc.write_mem = sim_syscall_write_mem;
 
   TRACE_EXTRACT (cpu,
 		 "rd:%-2i:%-4s  "
@@ -1081,7 +1097,25 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
       break;
     case MATCH_ECALL:
       TRACE_INSN (cpu, "ecall;");
-      cpu->a0 = sim_syscall (cpu, cpu->a7, cpu->a0, cpu->a1, cpu->a2, cpu->a3);
+      if (cb_target_to_host_syscall (STATE_CALLBACK (sd), cpu->a7) == -1)
+	{
+	  switch (cpu->a7)
+	    {
+	    case TARGET_SYS_link:
+	      {
+		char oldpath[1024], newpath[1024];
+		cb_get_string (cb, &sc, oldpath, sizeof (oldpath), sc.arg1);
+		cb_get_string (cb, &sc, newpath, sizeof (newpath), sc.arg2);
+		cpu->a0 = link (oldpath, newpath);
+		break;
+	      }
+	    default:
+	      cpu->a0 = -1;
+	      break;
+	    }
+	}
+      else
+	cpu->a0 = sim_syscall (cpu, cpu->a7, cpu->a0, cpu->a1, cpu->a2, cpu->a3);
       break;
     default:
       TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
