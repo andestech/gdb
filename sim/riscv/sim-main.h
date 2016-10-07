@@ -113,6 +113,7 @@ struct _sim_cpu {
     };
   };
   sim_cia pc;
+  sim_cia endbrk;
 
   struct {
 #define DECLARE_CSR(name, ...) unsigned_word name;
