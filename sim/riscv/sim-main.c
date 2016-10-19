@@ -271,7 +271,8 @@ execute_d (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
       goto done;
     case MATCH_FCVT_WU_D:
       sim_fpu_to32u (&u32, &sfa, rounding);
-      cpu->regs[rd] = u32;
+      i32 = u32;
+      cpu->regs[rd] = i32;
       goto done;
     case MATCH_FCVT_D_W:
       sim_fpu_i32to (&sft, cpu->regs[rs1], rounding);
@@ -520,7 +521,8 @@ execute_f (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
       goto done;
     case MATCH_FCVT_WU_S:
       sim_fpu_to32u (&u32, &sfa, rounding);
-      cpu->regs[rd] = u32;
+      i32 = u32;
+      cpu->regs[rd] = i32;
       goto done;
     case MATCH_FCVT_S_W:
       sim_fpu_i32to (&sft, cpu->regs[rs1], rounding);
