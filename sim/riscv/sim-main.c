@@ -335,12 +335,16 @@ execute_d (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
       cpu->fpregs[rd].w[0] = cpu->fpregs[rs1].w[0];
       break;
     case MATCH_FMIN_D:
-      sim_fpu_min (&sft, &sfa, &sfb);
-      sim_fpu_to64 (&cpu->fpregs[rd].v[0], &sft);
+      if (cpu->fpregs[rs1].D[0] < cpu->fpregs[rs2].D[0])
+        cpu->fpregs[rd].D[0] = cpu->fpregs[rs1].D[0];
+      else
+        cpu->fpregs[rd].D[0] = cpu->fpregs[rs2].D[0];
       break;
     case MATCH_FMAX_D:
-      sim_fpu_max (&sft, &sfa, &sfb);
-      sim_fpu_to64 (&cpu->fpregs[rd].v[0], &sft);
+      if (cpu->fpregs[rs1].D[0] > cpu->fpregs[rs2].D[0])
+        cpu->fpregs[rd].D[0] = cpu->fpregs[rs1].D[0];
+      else
+        cpu->fpregs[rd].D[0] = cpu->fpregs[rs2].D[0];
       break;
     case MATCH_FMV_X_D:
       cpu->regs[rd] = cpu->fpregs[rs1].v[0];
@@ -569,12 +573,16 @@ execute_f (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
       cpu->fpregs[rd].w[0] = u32;
       break;
     case MATCH_FMIN_S:
-      sim_fpu_min (&sft, &sfa, &sfb);
-      sim_fpu_to32 (&cpu->fpregs[rd].w[0], &sft);
+      if (cpu->fpregs[rs1].S[0] < cpu->fpregs[rs2].S[0])
+        cpu->fpregs[rd].S[0] = cpu->fpregs[rs1].S[0];
+      else
+        cpu->fpregs[rd].S[0] = cpu->fpregs[rs2].S[0];
       break;
     case MATCH_FMAX_S:
-      sim_fpu_max (&sft, &sfa, &sfb);
-      sim_fpu_to32 (&cpu->fpregs[rd].w[0], &sft);
+      if (cpu->fpregs[rs1].S[0] > cpu->fpregs[rs2].S[0])
+        cpu->fpregs[rd].S[0] = cpu->fpregs[rs1].S[0];
+      else
+        cpu->fpregs[rd].S[0] = cpu->fpregs[rs2].S[0];
       break;
     case MATCH_FMV_X_S:
       cpu->regs[rd] = cpu->fpregs[rs1].W[0];
