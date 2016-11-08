@@ -1369,6 +1369,7 @@ execute_a (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
   struct atomic_mem_reserved_list *amo_prev, *amo_curr;
   insn_t aqrl_mask = (OP_MASK_AQ << OP_SH_AQ) | (OP_MASK_RL << OP_SH_RL);
   unsigned_word tmp;
+  unsigned_word rs2_val = cpu->regs[rs2];
   sim_cia pc = cpu->pc + 4;
 
   /* Handle these two load/store operations specifically.  */
@@ -1466,7 +1467,7 @@ execute_a (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
       break;
     case MATCH_AMOSWAP_D:
     case MATCH_AMOSWAP_W:
-      tmp = cpu->regs[rs2];
+      tmp = rs2_val;
       break;
     case MATCH_AMOXOR_D:
     case MATCH_AMOXOR_W:
