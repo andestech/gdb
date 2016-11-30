@@ -1533,17 +1533,12 @@ void step_once (SIM_CPU *cpu)
 
   iw = sim_core_read_aligned_2 (cpu, pc, exec_map, pc);
 
-  /* Reject non-32-bit opcodes first.  */
   len = riscv_insn_length (iw);
-  if (len != 4)
-    {
-      sim_io_printf (sd, "sim: bad insn len %#x @ %#" PRIxTA ": %#" PRIxTW "\n",
-		     len, pc, iw);
-      sim_engine_halt (sd, cpu, NULL, pc, sim_signalled, SIM_SIGILL);
-    }
 
-  iw |= ((unsigned_word) sim_core_read_aligned_2 (
-    cpu, pc, exec_map, pc + 2) << 16);
+  if (len == 4)
+    iw |= ((unsigned_word)sim_core_read_aligned_2 (cpu, pc, exec_map, pc + 2) << 16);
+  else
+    iw |= ((unsigned_word)sim_core_read_aligned_2 (cpu, pc, exec_map, pc));
 
   TRACE_CORE (cpu, "0x%08" PRIxTW, iw);
 
