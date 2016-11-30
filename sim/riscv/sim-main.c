@@ -1517,6 +1517,7 @@ void step_once (SIM_CPU *cpu)
   unsigned int len;
   sim_cia pc = cpu->pc;
   const struct riscv_opcode *op;
+  int xlen = RISCV_XLEN (cpu);
 
   if (TRACE_ANY_P (cpu))
     trace_prefix (sd, cpu, NULL_CIA, pc, TRACE_LINENUM_P (cpu),
@@ -1524,16 +1525,12 @@ void step_once (SIM_CPU *cpu)
 
   iw = sim_core_read_aligned_2 (cpu, pc, exec_map, pc);
 
-  /* Reject non-32-bit opcodes first.  */
   len = riscv_insn_length (iw);
-  if (len != 4)
-    {
-      sim_io_printf (sd, "sim: bad insn len %#x @ %#"PRIxTA": %#"PRIxTW"\n",
-		     len, pc, iw);
-      sim_engine_halt (sd, cpu, NULL, pc, sim_signalled, SIM_SIGILL);
-    }
 
-  iw |= ((unsigned_word)sim_core_read_aligned_2 (cpu, pc, exec_map, pc + 2) << 16);
+  if (len == 4)
+    iw |= ((unsigned_word)sim_core_read_aligned_2 (cpu, pc, exec_map, pc + 2) << 16);
+  else
+    iw |= ((unsigned_word)sim_core_read_aligned_2 (cpu, pc, exec_map, pc));
 
   TRACE_CORE (cpu, "0x%08"PRIxTW, iw);
 
@@ -1542,11 +1539,17 @@ void step_once (SIM_CPU *cpu)
     sim_engine_halt (sd, cpu, NULL, pc, sim_signalled, SIM_SIGILL);
 
   for (; op->name; op++)
-    if ((op->match_func) (op, iw) && !(op->pinfo & INSN_ALIAS))
-      {
-	pc = execute_one (cpu, iw, op);
-	break;
-      }
+    {
+      /* Is this instruction restricted to a certain value of XLEN?  */
+      if (isdigit (op->subset[0]) && atoi (op->subset) != xlen)
+	continue;
+
+      if ((op->match_func) (op, iw) && !(op->pinfo & INSN_ALIAS))
+	{
+	  pc = execute_one (cpu, iw, op);
+	  break;
+	}
+    }
 
   /* TODO: Handle overflow into high 32 bits.  */
   /* TODO: Try to use a common counter and only update on demand (reads).  */
