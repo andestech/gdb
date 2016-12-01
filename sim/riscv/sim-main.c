@@ -1865,9 +1865,18 @@ void step_once (SIM_CPU *cpu)
 
   for (; op->name; op++)
     {
+      /* Does the opcode match?  */
+      if (!(op->match_func) (op, iw))
+	continue;
+      /* Is this a pseudo-instruction?  */
+      if ((op->pinfo & INSN_ALIAS))
+	continue;
       /* Is this instruction restricted to a certain value of XLEN?  */
       if (isdigit (op->subset[0]) && atoi (op->subset) != xlen)
 	continue;
+      /* It's a match.  */
+      pc = execute_one (cpu, iw, op);
+      break;
 
       if ((op->match_func) (op, iw) && !(op->pinfo & INSN_ALIAS))
 	{
