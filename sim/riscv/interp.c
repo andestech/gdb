@@ -65,6 +65,8 @@ sim_open (SIM_OPEN_KIND kind, host_callback *callback,
 {
   char c;
   int i;
+  unsigned long elf_flags = 0;
+  bfd *prog_bfd = NULL;
   SIM_DESC sd = sim_state_alloc_extra (kind, callback,
 				       sizeof (struct riscv_sim_state));
 
@@ -118,10 +120,16 @@ sim_open (SIM_OPEN_KIND kind, host_callback *callback,
       return 0;
     }
 
+  /* Store elf flags.  */
+  prog_bfd = STATE_PROG_BFD (sd);
+  if (prog_bfd != NULL)
+    elf_flags = elf_elfheader (prog_bfd)->e_flags;
+
   /* CPU specific initialization.  */
   for (i = 0; i < MAX_NR_PROCESSORS; ++i)
     {
       SIM_CPU *cpu = STATE_CPU (sd, i);
+      CPU_ELF_FLAGS (cpu) = elf_flags;
 
       initialize_cpu (sd, cpu, i);
     }

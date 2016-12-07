@@ -1006,13 +1006,19 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
   unsigned_word sb_imm = EXTRACT_BTYPE_IMM (iw);
   unsigned_word shamt_imm = ((iw >> OP_SH_SHAMT) & OP_MASK_SHAMT);
   unsigned_word tmp;
+  unsigned_word sys_id;
+  int eh_rve_p = cpu->elf_flags & 0x8;
   sim_cia pc = cpu->pc + 4;
   host_callback *cb = STATE_CALLBACK (sd);
   CB_SYSCALL sc;
 
   CB_SYSCALL_INIT (&sc);
 
-  sc.func = cpu->a7;
+  if (eh_rve_p)
+    sc.func = cpu->a5;
+  else
+    sc.func = cpu->a7;
+
   sc.arg1 = cpu->a0;
   sc.arg2 = cpu->a1;
   sc.arg3 = cpu->a2;
@@ -1451,9 +1457,14 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
       break;
     case MATCH_ECALL:
       TRACE_INSN (cpu, "ecall;");
-      if (cb_target_to_host_syscall (STATE_CALLBACK (sd), cpu->a7) == -1)
+      if (eh_rve_p)
+	sys_id = cpu->a5;
+      else
+	sys_id = cpu->a7;
+
+      if (cb_target_to_host_syscall (STATE_CALLBACK (sd), sys_id) == -1)
 	{
-	  switch (cpu->a7)
+	  switch (sys_id)
 	    {
 	    case TARGET_SYS_link:
 	      {
@@ -1473,13 +1484,13 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 		break;
 	      }
 	    default:
-	      cpu->a0 = sim_syscall (cpu, cpu->a7, cpu->a0,
+	      cpu->a0 = sim_syscall (cpu, sys_id, cpu->a0,
 				     cpu->a1, cpu->a2, cpu->a3);
 	      break;
 	    }
 	}
       else
-	cpu->a0 = sim_syscall (cpu, cpu->a7, cpu->a0, cpu->a1, cpu->a2, cpu->a3);
+	cpu->a0 = sim_syscall (cpu, sys_id, cpu->a0, cpu->a1, cpu->a2, cpu->a3);
       break;
     default:
       TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);

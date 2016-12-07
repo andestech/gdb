@@ -114,6 +114,8 @@ struct _sim_cpu {
   };
   sim_cia pc;
   sim_cia endbrk;
+  unsigned long elf_flags;
+#define CPU_ELF_FLAGS(cpu) ((cpu)->elf_flags)
 
   struct {
 #define DECLARE_CSR(name, ...) unsigned_word name;
