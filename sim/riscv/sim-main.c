@@ -1015,7 +1015,7 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
   CB_SYSCALL_INIT (&sc);
 
   if (eh_rve_p)
-    sc.func = cpu->a5;
+    sc.func = cpu->t0;
   else
     sc.func = cpu->a7;
 
