@@ -1458,7 +1458,7 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
     case MATCH_ECALL:
       TRACE_INSN (cpu, "ecall;");
       if (eh_rve_p)
-	sys_id = cpu->a5;
+	sys_id = cpu->t0;
       else
 	sys_id = cpu->a7;
 
