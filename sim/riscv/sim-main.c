@@ -1290,8 +1290,8 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
       break;
     case MATCH_JALR:
       TRACE_INSN (cpu, "jalr %s, %s, %" PRIiTW ";", rd_name, rs1_name, i_imm);
-      store_rd (cpu, rd, cpu->pc + 4);
       pc = cpu->regs[rs1] + i_imm;
+      store_rd (cpu, rd, cpu->pc + 4);
       TRACE_BRANCH (cpu, "to %#" PRIxTW, pc);
       break;
 
