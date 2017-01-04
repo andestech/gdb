@@ -28,6 +28,7 @@
 #include <time.h>
 #include <unistd.h>
 #include "sim/callback.h"
+#include <sys/time.h>
 #include "sim-main.h"
 #include "sim-signal.h"
 #include "sim-fpu.h"
@@ -1481,6 +1482,20 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 		  cpu->a0 = cpu->endbrk;
 		else
 		  cpu->endbrk = cpu->a0;
+		break;
+	      }
+	    case TARGET_SYS_gettimeofday:
+	      {
+		int rv;
+		struct timeval tv;
+
+		rv = gettimeofday (&tv, 0);
+		sim_core_write_unaligned_4 (cpu, cpu->pc, write_map,
+					    cpu->a0, tv.tv_sec);
+		sim_core_write_unaligned_4 (cpu, cpu->pc, write_map,
+					    cpu->a0 + RISCV_XLEN (cpu),
+					    tv.tv_usec);
+		cpu->a0 = rv;
 		break;
 	      }
 	    default:
