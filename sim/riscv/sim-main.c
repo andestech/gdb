@@ -1490,6 +1490,16 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	  TRACE_BRANCH (cpu, "to %#"PRIxTW, pc);
 	}
       break;
+    case MATCH_CMOVZ:
+      TRACE_INSN (cpu, "cmovz");
+      if (cpu->regs[rs2] == 0)
+	store_rd (cpu, rd, cpu->regs[rs1]);
+      break;
+    case MATCH_CMOVN:
+      TRACE_INSN (cpu, "cmovn");
+      if (cpu->regs[rs2] != 0)
+	store_rd (cpu, rd, cpu->regs[rs1]);
+      break;
     case MATCH_CSRRC:
       TRACE_INSN (cpu, "csrrc");
       switch (csr)
