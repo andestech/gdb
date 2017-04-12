@@ -1220,7 +1220,9 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
   unsigned_word u_imm = EXTRACT_UTYPE_IMM ((unsigned64) iw);
   unsigned_word s_imm = EXTRACT_STYPE_IMM (iw);
   unsigned_word sb_imm = EXTRACT_SBTYPE_IMM (iw);
-  unsigned_word beqc_imm = EXTRACT_SBTYPE_SIMM5 (iw);
+  unsigned_word beqc_imm = EXTRACT_STYPE_SIMM7(iw);
+  unsigned_word sb10_imm = EXTRACT_STYPE_IMM10(iw);
+
   unsigned_word immr = EXTRACT_ITYPE_IMM6H (iw);
   unsigned_word imms = EXTRACT_ITYPE_IMM6L (iw);
   unsigned_word shamt_imm = ((iw >> OP_SH_SHAMT) & OP_MASK_SHAMT);
@@ -1663,19 +1665,19 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_BEQC:
       TRACE_INSN (cpu, "beqc %s, %s, %#"PRIxTW";  // if (%s == %s) goto %#"PRIxTW,
-		  rs1_name, beqc_imm, sb_imm, rs1_name, beqc_imm, sb_imm);
+		  rs1_name, beqc_imm, sb10_imm, rs1_name, beqc_imm, sb10_imm);
       if (cpu->regs[rs1] == beqc_imm)
 	{
-	  pc = cpu->pc + sb_imm;
+	  pc = cpu->pc + sb10_imm;
 	  TRACE_BRANCH (cpu, "to %#"PRIxTW, pc);
 	}
       break;
     case MATCH_BNEC:
       TRACE_INSN (cpu, "bnec %s, %s, %#"PRIxTW";  // if (%s == %s) goto %#"PRIxTW,
-		  rs1_name, beqc_imm, sb_imm, rs1_name, beqc_imm, sb_imm);
+		  rs1_name, beqc_imm, sb10_imm, rs1_name, beqc_imm, sb10_imm);
       if (cpu->regs[rs1] != beqc_imm)
 	{
-	  pc = cpu->pc + sb_imm;
+	  pc = cpu->pc + sb10_imm;
 	  TRACE_BRANCH (cpu, "to %#"PRIxTW, pc);
 	}
       break;
