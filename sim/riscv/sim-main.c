@@ -1712,6 +1712,15 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       else
 	sbfm64 (cpu, rd, rs1, immr, imms);
       break;
+    case MATCH_BSET:
+      store_rd (cpu, rd, cpu->regs[rs1] | (1 << immr));
+      break;
+    case MATCH_BCLR:
+      store_rd (cpu, rd, cpu->regs[rs1] & ~(1 << immr));
+      break;
+    case MATCH_BTGL:
+      store_rd (cpu, rd, cpu->regs[rs1] ^ (1 << immr));
+      break;
     case MATCH_CSRRC:
       TRACE_INSN (cpu, "csrrc");
       switch (csr)
