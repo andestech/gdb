@@ -1721,6 +1721,22 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_BTGL:
       store_rd (cpu, rd, cpu->regs[rs1] ^ (1 << immr));
       break;
+    case MATCH_TBZ:
+      TRACE_INSN (cpu, "tbz");
+      if (!(cpu->regs[rs1] & (((uint64_t) 1) << immr)))
+	{
+	  pc = cpu->pc + sb10_imm;
+	  TRACE_BRANCH (cpu, "to %#"PRIxTW, pc);
+	}
+      break;
+    case MATCH_TBNZ:
+      TRACE_INSN (cpu, "tbz");
+      if (cpu->regs[rs1] & (((uint64_t) 1) << immr))
+	{
+	  pc = cpu->pc + sb10_imm;
+	  TRACE_BRANCH (cpu, "to %#"PRIxTW, pc);
+	}
+      break;
     case MATCH_CSRRC:
       TRACE_INSN (cpu, "csrrc");
       switch (csr)
