@@ -1442,7 +1442,7 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_BEQ:
       TRACE_INSN (cpu, "beq %s, %s, %#"PRIxTW";  // if (%s == %s) goto %#"PRIxTW,
-		  rs1_name, rs2_name, sb_imm, rs1_name, rs2_name, sb_imm);
+		  rs1_name, rs2_name, sb_imm, rs1_name, rs2_name, cpu->pc + sb_imm);
       if (cpu->regs[rs1] == cpu->regs[rs2])
 	{
 	  pc = cpu->pc + sb_imm;
@@ -1451,7 +1451,7 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_BLT:
       TRACE_INSN (cpu, "blt %s, %s, %#"PRIxTW";  // if (%s < %s) goto %#"PRIxTW,
-		  rs1_name, rs2_name, sb_imm, rs1_name, rs2_name, sb_imm);
+		  rs1_name, rs2_name, sb_imm, rs1_name, rs2_name, cpu->pc + sb_imm);
       if ((signed_word)cpu->regs[rs1] < (signed_word)cpu->regs[rs2])
 	{
 	  pc = cpu->pc + sb_imm;
@@ -1460,7 +1460,7 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_BLTU:
       TRACE_INSN (cpu, "bltu %s, %s, %#"PRIxTW";  // if (%s < %s) goto %#"PRIxTW,
-		  rs1_name, rs2_name, sb_imm, rs1_name, rs2_name, sb_imm);
+		  rs1_name, rs2_name, sb_imm, rs1_name, rs2_name, cpu->pc + sb_imm);
       if ((unsigned_word)cpu->regs[rs1] < (unsigned_word)cpu->regs[rs2])
 	{
 	  pc = cpu->pc + sb_imm;
@@ -1469,7 +1469,7 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_BGE:
       TRACE_INSN (cpu, "bge %s, %s, %#"PRIxTW";  // if (%s >= %s) goto %#"PRIxTW,
-		  rs1_name, rs2_name, sb_imm, rs1_name, rs2_name, sb_imm);
+		  rs1_name, rs2_name, sb_imm, rs1_name, rs2_name, cpu->pc + sb_imm);
       if ((signed_word)cpu->regs[rs1] >= (signed_word)cpu->regs[rs2])
 	{
 	  pc = cpu->pc + sb_imm;
@@ -1478,7 +1478,7 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_BGEU:
       TRACE_INSN (cpu, "bgeu %s, %s, %#"PRIxTW";  // if (%s >= %s) goto %#"PRIxTW,
-		  rs1_name, rs2_name, sb_imm, rs1_name, rs2_name, sb_imm);
+		  rs1_name, rs2_name, sb_imm, rs1_name, rs2_name, cpu->pc + sb_imm);
       if ((unsigned_word)cpu->regs[rs1] >= (unsigned_word)cpu->regs[rs2])
 	{
 	  pc = cpu->pc + sb_imm;
@@ -1487,7 +1487,7 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_BNE:
       TRACE_INSN (cpu, "bne %s, %s, %#"PRIxTW";  // if (%s != %s) goto %#"PRIxTW,
-		  rs1_name, rs2_name, sb_imm, rs1_name, rs2_name, sb_imm);
+		  rs1_name, rs2_name, sb_imm, rs1_name, rs2_name, cpu->pc + sb_imm);
       if (cpu->regs[rs1] != cpu->regs[rs2])
 	{
 	  pc = cpu->pc + sb_imm;
