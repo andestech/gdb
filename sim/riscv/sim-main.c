@@ -1664,7 +1664,7 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       store_rd (cpu, rs1, cpu->regs[rs1] + 1);
       break;
     case MATCH_BEQC:
-      TRACE_INSN (cpu, "beqc %s, %s, %#"PRIxTW";  // if (%s == %s) goto %#"PRIxTW,
+      TRACE_INSN (cpu, "beqc %s, %d, %#"PRIxTW";  // if (%s == %d) goto %#"PRIxTW,
 		  rs1_name, beqc_imm, sb10_imm, rs1_name, beqc_imm, sb10_imm);
       if (cpu->regs[rs1] == beqc_imm)
 	{
@@ -1673,7 +1673,7 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	}
       break;
     case MATCH_BNEC:
-      TRACE_INSN (cpu, "bnec %s, %s, %#"PRIxTW";  // if (%s == %s) goto %#"PRIxTW,
+      TRACE_INSN (cpu, "bnec %s, %d, %#"PRIxTW";  // if (%s == %d) goto %#"PRIxTW,
 		  rs1_name, beqc_imm, sb10_imm, rs1_name, beqc_imm, sb10_imm);
       if (cpu->regs[rs1] != beqc_imm)
 	{
