@@ -1722,7 +1722,8 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       store_rd (cpu, rd, cpu->regs[rs1] ^ (1 << immr));
       break;
     case MATCH_TBZ:
-      TRACE_INSN (cpu, "tbz");
+      TRACE_INSN (cpu, "tbz %s, %d, %#"PRIxTW";  // if (!(%s & (1 << %d))) goto %#"PRIxTW,
+		  rs1_name, immr, sb10_imm, rs1_name, immr, cpu->pc + sb10_imm);
       if (!(cpu->regs[rs1] & (((uint64_t) 1) << immr)))
 	{
 	  pc = cpu->pc + sb10_imm;
@@ -1730,7 +1731,8 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	}
       break;
     case MATCH_TBNZ:
-      TRACE_INSN (cpu, "tbz");
+      TRACE_INSN (cpu, "tbnz %s, %d, %#"PRIxTW";  // if (%s & (1 << %d)) goto %#"PRIxTW,
+		  rs1_name, immr, sb10_imm, rs1_name, immr, cpu->pc + sb10_imm);
       if (cpu->regs[rs1] & (((uint64_t) 1) << immr))
 	{
 	  pc = cpu->pc + sb10_imm;
