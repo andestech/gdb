@@ -313,7 +313,7 @@ bfm32 (sim_cpu *cpu, int rd, int rs1, uint32_t r, uint32_t s)
 static void
 bfm64 (sim_cpu *cpu, int rd, int rs1, uint32_t r, uint32_t s)
 {
-  uint32_t value = cpu->regs[rs1];
+  uint64_t value = cpu->regs[rs1];
   uint64_t mask = 0xffffffffffffffffULL;
 
   if (r <= s)
