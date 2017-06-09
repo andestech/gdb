@@ -1964,9 +1964,14 @@ void step_once (SIM_CPU *cpu)
 	}
     }
 
-  /* TODO: Handle overflow into high 32 bits.  */
   /* TODO: Try to use a common counter and only update on demand (reads).  */
   ++cpu->csr.cycle;
+  ++cpu->csr.mcycle;
+  if (RISCV_XLEN (cpu) == 32)
+    {
+      cpu->csr.cycleh = (cpu->csr.cycle >> 32);
+      cpu->csr.mcycleh = (cpu->csr.mcycle >> 32);
+    }
   ++cpu->csr.instret;
 
   cpu->pc = pc;
