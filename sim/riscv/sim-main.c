@@ -837,6 +837,15 @@ execute_c (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 	  store_rd (cpu, rd, rvc_imm);
 	  return pc;
 	case MATCH_C_ADDI16SP:
+	  {
+	    int eh_rve_p = cpu->elf_flags & 0x8;
+	    if (!eh_rve_p &&(cpu->sp & 0xf) != 0)
+	      {
+		fprintf (stderr, "Stack point not align to 16 byte.\n");
+		sim_engine_halt (sd, cpu, NULL, cpu->pc,
+				 sim_signalled, SIM_SIGILL);
+	      }
+	  }
 	  store_rd (cpu, rd, cpu->sp + EXTRACT_CITYPE_ADDI16SP_IMM (iw));
 	  return pc;
 	case MATCH_C_SRLI:
@@ -1054,7 +1063,17 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
       store_rd (cpu, rd, EXTEND32 (cpu->regs[rs1] + cpu->regs[rs2]));
       break;
     case MATCH_ADDI:
-      TRACE_INSN (cpu, "addi %s, %s, %#" PRIxTW ";  // %s = %s + %#" PRIxTW,
+      {
+	int eh_rve_p = cpu->elf_flags & 0x8;
+	if (!eh_rve_p && rd == 2 && ((cpu->regs[rs1] + i_imm) & 0xf) != 0)
+	  {
+	    fprintf (stderr, "Stack point not align to 16 byte.\n");
+	    sim_engine_halt (sd, cpu, NULL, cpu->pc,
+			     sim_signalled, SIM_SIGILL);
+	  }
+      }
+
+      TRACE_INSN (cpu, "addi %s, %s, %#" PRIxTW ";  // %s = %s + %#"PRIxTW,
 		  rd_name, rs1_name, i_imm, rd_name, rs1_name, i_imm);
       store_rd (cpu, rd, cpu->regs[rs1] + i_imm);
       break;
