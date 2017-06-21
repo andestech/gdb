@@ -1205,6 +1205,179 @@ execute_c (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
   return pc;
 }
 
+/* The RV32 lsmw instruction access register order is
+   tp, sp, gp, ra, s0-s11, a0-a7, t0-t6.  */
+static const int lsmw_rv_order[] =
+{
+  0,  4,  2,  3,  1,  8,  9, 18,
+  19, 20, 21, 22, 23, 24, 25, 26,
+  27, 10, 11, 12, 13, 14, 15, 16,
+  17,  5,  6,  7, 28, 29, 31
+};
+
+/* The RV32 lsmw instruction access register order is
+   tp, sp, gp, ra, s0-s1, a0-a5, t0-t2.  */
+static const int lsmw_rve_order[] =
+{
+  0,  4,  2,  3,  1, 8, 9, 10,
+  11, 12, 13, 14, 15, 5, 6, 7
+};
+
+static unsigned_word
+extract_unsigned_integer (unsigned char *addr, int len)
+{
+  unsigned int retval;
+  const unsigned char *p;
+  const unsigned char *startaddr = addr;
+  const unsigned char *endaddr = startaddr + len;
+
+  retval = 0;
+  for (p = endaddr - 1; p >= startaddr; --p)
+    retval = (retval << 8) | *p;
+
+  return retval;
+}
+
+static void
+store_unsigned_integer (unsigned char *addr, int len, unsigned_word val)
+{
+  unsigned char *p;
+  unsigned char *startaddr = addr;
+  unsigned char *endaddr = startaddr + len;
+
+  /* Start at the least significant end of the integer,
+     and work towards the most significant.  */
+  for (p = startaddr; p < endaddr; ++p)
+    {
+      *p = val & 0xff;
+      val >>= 8;
+    }
+}
+
+static void
+execute_lsmw (SIM_CPU *cpu, unsigned_word iw,
+	      const struct riscv_opcode *op, int load_p)
+{
+  SIM_DESC sd = CPU_STATE (cpu);
+  int rd = (iw >> OP_SH_RD) & OP_MASK_RD;
+  int rs = (iw >> OP_SH_RS1) & OP_MASK_RS1;
+  int re = (iw >> OP_SH_RS2) & OP_MASK_RS2;
+  const char *rd_name = riscv_gpr_names_abi[rd];
+  const char *rs_name = riscv_gpr_names_abi[rs];
+  const char *re_name = riscv_gpr_names_abi[re];
+  SIM_ADDR base = cpu->regs[rd];
+  int i, total_reg, start_reg, end_reg;
+  int eh_rve_p = cpu->elf_flags & 0x8;
+  int reg_cnt = 0;
+  /* dec=-1 or inc=1 */
+  int di = (iw & (1 << 30)) ? -1 : 1;
+  int ret;
+  /* The load/store bytes.  */
+  int size = 4;
+  unsigned_word val = 0;
+  char buf[4];
+  int reg_table[NGPR];
+  int zero_reg = 0;
+
+  TRACE_EXTRACT (cpu, "rd:%-2i:%-4s  rs:%-2i:%-4s %0*"PRIxTW"  re:%-2i:%-4s %0*"PRIxTW"  match:%#x mask:%#x",
+		 rd, rd_name,
+		 rs, rs_name, (int)sizeof (unsigned_word) * 2, cpu->regs[rs],
+		 re, re_name, (int)sizeof (unsigned_word) * 2, cpu->regs[re],
+		 (unsigned) op->match, (unsigned) op->mask);
+
+  /* Do the alignment check. */
+  if (base & 0x3)
+    {
+      fprintf (stderr, "address is not aligned to 4-byte boundary.\n");
+      sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
+      return;
+    }
+
+  if ((rs == zero_reg) || (rd == zero_reg))
+    {
+      fprintf (stderr, "Illegal encoding for smw/lmw"
+	       "(Rs or Rd is zero register) instruction.\n");
+      sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
+      return;
+    }
+
+  if (eh_rve_p)
+    {
+      memcpy(reg_table, lsmw_rve_order, sizeof(lsmw_rve_order));
+      total_reg = NGPR - 16;
+    }
+  else
+    {
+      memcpy(reg_table, lsmw_rv_order, sizeof(lsmw_rv_order));
+      total_reg = NGPR;
+    }
+
+  for (i = 0; i < total_reg; ++i)
+    {
+      if (rs == reg_table[i])
+	start_reg = i;
+      if (re == reg_table[i])
+	end_reg = i;
+    }
+
+  if (start_reg > end_reg)
+    {
+      fprintf (stderr, "Illegal encoding for smw/lmw (Rb > Re) instruction.\n");
+      sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
+      return;
+    }
+
+  /* Sum up the registers count.  */
+  reg_cnt = (end_reg - start_reg) + 1;
+  /* Generate the first memory address.  */
+  if (iw & (1 << 31))
+    base += 4 * di;
+  /* Adjust the first memory address
+     due to operating from low address memory.  */
+  if (iw & (1 << 30))
+    base -= (reg_cnt - 1) * 4;
+
+  for (i = start_reg; i <= end_reg; ++i)
+    {
+      if (load_p)
+	{
+	  /* load */
+	  ret = sim_read (sd, base, (unsigned char *) buf, size);
+	  if (ret != size)
+	    {
+	      fprintf (stderr, "Access violation. Write of address %#x\n", base);
+	      sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
+	      return;
+	    }
+	  val = extract_unsigned_integer ((unsigned char *) buf, size);
+	  store_rd (cpu, reg_table[i], val);
+	}
+      else
+	{
+	  /* store */
+	  val = cpu->regs[reg_table[i]];
+	  store_unsigned_integer ((unsigned char *) buf, size, val);
+	  ret = sim_write (sd, base, (unsigned char *) buf, size);
+	  if (ret != size)
+	    {
+	      fprintf (stderr, "Access violation. Write of address %#x\n", base);
+	      sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
+	    }
+	}
+      base += 4;
+    }
+
+  /* Update the base address register.  */
+  if (iw & (1 << 29))
+    {
+      /* Round up to 16bytes.  */
+      if (rd == X_SP)
+	reg_cnt = ((reg_cnt + 3) & ~3);
+
+      cpu->regs[rd] += reg_cnt * 4 * di;
+    }
+}
+
 static sim_cia
 execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex9)
 {
@@ -2015,6 +2188,26 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	}
       else
 	cpu->a0 = sim_syscall (cpu, sys_id, cpu->a0, cpu->a1, cpu->a2, cpu->a3);
+      break;
+    case MATCH_LMW_BI:
+    case MATCH_LMW_AI:
+    case MATCH_LMW_BD:
+    case MATCH_LMW_AD:
+    case MATCH_LMW_BIM:
+    case MATCH_LMW_AIM:
+    case MATCH_LMW_BDM:
+    case MATCH_LMW_ADM:
+      execute_lsmw (cpu, iw, op, 1);
+      break;
+    case MATCH_SMW_BI:
+    case MATCH_SMW_AI:
+    case MATCH_SMW_BD:
+    case MATCH_SMW_AD:
+    case MATCH_SMW_BIM:
+    case MATCH_SMW_AIM:
+    case MATCH_SMW_BDM:
+    case MATCH_SMW_ADM:
+      execute_lsmw (cpu, iw, op, 0);
       break;
     default:
       TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
