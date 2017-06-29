@@ -707,6 +707,18 @@ show_use_compressed_breakpoints (struct ui_file *file, int from_tty,
 		      "to %s.\n"), value);
 }
 
+extern void nds_init_remote_cmds (void);
+
+/* Callback for "nds" command.  */
+
+static void
+nds_command (const char *arg, int from_tty)
+{
+  printf_unfiltered (_("\"nds\" must be followed by arguments\n"));
+}
+
+struct cmd_list_element *nds_cmdlist;
+
 /* The set and show lists for 'set riscv' and 'show riscv' prefixes.  */
 
 static struct cmd_list_element *setriscvcmdlist = NULL;
@@ -4292,4 +4304,10 @@ this option can be used."),
 				show_use_compressed_breakpoints,
 				&setriscvcmdlist,
 				&showriscvcmdlist);
+
+  add_prefix_cmd ("nds", no_class, nds_command,
+		  _("ANDES specific commands."), &nds_cmdlist,
+		  "nds ", 0, &cmdlist);
+
+  nds_init_remote_cmds ();
 }
