@@ -1266,29 +1266,40 @@ execute_lsmw (SIM_CPU *cpu, unsigned_word iw,
   const char *rs_name = riscv_gpr_names_abi[rs];
   const char *re_name = riscv_gpr_names_abi[re];
   SIM_ADDR base = cpu->regs[rd];
-  int i, total_reg, start_reg, end_reg;
+  int i, total_reg, start_reg = -1, end_reg = -1;
   int eh_rve_p = cpu->elf_flags & 0x8;
   int reg_cnt = 0;
   /* dec=-1 or inc=1 */
   int di = (iw & (1 << 30)) ? -1 : 1;
   int ret;
   /* The load/store bytes.  */
-  int size = 4;
+  int size = RISCV_XLEN (cpu) / 8;
   unsigned_word val = 0;
   char buf[4];
   int reg_table[NGPR];
   int zero_reg = 0;
+  int m_bit  = iw & (1 << 29);
+  int d_bit = iw & (1 << 30);
+  int a_bit = iw & (1 << 31);
+  int stack_align_mode = m_bit && rd == X_SP;
+  int stack_align_adj = 0;
 
-  TRACE_EXTRACT (cpu, "rd:%-2i:%-4s  rs:%-2i:%-4s %0*"PRIxTW"  re:%-2i:%-4s %0*"PRIxTW"  match:%#x mask:%#x",
+  TRACE_EXTRACT (cpu, "rd:%-2i:%-4s  rs:%-2i:%-4s %0*" PRIxTW "  re:%-2i:%-4s %0*" PRIxTW "  match:%#x mask:%#x",
 		 rd, rd_name,
 		 rs, rs_name, (int)sizeof (unsigned_word) * 2, cpu->regs[rs],
 		 re, re_name, (int)sizeof (unsigned_word) * 2, cpu->regs[re],
 		 (unsigned) op->match, (unsigned) op->mask);
 
+  TRACE_INSN (cpu, "%cmw.%c%c%c %s, [%s], %s",
+	      load_p ? 'l' : 's',
+	      a_bit ? 'a' : 'b',
+	      d_bit ? 'd' : 'i',
+	      m_bit ? 'm' : ' ',
+	      rs_name, rd_name, re_name);
   /* Do the alignment check. */
-  if (base & 0x3)
+  if (base & size - 1)
     {
-      fprintf (stderr, "address is not aligned to 4-byte boundary.\n");
+      fprintf (stderr, "address is not aligned to %d-byte boundary.\n", size);
       sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
       return;
     }
@@ -1303,12 +1314,12 @@ execute_lsmw (SIM_CPU *cpu, unsigned_word iw,
 
   if (eh_rve_p)
     {
-      memcpy(reg_table, lsmw_rve_order, sizeof(lsmw_rve_order));
+      memcpy (reg_table, lsmw_rve_order, sizeof (lsmw_rve_order));
       total_reg = NGPR - 16;
     }
   else
     {
-      memcpy(reg_table, lsmw_rv_order, sizeof(lsmw_rv_order));
+      memcpy (reg_table, lsmw_rv_order, sizeof (lsmw_rv_order));
       total_reg = NGPR;
     }
 
@@ -1329,53 +1340,63 @@ execute_lsmw (SIM_CPU *cpu, unsigned_word iw,
 
   /* Sum up the registers count.  */
   reg_cnt = (end_reg - start_reg) + 1;
+
+  if (stack_align_mode)
+    {
+      if (RISCV_XLEN (cpu) == 32)
+	stack_align_adj = ((reg_cnt + 3) & ~3) - reg_cnt;
+      else
+	stack_align_adj = ((reg_cnt + 1) & ~1) - reg_cnt;
+    }
+  TRACE_INSN (cpu, "base = %" PRIxTW " stack_align_mode = %d stack_align_adj = %d", cpu->regs[rd], stack_align_mode, stack_align_adj);
+
   /* Generate the first memory address.  */
-  if (iw & (1 << 31))
-    base += 4 * di;
+  if (a_bit)
+    base += size * di;
   /* Adjust the first memory address
      due to operating from low address memory.  */
-  if (iw & (1 << 30))
-    base -= (reg_cnt - 1) * 4;
+  if (d_bit)
+    base -= (reg_cnt - 1 + stack_align_adj) * size;
 
   for (i = start_reg; i <= end_reg; ++i)
     {
       if (load_p)
 	{
-	  /* load */
-	  ret = sim_read (sd, base, (unsigned char *) buf, size);
-	  if (ret != size)
-	    {
-	      fprintf (stderr, "Access violation. Write of address %#x\n", base);
-	      sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
-	      return;
-	    }
-	  val = extract_unsigned_integer ((unsigned char *) buf, size);
-	  store_rd (cpu, reg_table[i], val);
+	  if (RISCV_XLEN (cpu) == 32)
+	    store_rd (cpu, reg_table[i],
+	      sim_core_read_unaligned_4 (cpu, cpu->pc, read_map,
+					 base));
+	  else
+	    store_rd (cpu, reg_table[i],
+	      sim_core_read_unaligned_8 (cpu, cpu->pc, read_map,
+					 base));
+	  TRACE_INSN (cpu, "[%" PRIxTW "]<- %s (%" PRIxTW ")", base, riscv_gpr_names_abi[reg_table[i]], cpu->regs[reg_table[i]]);
 	}
       else
 	{
-	  /* store */
-	  val = cpu->regs[reg_table[i]];
-	  store_unsigned_integer ((unsigned char *) buf, size, val);
-	  ret = sim_write (sd, base, (unsigned char *) buf, size);
-	  if (ret != size)
-	    {
-	      fprintf (stderr, "Access violation. Write of address %#x\n", base);
-	      sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
-	    }
+	  if (RISCV_XLEN (cpu) == 32)
+	    sim_core_write_unaligned_4 (cpu, cpu->pc, write_map,
+					base, cpu->regs[reg_table[i]]);
+	  else
+	    sim_core_write_unaligned_8 (cpu, cpu->pc, write_map,
+					base, cpu->regs[reg_table[i]]);
+	  TRACE_INSN (cpu, "%s(%" PRIxTW ") -> [%" PRIxTW "]", riscv_gpr_names_abi[reg_table[i]], cpu->regs[reg_table[i]], base);
 	}
-      base += 4;
+      base += size;
     }
 
   /* Update the base address register.  */
-  if (iw & (1 << 29))
-    {
-      /* Round up to 16bytes.  */
-      if (rd == X_SP)
-	reg_cnt = ((reg_cnt + 3) & ~3);
+  if (m_bit)
+    store_rd (cpu, rd, cpu->regs[rd] + (reg_cnt + stack_align_adj) * size * di);
 
-      cpu->regs[rd] += reg_cnt * 4 * di;
+  if (!eh_rve_p && rd == X_SP && (cpu->regs[rd] & 0xf) != 0)
+    {
+      fprintf (stderr, "Stack pointer is not aligned to 16-byte boundary.\n");
+      sim_engine_halt (sd, cpu, NULL, cpu->pc,
+		       sim_signalled, SIM_SIGILL);
     }
+
+
 }
 
 static sim_cia
