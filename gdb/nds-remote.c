@@ -41,20 +41,6 @@
 
 void nds_init_remote_cmds (void);
 
-char *nds_qparts [] =
-{
-  "qPart:nds32:ask:de",
-  "qPart:nds32:ask:cpu", /* core0, cpu, etc */
-  "qPart:nds32:ask:target", /* SID */
-};
-
-enum nds_qparts_enum
-{
-  NDS32_Q_ENDIAN,
-  NDS32_Q_CPU,
-  NDS32_Q_TARGET,
-};
-
 enum nds_remote_type
 {
   nds_rt_unknown = 0,
@@ -404,57 +390,6 @@ nds_target_type_make_value (struct gdbarch *gdbarch, struct internalvar *var,
 }
 
 static int
-nds_query_target_using_qpart (void)
-{
-  char *buf;
-  long size = 64;
-  struct cleanup *back_to;
-  int ret = 0;
-
-  /* The buffer passed to getpkt must be allocated using xmalloc,
-     because it might be xrealloc by read_frame.
-     See remote.c for details.  `buf' must be freed before return.  */
-  buf = (char *) xmalloc (size);
-
-  /* Let caller clean it up.  */
-  back_to = make_cleanup (free_current_contents, &buf);
-
-  /* qPart:nds32:ask:target - SID.  */
-  nds_remote_info.type = nds_rt_unknown;
-  putpkt (nds_qparts[NDS32_Q_TARGET]);
-  getpkt (&buf, &size, 0);
-  if (strcmp (buf, "SID") == 0)
-    nds_remote_info.type = nds_rt_sid;
-  else
-    goto out;
-
-  /* qPart:nds32:ask:cpu - prompt, e.g., "core0(gdb) ".  */
-  putpkt (nds_qparts[NDS32_Q_CPU]);
-  getpkt (&buf, &size, 0);
-  if (strlen (buf) > 0 && buf[0] != 'E')
-    {
-      const int csize = sizeof (nds_remote_info.cpu);
-      memset (nds_remote_info.cpu, 0, csize);
-      strncpy (nds_remote_info.cpu, buf, csize - 1);
-    }
-
-  /* qPart:nds32:ask:de - endian, e.g., LE or BE.  */
-  putpkt (nds_qparts[NDS32_Q_ENDIAN]);
-  getpkt (&buf, &size, 0);
-  if (strcmp (buf, "LE") == 0)
-    nds_remote_info.endian = BFD_ENDIAN_LITTLE;
-  else if (strcmp (buf, "BE") == 0)
-    nds_remote_info.endian = BFD_ENDIAN_BIG;
-  else
-    nds_remote_info.endian = BFD_ENDIAN_UNKNOWN;
-  ret = 1;
-
-out:
-  do_cleanups (back_to);
-  return ret;
-}
-
-static int
 nds_issue_qrcmd (const char *cmd, struct ui_file *res,
 		 struct ui_file_buffer *ui_buf)
 {
@@ -514,7 +449,9 @@ nds_query_target_using_qrcmd (void)
   if (nds_issue_qrcmd ("nds query target", res, &ui_buf) == -1)
     goto out;
 
-  if (strcmp ((char *) ui_buf.buf, "OCD") == 0)
+  if (strcmp ((char *) ui_buf.buf, "SID") == 0)
+    nds_remote_info.type = nds_rt_sid;
+  else if (strcmp ((char *) ui_buf.buf, "OCD") == 0)
     nds_remote_info.type = nds_rt_ocd;
   else
     {
@@ -558,8 +495,7 @@ nds_query_target_command (const char *args, int from_tty)
     return;
 
   /* Try to find out the type of target - SID or OCD.  */
-  if (!nds_query_target_using_qpart ())
-    nds_query_target_using_qrcmd ();
+  nds_query_target_using_qrcmd ();
 
   /* Prepend anything target return to prompt.  */
   xsnprintf (buf, sizeof (buf), "%s(gdb) ", nds_remote_info.cpuid);
