@@ -2431,6 +2431,20 @@ execute_m (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 		  rd_name, rs1_name, rs2_name, rd_name, rs1_name, rs2_name);
       store_rd (cpu, rd, cpu->regs[rd] - cpu->regs[rs1] * cpu->regs[rs2]);
       break;
+    case MATCH_MADDW:
+      TRACE_INSN (cpu, "maddw %s, %s, %s;  // %s = %s * %s",
+		  rd_name, rs1_name, rs2_name, rd_name, rs1_name, rs2_name);
+      store_rd (cpu, rd, EXTEND32 ((signed32) cpu->regs[rd]
+				   + (signed32) cpu->regs[rs1]
+				   * (signed32) cpu->regs[rs2]));
+      break;
+    case MATCH_MSUBW:
+      TRACE_INSN (cpu, "msubw %s, %s, %s;  // %s = %s * %s",
+		  rd_name, rs1_name, rs2_name, rd_name, rs1_name, rs2_name);
+      store_rd (cpu, rd, EXTEND32 ((signed32) cpu->regs[rd]
+				   - (signed32) cpu->regs[rs1]
+				   * (signed32) cpu->regs[rs2]));
+      break;
     default:
       TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
       sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
