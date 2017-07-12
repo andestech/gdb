@@ -159,193 +159,6 @@ ashiftrt64 (unsigned_word val, unsigned_word shift)
   return (val >> shift) | sign;
 }
 
-/* 32 bit bitfield move, left and right of affected zeroed
-   if r <= s Wd<s-r:0> = Wn<s:r> else Wd<32+s-r,32-r> = Wn<s:0>.  */
-static void
-ubfm32 (sim_cpu *cpu, int rd, int rs1, uint32_t r, uint32_t s)
-{
-  uint32_t value = cpu->regs[rs1];
-
-  /* Pick either s+1-r or s+1 consecutive bits out of the original word.  */
-  if (r <= s)
-    {
-      /* 31:...:s:xxx:r:...:0 ==> 31:...:s-r:xxx:0.
-	 We want only bits s:xxx:r at the bottom of the word
-	 so we LSL bit s up to bit 31 i.e. by 31 - s
-	 and then we LSR to bring bit 31 down to bit s - r
-	 i.e. by 31 + r - s.  */
-      value <<= 31 - s;
-      value >>= 31 + r - s;
-    }
-  else
-    {
-      /* 31:...:s:xxx:0 ==> 31:...:31-(r-1)+s:xxx:31-(r-1):...:0
-	 We want only bits s:xxx:0 starting at it 31-(r-1)
-	 so we LSL bit s up to bit 31 i.e. by 31 - s
-	 and then we LSL to bring bit 31 down to 31-(r-1)+s
-	 i.e. by r - (s + 1).  */
-      value <<= 31 - s;
-      value >>= r - (s + 1);
-    }
-
-  store_rd (cpu, rd, value);
-}
-
-/* 64 bit bitfield move, left and right of affected zeroed
-   if r <= s Wd<s-r:0> = Wn<s:r> else Wd<64+s-r,64-r> = Wn<s:0>.  */
-static void
-ubfm64 (sim_cpu *cpu, int rd, int rs1, uint32_t r, uint32_t s)
-{
-  uint64_t value = cpu->regs[rs1];
-
-  if (r <= s)
-    {
-      /* 63:...:s:xxx:r:...:0 ==> 63:...:s-r:xxx:0.
-	 We want only bits s:xxx:r at the bottom of the word.
-	 So we LSL bit s up to bit 63 i.e. by 63 - s
-	 and then we LSR to bring bit 63 down to bit s - r
-	 i.e. by 63 + r - s.  */
-      value <<= 63 - s;
-      value >>= 63 + r - s;
-    }
-  else
-    {
-      /* 63:...:s:xxx:0 ==> 63:...:63-(r-1)+s:xxx:63-(r-1):...:0.
-	 We want only bits s:xxx:0 starting at it 63-(r-1).
-	 So we LSL bit s up to bit 63 i.e. by 63 - s
-	 and then we LSL to bring bit 63 down to 63-(r-1)+s
-	 i.e. by r - (s + 1).  */
-      value <<= 63 - s;
-      value >>= r - (s + 1);
-    }
-
-  store_rd (cpu, rd, value);
-}
-
-/* 32 bit bitfield move, left of affected sign-extended, right zeroed.  */
-/* If r <= s Wd<s-r:0> = Wn<s:r> else Wd<32+s-r,32-r> = Wn<s:0>.  */
-static void
-sbfm32 (sim_cpu *cpu, int rd, int rs1, uint32_t r, uint32_t s)
-{
-  int32_t value = cpu->regs[rs1];
-
-  if (r <= s)
-    {
-      value <<= 31 - s;
-      value >>= 31 + r - s;
-    }
-  else
-    {
-      value <<= 31 - s;
-      value >>= r - (s + 1);
-    }
-
-  store_rd (cpu, rd, (uint32_t) value);
-}
-
-/* 64 bit bitfield move, left of affected sign-extended, right zeroed.  */
-/* If r <= s Wd<s-r:0> = Wn<s:r> else Wd<64+s-r,64-r> = Wn<s:0>.  */
-static void
-sbfm64 (sim_cpu *cpu, int rd, int rs1, uint32_t r, uint32_t s)
-{
-  int64_t value = cpu->regs[rs1];
-
-  if (r <= s)
-    {
-      value <<= 63 - s;
-      value >>= 63 + r - s;
-    }
-  else
-    {
-      value <<= 63 - s;
-      value >>= r - (s + 1);
-    }
-
-  store_rd (cpu, rd, (uint64_t) value);
-}
-
-/* 32 bit bitfield move, non-affected bits left as is.
-   If r <= s Wd<s-r:0> = Wn<s:r> else Wd<32+s-r,32-r> = Wn<s:0>.  */
-static void
-bfm32 (sim_cpu *cpu, int rd, int rs1, uint32_t r, uint32_t s)
-{
-  uint32_t value = cpu->regs[rs1];
-  uint32_t mask = -1;
-  uint32_t value2;
-
-  /* Pick either s+1-r or s+1 consecutive bits out of the original word.  */
-  if (r <= s)
-    {
-      /* 31:...:s:xxx:r:...:0 ==> 31:...:s-r:xxx:0.
-	 We want only bits s:xxx:r at the bottom of the word
-	 so we LSL bit s up to bit 31 i.e. by 31 - s
-	 and then we LSR to bring bit 31 down to bit s - r
-	 i.e. by 31 + r - s.  */
-      value <<= 31 - s;
-      value >>= 31 + r - s;
-      /* the mask must include the same bits.  */
-      mask <<= 31 - s;
-      mask >>= 31 + r - s;
-    }
-  else
-    {
-      /* 31:...:s:xxx:0 ==> 31:...:31-(r-1)+s:xxx:31-(r-1):...:0.
-	 We want only bits s:xxx:0 starting at it 31-(r-1)
-	 so we LSL bit s up to bit 31 i.e. by 31 - s
-	 and then we LSL to bring bit 31 down to 31-(r-1)+s
-	 i.e. by r - (s + 1).  */
-      value <<= 31 - s;
-      value >>= r - (s + 1);
-      /* The mask must include the same bits.  */
-      mask <<= 31 - s;
-      mask >>= r - (s + 1);
-    }
-
-  value2 = cpu->regs[rd];
-  value2 &= ~mask;
-  value2 |= value;
-
-  store_rd (cpu, rd, value2);
-}
-
-/* 64 bit bitfield move, non-affected bits left as is.
-   If r <= s Wd<s-r:0> = Wn<s:r> else Wd<64+s-r,64-r> = Wn<s:0>.  */
-static void
-bfm64 (sim_cpu *cpu, int rd, int rs1, uint32_t r, uint32_t s)
-{
-  uint64_t value = cpu->regs[rs1];
-  uint64_t mask = 0xffffffffffffffffULL;
-
-  if (r <= s)
-    {
-      /* 63:...:s:xxx:r:...:0 ==> 63:...:s-r:xxx:0.
-	 We want only bits s:xxx:r at the bottom of the word
-	 so we LSL bit s up to bit 63 i.e. by 63 - s
-	 and then we LSR to bring bit 63 down to bit s - r
-	 i.e. by 63 + r - s.  */
-      value <<= 63 - s;
-      value >>= 63 + r - s;
-      /* The mask must include the same bits.  */
-      mask <<= 63 - s;
-      mask >>= 63 + r - s;
-    }
-  else
-    {
-      /* 63:...:s:xxx:0 ==> 63:...:63-(r-1)+s:xxx:63-(r-1):...:0
-	 We want only bits s:xxx:0 starting at it 63-(r-1)
-	 so we LSL bit s up to bit 63 i.e. by 63 - s
-	 and then we LSL to bring bit 63 down to 63-(r-1)+s
-	 i.e. by r - (s + 1).  */
-      value <<= 63 - s;
-      value >>= r - (s + 1);
-      /* The mask must include the same bits.  */
-      mask <<= 63 - s;
-      mask >>= r - (s + 1);
-    }
-
-  store_rd (cpu, rd, (rd & ~mask) | value);
-}
-
 static sim_cia
 execute_d (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex9)
 {
@@ -1972,26 +1785,21 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       if (cpu->regs[rs2] != 0)
 	store_rd (cpu, rd, cpu->regs[rs1]);
       break;
-    case MATCH_BFM:
-      TRACE_INSN (cpu, "bfm");
-      if (RISCV_XLEN (cpu) == 32)
-	bfm32 (cpu, rd, rs1, immr, imms);
-      else
-	bfm64 (cpu, rd, rs1, immr, imms);
+    case MATCH_BEXT:
+      TRACE_INSN (cpu, "bext %s, %s, %#"PRIxTW", %#"PRIxTW"; // ", rd_name, rs1_name,
+		  immr, imms);
+      store_rd (cpu, rd, RV_X (cpu->regs[rs1], immr, imms));
       break;
-    case MATCH_UBFM:
-      TRACE_INSN (cpu, "ubfm");
-      if (RISCV_XLEN (cpu) == 32)
-	ubfm32 (cpu, rd, rs1, immr, imms);
-      else
-	ubfm64 (cpu, rd, rs1, immr, imms);
+    case MATCH_SBEXT:
+      TRACE_INSN (cpu, "sbext %s, %s, %#"PRIxTW", %#"PRIxTW"; // ", rd_name, rs1_name,
+		  immr, imms);
+      store_rd (cpu, rd, RV_SEXT (RV_X (cpu->regs[rs1], immr, imms), imms));
       break;
-    case MATCH_SBFM:
-      TRACE_INSN (cpu, "sbfm");
-      if (RISCV_XLEN (cpu) == 32)
-	sbfm32 (cpu, rd, rs1, immr, imms);
-      else
-	sbfm64 (cpu, rd, rs1, immr, imms);
+    case MATCH_BFI:
+      TRACE_INSN (cpu, "bfi %s, %s, %#"PRIxTW", %#"PRIxTW"; // ", rd_name, rs1_name,
+		  immr, imms);
+      store_rd (cpu, rd, (RV_X (cpu->regs[rs1], 0, imms) << immr)
+		         | (cpu->regs[rd] & ~(((1 << imms) - 1) << immr)));
       break;
     case MATCH_BSET:
       store_rd (cpu, rd, cpu->regs[rs1] | (1 << immr));
