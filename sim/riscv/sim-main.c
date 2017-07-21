@@ -1757,6 +1757,178 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 				  cpu->regs[rs1] + (cpu->regs[rs2] << sv),
 				  cpu->regs[rd]);
       break;
+    case MATCH_LDR_ZE:
+      TRACE_INSN (cpu, "ldr.ze %s, [%s + (%s << %d)]; // ", rd_name, rs1_name,
+		  rs2_name, sv);
+      RISCV_ASSERT_RV64 (cpu, "insn: %s", op->name);
+      store_rd (cpu, rd,
+		sim_core_read_unaligned_8 (cpu, cpu->pc, read_map,
+					   cpu->regs[rs1] +
+					   (RV_X (cpu->regs[rs2], 0, 32) << sv)));
+      break;
+    case MATCH_LWR_ZE:
+      TRACE_INSN (cpu, "lwr.ze %s, [%s + (%s << %d)]; // ", rd_name, rs1_name,
+		  rs2_name, sv);
+      store_rd (cpu, rd,
+		EXTEND32 (sim_core_read_unaligned_4
+			  (cpu, cpu->pc, read_map,
+			   cpu->regs[rs1] + (RV_X (cpu->regs[rs2], 0, 32) << sv))));
+      break;
+    case MATCH_LWUR_ZE:
+      TRACE_INSN (cpu, "lwur.ze %s, [%s + (%s << %d)]; // ", rd_name, rs1_name,
+		  rs2_name, sv);
+      store_rd (cpu, rd,
+		sim_core_read_unaligned_4 (cpu, cpu->pc, read_map,
+					   cpu->regs[rs1] +
+					   (RV_X (cpu->regs[rs2], 0, 32) << sv)));
+      break;
+    case MATCH_LHR_ZE:
+      TRACE_INSN (cpu, "lhr.ze %s, [%s + (%s << %d)]; // ", rd_name, rs1_name,
+		  rs2_name, sv);
+      store_rd (cpu, rd,
+		EXTEND16 (sim_core_read_unaligned_2
+			  (cpu, cpu->pc, read_map,
+			   cpu->regs[rs1] + (RV_X (cpu->regs[rs2], 0, 32) << sv))));
+      break;
+    case MATCH_LHUR_ZE:
+      TRACE_INSN (cpu, "lhur.ze %s, [%s + (%s << %d)]; // ", rd_name, rs1_name,
+		  rs2_name, sv);
+      store_rd (cpu, rd,
+		sim_core_read_unaligned_2 (cpu, cpu->pc, read_map,
+					   cpu->regs[rs1] +
+					   (RV_X (cpu->regs[rs2], 0, 32) << sv)));
+      break;
+    case MATCH_LBR_ZE:
+      TRACE_INSN (cpu, "lbr.ze %s, [%s + (%s << %d)]; // ", rd_name, rs1_name,
+		  rs2_name, sv);
+      store_rd (cpu, rd,
+		EXTEND8 (sim_core_read_unaligned_1
+			 (cpu, cpu->pc, read_map,
+			  cpu->regs[rs1] + (RV_X (cpu->regs[rs2], 0, 32) << sv))));
+      break;
+    case MATCH_LBUR_ZE:
+      TRACE_INSN (cpu, "lbur.ze %s, [%s + (%s << %d)]; // ", rd_name, rs1_name,
+		  rs2_name, sv);
+      store_rd (cpu, rd,
+		sim_core_read_unaligned_1 (cpu, cpu->pc, read_map,
+					   cpu->regs[rs1] +
+					   (RV_X (cpu->regs[rs2], 0, 32) << sv)));
+      break;
+    case MATCH_SDR_ZE:
+      TRACE_INSN (cpu, "sdr.ze %s, [%s + (%s << %d)]; // ", rd_name, rs1_name,
+		  rs2_name, sv);
+      RISCV_ASSERT_RV64 (cpu, "insn: %s", op->name);
+      sim_core_write_unaligned_8 (cpu, cpu->pc, write_map,
+				  cpu->regs[rs1] + (RV_X (cpu->regs[rs2], 0, 32) << sv),
+				  cpu->regs[rd]);
+      break;
+    case MATCH_SWR_ZE:
+      TRACE_INSN (cpu, "swr.ze %s, [%s + (%s << %d)]; // ", rd_name, rs1_name,
+		  rs2_name, sv);
+      sim_core_write_unaligned_4 (cpu, cpu->pc, write_map,
+				  cpu->regs[rs1] + (RV_X (cpu->regs[rs2], 0, 32) << sv),
+				  cpu->regs[rd]);
+      break;
+    case MATCH_SHR_ZE:
+      TRACE_INSN (cpu, "shr.ze %s, [%s + (%s << %d)]; // ", rd_name, rs1_name,
+		  rs2_name, sv);
+      sim_core_write_unaligned_2 (cpu, cpu->pc, write_map,
+				  cpu->regs[rs1] + (RV_X (cpu->regs[rs2], 0, 32) << sv),
+				  cpu->regs[rd]);
+      break;
+    case MATCH_SBR_ZE:
+      TRACE_INSN (cpu, "sbr.ze %s, [%s + (%s << %d)]; // ", rd_name, rs1_name,
+		  rs2_name, sv);
+      sim_core_write_unaligned_1 (cpu, cpu->pc, write_map,
+				  cpu->regs[rs1] + (RV_X (cpu->regs[rs2], 0, 32) << sv),
+				  cpu->regs[rd]);
+      break;
+    case MATCH_LDR_SE:
+      TRACE_INSN (cpu, "ldr.se %s, [%s + (%s << %d)]; // ", rd_name, rs1_name,
+		  rs2_name, sv);
+      RISCV_ASSERT_RV64 (cpu, "insn: %s", op->name);
+      store_rd (cpu, rd,
+		sim_core_read_unaligned_8 (cpu, cpu->pc, read_map,
+					   cpu->regs[rs1] +
+					   (RV_SEXT (cpu->regs[rs2], 32) << sv)));
+      break;
+    case MATCH_LWR_SE:
+      TRACE_INSN (cpu, "lwr.se %s, [%s + (%s << %d)]; // ", rd_name, rs1_name,
+		  rs2_name, sv);
+      store_rd (cpu, rd,
+		EXTEND32 (sim_core_read_unaligned_4
+			  (cpu, cpu->pc, read_map,
+			   cpu->regs[rs1] + (RV_SEXT (cpu->regs[rs2], 32) << sv))));
+      break;
+    case MATCH_LWUR_SE:
+      TRACE_INSN (cpu, "lwur.ze %s, [%s + (%s << %d)]; // ", rd_name, rs1_name,
+		  rs2_name, sv);
+      store_rd (cpu, rd,
+		sim_core_read_unaligned_4 (cpu, cpu->pc, read_map,
+					   cpu->regs[rs1] +
+					   (RV_SEXT (cpu->regs[rs2], 32) << sv)));
+      break;
+    case MATCH_LHR_SE:
+      TRACE_INSN (cpu, "lhr.ze %s, [%s + (%s << %d)]; // ", rd_name, rs1_name,
+		  rs2_name, sv);
+      store_rd (cpu, rd,
+		EXTEND16 (sim_core_read_unaligned_2
+			  (cpu, cpu->pc, read_map,
+			   cpu->regs[rs1] + (RV_SEXT (cpu->regs[rs2], 32) << sv))));
+      break;
+    case MATCH_LHUR_SE:
+      TRACE_INSN (cpu, "lhur.ze %s, [%s + (%s << %d)]; // ", rd_name, rs1_name,
+		  rs2_name, sv);
+      store_rd (cpu, rd,
+		sim_core_read_unaligned_2 (cpu, cpu->pc, read_map,
+					   cpu->regs[rs1] +
+					   (RV_SEXT (cpu->regs[rs2], 32) << sv)));
+      break;
+    case MATCH_LBR_SE:
+      TRACE_INSN (cpu, "lbr.ze %s, [%s + (%s << %d)]; // ", rd_name, rs1_name,
+		  rs2_name, sv);
+      store_rd (cpu, rd,
+		EXTEND8 (sim_core_read_unaligned_1
+			 (cpu, cpu->pc, read_map,
+			  cpu->regs[rs1] + (RV_SEXT (cpu->regs[rs2], 32) << sv))));
+      break;
+    case MATCH_LBUR_SE:
+      TRACE_INSN (cpu, "lbur.ze %s, [%s + (%s << %d)]; // ", rd_name, rs1_name,
+		  rs2_name, sv);
+      store_rd (cpu, rd,
+		sim_core_read_unaligned_1 (cpu, cpu->pc, read_map,
+					   cpu->regs[rs1] +
+					   (RV_SEXT (cpu->regs[rs2], 32) << sv)));
+      break;
+    case MATCH_SDR_SE:
+      TRACE_INSN (cpu, "sdr.ze %s, [%s + (%s << %d)]; // ", rd_name, rs1_name,
+		  rs2_name, sv);
+      RISCV_ASSERT_RV64 (cpu, "insn: %s", op->name);
+      sim_core_write_unaligned_8 (cpu, cpu->pc, write_map,
+				  cpu->regs[rs1] + (RV_SEXT (cpu->regs[rs2], 32) << sv),
+				  cpu->regs[rd]);
+      break;
+    case MATCH_SWR_SE:
+      TRACE_INSN (cpu, "swr.ze %s, [%s + (%s << %d)]; // ", rd_name, rs1_name,
+		  rs2_name, sv);
+      sim_core_write_unaligned_4 (cpu, cpu->pc, write_map,
+				  cpu->regs[rs1] + (RV_SEXT (cpu->regs[rs2], 32) << sv),
+				  cpu->regs[rd]);
+      break;
+    case MATCH_SHR_SE:
+      TRACE_INSN (cpu, "shr.ze %s, [%s + (%s << %d)]; // ", rd_name, rs1_name,
+		  rs2_name, sv);
+      sim_core_write_unaligned_2 (cpu, cpu->pc, write_map,
+				  cpu->regs[rs1] + (RV_SEXT (cpu->regs[rs2], 32) << sv),
+				  cpu->regs[rd]);
+      break;
+    case MATCH_SBR_SE:
+      TRACE_INSN (cpu, "sbr.se %s, [%s + (%s << %d)]; // ", rd_name, rs1_name,
+		  rs2_name, sv);
+      sim_core_write_unaligned_1 (cpu, cpu->pc, write_map,
+				  cpu->regs[rs1] + (RV_SEXT (cpu->regs[rs2], 32) << sv),
+				  cpu->regs[rd]);
+      break;
     case MATCH_BEQC:
       TRACE_INSN (cpu, "beqc %s, %d, %#"PRIxTW";  // if (%s == %d) goto %#"PRIxTW,
 		  rs1_name, beqc_imm, sb10_imm, rs1_name, beqc_imm, cpu->pc + sb10_imm);
