@@ -1929,6 +1929,61 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 				  cpu->regs[rs1] + (RV_SEXT (cpu->regs[rs2], 32) << sv),
 				  cpu->regs[rd]);
       break;
+    case MATCH_LEA_H:
+      TRACE_INSN (cpu, "lea.h %s, %s, %s;  // %s = %s + (%s << 1)",
+		  rd_name, rs1_name, rs2_name, rd_name, rs1_name, rs2_name);
+      store_rd (cpu, rd, cpu->regs[rs1] + (cpu->regs[rs2] << 1));
+      break;
+    case MATCH_LEA_W:
+      TRACE_INSN (cpu, "lea.h %s, %s, %s;  // %s = %s + (%s << 2)",
+		  rd_name, rs1_name, rs2_name, rd_name, rs1_name, rs2_name);
+      store_rd (cpu, rd, cpu->regs[rs1] + (cpu->regs[rs2] << 2));
+      break;
+    case MATCH_LEA_D:
+      TRACE_INSN (cpu, "lea.d %s, %s, %s;  // %s = %s + (%s << 3)",
+		  rd_name, rs1_name, rs2_name, rd_name, rs1_name, rs2_name);
+      store_rd (cpu, rd, cpu->regs[rs1] + (cpu->regs[rs2] << 3));
+      break;
+    case MATCH_LEA_B_ZE:
+      TRACE_INSN (cpu, "lea.b.ze %s, %s, %s;  // %s = %s + (ZE(%s) << 0)",
+		  rd_name, rs1_name, rs2_name, rd_name, rs1_name, rs2_name);
+      store_rd (cpu, rd, cpu->regs[rs1] + (RV_X (cpu->regs[rs2], 0, 32) << 0));
+      break;
+    case MATCH_LEA_H_ZE:
+      TRACE_INSN (cpu, "lea.h.ze %s, %s, %s;  // %s = %s + (ZE(%s) << 1)",
+		  rd_name, rs1_name, rs2_name, rd_name, rs1_name, rs2_name);
+      store_rd (cpu, rd, cpu->regs[rs1] + (RV_X (cpu->regs[rs2], 0, 32) << 1));
+      break;
+    case MATCH_LEA_W_ZE:
+      TRACE_INSN (cpu, "lea.h.ze %s, %s, %s;  // %s = %s + (ZE(%s) << 2)",
+		  rd_name, rs1_name, rs2_name, rd_name, rs1_name, rs2_name);
+      store_rd (cpu, rd, cpu->regs[rs1] + (RV_X (cpu->regs[rs2], 0, 32) << 2));
+      break;
+    case MATCH_LEA_D_ZE:
+      TRACE_INSN (cpu, "lea.d.ze %s, %s, %s;  // %s = %s + (ZE(%s) << 3)",
+		  rd_name, rs1_name, rs2_name, rd_name, rs1_name, rs2_name);
+      store_rd (cpu, rd, cpu->regs[rs1] + (RV_X (cpu->regs[rs2], 0, 32) << 3));
+      break;
+    case MATCH_LEA_B_SE:
+      TRACE_INSN (cpu, "lea.b.se %s, %s, %s;  // %s = %s + (SE(%s) << 0)",
+		  rd_name, rs1_name, rs2_name, rd_name, rs1_name, rs2_name);
+      store_rd (cpu, rd, cpu->regs[rs1] + (RV_SEXT (cpu->regs[rs2], 32) << 0));
+      break;
+    case MATCH_LEA_H_SE:
+      TRACE_INSN (cpu, "lea.h.se %s, %s, %s;  // %s = %s + (SE(%s) << 1)",
+		  rd_name, rs1_name, rs2_name, rd_name, rs1_name, rs2_name);
+      store_rd (cpu, rd, cpu->regs[rs1] + (RV_SEXT (cpu->regs[rs2], 32) << 1));
+      break;
+    case MATCH_LEA_W_SE:
+      TRACE_INSN (cpu, "lea.h.se %s, %s, %s;  // %s = %s + (SE(%s) << 2)",
+		  rd_name, rs1_name, rs2_name, rd_name, rs1_name, rs2_name);
+      store_rd (cpu, rd, cpu->regs[rs1] + (RV_SEXT (cpu->regs[rs2], 32) << 2));
+      break;
+    case MATCH_LEA_D_SE:
+      TRACE_INSN (cpu, "lea.d.se %s, %s, %s;  // %s = %s + (SE(%s) << 3)",
+		  rd_name, rs1_name, rs2_name, rd_name, rs1_name, rs2_name);
+      store_rd (cpu, rd, cpu->regs[rs1] + (RV_SEXT (cpu->regs[rs2], 32) << 3));
+      break;
     case MATCH_BEQC:
       TRACE_INSN (cpu, "beqc %s, %d, %#"PRIxTW";  // if (%s == %d) goto %#"PRIxTW,
 		  rs1_name, beqc_imm, sb10_imm, rs1_name, beqc_imm, cpu->pc + sb10_imm);
