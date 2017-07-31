@@ -126,6 +126,9 @@ store_csr (SIM_CPU *cpu, const char *name, int csr, unsigned_word *reg,
       cpu->csr.frm = (val >> 5) & 0x7;
       cpu->csr.fflags = val & 0x1f;
       break;
+    case CSR_ITB:
+      cpu->csr.itb = val;
+      break;
 
     /* Allow certain registers only in respective modes.  */
     case CSR_CYCLEH:
@@ -157,7 +160,7 @@ ashiftrt64 (unsigned_word val, unsigned_word shift)
 }
 
 static sim_cia
-execute_d (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
+execute_d (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex9)
 {
   SIM_DESC sd = CPU_STATE (cpu);
   unsigned int mask_arithmetic = MASK_FADD_D;
@@ -189,6 +192,8 @@ execute_d (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
   uint64_t u64;
   int64_t i64;
   sim_cia pc = cpu->pc + 4;
+  if (ex9)
+    pc -= 2;
 
   /* Rounding mode.  */
   int rm = (iw >> OP_SH_RM) & OP_MASK_RM;
@@ -407,7 +412,7 @@ execute_d (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 }
 
 static sim_cia
-execute_f (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
+execute_f (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex9)
 {
   SIM_DESC sd = CPU_STATE (cpu);
   unsigned int mask_arithmetic = MASK_FADD_S;
@@ -439,6 +444,8 @@ execute_f (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
   int64_t i64;
   uint64_t u64;
   sim_cia pc = cpu->pc + 4;
+  if (ex9)
+    pc -= 2;
 
   /* Rounding mode.  */
   int rm = (iw >> OP_SH_RM) & OP_MASK_RM;
@@ -803,6 +810,16 @@ execute_c (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 					+ EXTRACT_RVC_LD_IMM (iw),
 					cpu->regs[crs2s]);
 	  return pc;
+	case MATCH_C_EX9:
+	  iw = sim_core_read_unaligned_4 (cpu, cpu->pc, exec_map,
+					  cpu->csr.itb + EXTRACT_RVC_EX9_IMM (iw) * 4);
+	  pc = riscv_decode (cpu, iw, cpu->pc, 1);
+	  return pc;
+	case MATCH_C_EX10:
+	  iw = sim_core_read_unaligned_4 (cpu, cpu->pc, exec_map,
+					  cpu->csr.itb + EXTRACT_RVC_EX10_IMM (iw) * 4);
+	  pc = riscv_decode (cpu, iw, cpu->pc, 1);
+	  return pc;
 	default:
 	  TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
 	  sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
@@ -1002,7 +1019,7 @@ execute_c (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 }
 
 static sim_cia
-execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
+execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex9)
 {
   SIM_DESC sd = CPU_STATE (cpu);
   int rd = (iw >> OP_SH_RD) & OP_MASK_RD;
@@ -1021,6 +1038,9 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
   unsigned_word sys_id;
   int eh_rve_p = cpu->elf_flags & 0x8;
   sim_cia pc = cpu->pc + 4;
+  if (ex9)
+    pc -= 2;
+
   host_callback *cb = STATE_CALLBACK (sd);
   CB_SYSCALL sc;
 
@@ -1283,15 +1303,26 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 	}
       break;
     case MATCH_JAL:
-      TRACE_INSN (cpu, "jal %s, %"PRIiTW";", rd_name, EXTRACT_UJTYPE_IMM (iw));
-      store_rd (cpu, rd, cpu->pc + 4);
-      pc = cpu->pc + EXTRACT_UJTYPE_IMM (iw);
-      TRACE_BRANCH (cpu, "to %#"PRIxTW, pc);
+      if (ex9)
+	{
+	  store_rd (cpu, rd, cpu->pc + 2);
+	  pc = (cpu->pc & 0xfff00000) | EXTRACT_UJTYPE_IMM (iw);
+	}
+      else
+	{
+	  TRACE_INSN (cpu, "jal %s, %"PRIiTW";", rd_name, EXTRACT_UJTYPE_IMM (iw));
+	  store_rd (cpu, rd, cpu->pc + 4);
+	  pc = cpu->pc + EXTRACT_UJTYPE_IMM (iw);
+	  TRACE_BRANCH (cpu, "to %#"PRIxTW, pc);
+	}
       break;
     case MATCH_JALR:
       TRACE_INSN (cpu, "jalr %s, %s, %"PRIiTW";", rd_name, rs1_name, i_imm);
       pc = cpu->regs[rs1] + i_imm;
-      store_rd (cpu, rd, cpu->pc + 4);
+      if (ex9)
+	store_rd (cpu, rd, cpu->pc + 2);
+      else
+	store_rd (cpu, rd, cpu->pc + 4);
       TRACE_BRANCH (cpu, "to %#"PRIxTW, pc);
       break;
 
@@ -1608,7 +1639,7 @@ mulhsu (signed64 a, unsigned64 b)
 }
 
 static sim_cia
-execute_m (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
+execute_m (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex9)
 {
   SIM_DESC sd = CPU_STATE (cpu);
   int rd = (iw >> OP_SH_RD) & OP_MASK_RD;
@@ -1620,6 +1651,8 @@ execute_m (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
   unsigned_word tmp, dividend_max;
   signed_word dividend32_max;
   sim_cia pc = cpu->pc + 4;
+  if (ex9)
+    pc -= 2;
 
   dividend_max = -((unsigned_word)1 << (WITH_TARGET_WORD_BITSIZE - 1));
   dividend32_max = INT32_MIN;
@@ -1762,7 +1795,7 @@ execute_m (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 static sim_cia
-execute_a (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
+execute_a (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex9)
 {
   SIM_DESC sd = CPU_STATE (cpu);
   int rd = (iw >> OP_SH_RD) & OP_MASK_RD;
@@ -1776,6 +1809,8 @@ execute_a (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
   unsigned_word tmp;
   unsigned_word rs2_val = cpu->regs[rs2];
   sim_cia pc = cpu->pc + 4;
+  if (ex9)
+    pc -= 2;
 
   /* Handle these two load/store operations specifically.  */
   switch (op->match & ~aqrl_mask)
@@ -1893,7 +1928,7 @@ execute_a (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 }
 
 static sim_cia
-execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
+execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex9)
 {
   SIM_DESC sd = CPU_STATE (cpu);
   const char *subset = op->subset;
@@ -1902,17 +1937,17 @@ execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
   switch (subset[0])
     {
     case 'A':
-      return execute_a (cpu, iw, op);
+      return execute_a (cpu, iw, op, ex9);
     case 'C':
       return execute_c (cpu, iw, op);
     case 'D':
-      return execute_d (cpu, iw, op);
+      return execute_d (cpu, iw, op, ex9);
     case 'F':
-      return execute_f (cpu, iw, op);
+      return execute_f (cpu, iw, op, ex9);
     case 'I':
-      return execute_i (cpu, iw, op);
+      return execute_i (cpu, iw, op, ex9);
     case 'M':
-      return execute_m (cpu, iw, op);
+      return execute_m (cpu, iw, op, ex9);
     case '3':
       if (subset[1] == '2')
 	{
@@ -1936,6 +1971,42 @@ execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
     }
 
   return cpu->pc + riscv_insn_length (iw);
+}
+
+sim_cia
+riscv_decode (SIM_CPU *cpu, unsigned_word iw, sim_cia pc, int ex9)
+{
+  SIM_DESC sd = CPU_STATE (cpu);
+  const struct riscv_opcode *op;
+  int xlen = RISCV_XLEN (cpu);
+
+  op = riscv_hash[OP_HASH_IDX (iw)];
+  if (!op)
+    sim_engine_halt (sd, cpu, NULL, pc, sim_signalled, SIM_SIGILL);
+
+  for (; op->name; op++)
+    {
+      /* Does the opcode match?  */
+      if (!(op->match_func) (op, iw))
+	continue;
+      /* Is this a pseudo-instruction?  */
+      if ((op->pinfo & INSN_ALIAS))
+	continue;
+      /* Is this instruction restricted to a certain value of XLEN?  */
+      if (isdigit (op->subset[0]) && atoi (op->subset) != xlen)
+	continue;
+      /* It's a match.  */
+      pc = execute_one (cpu, iw, op, ex9);
+      break;
+
+      if ((op->match_func) (op, iw) && !(op->pinfo & INSN_ALIAS))
+	{
+	  pc = execute_one (cpu, iw, op, ex9);
+	  break;
+	}
+    }
+
+  return pc;
 }
 
 /* Decode & execute a single instruction.  */
@@ -1963,31 +2034,7 @@ void step_once (SIM_CPU *cpu)
 
   TRACE_CORE (cpu, "0x%08"PRIxTW, iw);
 
-  op = riscv_hash[OP_HASH_IDX (iw)];
-  if (!op)
-    sim_engine_halt (sd, cpu, NULL, pc, sim_signalled, SIM_SIGILL);
-
-  for (; op->name; op++)
-    {
-      /* Does the opcode match?  */
-      if (!(op->match_func) (op, iw))
-	continue;
-      /* Is this a pseudo-instruction?  */
-      if ((op->pinfo & INSN_ALIAS))
-	continue;
-      /* Is this instruction restricted to a certain value of XLEN?  */
-      if (isdigit (op->subset[0]) && atoi (op->subset) != xlen)
-	continue;
-      /* It's a match.  */
-      pc = execute_one (cpu, iw, op);
-      break;
-
-      if ((op->match_func) (op, iw) && !(op->pinfo & INSN_ALIAS))
-	{
-	  pc = execute_one (cpu, iw, op);
-	  break;
-	}
-    }
+  pc = riscv_decode (cpu, iw, pc, 0);
 
   /* TODO: Try to use a common counter and only update on demand (reads).  */
   ++cpu->csr.cycle;
