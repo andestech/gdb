@@ -127,6 +127,9 @@ store_csr (SIM_CPU *cpu, const char *name, int csr, unsigned_word *reg,
       cpu->csr.frm = (val >> 5) & 0x7;
       cpu->csr.fflags = val & 0x1f;
       break;
+    case CSR_UITB:
+      cpu->csr.uitb = val;
+      break;
 
     /* Allow certain registers only in respective modes.  */
     case CSR_CYCLEH:
@@ -159,7 +162,7 @@ ashiftrt64 (unsigned_word val, unsigned_word shift)
 }
 
 static sim_cia
-execute_d (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
+execute_d (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex9)
 {
   SIM_DESC sd = CPU_STATE (cpu);
   unsigned int mask_arithmetic = MASK_FADD_D;
@@ -191,6 +194,8 @@ execute_d (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
   uint64_t u64;
   int64_t i64;
   sim_cia pc = cpu->pc + 4;
+  if (ex9)
+    pc -= 2;
 
   /* Rounding mode.  */
   int rm = (iw >> OP_SH_RM) & OP_MASK_RM;
@@ -409,7 +414,7 @@ execute_d (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 }
 
 static sim_cia
-execute_f (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
+execute_f (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex9)
 {
   SIM_DESC sd = CPU_STATE (cpu);
   unsigned int mask_arithmetic = MASK_FADD_S;
@@ -441,6 +446,8 @@ execute_f (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
   int64_t i64;
   uint64_t u64;
   sim_cia pc = cpu->pc + 4;
+  if (ex9)
+    pc -= 2;
 
   /* Rounding mode.  */
   int rm = (iw >> OP_SH_RM) & OP_MASK_RM;
@@ -1006,7 +1013,7 @@ execute_c (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 }
 
 static sim_cia
-execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
+execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex9)
 {
   SIM_DESC sd = CPU_STATE (cpu);
   int rd = (iw >> OP_SH_RD) & OP_MASK_RD;
@@ -1025,6 +1032,9 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
   unsigned_word sys_id;
   int eh_rve_p = cpu->elf_flags & 0x8;
   sim_cia pc = cpu->pc + 4;
+  if (ex9)
+    pc -= 2;
+
   host_callback *cb = STATE_CALLBACK (sd);
   CB_SYSCALL sc;
 
@@ -1305,16 +1315,27 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 	}
       break;
     case MATCH_JAL:
-      TRACE_INSN (cpu, "jal %s, %" PRIiTW ";", rd_name,
-		  EXTRACT_JTYPE_IMM (iw));
-      store_rd (cpu, rd, cpu->pc + 4);
-      pc = cpu->pc + EXTRACT_JTYPE_IMM (iw);
-      TRACE_BRANCH (cpu, "to %#" PRIxTW, pc);
+      if (ex9)
+      {
+          store_rd (cpu, rd, cpu->pc + 2);
+          pc = (cpu->pc & 0xfff00000) | EXTRACT_UJTYPE_IMM_EXECIT_TAB (iw);
+      }
+      else
+      {
+          TRACE_INSN (cpu, "jal %s, %" PRIiTW ";", rd_name,
+		      EXTRACT_JTYPE_IMM (iw));
+          store_rd (cpu, rd, cpu->pc + 4);
+          pc = cpu->pc + EXTRACT_JTYPE_IMM (iw);
+          TRACE_BRANCH (cpu, "to %#" PRIxTW, pc);
+      }
       break;
     case MATCH_JALR:
       TRACE_INSN (cpu, "jalr %s, %s, %" PRIiTW ";", rd_name, rs1_name, i_imm);
       pc = cpu->regs[rs1] + i_imm;
-      store_rd (cpu, rd, cpu->pc + 4);
+      if (ex9)
+          store_rd (cpu, rd, cpu->pc + 2);
+      else
+          store_rd (cpu, rd, cpu->pc + 4);
       TRACE_BRANCH (cpu, "to %#" PRIxTW, pc);
       break;
 
@@ -1638,7 +1659,7 @@ mulhsu (int64_t a, uint64_t b)
 }
 
 static sim_cia
-execute_m (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
+execute_m (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex9)
 {
   SIM_DESC sd = CPU_STATE (cpu);
   int rd = (iw >> OP_SH_RD) & OP_MASK_RD;
@@ -1649,6 +1670,8 @@ execute_m (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
   const char *rs2_name = riscv_gpr_names_abi[rs2];
   unsigned_word tmp, dividend_max;
   sim_cia pc = cpu->pc + 4;
+  if (ex9)
+    pc -= 2;
 
   dividend_max = -((unsigned_word) 1 << (WITH_TARGET_WORD_BITSIZE - 1));
 
@@ -1785,7 +1808,7 @@ execute_m (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 }
 
 static sim_cia
-execute_a (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
+execute_a (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex9)
 {
   SIM_DESC sd = CPU_STATE (cpu);
   struct riscv_sim_state *state = RISCV_SIM_STATE (sd);
@@ -1800,6 +1823,8 @@ execute_a (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
   unsigned_word tmp;
   unsigned_word rs2_val = cpu->regs[rs2];
   sim_cia pc = cpu->pc + 4;
+  if (ex9)
+    pc -= 2;
 
   /* Handle these two load/store operations specifically.  */
   switch (op->match & ~aqrl_mask)
@@ -1917,7 +1942,7 @@ execute_a (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 }
 
 static sim_cia
-execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
+execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex9)
 {
   SIM_DESC sd = CPU_STATE (cpu);
 
@@ -1929,23 +1954,55 @@ execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
   switch (op->insn_class)
     {
     case INSN_CLASS_A:
-      return execute_a (cpu, iw, op);
+      return execute_a (cpu, iw, op, ex9);
     case INSN_CLASS_C:
       return execute_c (cpu, iw, op);
     case INSN_CLASS_D:
-      return execute_d (cpu, iw, op);
+      return execute_d (cpu, iw, op, ex9);
     case INSN_CLASS_F:
-      return execute_f (cpu, iw, op);
+      return execute_f (cpu, iw, op, ex9);
     case INSN_CLASS_I:
-      return execute_i (cpu, iw, op);
+      return execute_i (cpu, iw, op, ex9);
     case INSN_CLASS_M:
-      return execute_m (cpu, iw, op);
+      return execute_m (cpu, iw, op, ex9);
     default:
       TRACE_INSN (cpu, "UNHANDLED EXTENSION: %d", op->insn_class);
       sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
     }
 
   return cpu->pc + riscv_insn_length (iw);
+}
+
+sim_cia
+riscv_decode (SIM_CPU *cpu, unsigned_word iw, sim_cia pc, int ex9)
+{
+  SIM_DESC sd = CPU_STATE (cpu);
+  const struct riscv_opcode *op;
+  int xlen = RISCV_XLEN (cpu);
+
+  op = riscv_hash[OP_HASH_IDX (iw)];
+  if (!op)
+    sim_engine_halt (sd, cpu, NULL, pc, sim_signalled, SIM_SIGILL);
+
+  /* NB: Same loop logic as riscv_disassemble_insn.  */
+  for (; op->name; op++)
+    {
+      /* Does the opcode match?  */
+      if (! op->match_func (op, iw))
+	continue;
+      /* Is this a pseudo-instruction and may we print it as such?  */
+      if (op->pinfo & INSN_ALIAS)
+	continue;
+      /* Is this instruction restricted to a certain value of XLEN?  */
+      if (op->xlen_requirement != 0 && op->xlen_requirement != xlen)
+	continue;
+
+      /* It's a match.  */
+      pc = execute_one (cpu, iw, op, ex9);
+      break;
+    }
+
+  return pc;
 }
 
 /* Decode & execute a single instruction.  */
@@ -1971,29 +2028,9 @@ void step_once (SIM_CPU *cpu)
   else
     iw |= ((unsigned_word)sim_core_read_aligned_2 (cpu, pc, exec_map, pc));
 
-  TRACE_CORE (cpu, "0x%08" PRIxTW, iw);
+  TRACE_CORE (cpu, "0x%08"PRIxTW, iw);
 
-  op = riscv_hash[OP_HASH_IDX (iw)];
-  if (!op)
-    sim_engine_halt (sd, cpu, NULL, pc, sim_signalled, SIM_SIGILL);
-
-  /* NB: Same loop logic as riscv_disassemble_insn.  */
-  for (; op->name; op++)
-    {
-      /* Does the opcode match?  */
-      if (! op->match_func (op, iw))
-	continue;
-      /* Is this a pseudo-instruction and may we print it as such?  */
-      if (op->pinfo & INSN_ALIAS)
-	continue;
-      /* Is this instruction restricted to a certain value of XLEN?  */
-      if (op->xlen_requirement != 0 && op->xlen_requirement != xlen)
-	continue;
-
-      /* It's a match.  */
-      pc = execute_one (cpu, iw, op);
-      break;
-    }
+  pc = riscv_decode (cpu, iw, pc, 0);
 
   /* TODO: Try to use a common counter and only update on demand (reads).  */
   ++cpu->csr.cycle;

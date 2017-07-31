@@ -141,6 +141,7 @@ extern void step_once (SIM_CPU *);
 extern void initialize_cpu (SIM_DESC, SIM_CPU *, int);
 extern void initialize_env (SIM_DESC, const char * const *argv,
 			    const char * const *env);
+extern sim_cia riscv_decode (SIM_CPU *, unsigned_word, sim_cia, int);
 
 #define DEFAULT_MEM_SIZE (64 * 1024 * 1024)
 
