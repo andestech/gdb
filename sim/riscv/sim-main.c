@@ -714,8 +714,8 @@ execute_c (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
       else if (crs2 == 0)
 	{
 	  /* c.jalr */
-	  store_rd (cpu, X_RA, cpu->pc + 2);
 	  pc = cpu->regs[rd];
+	  store_rd (cpu, X_RA, cpu->pc + 2);
 	}
       else
 	{
