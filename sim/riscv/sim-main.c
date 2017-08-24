@@ -1233,6 +1233,7 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 
   unsigned_word immr = EXTRACT_ITYPE_IMM6H (iw);
   unsigned_word imms = EXTRACT_ITYPE_IMM6L (iw);
+  unsigned_word cimm6 = EXTRACT_TYPE_CIMM6 (iw);
   unsigned_word shamt_imm = ((iw >> OP_SH_SHAMT) & OP_MASK_SHAMT);
   unsigned_word tmp;
   unsigned_word sys_id;
@@ -1933,8 +1934,8 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_BBZ:
       TRACE_INSN (cpu, "tbz %s, %d, %#"PRIxTW";  // if (!(%s & (1 << %d))) goto %#"PRIxTW,
-		  rs1_name, immr, sb10_imm, rs1_name, immr, cpu->pc + sb10_imm);
-      if (!(cpu->regs[rs1] & (((uint64_t) 1) << immr)))
+		  rs1_name, cimm6, sb10_imm, rs1_name, cimm6, cpu->pc + sb10_imm);
+      if (!(cpu->regs[rs1] & (((uint64_t) 1) << cimm6)))
 	{
 	  pc = cpu->pc + sb10_imm;
 	  TRACE_BRANCH (cpu, "to %#"PRIxTW, pc);
@@ -1942,8 +1943,8 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_BBN:
       TRACE_INSN (cpu, "tbnz %s, %d, %#"PRIxTW";  // if (%s & (1 << %d)) goto %#"PRIxTW,
-		  rs1_name, immr, sb10_imm, rs1_name, immr, cpu->pc + sb10_imm);
-      if (cpu->regs[rs1] & (((uint64_t) 1) << immr))
+		  rs1_name, cimm6, sb10_imm, rs1_name, cimm6, cpu->pc + sb10_imm);
+      if (cpu->regs[rs1] & (((uint64_t) 1) << cimm6))
 	{
 	  pc = cpu->pc + sb10_imm;
 	  TRACE_BRANCH (cpu, "to %#"PRIxTW, pc);
