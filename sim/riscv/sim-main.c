@@ -1228,7 +1228,7 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
   unsigned_word u_imm = EXTRACT_UTYPE_IMM ((unsigned64) iw);
   unsigned_word s_imm = EXTRACT_STYPE_IMM (iw);
   unsigned_word sb_imm = EXTRACT_SBTYPE_IMM (iw);
-  unsigned_word beqc_imm = EXTRACT_STYPE_SIMM7(iw);
+  unsigned_word beqc_imm = EXTRACT_STYPE_IMM7(iw);
   unsigned_word sb10_imm = EXTRACT_STYPE_IMM10(iw);
 
   unsigned_word immr = EXTRACT_ITYPE_IMM6H (iw);
@@ -1920,7 +1920,7 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_BFINS:
       TRACE_INSN (cpu, "bfi %s, %s, %#"PRIxTW", %#"PRIxTW"; // ", rd_name, rs1_name,
 		  imms, immr);
-      store_rd (cpu, rd, (RV_X (cpu->regs[rs1], 0, immr) << imms)
+      store_rd (cpu, rd, (RV_X (cpu->regs[rs1], 0, immr + 1) << imms)
 		         | (cpu->regs[rd] & ~(((1 << immr) - 1) << imms)));
       break;
     case MATCH_BSET:
