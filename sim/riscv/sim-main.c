@@ -1907,21 +1907,15 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       if (cpu->regs[rs2] != 0)
 	store_rd (cpu, rd, cpu->regs[rs1]);
       break;
-    case MATCH_UBFEXT:
+    case MATCH_BFOZ:
       TRACE_INSN (cpu, "bext %s, %s, %#"PRIxTW", %#"PRIxTW"; // ", rd_name, rs1_name,
 		  imms, immr);
       store_rd (cpu, rd, RV_X (cpu->regs[rs1], imms, immr));
       break;
-    case MATCH_SBFEXT:
+    case MATCH_BFOS:
       TRACE_INSN (cpu, "sbext %s, %s, %#"PRIxTW", %#"PRIxTW"; // ", rd_name, rs1_name,
 		  imms, immr);
       store_rd (cpu, rd, RV_SEXT (RV_X (cpu->regs[rs1], imms, immr), immr));
-      break;
-    case MATCH_BFINS:
-      TRACE_INSN (cpu, "bfi %s, %s, %#"PRIxTW", %#"PRIxTW"; // ", rd_name, rs1_name,
-		  imms, immr);
-      store_rd (cpu, rd, (RV_X (cpu->regs[rs1], 0, immr + 1) << imms)
-		         | (cpu->regs[rd] & ~(((1 << immr) - 1) << imms)));
       break;
     case MATCH_BSET:
       store_rd (cpu, rd, cpu->regs[rs1] | (1 << immr));
