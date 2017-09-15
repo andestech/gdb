@@ -619,6 +619,7 @@
  { "SYS_unlink", 1026 },
  { "SYS_write", 64 },
  { "SYS_writev", 66 },
+ { "SYS_rename", 1034 },
 /* end riscv sys target macros */
 #endif
 #endif
