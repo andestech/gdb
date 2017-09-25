@@ -1908,22 +1908,22 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	store_rd (cpu, rd, cpu->regs[rs1]);
       break;
     case MATCH_BFOZ:
-      TRACE_INSN (cpu, "bext %s, %s, %#"PRIxTW", %#"PRIxTW"; // ", rd_name, rs1_name,
+      TRACE_INSN (cpu, "bfoz %s, %s, %#"PRIxTW", %#"PRIxTW"; // ", rd_name, rs1_name,
 		  imms, immr);
       if (immr == 0)
 	store_rd (cpu, rd, (cpu->regs[rs1] & 0x1) << imms);
-      if (immr < imms)
-	store_rd (cpu, rd, RV_X (cpu->regs[rs1], 0, imms) << immr);
+      else if (immr < imms)
+	store_rd (cpu, rd, RV_X (cpu->regs[rs1], 0, imms - immr + 1) << immr);
       else
 	store_rd (cpu, rd, RV_X (cpu->regs[rs1], imms, immr - imms + 1));
       break;
     case MATCH_BFOS:
-      TRACE_INSN (cpu, "sbext %s, %s, %#"PRIxTW", %#"PRIxTW"; // ", rd_name, rs1_name,
+      TRACE_INSN (cpu, "bfos %s, %s, %#"PRIxTW", %#"PRIxTW"; // ", rd_name, rs1_name,
 		  imms, immr);
       if (immr == 0)
-	store_rd (cpu, rd, RV_SEXT ((cpu->regs[rs1] & 0x1) << imms, imms));
-      if (immr < imms)
-	store_rd (cpu, rd, RV_SEXT (RV_X (cpu->regs[rs1], 0, imms) << immr, immr));
+	store_rd (cpu, rd, RV_SEXT ((cpu->regs[rs1] & 0x1) << imms, imms + 1));
+      else if (immr < imms)
+	store_rd (cpu, rd, RV_SEXT (RV_X (cpu->regs[rs1], 0, imms - immr + 1) << immr,  imms + 1));
       else
 	store_rd (cpu, rd, RV_SEXT (RV_X (cpu->regs[rs1], imms, immr - imms + 1), immr - imms + 1));
       break;
