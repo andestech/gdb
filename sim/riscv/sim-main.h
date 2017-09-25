@@ -99,5 +99,7 @@ extern sim_cia riscv_decode (SIM_CPU *, unsigned_word, sim_cia, int);
 #define DEFAULT_MEM_SIZE (64 * 1024 * 1024)
 
 #define RISCV_XLEN(cpu) MACH_WORD_BITSIZE (CPU_MACH (cpu))
+#define SIM_RV_X(x, s, n)  (((x) >> (s)) & ((1L << (n)) - 1L))
+#define SIM_RV_SEXT(x, bs) ((((x) & ((1L << (bs)) - 1L)) ^ (1L << ((bs) - 1L))) - (1L << ((bs) - 1L)))
 
 #endif
