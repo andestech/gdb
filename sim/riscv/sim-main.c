@@ -1231,8 +1231,8 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
   unsigned_word beqc_imm = EXTRACT_STYPE_IMM7(iw);
   unsigned_word sb10_imm = EXTRACT_STYPE_IMM10(iw);
 
-  unsigned_word immr = EXTRACT_ITYPE_IMM6H (iw);
-  unsigned_word imms = EXTRACT_ITYPE_IMM6L (iw);
+  unsigned_word msb = EXTRACT_ITYPE_IMM6H (iw);
+  unsigned_word lsb = EXTRACT_ITYPE_IMM6L (iw);
   unsigned_word cimm6 = EXTRACT_TYPE_CIMM6 (iw);
   unsigned_word shamt_imm = ((iw >> OP_SH_SHAMT) & OP_MASK_SHAMT);
   unsigned_word tmp;
@@ -1909,34 +1909,34 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_BFOZ:
       TRACE_INSN (cpu, "bfoz %s, %s, %#"PRIxTW", %#"PRIxTW"; // ", rd_name, rs1_name,
-		  imms, immr);
-      if (immr == 0)
-	store_rd (cpu, rd, (cpu->regs[rs1] & 0x1) << imms);
-      else if (immr < imms)
-	store_rd (cpu, rd, SIM_RV_X (cpu->regs[rs1], 0, imms - immr + 1) << immr);
+		  msb, lsb);
+      if (msb == 0)
+	store_rd (cpu, rd, (cpu->regs[rs1] & 0x1) << lsb);
+      else if (msb < lsb)
+	store_rd (cpu, rd, SIM_RV_X (cpu->regs[rs1], 0, lsb - msb + 1) << msb);
       else
-	store_rd (cpu, rd, SIM_RV_X (cpu->regs[rs1], imms, immr - imms + 1));
+	store_rd (cpu, rd, SIM_RV_X (cpu->regs[rs1], lsb, msb - lsb + 1));
       break;
     case MATCH_BFOS:
       TRACE_INSN (cpu, "bfos %s, %s, %#"PRIxTW", %#"PRIxTW"; // ", rd_name, rs1_name,
-		  imms, immr);
-      if (immr == 0)
-	store_rd (cpu, rd, SIM_RV_SEXT ((cpu->regs[rs1] & 0x1) << imms, imms + 1));
-      else if (immr < imms)
-	store_rd (cpu, rd, SIM_RV_SEXT (SIM_RV_X (cpu->regs[rs1], 0, imms - immr + 1) << immr,  imms + 1));
+		  msb, lsb);
+      if (msb == 0)
+	store_rd (cpu, rd, SIM_RV_SEXT ((cpu->regs[rs1] & 0x1) << lsb, lsb + 1));
+      else if (msb < lsb)
+	store_rd (cpu, rd, SIM_RV_SEXT (SIM_RV_X (cpu->regs[rs1], 0, lsb - msb + 1) << msb,  lsb + 1));
       else
-	store_rd (cpu, rd, SIM_RV_SEXT (SIM_RV_X (cpu->regs[rs1], imms, immr - imms + 1), immr - imms + 1));
+	store_rd (cpu, rd, SIM_RV_SEXT (SIM_RV_X (cpu->regs[rs1], lsb, msb - lsb + 1), msb - lsb + 1));
       break;
 
       break;
     case MATCH_BSET:
-      store_rd (cpu, rd, cpu->regs[rs1] | (1 << immr));
+      store_rd (cpu, rd, cpu->regs[rs1] | (1 << msb));
       break;
     case MATCH_BCLR:
-      store_rd (cpu, rd, cpu->regs[rs1] & ~(1 << immr));
+      store_rd (cpu, rd, cpu->regs[rs1] & ~(1 << msb));
       break;
     case MATCH_BTGL:
-      store_rd (cpu, rd, cpu->regs[rs1] ^ (1 << immr));
+      store_rd (cpu, rd, cpu->regs[rs1] ^ (1 << msb));
       break;
     case MATCH_BBC:
       TRACE_INSN (cpu, "bbc %s, %d, %#"PRIxTW";  // if (!(%s & (1 << %d))) goto %#"PRIxTW,
