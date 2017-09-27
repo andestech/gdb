@@ -2037,8 +2037,8 @@ void step_once (SIM_CPU *cpu)
   ++cpu->csr.mcycle;
   if (RISCV_XLEN (cpu) == 32)
     {
-      cpu->csr.cycleh = (cpu->csr.cycle >> 32);
-      cpu->csr.mcycleh = (cpu->csr.mcycle >> 32);
+      cpu->csr.cycleh = ((uint64_t)cpu->csr.cycle >> 32);
+      cpu->csr.mcycleh = ((uint64_t)cpu->csr.mcycle >> 32);
     }
   ++cpu->csr.instret;
 
@@ -2174,6 +2174,9 @@ initialize_cpu (SIM_DESC sd, SIM_CPU *cpu, int mhartid)
 
   cpu->csr.mimpid = 0x8000;
   cpu->csr.mhartid = mhartid;
+  cpu->csr.cycle = 0;
+  cpu->csr.mcycle = 0;
+  cpu->csr.instret = 0;
 }
 
 /* Some utils don't like having a NULL environ.  */
