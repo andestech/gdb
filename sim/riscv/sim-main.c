@@ -810,9 +810,9 @@ execute_c (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 					+ EXTRACT_RVC_LD_IMM (iw),
 					cpu->regs[crs2s]);
 	  return pc;
-	case MATCH_C_EX9:
+	case MATCH_C_EX9IT:
 	  iw = sim_core_read_unaligned_4 (cpu, cpu->pc, exec_map,
-					  cpu->csr.itb + EXTRACT_RVC_EX9_IMM (iw) * 4);
+					  cpu->csr.itb + EXTRACT_RVC_EX9IT_IMM (iw));
 	  pc = riscv_decode (cpu, iw, cpu->pc, 1);
 	  return pc;
 	case MATCH_C_EX10:
