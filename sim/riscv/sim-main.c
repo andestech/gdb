@@ -2033,12 +2033,22 @@ void step_once (SIM_CPU *cpu)
   pc = riscv_decode (cpu, iw, pc, 0);
 
   /* TODO: Try to use a common counter and only update on demand (reads).  */
-  ++cpu->csr.cycle;
-  ++cpu->csr.mcycle;
   if (RISCV_XLEN (cpu) == 32)
     {
-      cpu->csr.cycleh = ((uint64_t)cpu->csr.cycle >> 32);
-      cpu->csr.mcycleh = ((uint64_t)cpu->csr.mcycle >> 32);
+      unsigned_word old_cycle = cpu->csr.cycle++;
+      ++cpu->csr.mcycle;
+
+      if (old_cycle > cpu->csr.cycle)
+	{
+	  /* Increase cycleh if cycle is overflowed.  */
+	  cpu->csr.cycleh++;
+	  cpu->csr.mcycleh++;
+	}
+    }
+  else
+    {
+      ++cpu->csr.cycle;
+      ++cpu->csr.mcycle;
     }
   ++cpu->csr.instret;
 
