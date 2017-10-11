@@ -815,6 +815,20 @@ execute_c (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 					  cpu->csr.itb + EXTRACT_RVC_EX9IT_IMM (iw));
 	  pc = riscv_decode (cpu, iw, cpu->pc, 1);
 	  return pc;
+	case MATCH_C_EX9CS:
+          TRACE_INSN (cpu, "ex9cs");
+	  unsigned int offset = EXTRACT_RVC_EX9CS_IMM(iw);
+	  iw = sim_core_read_aligned_2 (cpu, cpu->pc, exec_map,
+					  cpu->pc + offset);
+          int len = riscv_insn_length (iw);
+	  if (len == 4) // 32-bit insn
+	    iw |= ((unsigned_word)sim_core_read_aligned_2 (cpu, cpu->pc, exec_map, cpu->pc + offset + 2) << 16);
+	  else
+	    iw |= ((unsigned_word)sim_core_read_aligned_2 (cpu, cpu->pc, exec_map, cpu->pc + offset));
+	  
+	  pc = riscv_decode (cpu, iw, cpu->pc, 2);
+	  
+	  return pc;
 	case MATCH_C_EX10:
 	  iw = sim_core_read_unaligned_4 (cpu, cpu->pc, exec_map,
 					  cpu->csr.itb + EXTRACT_RVC_EX10_IMM (iw) * 4);
@@ -1511,10 +1525,20 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	}
       break;
     case MATCH_JAL:
-      if (ex9)
+      if (ex9 == 1)
 	{
+	  // case ex9.it
 	  store_rd (cpu, rd, cpu->pc + 2);
 	  pc = (cpu->pc & 0xfff00000) | EXTRACT_UJTYPE_IMM (iw);
+	}
+      else if (ex9 == 2) 
+	{
+	  // case ex9.cs
+	  TRACE_INSN (cpu, "jal %s, %"PRIiTW";", rd_name, EXTRACT_UJTYPE_IMM (iw));
+	  store_rd (cpu, rd, cpu->pc + 2);
+	  pc = cpu->pc + EXTRACT_UJTYPE_IMM (iw);
+	  TRACE_BRANCH (cpu, "to %#"PRIxTW, pc);
+
 	}
       else
 	{
