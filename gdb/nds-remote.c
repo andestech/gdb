@@ -34,10 +34,12 @@
 #include "ui-out.h"		/* current_uiout */
 #include "exceptions.h"
 #include <ctype.h>
+#include <dlfcn.h>
 
 #include "elf-bfd.h"		/* elf_elfheader () */
 #include "objfiles.h"
 #include "nds-elf.h"
+#include "dis-asm.h"
 
 void nds_init_remote_cmds (void);
 
@@ -542,6 +544,128 @@ nds_endian_check_command (const char *args, int from_tty)
   if (nds_remote_info.endian != elf_endian)
     warning ("Target and elf have different endian");
 }
+
+
+/* Data structures used by ACE */
+typedef struct ace_operand
+{
+  const char *name;  /* operand name */
+  int bitpos;  /* operand start position */
+  int bitsize;  /* operand width */
+  int shift;  /* operand shift amount */
+  int hw_res;  /* hardware resource */
+  const char *hw_name;  /* hardware/register name */
+} ace_op_t;
+
+extern struct riscv_opcode *ace_opcs;
+extern ace_op_t *ace_ops;
+/* Represent whether ACE shared library is loaded successfully */
+extern bfd_boolean ace_lib_load_success;
+
+static void
+nds_handle_ace(const char *ace_lib_path)
+{
+  void *dlc = dlopen (ace_lib_path, RTLD_NOW | RTLD_LOCAL);
+  char *err;
+
+  if (dlc == NULL)
+    err = (char *) dlerror ();
+  else
+    {
+      ace_ops = (ace_op_t *) dlsym (dlc, "ace_operands");
+      err = (char *) dlerror ();
+      if (err == NULL)
+	{
+	  ace_opcs = (struct riscv_opcode *) dlsym (dlc, "ace_opcodes");
+	  err = (char *) dlerror ();
+	}
+    }
+
+  if (err == NULL)
+    ace_lib_load_success = TRUE;
+  else
+    fprintf (stderr, _("Fault to load ACE shared library: %s\n"), err);
+}
+
+/* Callback for "nds read_acedesc" command.  */
+
+static void
+nds_read_ace_desc_command (const char *args, int from_tty)
+{
+  struct utsname os;
+
+  /* What kind of platform am I running at?  */
+  if (uname (&os) == 0)
+    {
+      struct cleanup *back_to;
+      struct ui_file *res;
+      struct ui_file_buffer ui_buf;
+      volatile struct gdb_exception except;
+      int len, cpid;
+
+      /* ui_file for qRcmd.  */
+      res = mem_fileopen ();
+      back_to = make_cleanup_ui_file_delete (res);
+
+      /* ui_file_buffer for reading ui_file.  */
+      ui_buf.buf_size = 2048;
+      ui_buf.buf = (unsigned char *) xmalloc (ui_buf.buf_size);
+      make_cleanup (free_current_contents, &ui_buf.buf);
+
+      for (cpid = 0; cpid < 5; cpid++)
+	{
+	  char qrcmd[80];
+
+	  if (cpid == 4)
+	    sprintf (qrcmd, "nds ace %s", os.sysname);
+	  else
+	    sprintf (qrcmd, "nds cop%d %s", cpid, os.sysname);
+
+	  /* make_cleanup outside TRY_CACHE,
+	     because it save and reset cleanup-chain.  */
+	  scoped_restore save_stdtarg = make_scoped_restore (&gdb_stdtarg, res);
+	  /* Supress error messages from gdbserver
+	     if gdbserver doesn't support the monitor command.  */
+
+	  TRY
+	    {
+	      target_rcmd (qrcmd, res);
+	    }
+	  CATCH (except, RETURN_MASK_ERROR)
+	    {
+	      goto out;
+	    }
+	  END_CATCH
+
+	  /* Read data in ui_file.  */
+	  memset (ui_buf.buf, 0, ui_buf.buf_size);
+	  ui_file_put (res, do_ui_file_put_memcpy, &ui_buf);
+	  ui_file_rewind (res);
+
+	  /* Trim trailing newline characters.  */
+	  len = strlen ((char *) ui_buf.buf);
+	  while (len != 0 && isspace (ui_buf.buf[len - 1]))
+	    len--;
+	  ui_buf.buf[len] = '\0';
+
+	  if (len != 0)
+	    {
+	      FILE *fptr = NULL;
+
+	      if (cpid == 4)
+		strcpy (qrcmd, "target.ace");
+	      else
+		sprintf (qrcmd, "target.cop%d", cpid);
+	      remote_file_get ((char *) ui_buf.buf, qrcmd, from_tty);
+	      nds_handle_ace (qrcmd);
+	      unlink (qrcmd);
+	    }
+	}
+out:
+      do_cleanups (back_to);
+    }
+}
+
 
 static int
 nds_get_acr_info (struct gdbarch *gdbarch, const char *name,
@@ -854,6 +978,11 @@ nds_init_remote_cmds (void)
 	   _("Turn on pipeline for profiling."), &nds_pipeline_cmdlist);
   add_cmd ("off", no_class, nds_pipeline_off_command,
 	   _("Turn off pipeline for profiling."), &nds_pipeline_cmdlist);
+
+  /* nds read_acedesc  */
+  add_cmd ("read_acedesc", no_class, nds_read_ace_desc_command,
+	   _("Request the ACE or coprocessor description file from remote."),
+	     &nds_cmdlist);
 
   /* nds print  */
   add_cmd ("print", no_class, nds_print_acr_command,
