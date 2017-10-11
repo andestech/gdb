@@ -6307,11 +6307,21 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	}
       break;
     case MATCH_JAL:
-      if (ex9)
-      {
-          store_rd (cpu, rd, cpu->pc + 2);
-          pc = (cpu->pc & 0xfff00000) | EXTRACT_UJTYPE_IMM_EXECIT_TAB (iw);
-      }
+      if (ex9 == 1)
+	{
+	  // case ex9.it
+	  store_rd (cpu, rd, cpu->pc + 2);
+	  pc = (cpu->pc & 0xfff00000) | EXTRACT_UJTYPE_IMM_EXECIT_TAB (iw);
+	}
+      else if (ex9 == 2) 
+	{
+	  // case ex9.cs
+	  TRACE_INSN (cpu, "jal %s, %"PRIiTW";", rd_name, EXTRACT_JTYPE_IMM (iw));
+	  store_rd (cpu, rd, cpu->pc + 2);
+	  pc = cpu->pc + EXTRACT_JTYPE_IMM (iw);
+	  TRACE_BRANCH (cpu, "to %#"PRIxTW, pc);
+
+	}
       else
       {
           TRACE_INSN (cpu, "jal %s, %" PRIiTW ";", rd_name,
