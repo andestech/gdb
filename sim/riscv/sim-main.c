@@ -126,8 +126,8 @@ store_csr (SIM_CPU *cpu, const char *name, int csr, unsigned_word *reg,
       cpu->csr.frm = (val >> 5) & 0x7;
       cpu->csr.fflags = val & 0x1f;
       break;
-    case CSR_ITB:
-      cpu->csr.itb = val;
+    case CSR_UITB:
+      cpu->csr.uitb = val;
       break;
 
     /* Allow certain registers only in respective modes.  */
@@ -812,7 +812,7 @@ execute_c (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 	  return pc;
 	case MATCH_C_EX9IT:
 	  iw = sim_core_read_unaligned_4 (cpu, cpu->pc, exec_map,
-					  cpu->csr.itb + EXTRACT_RVC_EX9IT_IMM (iw));
+					  cpu->csr.uitb + EXTRACT_RVC_EX9IT_IMM (iw));
 	  pc = riscv_decode (cpu, iw, cpu->pc, 1);
 	  return pc;
 	case MATCH_C_EX9CS:
@@ -831,7 +831,7 @@ execute_c (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 	  return pc;
 	case MATCH_C_EX10:
 	  iw = sim_core_read_unaligned_4 (cpu, cpu->pc, exec_map,
-					  cpu->csr.itb + EXTRACT_RVC_EX10_IMM (iw) * 4);
+					  cpu->csr.uitb + EXTRACT_RVC_EX10_IMM (iw) * 4);
 	  pc = riscv_decode (cpu, iw, cpu->pc, 1);
 	  return pc;
 	default:
