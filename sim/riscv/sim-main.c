@@ -2084,6 +2084,75 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	  TRACE_BRANCH (cpu, "to %#"PRIxTW, pc);
 	}
       break;
+    case MATCH_FFB:
+    /* FIXME: Implement for little-endian only.  */
+      {
+	int j;
+	TRACE_INSN (cpu, "ffb %s, %s, %s;)", rd_name, rs1_name, rs2_name);
+	store_rd (cpu, rd, 0);
+	for (j = 0; j < RISCV_XLEN (cpu); j+=8)
+	  {
+	    if ((cpu->regs[rs1] & ((uint64_t) 0xff << j))
+		== (cpu->regs[rs2] & ((uint64_t) 0xff << j)))
+	    {
+	      store_rd (cpu, rd, (int64_t) (j - RISCV_XLEN (cpu)) / 8);
+	      break;
+	    }
+	  }
+      }
+      break;
+    case MATCH_FFZMISM:
+    /* FIXME: Implement for little-endian only.  */
+      {
+	int j;
+	TRACE_INSN (cpu, "ffzmism %s, %s, %s;)", rd_name, rs1_name, rs2_name);
+	store_rd (cpu, rd, 0);
+	for (j = 0; j < RISCV_XLEN (cpu); j+=8)
+	  {
+	    if ((cpu->regs[rs1] & ((uint64_t) 0xff << j)) == 0
+		|| ((cpu->regs[rs1] & ((uint64_t) 0xff << j))
+		    != (cpu->regs[rs2] & ((uint64_t) 0xff << j))))
+	    {
+	      store_rd (cpu, rd, (int64_t) (j - RISCV_XLEN (cpu)) / 8);
+	      break;
+	    }
+	  }
+      }
+      break;
+    case MATCH_FFMISM:
+    /* FIXME: Implement for little-endian only.  */
+      {
+	int j;
+	TRACE_INSN (cpu, "ffmism %s, %s, %s;)", rd_name, rs1_name, rs2_name);
+	store_rd (cpu, rd, 0);
+	for (j = 0; j < RISCV_XLEN (cpu); j+=8)
+	  {
+	    if ((cpu->regs[rs1] & ((uint64_t) 0xff << j))
+		!= (cpu->regs[rs2] & ((uint64_t) 0xff << j)))
+	    {
+	      store_rd (cpu, rd, (int64_t) (j - RISCV_XLEN (cpu)) / 8);
+	      break;
+	    }
+	  }
+      }
+      break;
+    case MATCH_FLMISM:
+    /* FIXME: Implement for little-endian only.  */
+      {
+	int j;
+	TRACE_INSN (cpu, "flmism %s, %s, %s;)", rd_name, rs1_name, rs2_name);
+	store_rd (cpu, rd, 0);
+	for (j = RISCV_XLEN (cpu) - 8; j >= 0; j-=8)
+	  {
+	    if ((cpu->regs[rs1] & ((uint64_t) 0xff << j))
+		!= (cpu->regs[rs2] & ((uint64_t) 0xff << j)))
+	    {
+	      store_rd (cpu, rd, (int64_t) (j - RISCV_XLEN (cpu)) / 8);
+	      break;
+	    }
+	  }
+      }
+      break;
     case MATCH_CSRRC:
       TRACE_INSN (cpu, "csrrc");
       switch (csr)
