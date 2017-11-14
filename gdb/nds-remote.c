@@ -600,8 +600,8 @@ nds_read_ace_desc_command (const char *args, int from_tty)
       struct cleanup *back_to;
       struct ui_file *res;
       struct ui_file_buffer ui_buf;
-      volatile struct gdb_exception except;
-      int len, cpid;
+      char qrcmd[80];
+      const char *filename = NULL;
 
       /* ui_file for qRcmd.  */
       res = mem_fileopen ();
@@ -612,54 +612,24 @@ nds_read_ace_desc_command (const char *args, int from_tty)
       ui_buf.buf = (unsigned char *) xmalloc (ui_buf.buf_size);
       make_cleanup (free_current_contents, &ui_buf.buf);
 
-      for (cpid = 0; cpid < 5; cpid++)
+      /* make_cleanup outside TRY_CACHE,
+	 because it save and reset cleanup-chain.  */
+      scoped_restore save_stdtarg = make_scoped_restore (&gdb_stdtarg, res);
+      /* Supress error messages from gdbserver
+	 if gdbserver doesn't support the monitor command.  */
+
+      sprintf (qrcmd, "nds ace %s", os.sysname);
+      if (nds_issue_qrcmd (qrcmd, res, &ui_buf) == -1)
+	goto out;
+
+      filename = (char *) ui_buf.buf;
+      if (strlen (filename) != 0)
 	{
-	  char qrcmd[80];
+	  const char *lib = "./libace.so";
 
-	  if (cpid == 4)
-	    sprintf (qrcmd, "nds ace %s", os.sysname);
-	  else
-	    sprintf (qrcmd, "nds cop%d %s", cpid, os.sysname);
-
-	  /* make_cleanup outside TRY_CACHE,
-	     because it save and reset cleanup-chain.  */
-	  scoped_restore save_stdtarg = make_scoped_restore (&gdb_stdtarg, res);
-	  /* Supress error messages from gdbserver
-	     if gdbserver doesn't support the monitor command.  */
-
-	  TRY
-	    {
-	      target_rcmd (qrcmd, res);
-	    }
-	  CATCH (except, RETURN_MASK_ERROR)
-	    {
-	      goto out;
-	    }
-	  END_CATCH
-
-	  /* Read data in ui_file.  */
-	  memset (ui_buf.buf, 0, ui_buf.buf_size);
-	  ui_file_put (res, do_ui_file_put_memcpy, &ui_buf);
-	  ui_file_rewind (res);
-
-	  /* Trim trailing newline characters.  */
-	  len = strlen ((char *) ui_buf.buf);
-	  while (len != 0 && isspace (ui_buf.buf[len - 1]))
-	    len--;
-	  ui_buf.buf[len] = '\0';
-
-	  if (len != 0)
-	    {
-	      FILE *fptr = NULL;
-
-	      if (cpid == 4)
-		strcpy (qrcmd, "target.ace");
-	      else
-		sprintf (qrcmd, "target.cop%d", cpid);
-	      remote_file_get ((char *) ui_buf.buf, qrcmd, from_tty);
-	      nds_handle_ace (qrcmd);
-	      unlink (qrcmd);
-	    }
+	  remote_file_get (filename, lib, from_tty);
+	  nds_handle_ace (lib);
+	  unlink (lib);
 	}
 out:
       do_cleanups (back_to);
