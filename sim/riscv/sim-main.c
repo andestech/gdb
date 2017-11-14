@@ -26,6 +26,7 @@
 
 #include <inttypes.h>
 #include <time.h>
+#include <ctype.h>
 #include <unistd.h>
 #include "sim/callback.h"
 #include <sys/time.h>
@@ -194,15 +195,15 @@ execute_d (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
   uint64_t u64;
   int64_t i64;
   sim_cia pc = cpu->pc + 4;
-  if (ex9)
-    pc -= 2;
-
   /* Rounding mode.  */
   int rm = (iw >> OP_SH_RM) & OP_MASK_RM;
   int rounding = round_modes[rm];
-
   sim_fpu sft, sft2;
   sim_fpu sfa, sfb, sfc;
+
+  if (ex9)
+    pc -= 2;
+
   sim_fpu_64to (&sfa, cpu->fpregs[rs1].v[0]);
   sim_fpu_64to (&sfb, cpu->fpregs[rs2].v[0]);
 
@@ -510,9 +511,6 @@ execute_f (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
   int64_t i64;
   uint64_t u64;
   sim_cia pc = cpu->pc + 4;
-  if (ex9)
-    pc -= 2;
-
   /* Rounding mode.  */
   int rm = (iw >> OP_SH_RM) & OP_MASK_RM;
   int rounding = round_modes[rm];
@@ -521,6 +519,9 @@ execute_f (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
   sim_fpu sfa, sfb, sfc;
   sim_fpu_32to (&sfa, cpu->fpregs[rs1].w[0]);
   sim_fpu_32to (&sfb, cpu->fpregs[rs2].w[0]);
+
+  if (ex9)
+    pc -= 2;
 
   switch (op->match & mask_mul_add)
     {
@@ -1313,13 +1314,14 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
   unsigned_word shamt_imm = ((iw >> OP_SH_SHAMT) & OP_MASK_SHAMT);
   unsigned_word tmp;
   unsigned_word sys_id;
+  host_callback *cb;
   int eh_rve_p = cpu->elf_flags & 0x8;
   sim_cia pc = cpu->pc + 4;
+  CB_SYSCALL sc;
   if (ex9)
     pc -= 2;
 
-  host_callback *cb = STATE_CALLBACK (sd);
-  CB_SYSCALL sc;
+  cb = STATE_CALLBACK (sd);
 
   CB_SYSCALL_INIT (&sc);
 
@@ -1699,7 +1701,6 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       sim_core_write_unaligned_1 (cpu, cpu->pc, write_map,
 				  cpu->regs[rs1] + s_imm, cpu->regs[rs2]);
       break;
-
     case MATCH_CSRRC:
       TRACE_INSN (cpu, "csrrc");
       switch (csr)
