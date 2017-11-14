@@ -25,6 +25,7 @@
 
 #include <inttypes.h>
 #include <time.h>
+#include <ctype.h>
 #include <unistd.h>
 #include <sys/time.h>
 
@@ -192,15 +193,15 @@ execute_d (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
   uint64_t u64;
   int64_t i64;
   sim_cia pc = cpu->pc + 4;
-  if (ex9)
-    pc -= 2;
-
   /* Rounding mode.  */
   int rm = (iw >> OP_SH_RM) & OP_MASK_RM;
   int rounding = round_modes[rm];
-
   sim_fpu sft, sft2;
   sim_fpu sfa, sfb, sfc;
+
+  if (ex9)
+    pc -= 2;
+
   sim_fpu_64to (&sfa, cpu->fpregs[rs1].v[0]);
   sim_fpu_64to (&sfb, cpu->fpregs[rs2].v[0]);
 
@@ -351,14 +352,14 @@ execute_d (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     {
     case MATCH_FLD:
       TRACE_INSN (cpu, "fld %s, %" PRIiTW "(%s)",
-		  frd_name, rs1_name, i_imm);
+		  frd_name, i_imm, rs1_name);
       store_frd64 (cpu, rd,
 	sim_core_read_unaligned_8 (cpu, cpu->pc, read_map,
 				   cpu->regs[rs1] + i_imm));
       break;
     case MATCH_FSD:
       TRACE_INSN (cpu, "fsd %s, %" PRIiTW "(%s)",
-		  frs2_name, rs1_name, s_imm);
+		  frs2_name, s_imm, rs1_name);
       sim_core_write_unaligned_8 (cpu, cpu->pc, write_map,
 				  cpu->regs[rs1] + s_imm,
 				  cpu->fpregs[rs2].v[0]);
@@ -508,9 +509,6 @@ execute_f (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
   int64_t i64;
   uint64_t u64;
   sim_cia pc = cpu->pc + 4;
-  if (ex9)
-    pc -= 2;
-
   /* Rounding mode.  */
   int rm = (iw >> OP_SH_RM) & OP_MASK_RM;
   int rounding = round_modes[rm];
@@ -519,6 +517,9 @@ execute_f (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
   sim_fpu sfa, sfb, sfc;
   sim_fpu_32to (&sfa, cpu->fpregs[rs1].w[0]);
   sim_fpu_32to (&sfb, cpu->fpregs[rs2].w[0]);
+
+  if (ex9)
+    pc -= 2;
 
   switch (op->match & mask_mul_add)
     {
@@ -604,49 +605,49 @@ execute_f (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
   switch (op->match & mask_convert)
     {
     case MATCH_FCVT_W_S:
-      TRACE_INSN (cpu, "fcvt.w.s %s, %s, %s",
+      TRACE_INSN (cpu, "fcvt.w.s %s, %s",
 		  rd_name, frs1_name);
       sim_fpu_to32i (&i32, &sfa, rounding);
       cpu->regs[rd] = i32;
       goto done;
     case MATCH_FCVT_WU_S:
-      TRACE_INSN (cpu, "fcvt.wu.s %s, %s, %s",
+      TRACE_INSN (cpu, "fcvt.wu.s %s, %s",
 		  rd_name, frs1_name);
       sim_fpu_to32u (&u32, &sfa, rounding);
       i32 = u32;
       cpu->regs[rd] = i32;
       goto done;
     case MATCH_FCVT_S_W:
-      TRACE_INSN (cpu, "fcvt.s.w %s, %s, %s",
+      TRACE_INSN (cpu, "fcvt.s.w %s, %s",
 		  frd_name, rs1_name);
       sim_fpu_i32to (&sft, cpu->regs[rs1], rounding);
       sim_fpu_round_32 (&sft, rounding, sim_fpu_denorm_default);
       sim_fpu_to32 ((unsigned32 *) (cpu->fpregs + rd), &sft);
       goto done;
     case MATCH_FCVT_S_WU:
-      TRACE_INSN (cpu, "fcvt.s.wu %s, %s, %s",
+      TRACE_INSN (cpu, "fcvt.s.wu %s, %s",
 		  frd_name, rs1_name);
       sim_fpu_u32to (&sft, cpu->regs[rs1], rounding);
       sim_fpu_round_32 (&sft, rounding, sim_fpu_denorm_default);
       sim_fpu_to32 ((unsigned32 *) (cpu->fpregs + rd), &sft);
       goto done;
     case MATCH_FCVT_L_S:
-      TRACE_INSN (cpu, "fcvt.l.s %s, %s, %s",
+      TRACE_INSN (cpu, "fcvt.l.s %s, %s",
 		  rd_name, frs1_name);
       cpu->regs[rd] = (int64_t) cpu->fpregs[rs1].S[0];
       goto done;
     case MATCH_FCVT_LU_S:
-      TRACE_INSN (cpu, "fcvt.lu.s %s, %s, %s",
+      TRACE_INSN (cpu, "fcvt.lu.s %s, %s",
 		  rd_name, frs1_name);
       cpu->regs[rd] = (uint64_t) cpu->fpregs[rs1].S[0];
       goto done;
     case MATCH_FCVT_S_L:
-      TRACE_INSN (cpu, "fcvt.s.l %s, %s, %s",
+      TRACE_INSN (cpu, "fcvt.s.l %s, %s",
 		  frd_name, rs1_name);
       cpu->fpregs[rd].S[0] = (float) ((int64_t) cpu->regs[rs1]);
       goto done;
     case MATCH_FCVT_S_LU:
-      TRACE_INSN (cpu, "fcvt.s.lu %s, %s, %s",
+      TRACE_INSN (cpu, "fcvt.s.lu %s, %s",
 		  frd_name, rs1_name);
       cpu->fpregs[rd].S[0] = (float) cpu->regs[rs1];
       goto done;
@@ -656,14 +657,14 @@ execute_f (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     {
     case MATCH_FLW:
       TRACE_INSN (cpu, "flw %s, %" PRIiTW "(%s)",
-		  frd_name, rs1_name, i_imm);
+		  frd_name, i_imm, rs1_name);
       store_frd (cpu, rd, EXTEND32 (
 	sim_core_read_unaligned_4 (cpu, cpu->pc, read_map,
 				   cpu->regs[rs1] + i_imm)));
       break;
     case MATCH_FSW:
       TRACE_INSN (cpu, "fsw %s, %" PRIiTW "(%s)",
-		  frs2_name, rs1_name, s_imm);
+		  frs2_name, s_imm, rs1_name);
       sim_core_write_unaligned_4 (cpu, cpu->pc, write_map,
 				  cpu->regs[rs1] + s_imm, cpu->fpregs[rs2].w[0]);
       break;
@@ -1016,18 +1017,24 @@ execute_c (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 	  pc = riscv_decode (cpu, iw, cpu->pc, 1);
 	  return pc;
 	case MATCH_C_EX9CS:
-          TRACE_INSN (cpu, "ex9cs");
-	  unsigned int offset = EXTRACT_RVC_EX9CS_IMM(iw);
-	  iw = sim_core_read_aligned_2 (cpu, cpu->pc, exec_map,
+	  {
+	    unsigned int offset = EXTRACT_RVC_EX9CS_IMM(iw);
+	    int len;
+	    TRACE_INSN (cpu, "ex9cs");
+	    iw = sim_core_read_aligned_2 (cpu, cpu->pc, exec_map,
 					  cpu->pc + offset);
-          int len = riscv_insn_length (iw);
-	  if (len == 4) // 32-bit insn
-	    iw |= ((unsigned_word)sim_core_read_aligned_2 (cpu, cpu->pc, exec_map, cpu->pc + offset + 2) << 16);
-	  else
-	    iw |= ((unsigned_word)sim_core_read_aligned_2 (cpu, cpu->pc, exec_map, cpu->pc + offset));
-	  
-	  pc = riscv_decode (cpu, iw, cpu->pc, 2);
-	  
+	    len = riscv_insn_length (iw);
+	    if (len == 4) // 32-bit insn
+	      iw |= ((unsigned_word)sim_core_read_aligned_2 (
+				      cpu, cpu->pc, exec_map,
+				      cpu->pc + offset + 2) << 16);
+	    else
+	      iw |= ((unsigned_word)sim_core_read_aligned_2 (
+				      cpu, cpu->pc, exec_map,
+				      cpu->pc + offset));
+
+	    pc = riscv_decode (cpu, iw, cpu->pc, 2);
+	  }
 	  return pc;
 	case MATCH_C_EX10:
 	  iw = sim_core_read_unaligned_4 (cpu, cpu->pc, exec_map,
@@ -1407,7 +1414,7 @@ execute_lsmw (SIM_CPU *cpu, unsigned_word iw,
 	      m_bit ? 'm' : ' ',
 	      rs_name, rd_name, re_name);
   /* Do the alignment check. */
-  if (base & size - 1)
+  if (base & (size - 1))
     {
       fprintf (stderr, "address is not aligned to %d-byte boundary.\n", size);
       sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
@@ -1534,13 +1541,14 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
   unsigned_word shamt_imm = ((iw >> OP_SH_SHAMT) & OP_MASK_SHAMT);
   unsigned_word tmp;
   unsigned_word sys_id;
+  host_callback *cb;
   int eh_rve_p = cpu->elf_flags & 0x8;
   sim_cia pc = cpu->pc + 4;
+  CB_SYSCALL sc;
   if (ex9)
     pc -= 2;
 
-  host_callback *cb = STATE_CALLBACK (sd);
-  CB_SYSCALL sc;
+  cb = STATE_CALLBACK (sd);
 
   CB_SYSCALL_INIT (&sc);
 
@@ -1746,12 +1754,12 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_SLTI:
       TRACE_INSN (cpu, "slti %s %s %" PRIiTW,
-		  rd_name, rs1_name, rs2_name, i_imm);
+		  rd_name, rs1_name, i_imm);
       store_rd (cpu, rd, !!((signed_word)cpu->regs[rs1] < (signed_word)i_imm));
       break;
     case MATCH_SLTIU:
       TRACE_INSN (cpu, "sltiu %s %s %" PRIiTW,
-		  rd_name, rs1_name, rs2_name, i_imm);
+		  rd_name, rs1_name, i_imm);
       store_rd (cpu, rd,
 		!!((unsigned_word)cpu->regs[rs1] < (unsigned_word)i_imm));
       break;
@@ -1851,9 +1859,9 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_LDGP: {
       unsigned_word gp_imm = EXTRACT_GPTYPE_LD_IMM(iw);
       TRACE_INSN (cpu, "ldgp %s, %"PRIiTW"; // ",
-		  rd_name, gp_imm, rs1_name);
+		  rd_name, gp_imm);
       RISCV_ASSERT_RV64 (cpu, "insn: %s", op->name);
-      store_rd (cpu, rd, 
+      store_rd (cpu, rd,
 	sim_core_read_unaligned_8 (cpu, cpu->pc, read_map,
 				   cpu->regs[X_GP] + gp_imm));
       break;
@@ -1869,7 +1877,7 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_LWGP: {
       unsigned_word gp_imm = EXTRACT_GPTYPE_LW_IMM(iw);
       TRACE_INSN (cpu, "lwgp %s, %"PRIiTW"; // ",
-		  rd_name, gp_imm, rs1_name);
+		  rd_name, gp_imm);
       store_rd (cpu, rd, EXTEND32 (
 	sim_core_read_unaligned_4 (cpu, cpu->pc, read_map,
 				   cpu->regs[X_GP] + gp_imm)));
@@ -1885,8 +1893,8 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_LWUGP: {
       unsigned_word gp_imm = EXTRACT_GPTYPE_LW_IMM(iw);
       TRACE_INSN (cpu, "lwugp %s, %"PRIiTW"; // ",
-		  rd_name, gp_imm, rs1_name);
-      store_rd (cpu, rd, 
+		  rd_name, gp_imm);
+      store_rd (cpu, rd,
 	sim_core_read_unaligned_4 (cpu, cpu->pc, read_map,
 				   cpu->regs[X_GP] + gp_imm));
       break;
@@ -1901,7 +1909,7 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_LHGP: {
       unsigned_word gp_imm = EXTRACT_GPTYPE_LH_IMM(iw);
       TRACE_INSN (cpu, "lhgp %s, %"PRIiTW"; // ",
-		  rd_name, gp_imm, rs1_name);
+		  rd_name, gp_imm);
       store_rd (cpu, rd, EXTEND16 (
 	sim_core_read_unaligned_2 (cpu, cpu->pc, read_map,
 				   cpu->regs[X_GP] + gp_imm)));
@@ -1917,8 +1925,8 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_LHUGP: {
       unsigned_word gp_imm = EXTRACT_GPTYPE_LH_IMM(iw);
       TRACE_INSN (cpu, "lhugp %s, %"PRIiTW"; // ",
-		  rd_name, gp_imm, rs1_name);
-      store_rd (cpu, rd, 
+		  rd_name, gp_imm);
+      store_rd (cpu, rd,
 	sim_core_read_unaligned_2 (cpu, cpu->pc, read_map,
 				   cpu->regs[X_GP] + gp_imm));
       break;
@@ -1933,7 +1941,7 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_LBGP: {
       unsigned_word gp_imm = EXTRACT_GPTYPE_LB_IMM(iw);
       TRACE_INSN (cpu, "lbgp %s, %"PRIiTW"; // ",
-		  rd_name, gp_imm, rs1_name);
+		  rd_name, gp_imm);
       store_rd (cpu, rd, EXTEND8 (
 	sim_core_read_unaligned_1 (cpu, cpu->pc, read_map,
 				   cpu->regs[X_GP] + gp_imm)));
@@ -1949,8 +1957,8 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_LBUGP: {
       unsigned_word gp_imm = EXTRACT_GPTYPE_LB_IMM(iw);
       TRACE_INSN (cpu, "lbugp %s, %"PRIiTW"; // ",
-		  rd_name, gp_imm, rs1_name);
-      store_rd (cpu, rd, 
+		  rd_name, gp_imm);
+      store_rd (cpu, rd,
 	sim_core_read_unaligned_1 (cpu, cpu->pc, read_map,
 				   cpu->regs[X_GP] + gp_imm));
       break;
@@ -2036,6 +2044,7 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 		  rd_name, rs1_name, rs2_name, rd_name, rs1_name, rs2_name);
       store_rd (cpu, rd, cpu->regs[rs1] + (cpu->regs[rs2] << 3));
       break;
+#if (WITH_TARGET_WORD_BITSIZE == 64)
     case MATCH_LEA_B_ZE:
       TRACE_INSN (cpu, "lea.b.ze %s, %s, %s;  // %s = %s + (ZE(%s) << 0)",
 		  rd_name, rs1_name, rs2_name, rd_name, rs1_name, rs2_name);
@@ -2056,6 +2065,7 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 		  rd_name, rs1_name, rs2_name, rd_name, rs1_name, rs2_name);
       store_rd (cpu, rd, cpu->regs[rs1] + (SIM_RV_X (cpu->regs[rs2], 0, 32) << 3));
       break;
+#endif
     case MATCH_BEQC:
       TRACE_INSN (cpu, "beqc %s, %d, %#"PRIxTW";  // if (%s == %d) goto %#"PRIxTW,
 		  rs1_name, beqc_imm, sb10_imm, rs1_name, beqc_imm, cpu->pc + sb10_imm);

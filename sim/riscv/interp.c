@@ -83,6 +83,7 @@ sim_open (SIM_OPEN_KIND kind, host_callback *callback,
   int i;
   SIM_DESC sd = sim_state_alloc (kind, callback);
   unsigned long elf_flags = 0;
+  bfd *prog_bfd;
 
   /* The cpu data is kept in a separately allocated chunk of memory.  */
   if (sim_cpu_alloc_all (sd, 1, /*cgen_cpu_max_extra_bytes ()*/0) != SIM_RC_OK)
@@ -134,7 +135,7 @@ sim_open (SIM_OPEN_KIND kind, host_callback *callback,
     }
 
   /* Store elf flags.  */
-  bfd *prog_bfd = STATE_PROG_BFD (sd);
+  prog_bfd = STATE_PROG_BFD (sd);
   if (prog_bfd != NULL)
     elf_flags = elf_elfheader (prog_bfd)->e_flags;
 
