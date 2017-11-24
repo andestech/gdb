@@ -16,6 +16,11 @@
 # Check that "gdb -batch -ex run" does not leave the terminal in the
 # wrong state.
 
+if [ishost *cygwin*] {
+    unsupported "Cygwin 2.5.2 does not implement KILL correctly."
+    return -1
+}
+
 standard_testfile
 
 if {[build_executable "failed to prepare" $testfile $srcfile debug] == -1} {
