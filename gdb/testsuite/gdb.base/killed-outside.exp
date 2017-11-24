@@ -16,6 +16,11 @@
 # Test that GDB doesn't get badly wedged if the inferior is killed
 # from outside GDB (with SIGKILL) while the program is stopped.
 
+if [ishost *cygwin*] {
+    unsupported "Cygwin 2.5.2 does not implement KILL correctly."
+    return -1
+}
+
 standard_testfile
 
 # Get the value of variable VAR in the inferior.  MSG is used as the
