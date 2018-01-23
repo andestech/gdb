@@ -1827,7 +1827,7 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	{
 	  // case ex9.it
 	  store_rd (cpu, rd, cpu->pc + 2);
-	  pc = (cpu->pc & 0xfff00000) | EXTRACT_UJTYPE_IMM (iw);
+	  pc = (cpu->pc & 0xffe00000) | EXTRACT_UJTYPE_IMM_EX9TAB (iw);
 	}
       else if (ex9 == 2) 
 	{
