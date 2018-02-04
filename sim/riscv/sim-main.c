@@ -2776,13 +2776,6 @@ riscv_decode (SIM_CPU *cpu, unsigned_word iw, sim_cia pc, int ex9)
 	continue;
       /* It's a match.  */
       pc = execute_one (cpu, iw, op, ex9);
-      break;
-
-      if ((op->match_func) (op, iw) && !(op->pinfo & INSN_ALIAS))
-	{
-	  pc = execute_one (cpu, iw, op, ex9);
-	  break;
-	}
     }
 
   return pc;
