@@ -2266,6 +2266,7 @@ riscv_decode (SIM_CPU *cpu, unsigned_word iw, sim_cia pc, int ex9)
   SIM_DESC sd = CPU_STATE (cpu);
   const struct riscv_opcode *op;
   int xlen = RISCV_XLEN (cpu);
+  int is_executed = 0;
 
   op = riscv_hash[OP_HASH_IDX (iw)];
   if (!op)
@@ -2286,8 +2287,12 @@ riscv_decode (SIM_CPU *cpu, unsigned_word iw, sim_cia pc, int ex9)
 
       /* It's a match.  */
       pc = execute_one (cpu, iw, op, ex9);
+      is_executed = 1;
       break;
     }
+
+  if (!is_executed)
+    sim_engine_halt (sd, cpu, NULL, pc, sim_signalled, SIM_SIGILL);
 
   return pc;
 }
