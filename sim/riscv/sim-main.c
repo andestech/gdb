@@ -2779,6 +2779,7 @@ riscv_decode (SIM_CPU *cpu, unsigned_word iw, sim_cia pc, int ex9)
       pc = execute_one (cpu, iw, op, ex9);
 
       is_executed = 1;
+      break;
     }
 
   if (!is_executed)
