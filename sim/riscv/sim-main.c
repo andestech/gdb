@@ -1185,8 +1185,8 @@ execute_c (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 	case MATCH_C_SWSP:
 	  TRACE_INSN (cpu, "c.swsp %s, %" PRIiTW "(sp);"
 			   " // *(sp + %" PRIiTW ") = %s",
-		      rd_name, EXTRACT_CSSTYPE_SWSP_IMM (iw),
-		      EXTRACT_CSSTYPE_SWSP_IMM (iw), rd_name);
+		      crs2_name, EXTRACT_CSSTYPE_SWSP_IMM (iw),
+		      EXTRACT_CSSTYPE_SWSP_IMM (iw), crs2_name);
 	  sim_core_write_unaligned_4 (cpu, cpu->pc, write_map,
 				      (cpu->sp + EXTRACT_CSSTYPE_SWSP_IMM (iw)),
 				      cpu->regs[crs2]);
