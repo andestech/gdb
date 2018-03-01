@@ -2442,8 +2442,18 @@ initialize_cpu (SIM_DESC sd, SIM_CPU *cpu, int mhartid)
       const struct riscv_opcode *op;
 
       for (op = riscv_opcodes; op->name; op++)
-	if (!riscv_hash[OP_HASH_IDX (op->match)])
-	  riscv_hash[OP_HASH_IDX (op->match)] = op;
+	{
+	  /* Skip all pseudo-instructions.  */
+	  if ((op->pinfo & INSN_ALIAS))
+	    continue;
+
+	  /* Skip all instructions which is not valid for current XLEN.  */
+	  if (isdigit (op->subset[0]) && atoi (op->subset) != RISCV_XLEN (cpu))
+	    continue;
+
+	  if (!riscv_hash[OP_HASH_IDX (op->match)])
+	    riscv_hash[OP_HASH_IDX (op->match)] = op;
+	}
     }
 
   cpu->csr.misa = 0;
