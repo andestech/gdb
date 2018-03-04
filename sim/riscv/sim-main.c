@@ -44,7 +44,9 @@
   TRACE_REGISTER (cpu, "wrote %s = %#" PRIxTW, riscv_gpr_names_abi[reg], \
 		  cpu->regs[reg])
 
-static const struct riscv_opcode *riscv_hash[OP_MASK_OP + 1];
+#define HASH_TABLE_SZ (OP_MASK_OP + 1)
+static const struct riscv_opcode *riscv_hash[HASH_TABLE_SZ];
+static struct riscv_opcode *sim_riscv_opcodes = NULL;
 #define OP_HASH_IDX(i) ((i) & (riscv_insn_length (i) == 2 ? 0x3 : 0x7f))
 
 #define RISCV_ASSERT_RV32(cpu, fmt, args...) \
@@ -2271,17 +2273,10 @@ riscv_decode (SIM_CPU *cpu, unsigned_word iw, sim_cia pc, int ex9)
   if (!op)
     sim_engine_halt (sd, cpu, NULL, pc, sim_signalled, SIM_SIGILL);
 
-  /* NB: Same loop logic as riscv_disassemble_insn.  */
   for (; op->name; op++)
     {
       /* Does the opcode match?  */
       if (! op->match_func (op, iw))
-	continue;
-      /* Is this a pseudo-instruction and may we print it as such?  */
-      if (op->pinfo & INSN_ALIAS)
-	continue;
-      /* Is this instruction restricted to a certain value of XLEN?  */
-      if (op->xlen_requirement != 0 && op->xlen_requirement != xlen)
 	continue;
 
       /* It's a match.  */
@@ -2429,6 +2424,8 @@ initialize_cpu (SIM_DESC sd, SIM_CPU *cpu, int mhartid)
 {
   const char *extensions;
   int i;
+  unsigned n;
+  const struct riscv_opcode *op;
 
   memset (cpu->regs, 0, sizeof (cpu->regs));
 
@@ -2437,24 +2434,49 @@ initialize_cpu (SIM_DESC sd, SIM_CPU *cpu, int mhartid)
   CPU_REG_FETCH (cpu) = reg_fetch;
   CPU_REG_STORE (cpu) = reg_store;
 
-  if (!riscv_hash[0])
+  if (sim_riscv_opcodes)
+    free (sim_riscv_opcodes);
+
+  /* Calculate how many entry we need for sim_riscv_opcodes.  */
+  for (n = 0, op = riscv_opcodes; op->name; op++)
     {
-      const struct riscv_opcode *op;
+      /* Skip all pseudo-instructions.  */
+      if ((op->pinfo & INSN_ALIAS))
+	continue;
 
-      for (op = riscv_opcodes; op->name; op++)
-	{
-	  /* Skip all pseudo-instructions.  */
-	  if ((op->pinfo & INSN_ALIAS))
-	    continue;
+      /* Skip all instructions which is not valid for current XLEN.  */
+      if (op->xlen_requirement != 0 && op->xlen_requirement != RISCV_XLEN (cpu))
+	continue;
 
-	  /* Skip all instructions which is not valid for current XLEN.  */
-	  if (isdigit (op->subset[0]) && atoi (op->subset) != RISCV_XLEN (cpu))
-	    continue;
-
-	  if (!riscv_hash[OP_HASH_IDX (op->match)])
-	    riscv_hash[OP_HASH_IDX (op->match)] = op;
-	}
+      ++n;
     }
+
+  /* +1 for sentinel.  */
+  sim_riscv_opcodes = xmalloc (sizeof (struct riscv_opcode) * (n + 1));
+
+  /* Copy riscv_opcodes into sim_riscv_opcodes.  */
+  for (n = 0, op = riscv_opcodes; op->name; op++)
+    {
+      /* Skip all pseudo-instructions.  */
+      if ((op->pinfo & INSN_ALIAS))
+	continue;
+
+      /* Skip all instructions which is not valid for current XLEN.  */
+      if (op->xlen_requirement != 0 && op->xlen_requirement != RISCV_XLEN (cpu))
+	continue;
+
+      sim_riscv_opcodes[n++] = *op;
+    }
+
+  /* Setup sentinel. */
+  memset (&sim_riscv_opcodes[n], 0, sizeof (struct riscv_opcode));
+
+  /* Initialize for hash table.  */
+  memset (riscv_hash, 0, sizeof (struct riscv_opcode *) * HASH_TABLE_SZ);
+
+  for (op = sim_riscv_opcodes; op->name; op++)
+    if (!riscv_hash[OP_HASH_IDX (op->match)])
+      riscv_hash[OP_HASH_IDX (op->match)] = op;
 
   cpu->csr.misa = 0;
   /* RV32 sets this field to 0, and we don't really support RV128 yet.  */
