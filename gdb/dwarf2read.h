@@ -246,6 +246,9 @@ public:
   /* Table containing line_header indexed by offset and offset_in_dwz.  */
   htab_t line_header_hash {};
 
+	/* The CU containing the m_builder in scope.  */
+  struct dwarf2_cu *sym_cu = nullptr;
+
   /* Table containing all filenames.  This is an optional because the
      table is lazily constructed on first access.  */
   gdb::optional<filename_seen_cache> filenames_cache;

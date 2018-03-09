@@ -34,6 +34,36 @@
 #include "cg_arcs.h"
 #include "utils.h"
 #include "corefile.h"
+// ============================================================================
+// get_name
+//
+// This function returns the proper name of the symbol.
+// ============================================================================
+char *
+get_name (char *name)
+{   char *demangled = 0;
+
+    if (name)
+    {
+        if (!bsd_style_output)
+        {
+            if (name[0] == '_' && name[1] && discard_underscores)
+	    {
+                name++;
+	    }
+            if (demangle)
+            {
+                demangled = cplus_demangle (name, DMGL_ANSI | DMGL_PARAMS);
+                if (demangled)
+                {
+                    name = demangled;
+                }
+            }
+        }
+    }
+
+    return name;
+} // get_name
 
 
 /*

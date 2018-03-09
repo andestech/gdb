@@ -23,6 +23,7 @@
 #include "libiberty.h"
 #include "libbfd.h"
 #include "elf-bfd.h"
+#include "safe-ctype.h"
 
 /* Return the number of bytes needed by I in uleb128 format.  */
 static int
@@ -533,6 +534,60 @@ _bfd_elf_parse_attributes (bfd *abfd, Elf_Internal_Shdr * hdr)
 	      switch (tag)
 		{
 		case Tag_File:
+		  /* { Andes attribute Backward compatible hack.  */
+		  do {
+		  static const char tag_table[] = {
+		    0, 1, 2, 3,
+		    5, /* 4 arch */
+		    8, /* 5 priv_spec */
+		    10, /* 6 priv_spec_minor */
+		    12, /* 7 priv_spec_revision */
+		    6, /* 8 strict_align */
+		    4, /* 9 stack_align */
+		  };
+		  tag = _bfd_safe_read_leb128 (abfd, p, &n, FALSE, end);
+		  if (((tag == 4) && (TOLOWER(p[1]) != 'r')) ||
+		      ((tag == 5) && (TOLOWER(p[1]) == 'r')))
+		    break; /* new style */
+
+		  /* old style  */
+		  while (p < end)
+		    {
+		      int type;
+
+		      tag = _bfd_safe_read_leb128 (abfd, p, &n, FALSE, end);
+		      p += n;
+		      if (tag < sizeof(tag_table))
+			tag = tag_table[tag];
+		      type = _bfd_elf_obj_attrs_arg_type (abfd, vendor, tag);
+		      switch (type & (ATTR_TYPE_FLAG_INT_VAL | ATTR_TYPE_FLAG_STR_VAL))
+			{
+			case ATTR_TYPE_FLAG_INT_VAL | ATTR_TYPE_FLAG_STR_VAL:
+			  val = _bfd_safe_read_leb128 (abfd, p, &n, FALSE, end);
+			  p += n;
+			  bfd_elf_add_obj_attr_int_string (abfd, vendor, tag,
+							   val, (char *) p);
+			  p += strlen ((char *)p) + 1;
+			  break;
+			case ATTR_TYPE_FLAG_STR_VAL:
+			  bfd_elf_add_obj_attr_string (abfd, vendor, tag,
+						       (char *) p);
+			  p += strlen ((char *)p) + 1;
+			  break;
+			case ATTR_TYPE_FLAG_INT_VAL:
+			  val = _bfd_safe_read_leb128 (abfd, p, &n, FALSE, end);
+			  p += n;
+			  if (tag == 6) /* strict_align => unaligned_access */
+			    val = !val;
+			  bfd_elf_add_obj_attr_int (abfd, vendor, tag, val);
+			  break;
+			default:
+			  abort ();
+			}
+		    }
+		  } while (0);
+		  /* } Andes attribute Backward compatible hack.  */
+
 		  while (p < end)
 		    {
 		      int type;

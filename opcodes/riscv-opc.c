@@ -1,5 +1,5 @@
 /* RISC-V opcode list
-   Copyright (C) 2011-2019 Free Software Foundation, Inc.
+   Copyright (C) 2011-2020 Free Software Foundation, Inc.
 
    Contributed by Andrew Waterman (andrew@sifive.com).
    Based on MIPS target.
@@ -39,6 +39,13 @@ const char * const riscv_gpr_names_abi[NGPR] = {
   "s0",   "s1", "a0",  "a1",  "a2", "a3",  "a4",  "a5",
   "a6",   "a7", "s2",  "s3",  "s4", "s5",  "s6",  "s7",
   "s8",   "s9", "s10", "s11", "t3", "t4",  "t5",  "t6"
+};
+
+const char * const riscv_gpr_names_standard[NGPR] = {
+  "r0",   "r1",   "r2",   "r3",   "r4",   "r5",   "r6",   "r7",
+  "r8",   "r9",   "r10",  "r11",  "r12",  "r13",  "r14",  "r15",
+  "r16",  "r17",  "r18",  "r19",  "r20",  "r21",  "r22",  "r23",
+  "r24",  "r25",  "r26",  "r27",  "r28",  "r29",  "r30",  "r31"
 };
 
 const char * const riscv_fpr_names_numeric[NFPR] =
@@ -96,11 +103,36 @@ const char * const riscv_vecm_names_numeric[NVECM] =
 #define MASK_VS1 (OP_MASK_VS1 << OP_SH_VS1)
 #define MASK_VS2 (OP_MASK_VS2 << OP_SH_VS2)
 #define MASK_VMASK (OP_MASK_VMASK << OP_SH_VMASK)
+/* the followings are moved to riscv-opc.h
+#define MASK_SHAMT (OP_MASK_SHAMT << OP_SH_SHAMT)
+#define MATCH_SHAMT_REV8_32 (0b11000 << OP_SH_SHAMT)
+#define MATCH_SHAMT_REV8_64 (0b111000 << OP_SH_SHAMT)
+#define MATCH_SHAMT_BREV8 (0b00111 << OP_SH_SHAMT)
+#define MATCH_SHAMT_ZIP_32 (0b1111 << OP_SH_SHAMT)
+#define MATCH_SHAMT_ORC_B (0b00111 << OP_SH_SHAMT)
+*/
+
+static struct opc_options
+{
+  int no_vic;
+} opc_opts =
+{
+  0, /* no_vic */
+};
+
+int opc_set_no_vic (int is);
+int opc_set_no_vic (int is)
+{
+  int previous = opc_opts.no_vic;
+  opc_opts.no_vic = is;
+  return previous;
+}
 
 static int
 match_opcode (const struct riscv_opcode *op,
 	      insn_t insn,
-	      int constraints ATTRIBUTE_UNUSED)
+	      int constraints ATTRIBUTE_UNUSED,
+	      const char **error ATTRIBUTE_UNUSED)
 {
   return ((insn ^ op->match) & op->mask) == 0;
 }
@@ -108,7 +140,8 @@ match_opcode (const struct riscv_opcode *op,
 static int
 match_never (const struct riscv_opcode *op ATTRIBUTE_UNUSED,
 	     insn_t insn ATTRIBUTE_UNUSED,
-	     int constraints ATTRIBUTE_UNUSED)
+	     int constraints ATTRIBUTE_UNUSED,
+	     const char **error ATTRIBUTE_UNUSED)
 {
   return 0;
 }
@@ -116,50 +149,76 @@ match_never (const struct riscv_opcode *op ATTRIBUTE_UNUSED,
 static int
 match_rs1_eq_rs2 (const struct riscv_opcode *op,
 		  insn_t insn,
-		  int constraints ATTRIBUTE_UNUSED)
+		  int constraints ATTRIBUTE_UNUSED,
+		  const char **error ATTRIBUTE_UNUSED)
 {
   int rs1 = (insn & MASK_RS1) >> OP_SH_RS1;
   int rs2 = (insn & MASK_RS2) >> OP_SH_RS2;
-  return match_opcode (op, insn, 0) && rs1 == rs2;
+  return match_opcode (op, insn, 0, NULL) && rs1 == rs2;
 }
 
 static int
 match_vs1_eq_vs2 (const struct riscv_opcode *op,
 		  insn_t insn,
-		  int constraints ATTRIBUTE_UNUSED)
+		  int constraints ATTRIBUTE_UNUSED,
+		  const char **error ATTRIBUTE_UNUSED)
 {
   int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
 
-  return match_opcode (op, insn, 0) && vs1 == vs2;
+  return match_opcode (op, insn, 0, NULL) && vs1 == vs2;
+}
+
+static int
+match_vs1_eq_vs2_neq_vm (const struct riscv_opcode *op,
+			 insn_t insn,
+			 int constraints,
+			 const char **error)
+{
+  int vd = (insn & MASK_VD) >> OP_SH_VD;
+  int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
+  int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
+  int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
+
+  if (!constraints || error == NULL)
+    return match_opcode (op, insn, 0, NULL) && vs1 == vs2;
+
+  if (!vm && vm == vd)
+    *error = "illegal operands vd cannot overlap vm";
+  else
+    return match_opcode (op, insn, 0, NULL) && vs1 == vs2;
+  return 0;
 }
 
 static int
 match_vd_eq_vs1_eq_vs2 (const struct riscv_opcode *op,
 			insn_t insn,
-			int constraints ATTRIBUTE_UNUSED)
+			int constraints ATTRIBUTE_UNUSED,
+			const char **error ATTRIBUTE_UNUSED)
 {
   int vd =  (insn & MASK_VD) >> OP_SH_VD;
   int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
 
-  return match_opcode (op, insn, 0) && vd == vs1 && vs1 == vs2;
+  return match_opcode (op, insn, 0, NULL) && vd == vs1 && vs1 == vs2;
 }
 
 static int
 match_rd_nonzero (const struct riscv_opcode *op,
 		  insn_t insn,
-		  int constraints ATTRIBUTE_UNUSED)
+		  int constraints ATTRIBUTE_UNUSED,
+		  const char **error ATTRIBUTE_UNUSED)
 {
-  return match_opcode (op, insn, 0) && ((insn & MASK_RD) != 0);
+  return match_opcode (op, insn, 0, NULL) && ((insn & MASK_RD) != 0);
 }
 
 static int
 match_c_add (const struct riscv_opcode *op,
 	     insn_t insn,
-	     int constraints ATTRIBUTE_UNUSED)
+	     int constraints ATTRIBUTE_UNUSED,
+	     const char **error ATTRIBUTE_UNUSED)
 {
-  return match_rd_nonzero (op, insn, 0) && ((insn & MASK_CRS2) != 0);
+  return match_rd_nonzero (op, insn, 0, NULL) && ((insn & MASK_CRS2) != 0);
 }
 
 /* We don't allow mv zero,X to become a c.mv hint, so we need a separate
@@ -168,26 +227,29 @@ match_c_add (const struct riscv_opcode *op,
 static int
 match_c_add_with_hint (const struct riscv_opcode *op,
 		       insn_t insn,
-		       int constraints ATTRIBUTE_UNUSED)
+		       int constraints ATTRIBUTE_UNUSED,
+		       const char **error ATTRIBUTE_UNUSED)
 {
-  return match_opcode (op, insn, 0) && ((insn & MASK_CRS2) != 0);
+  return match_opcode (op, insn, 0, NULL) && ((insn & MASK_CRS2) != 0);
 }
 
 static int
 match_c_nop (const struct riscv_opcode *op,
 	     insn_t insn,
-	     int constraints ATTRIBUTE_UNUSED)
+	     int constraints ATTRIBUTE_UNUSED,
+	     const char **error ATTRIBUTE_UNUSED)
 {
-  return (match_opcode (op, insn, 0)
+  return (match_opcode (op, insn, 0, NULL)
 	  && (((insn & MASK_RD) >> OP_SH_RD) == 0));
 }
 
 static int
 match_c_addi16sp (const struct riscv_opcode *op,
 		  insn_t insn,
-		  int constraints ATTRIBUTE_UNUSED)
+		  int constraints ATTRIBUTE_UNUSED,
+		  const char **error ATTRIBUTE_UNUSED)
 {
-  return (match_opcode (op, insn, 0)
+  return (match_opcode (op, insn, 0, NULL)
 	  && (((insn & MASK_RD) >> OP_SH_RD) == 2)
 	  && EXTRACT_RVC_ADDI16SP_IMM (insn) != 0);
 }
@@ -195,9 +257,10 @@ match_c_addi16sp (const struct riscv_opcode *op,
 static int
 match_c_lui (const struct riscv_opcode *op,
 	     insn_t insn,
-	     int constraints ATTRIBUTE_UNUSED)
+	     int constraints ATTRIBUTE_UNUSED,
+	     const char **error ATTRIBUTE_UNUSED)
 {
-  return (match_rd_nonzero (op, insn, 0)
+  return (match_rd_nonzero (op, insn, 0, NULL)
 	  && (((insn & MASK_RD) >> OP_SH_RD) != 2)
 	  && EXTRACT_RVC_LUI_IMM (insn) != 0);
 }
@@ -208,9 +271,10 @@ match_c_lui (const struct riscv_opcode *op,
 static int
 match_c_lui_with_hint (const struct riscv_opcode *op,
 		       insn_t insn,
-		       int constraints ATTRIBUTE_UNUSED)
+		       int constraints ATTRIBUTE_UNUSED,
+		       const char **error ATTRIBUTE_UNUSED)
 {
-  return (match_opcode (op, insn, 0)
+  return (match_opcode (op, insn, 0, NULL)
 	  && (((insn & MASK_RD) >> OP_SH_RD) != 2)
 	  && EXTRACT_RVC_LUI_IMM (insn) != 0);
 }
@@ -218,9 +282,11 @@ match_c_lui_with_hint (const struct riscv_opcode *op,
 static int
 match_c_addi4spn (const struct riscv_opcode *op,
 		  insn_t insn,
-		  int constraints ATTRIBUTE_UNUSED)
+		  int constraints ATTRIBUTE_UNUSED,
+		  const char **error ATTRIBUTE_UNUSED)
 {
-  return match_opcode (op, insn, 0) && EXTRACT_RVC_ADDI4SPN_IMM (insn) != 0;
+  return (match_opcode (op, insn, 0, NULL)
+	  && EXTRACT_RVC_ADDI4SPN_IMM (insn) != 0);
 }
 
 /* This requires a non-zero shift.  A zero rd is a hint, so is allowed.  */
@@ -228,9 +294,10 @@ match_c_addi4spn (const struct riscv_opcode *op,
 static int
 match_c_slli (const struct riscv_opcode *op,
 	      insn_t insn,
-	      int constraints ATTRIBUTE_UNUSED)
+	      int constraints ATTRIBUTE_UNUSED,
+	      const char **error ATTRIBUTE_UNUSED)
 {
-  return match_opcode (op, insn, 0) && EXTRACT_RVC_IMM (insn) != 0;
+  return match_opcode (op, insn, 0, NULL) && EXTRACT_RVC_IMM (insn) != 0;
 }
 
 /* This requires a non-zero rd, and a non-zero shift.  */
@@ -238,9 +305,11 @@ match_c_slli (const struct riscv_opcode *op,
 static int
 match_slli_as_c_slli (const struct riscv_opcode *op,
 		      insn_t insn,
-		      int constraints ATTRIBUTE_UNUSED)
+		      int constraints ATTRIBUTE_UNUSED,
+		      const char **error ATTRIBUTE_UNUSED)
 {
-  return match_rd_nonzero (op, insn, 0) && EXTRACT_RVC_IMM (insn) != 0;
+  return (match_rd_nonzero (op, insn, 0, NULL)
+	  && EXTRACT_RVC_IMM (insn) != 0);
 }
 
 /* This requires a zero shift.  A zero rd is a hint, so is allowed.  */
@@ -248,9 +317,10 @@ match_slli_as_c_slli (const struct riscv_opcode *op,
 static int
 match_c_slli64 (const struct riscv_opcode *op,
 		insn_t insn,
-		int constraints ATTRIBUTE_UNUSED)
+		int constraints ATTRIBUTE_UNUSED,
+		const char **error ATTRIBUTE_UNUSED)
 {
-  return match_opcode (op, insn, 0) && EXTRACT_RVC_IMM (insn) == 0;
+  return match_opcode (op, insn, 0, NULL) && EXTRACT_RVC_IMM (insn) == 0;
 }
 
 /* This is used for both srli and srai.  This requires a non-zero shift.
@@ -259,9 +329,10 @@ match_c_slli64 (const struct riscv_opcode *op,
 static int
 match_srxi_as_c_srxi (const struct riscv_opcode *op,
 		      insn_t insn,
-		      int constraints ATTRIBUTE_UNUSED)
+		      int constraints ATTRIBUTE_UNUSED,
+		      const char **error ATTRIBUTE_UNUSED)
 {
-  return match_opcode (op, insn, 0) && EXTRACT_RVC_IMM (insn) != 0;
+  return match_opcode (op, insn, 0, NULL) && EXTRACT_RVC_IMM (insn) != 0;
 }
 
 /* These are used to check the vector constraints.  */
@@ -269,212 +340,312 @@ match_srxi_as_c_srxi (const struct riscv_opcode *op,
 static int
 match_widen_vd_neq_vs1_neq_vs2_neq_vm (const struct riscv_opcode *op,
 				       insn_t insn,
-				       int constraints)
+				       int constraints,
+				       const char **error)
 {
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
   int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
 
-  if (constraints
-      && ((vd % 2) != 0
-	  || (vs1 >= vd && vs1 <= (vd + 1))
-	  || (vs2 >= vd && vs2 <= (vd + 1))
-	  || (!vm && vm >= vd && vm <= (vd + 1))))
-    return 0;
+  if (!constraints || error == NULL)
+    return match_opcode (op, insn, 0, NULL);
 
-  return match_opcode (op, insn, 0);
+  if ((vd % 2) != 0)
+    *error = "illegal operands vd must be multiple of 2";
+  else if (vs1 >= vd && vs1 <= (vd + 1))
+    *error = "illegal operands vd cannot overlap vs1";
+  else if (vs2 >= vd && vs2 <= (vd + 1))
+    *error = "illegal operands vd cannot overlap vs2";
+  else if (!vm && vm >= vd && vm <= (vd + 1))
+    *error = "illegal operands vd cannot overlap vm";
+  else
+    return match_opcode (op, insn, 0, NULL);
+  return 0;
 }
 
 static int
 match_widen_vd_neq_vs1_neq_vm (const struct riscv_opcode *op,
 			       insn_t insn,
-			       int constraints)
+			       int constraints,
+			       const char **error)
 {
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
   int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
 
-  if (constraints
-      && ((vd % 2) != 0
-	  || (vs2 % 2) != 0
-	  || (vs1 >= vd && vs1 <= (vd + 1))
-	  || (!vm && vm >= vd && vm <= (vd + 1))))
-    return 0;
+  if (!constraints || error == NULL)
+    return match_opcode (op, insn, 0, NULL);
 
-  return match_opcode (op, insn, 0);
+  if ((vd % 2) != 0)
+    *error = "illegal operands vd must be multiple of 2";
+  else if ((vs2 % 2) != 0)
+    *error = "illegal operands vs2 must be multiple of 2";
+  else if (vs1 >= vd && vs1 <= (vd + 1))
+    *error = "illegal operands vd cannot overlap vs1";
+  else if (!vm && vm >= vd && vm <= (vd + 1))
+    *error = "illegal operands vd cannot overlap vm";
+  else
+    return match_opcode (op, insn, 0, NULL);
+  return 0;
 }
 
 static int
 match_widen_vd_neq_vs2_neq_vm (const struct riscv_opcode *op,
 			       insn_t insn,
-			       int constraints)
+			       int constraints,
+			       const char **error)
 {
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
   int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
 
-  if (constraints
-      && ((vd % 2) != 0
-	  || (vs2 >= vd && vs2 <= (vd + 1))
-	  || (!vm && vm >= vd && vm <= (vd + 1))))
-    return 0;
+  if (!constraints || error == NULL)
+    return match_opcode (op, insn, 0, NULL);
 
-  return match_opcode (op, insn, 0);
+  if ((vd % 2) != 0)
+    *error = "illegal operands vd must be multiple of 2";
+  else if (vs2 >= vd && vs2 <= (vd + 1))
+    *error = "illegal operands vd cannot overlap vs2";
+  else if (!vm && vm >= vd && vm <= (vd + 1))
+    *error = "illegal operands vd cannot overlap vm";
+  else
+    return match_opcode (op, insn, 0, NULL);
+  return 0;
 }
 
 static int
 match_widen_vd_neq_vm (const struct riscv_opcode *op,
 		       insn_t insn,
-		       int constraints)
+		       int constraints,
+		       const char **error)
 {
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
   int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
 
-  if (constraints
-      && ((vd % 2) != 0
-	  || (vs2 % 2) != 0
-	  || (!vm && vm >= vd && vm <= (vd + 1))))
-    return 0;
+  if (!constraints || error == NULL)
+    return match_opcode (op, insn, 0, NULL);
 
-  return match_opcode (op, insn, 0);
+  if ((vd % 2) != 0)
+    *error = "illegal operands vd must be multiple of 2";
+  else if ((vs2 % 2) != 0)
+    *error = "illegal operands vs2 must be multiple of 2";
+  else if (!vm && vm >= vd && vm <= (vd + 1))
+    *error = "illegal operands vd cannot overlap vm";
+  else
+    return match_opcode (op, insn, 0, NULL);
+  return 0;
+}
+
+static int
+match_narrow_vd_neq_vs2_neq_vm (const struct riscv_opcode *op,
+				insn_t insn,
+				int constraints,
+				const char **error)
+{
+  int vd = (insn & MASK_VD) >> OP_SH_VD;
+  int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
+  int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
+
+  if (!constraints || error == NULL)
+    return match_opcode (op, insn, 0, NULL);
+
+  if ((vs2 % 2) != 0)
+    *error = "illegal operands vd must be multiple of 2";
+  else if (vd >= vs2 && vd <= (vs2 + 1))
+    *error = "illegal operands vd cannot overlap vs2";
+  else if (!vm && vd >= vm && vd <= (vm + 1))
+    *error = "illegal operands vd cannot overlap vm";
+  else
+    return match_opcode (op, insn, 0, NULL);
+  return 0;
 }
 
 static int
 match_quad_vd_neq_vs1_neq_vs2_neq_vm (const struct riscv_opcode *op,
 				      insn_t insn,
-				      int constraints)
+				      int constraints,
+				      const char **error)
 {
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
   int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
 
-  if (constraints
-      && ((vd % 4) != 0
-	  || (vs1 >= vd && vs1 <= (vd + 3))
-	  || (vs2 >= vd && vs2 <= (vd + 3))
-	  || (!vm && vm >= vd && vm <= (vd + 3))))
-    return 0;
+  if (!constraints || error == NULL)
+    return match_opcode (op, insn, 0, NULL);
 
-  return match_opcode (op, insn, 0);
+  if ((vd % 4) != 0)
+    *error = "illegal operands vd must be multiple of 4";
+  else if (vs1 >= vd && vs1 <= (vd + 3))
+    *error = "illegal operands vd cannot overlap vs1";
+  else if (vs2 >= vd && vs2 <= (vd + 3))
+    *error = "illegal operands vd cannot overlap vs2";
+  else if (!vm && vm >= vd && vm <= (vd + 3))
+    *error = "illegal operands vd cannot overlap vm";
+  else
+    return match_opcode (op, insn, 0, NULL);
+  return 0;
 }
 
 static int
 match_quad_vd_neq_vs2_neq_vm (const struct riscv_opcode *op,
 			      insn_t insn,
-			      int constraints)
+			      int constraints,
+			      const char **error)
 {
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
   int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
 
-  if (constraints
-      && ((vd % 4) != 0
-	  || (vs2 >= vd && vs2 <= (vd + 3))
-	  || (!vm && vm >= vd && vm <= (vd + 3))))
-    return 0;
+  if (!constraints || error == NULL)
+    return match_opcode (op, insn, 0, NULL);
 
-  return match_opcode (op, insn, 0);
+  if ((vd % 4) != 0)
+    *error = "illegal operands vd must be multiple of 4";
+  else if (vs2 >= vd && vs2 <= (vd + 3))
+    *error = "illegal operands vd cannot overlap vs2";
+  else if (!vm && vm >= vd && vm <= (vd + 3))
+    *error = "illegal operands vd cannot overlap vm";
+  else
+    return match_opcode (op, insn, 0, NULL);
+  return 0;
 }
 
 static int
-match_narrow_vd_neq_vs2 (const struct riscv_opcode *op,
-			 insn_t insn,
-			 int constraints)
+match_vd_neq_vs1_neq_vs2 (const struct riscv_opcode *op,
+			  insn_t insn,
+			  int constraints,
+			  const char **error)
 {
   int vd = (insn & MASK_VD) >> OP_SH_VD;
+  int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
 
-  if (constraints
-      && ((vs2 % 2) != 0
-	  || (vd >= vs2 && vd <= (vs2 + 1))))
-    return 0;
+  if (!constraints || error == NULL)
+    return match_opcode (op, insn, 0, NULL);
 
-  return match_opcode (op, insn, 0);
+  if (vs1 == vd)
+    *error = "illegal operands vd cannot overlap vs1";
+  else if (vs2 == vd)
+    *error = "illegal operands vd cannot overlap vs2";
+  else
+    return match_opcode (op, insn, 0, NULL);
+  return 0;
 }
 
 static int
 match_vd_neq_vs1_neq_vs2_neq_vm (const struct riscv_opcode *op,
 				 insn_t insn,
-				 int constraints)
+				 int constraints,
+				 const char **error)
 {
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
   int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
 
-  if (constraints
-      && (vs1 == vd
-	  || vs2 == vd
-	  || (!vm && vm == vd)))
-    return 0;
+  if (!constraints || error == NULL)
+    return match_opcode (op, insn, 0, NULL);
 
-  return match_opcode (op, insn, 0);
+  if (vs1 == vd)
+    *error = "illegal operands vd cannot overlap vs1";
+  else if (vs2 == vd)
+    *error = "illegal operands vd cannot overlap vs2";
+  else if (!vm && vm == vd)
+    *error = "illegal operands vd cannot overlap vm";
+  else
+    return match_opcode (op, insn, 0, NULL);
+  return 0;
 }
 
 static int
 match_vd_neq_vs2_neq_vm (const struct riscv_opcode *op,
 			 insn_t insn,
-			 int constraints)
+			 int constraints,
+			 const char **error)
 {
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
   int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
 
-   if (constraints
-      && (vs2 == vd
-	  || (!vm && vm == vd)))
-    return 0;
+  if (!constraints || error == NULL)
+    return match_opcode (op, insn, 0, NULL);
 
-  return match_opcode (op, insn, 0);
+  if (vs2 == vd)
+    *error = "illegal operands vd cannot overlap vs2";
+  else if (!vm && vm == vd)
+    *error = "illegal operands vd cannot overlap vm";
+  else
+    return match_opcode (op, insn, 0, NULL);
+  return 0;
 }
 
-static int
-match_vd_neq_vs2 (const struct riscv_opcode *op,
-		  insn_t insn,
-		  int constraints)
-{
-  int vd = (insn & MASK_VD) >> OP_SH_VD;
-  int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
-
-   if (constraints && vs2 == vd)
-    return 0;
-
-  return match_opcode (op, insn, 0);
-}
+/* v[m]adc and v[m]sbc use the vm encoding to encode the
+   carry-in v0 register.  The carry-in v0 register can not
+   overlap with the vd, too.  Therefore, we use the same
+   match_vd_neq_vm to check the overlap constraints.  */
 
 static int
 match_vd_neq_vm (const struct riscv_opcode *op,
 		 insn_t insn,
-		 int constraints)
+		 int constraints,
+		 const char **error)
 {
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
 
-  if (constraints && !vm && vm == vd)
-    return 0;
+  if (!constraints || error == NULL)
+    return match_opcode (op, insn, 0, NULL);
 
-  return match_opcode (op, insn, 0);
+  if (!vm && vm == vd)
+    *error = "illegal operands vd cannot overlap vm";
+  else
+    return match_opcode (op, insn, 0, NULL);
+  return 0;
+}
+
+static int
+match_vls_nf_rv (const struct riscv_opcode *op,
+		 insn_t insn,
+		 int constraints,
+		 const char **error)
+{
+  int vd = (insn & MASK_VD) >> OP_SH_VD;
+  int nf = ((insn & (0x7 << 29) ) >> 29) + 1;
+
+  if (!constraints || error == NULL)
+    return match_opcode (op, insn, 0, NULL);
+
+  if ((vd % nf) != 0)
+    *error = "illegal operands vd must be multiple of nf";
+  else
+    return match_opcode (op, insn, 0, NULL);
+  return 0;
 }
 
 static int
 match_vmv_nf_rv (const struct riscv_opcode *op,
 		 insn_t insn,
-		 int constraints)
+		 int constraints,
+		 const char **error)
 {
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
   int nf = ((insn & (0x7 << 15) ) >> 15) + 1;
 
-  if (constraints
-      && ((vd % nf) != 0
-	  || (vs2 % nf) != 0))
-    return 0;
+  if (!constraints || error == NULL)
+    return match_opcode (op, insn, 0, NULL);
 
-  return match_opcode (op, insn, 0);
+  if ((vd % nf) != 0)
+    *error = "illegal operands vd must be multiple of nf";
+  else if ((vs2 % nf) != 0)
+    *error = "illegal operands vs2 must be multiple of nf";
+  else
+    return match_opcode (op, insn, 0, NULL);
+  return 0;
 }
 
 const struct riscv_opcode riscv_opcodes[] =
@@ -482,6 +653,73 @@ const struct riscv_opcode riscv_opcodes[] =
 /* name,     xlen, isa,   operands, match, mask, match_func, pinfo.  */
 {"unimp",       0, {"C", 0},   "",  0, 0xffffU,  match_opcode, INSN_ALIAS },
 {"unimp",       0, {"I", 0},   "",  MATCH_CSRRW | (CSR_CYCLE << OP_SH_CSR), 0xffffffffU,  match_opcode, 0 }, /* csrw cycle, x0 */
+
+/* Compressed instructions.  */
+/* For bug-16573, move the compressed insns up can let objdump
+   show the compressed insns with "c." suffix.  */
+{"c.unimp",    0, {"C", 0},   "",  0, 0xffffU,  match_opcode, 0 },
+{"c.ebreak",   0, {"C", 0},   "",  MATCH_C_EBREAK, MASK_C_EBREAK, match_opcode, 0 },
+{"c.jr",       0, {"C", 0},   "d",  MATCH_C_JR, MASK_C_JR, match_rd_nonzero, INSN_BRANCH },
+{"c.jalr",     0, {"C", 0},   "d",  MATCH_C_JALR, MASK_C_JALR, match_rd_nonzero, INSN_JSR },
+{"c.j",        0, {"C", 0},   "Ca",  MATCH_C_J, MASK_C_J, match_opcode, INSN_BRANCH },
+{"c.jal",     32, {"C", 0}, "Ca",  MATCH_C_JAL, MASK_C_JAL, match_opcode, INSN_JSR },
+{"c.beqz",     0, {"C", 0},   "Cs,Cp",  MATCH_C_BEQZ, MASK_C_BEQZ, match_opcode, INSN_CONDBRANCH },
+{"c.bnez",     0, {"C", 0},   "Cs,Cp",  MATCH_C_BNEZ, MASK_C_BNEZ, match_opcode, INSN_CONDBRANCH },
+{"c.lwsp",     0, {"C", 0},   "d,Cm(Cc)",  MATCH_C_LWSP, MASK_C_LWSP, match_rd_nonzero, 0 },
+{"c.lw",       0, {"C", 0},   "Ct,Ck(Cs)",  MATCH_C_LW, MASK_C_LW, match_opcode, INSN_DREF|INSN_4_BYTE },
+{"c.swsp",     0, {"C", 0},   "CV,CM(Cc)",  MATCH_C_SWSP, MASK_C_SWSP, match_opcode, INSN_DREF|INSN_4_BYTE },
+{"c.sw",       0, {"C", 0},   "Ct,Ck(Cs)",  MATCH_C_SW, MASK_C_SW, match_opcode, INSN_DREF|INSN_4_BYTE },
+{"c.nop",      0, {"C", 0},   "",  MATCH_C_ADDI, 0xffff, match_opcode, INSN_ALIAS },
+{"c.nop",      0, {"C", 0},   "Cj",  MATCH_C_ADDI, MASK_C_ADDI | MASK_RD, match_opcode, INSN_ALIAS },
+{"c.mv",       0, {"C", 0},   "d,CV",  MATCH_C_MV, MASK_C_MV, match_c_add_with_hint, 0 },
+{"c.lui",      0, {"C", 0},   "d,Cu",  MATCH_C_LUI, MASK_C_LUI, match_c_lui_with_hint, 0 },
+{"c.li",       0, {"C", 0},   "d,Co",  MATCH_C_LI, MASK_C_LI, match_opcode, 0 },
+{"c.addi4spn", 0, {"C", 0},   "Ct,Cc,CK", MATCH_C_ADDI4SPN, MASK_C_ADDI4SPN, match_c_addi4spn, 0 },
+{"c.addi16sp", 0, {"C", 0},   "Cc,CL", MATCH_C_ADDI16SP, MASK_C_ADDI16SP, match_c_addi16sp, 0 },
+{"c.addi",     0, {"C", 0},   "d,Co",  MATCH_C_ADDI, MASK_C_ADDI, match_opcode, 0 },
+{"c.add",      0, {"C", 0},   "d,CV",  MATCH_C_ADD, MASK_C_ADD, match_c_add_with_hint, 0 },
+{"c.sub",      0, {"C", 0},   "Cs,Ct",  MATCH_C_SUB, MASK_C_SUB, match_opcode, 0 },
+{"c.and",      0, {"C", 0},   "Cs,Ct",  MATCH_C_AND, MASK_C_AND, match_opcode, 0 },
+{"c.or",       0, {"C", 0},   "Cs,Ct",  MATCH_C_OR, MASK_C_OR, match_opcode, 0 },
+{"c.xor",      0, {"C", 0},   "Cs,Ct",  MATCH_C_XOR, MASK_C_XOR, match_opcode, 0 },
+{"c.slli",     0, {"C", 0},   "d,C>",  MATCH_C_SLLI, MASK_C_SLLI, match_c_slli, 0 },
+{"c.srli",     0, {"C", 0},   "Cs,C>",  MATCH_C_SRLI, MASK_C_SRLI, match_c_slli, 0 },
+{"c.srai",     0, {"C", 0},   "Cs,C>",  MATCH_C_SRAI, MASK_C_SRAI, match_c_slli, 0 },
+{"c.slli64",   0, {"C", 0},   "d",  MATCH_C_SLLI64, MASK_C_SLLI64, match_c_slli64, 0 },
+{"c.srli64",   0, {"C", 0},   "Cs",  MATCH_C_SRLI64, MASK_C_SRLI64, match_c_slli64, 0 },
+{"c.srai64",   0, {"C", 0},   "Cs",  MATCH_C_SRAI64, MASK_C_SRAI64, match_c_slli64, 0 },
+{"c.andi",     0, {"C", 0},   "Cs,Co",  MATCH_C_ANDI, MASK_C_ANDI, match_opcode, 0 },
+{"c.addiw",   64, {"C", 0}, "d,Co",  MATCH_C_ADDIW, MASK_C_ADDIW, match_rd_nonzero, 0 },
+{"c.addw",    64, {"C", 0}, "Cs,Ct",  MATCH_C_ADDW, MASK_C_ADDW, match_opcode, 0 },
+{"c.subw",    64, {"C", 0}, "Cs,Ct",  MATCH_C_SUBW, MASK_C_SUBW, match_opcode, 0 },
+{"c.ldsp",    64, {"C", 0}, "d,Cn(Cc)",  MATCH_C_LDSP, MASK_C_LDSP, match_rd_nonzero, INSN_DREF|INSN_8_BYTE },
+{"c.ld",      64, {"C", 0}, "Ct,Cl(Cs)",  MATCH_C_LD, MASK_C_LD, match_opcode, INSN_DREF|INSN_8_BYTE },
+{"c.sdsp",    64, {"C", 0}, "CV,CN(Cc)",  MATCH_C_SDSP, MASK_C_SDSP, match_opcode, INSN_DREF|INSN_8_BYTE },
+{"c.sd",      64, {"C", 0}, "Ct,Cl(Cs)",  MATCH_C_SD, MASK_C_SD, match_opcode, INSN_DREF|INSN_8_BYTE },
+{"c.fldsp",    0, {"D", "C", 0},   "D,Cn(Cc)",  MATCH_C_FLDSP, MASK_C_FLDSP, match_opcode, INSN_DREF|INSN_8_BYTE },
+{"c.fld",      0, {"D", "C", 0},   "CD,Cl(Cs)",  MATCH_C_FLD, MASK_C_FLD, match_opcode, INSN_DREF|INSN_8_BYTE },
+{"c.fsdsp",    0, {"D", "C", 0},   "CT,CN(Cc)",  MATCH_C_FSDSP, MASK_C_FSDSP, match_opcode, INSN_DREF|INSN_8_BYTE },
+{"c.fsd",      0, {"D", "C", 0},   "CD,Cl(Cs)",  MATCH_C_FSD, MASK_C_FSD, match_opcode, INSN_DREF|INSN_8_BYTE },
+{"c.flwsp",   32, {"F", "C", 0}, "D,Cm(Cc)",  MATCH_C_FLWSP, MASK_C_FLWSP, match_opcode, INSN_DREF|INSN_4_BYTE },
+{"c.flw",     32, {"F", "C", 0}, "CD,Ck(Cs)",  MATCH_C_FLW, MASK_C_FLW, match_opcode, INSN_DREF|INSN_4_BYTE },
+{"c.fswsp",   32, {"F", "C", 0}, "CT,CM(Cc)",  MATCH_C_FSWSP, MASK_C_FSWSP, match_opcode, INSN_DREF|INSN_4_BYTE },
+{"c.fsw",     32, {"F", "C", 0}, "CD,Ck(Cs)",  MATCH_C_FSW, MASK_C_FSW, match_opcode, INSN_DREF|INSN_4_BYTE },
+
+/* prefetch.i is a HINT of ori  */
+/* { Zicbom */
+/* Zicbom */
+{"cbo.inval",  0, {"ZICBOM", 0}, "s", MATCH_CBO_INVAL, MASK_CBO_INVAL, match_opcode, 0 },
+{"cbo.clean",  0, {"ZICBOM", 0}, "s", MATCH_CBO_CLEAN, MASK_CBO_CLEAN, match_opcode, 0 },
+{"cbo.flush",  0, {"ZICBOM", 0}, "s", MATCH_CBO_FLUSH, MASK_CBO_FLUSH, match_opcode, 0 },
+/* Zicboz */
+{"cbo.zero",   0, {"ZICBOZ", 0}, "s", MATCH_CBO_ZERO, MASK_CBO_ZERO, match_opcode, 0 },
+/* Zicbop */
+{"prefetch.i", 0, {"ZICBOP", 0}, "f(s)", MATCH_PREFETCH_I, MASK_PREFETCH_I, match_opcode, 0 },
+{"prefetch.r", 0, {"ZICBOP", 0}, "f(s)", MATCH_PREFETCH_R, MASK_PREFETCH_R, match_opcode, 0 },
+{"prefetch.w", 0, {"ZICBOP", 0}, "f(s)", MATCH_PREFETCH_W, MASK_PREFETCH_W, match_opcode, 0 },
+/* } Zicbo */
+
+/* RVI instructions and RVC instructions without "c." suffix.  */
 {"ebreak",      0, {"C", 0},   "",  MATCH_C_EBREAK, MASK_C_EBREAK, match_opcode, INSN_ALIAS },
 {"ebreak",      0, {"I", 0},   "",    MATCH_EBREAK, MASK_EBREAK, match_opcode, 0 },
 {"sbreak",      0, {"C", 0},   "",  MATCH_C_EBREAK, MASK_C_EBREAK, match_opcode, INSN_ALIAS },
@@ -517,8 +755,10 @@ const struct riscv_opcode riscv_opcodes[] =
 {"li",          0, {"I", 0},   "d,j",      MATCH_ADDI, MASK_ADDI | MASK_RS1, match_opcode, INSN_ALIAS }, /* addi */
 {"li",          0, {"I", 0},   "d,I",  0,    (int) M_LI,  match_never, INSN_MACRO },
 {"mv",          0, {"C", 0},   "d,CV",  MATCH_C_MV, MASK_C_MV, match_c_add, INSN_ALIAS },
+{"mv",          0, {"C", 0},   "d,Cz",  MATCH_C_LI, MASK_C_LI | MASK_RVC_IMM, match_rd_nonzero, INSN_ALIAS },
 {"mv",          0, {"I", 0},   "d,s",  MATCH_ADDI, MASK_ADDI | MASK_IMM, match_opcode, INSN_ALIAS },
 {"move",        0, {"C", 0},   "d,CV",  MATCH_C_MV, MASK_C_MV, match_c_add, INSN_ALIAS },
+{"move",        0, {"C", 0},   "d,Cz",  MATCH_C_LI, MASK_C_LI | MASK_RVC_IMM, match_rd_nonzero, INSN_ALIAS },
 {"move",        0, {"I", 0},   "d,s",  MATCH_ADDI, MASK_ADDI | MASK_IMM, match_opcode, INSN_ALIAS },
 {"andi",        0, {"C", 0},   "Cs,Cw,Co",  MATCH_C_ANDI, MASK_C_ANDI, match_opcode, INSN_ALIAS },
 {"andi",        0, {"I", 0},   "d,s,j",  MATCH_ANDI, MASK_ANDI, match_opcode, 0 },
@@ -529,6 +769,7 @@ const struct riscv_opcode riscv_opcodes[] =
 {"and",         0, {"I", 0},   "d,s,j",  MATCH_ANDI, MASK_ANDI, match_opcode, INSN_ALIAS },
 {"beqz",        0, {"C", 0},   "Cs,Cp",  MATCH_C_BEQZ, MASK_C_BEQZ, match_opcode, INSN_ALIAS|INSN_CONDBRANCH },
 {"beqz",        0, {"I", 0},   "s,p",  MATCH_BEQ, MASK_BEQ | MASK_RS2, match_opcode, INSN_ALIAS|INSN_CONDBRANCH },
+{"beq",         0, {"C", 0},   "Cs,Cz,Cp",  MATCH_C_BEQZ, MASK_C_BEQZ, match_opcode, INSN_ALIAS|INSN_CONDBRANCH },
 {"beq",         0, {"I", 0},   "s,t,p",  MATCH_BEQ, MASK_BEQ, match_opcode, INSN_CONDBRANCH },
 {"blez",        0, {"I", 0},   "t,p",  MATCH_BGE, MASK_BGE | MASK_RS1, match_opcode, INSN_ALIAS|INSN_CONDBRANCH },
 {"bgez",        0, {"I", 0},   "s,p",  MATCH_BGE, MASK_BGE | MASK_RS2, match_opcode, INSN_ALIAS|INSN_CONDBRANCH },
@@ -544,17 +785,23 @@ const struct riscv_opcode riscv_opcodes[] =
 {"bgtu",        0, {"I", 0},   "t,s,p",  MATCH_BLTU, MASK_BLTU, match_opcode, INSN_ALIAS|INSN_CONDBRANCH },
 {"bnez",        0, {"C", 0},   "Cs,Cp",  MATCH_C_BNEZ, MASK_C_BNEZ, match_opcode, INSN_ALIAS|INSN_CONDBRANCH },
 {"bnez",        0, {"I", 0},   "s,p",  MATCH_BNE, MASK_BNE | MASK_RS2, match_opcode, INSN_ALIAS|INSN_CONDBRANCH },
+{"bne",         0, {"C", 0},   "Cs,Cz,Cp",  MATCH_C_BNEZ, MASK_C_BNEZ, match_opcode, INSN_ALIAS|INSN_CONDBRANCH },
 {"bne",         0, {"I", 0},   "s,t,p",  MATCH_BNE, MASK_BNE, match_opcode, INSN_CONDBRANCH },
 {"addi",        0, {"C", 0},   "Ct,Cc,CK", MATCH_C_ADDI4SPN, MASK_C_ADDI4SPN, match_c_addi4spn, INSN_ALIAS },
 {"addi",        0, {"C", 0},   "d,CU,Cj",  MATCH_C_ADDI, MASK_C_ADDI, match_rd_nonzero, INSN_ALIAS },
+{"addi",        0, {"C", 0},   "d,Cz,Co",  MATCH_C_LI, MASK_C_LI, match_rd_nonzero, INSN_ALIAS },
 {"addi",        0, {"C", 0},   "d,CU,z",    MATCH_C_NOP, MASK_C_ADDI | MASK_RVC_IMM, match_c_nop, INSN_ALIAS },
+{"addi",        0, {"C", 0},   "d,CV,z",    MATCH_C_MV, MASK_C_MV, match_c_add, INSN_ALIAS },
 {"addi",        0, {"C", 0},   "Cc,Cc,CL", MATCH_C_ADDI16SP, MASK_C_ADDI16SP, match_c_addi16sp, INSN_ALIAS },
+{"addi",        0, {"C", 0},   "d,Cz,Co",  MATCH_C_LI, MASK_C_LI, match_rd_nonzero, INSN_ALIAS },
 {"addi",        0, {"I", 0},   "d,s,j",  MATCH_ADDI, MASK_ADDI, match_opcode, 0 },
 {"add",         0, {"C", 0},   "d,CU,CV",  MATCH_C_ADD, MASK_C_ADD, match_c_add, INSN_ALIAS },
 {"add",         0, {"C", 0},   "d,CV,CU",  MATCH_C_ADD, MASK_C_ADD, match_c_add, INSN_ALIAS },
 {"add",         0, {"C", 0},   "d,CU,Co",  MATCH_C_ADDI, MASK_C_ADDI, match_rd_nonzero, INSN_ALIAS },
 {"add",         0, {"C", 0},   "Ct,Cc,CK", MATCH_C_ADDI4SPN, MASK_C_ADDI4SPN, match_c_addi4spn, INSN_ALIAS },
 {"add",         0, {"C", 0},   "Cc,Cc,CL", MATCH_C_ADDI16SP, MASK_C_ADDI16SP, match_c_addi16sp, INSN_ALIAS },
+{"add",         0, {"C", 0},   "d,Cz,CV",  MATCH_C_MV, MASK_C_MV, match_c_add, INSN_ALIAS },
+{"add",         0, {"C", 0},   "d,CV,Cz",  MATCH_C_MV, MASK_C_MV, match_c_add, INSN_ALIAS },
 {"add",         0, {"I", 0},   "d,s,t",  MATCH_ADD, MASK_ADD, match_opcode, 0 },
 /* This is used for TLS, where the fourth arg is %tprel_add, to get a reloc
    applied to an add instruction, for relaxation to use.  */
@@ -670,6 +917,386 @@ const struct riscv_opcode riscv_opcodes[] =
 {"subw",       64, {"C", 0}, "Cs,Cw,Ct",  MATCH_C_SUBW, MASK_C_SUBW, match_opcode, INSN_ALIAS },
 {"subw",       64, {"I", 0}, "d,s,t",  MATCH_SUBW, MASK_SUBW, match_opcode, 0 },
 
+/* NDS V5 Extension.  */
+{"la.lo32",    64, {"XANDES", 0}, "d,A",  0, (int) M_LA_LO,  match_never, INSN_MACRO },
+{"bfoz",        0, {"XANDES", 0}, "d,s,h,l",  MATCH_BFOZ, MASK_BFOZ, match_opcode, 0 },
+{"bfos",        0, {"XANDES", 0}, "d,s,h,l",  MATCH_BFOS, MASK_BFOS, match_opcode, 0 },
+{"beqc",        0, {"XANDES", 0}, "s,i,g",  MATCH_BEQC, MASK_BEQC, match_opcode, 0 },
+{"bnec",        0, {"XANDES", 0}, "s,i,g",  MATCH_BNEC, MASK_BNEC, match_opcode, 0 },
+{"bbc",         0, {"XANDES", 0}, "s,k,g",  MATCH_BBC, MASK_BBC, match_opcode, 0 },
+{"bbs",         0, {"XANDES", 0}, "s,k,g",  MATCH_BBS, MASK_BBS, match_opcode, 0 },
+{"lea.h",       0, {"XANDES", 0}, "d,s,t",  MATCH_LEA_H, MASK_LEA_H, match_opcode, 0 },
+{"lea.w",       0, {"XANDES", 0}, "d,s,t",  MATCH_LEA_W, MASK_LEA_W, match_opcode, 0 },
+{"lea.d",       0, {"XANDES", 0}, "d,s,t",  MATCH_LEA_D, MASK_LEA_D, match_opcode, 0 },
+{"lea.b.ze",    0, {"XANDES", 0}, "d,s,t",  MATCH_LEA_B_ZE, MASK_LEA_B_ZE, match_opcode, 0 },
+{"lea.h.ze",    0, {"XANDES", 0}, "d,s,t",  MATCH_LEA_H_ZE, MASK_LEA_H_ZE, match_opcode, 0 },
+{"lea.w.ze",    0, {"XANDES", 0}, "d,s,t",  MATCH_LEA_W_ZE, MASK_LEA_W_ZE, match_opcode, 0 },
+{"lea.d.ze",    0, {"XANDES", 0}, "d,s,t",  MATCH_LEA_D_ZE, MASK_LEA_D_ZE, match_opcode, 0 },
+{"lbugp",       0, {"XANDES", 0}, "d,Gb", MATCH_LBUGP, MASK_LBUGP, match_opcode, 0},
+{"lbgp",        0, {"XANDES", 0}, "d,Gb", MATCH_LBGP, MASK_LBGP, match_opcode, 0},
+{"lhugp",       0, {"XANDES", 0}, "d,Gh", MATCH_LHUGP, MASK_LHUGP, match_opcode, 0},
+{"lhgp",        0, {"XANDES", 0}, "d,Gh", MATCH_LHGP, MASK_LHGP, match_opcode, 0},
+{"lwugp",      64, {"XANDES", 0}, "d,Gw", MATCH_LWUGP, MASK_LWUGP, match_opcode, 0},
+{"lwgp",        0, {"XANDES", 0}, "d,Gw", MATCH_LWGP, MASK_LWGP, match_opcode, 0},
+{"ldgp",       64, {"XANDES", 0}, "d,Gd", MATCH_LDGP, MASK_LDGP, match_opcode, 0},
+{"sbgp",        0, {"XANDES", 0}, "t,Hb", MATCH_SBGP, MASK_SBGP, match_opcode, 0},
+{"shgp",        0, {"XANDES", 0}, "t,Hh", MATCH_SHGP, MASK_SHGP, match_opcode, 0},
+{"swgp",        0, {"XANDES", 0}, "t,Hw", MATCH_SWGP, MASK_SWGP, match_opcode, 0},
+{"sdgp",       64, {"XANDES", 0}, "t,Hd", MATCH_SDGP, MASK_SDGP, match_opcode, 0},
+{"addigp",      0, {"XANDES", 0}, "d,Gb", MATCH_ADDIGP, MASK_ADDIGP, match_opcode, 0},
+{"ffb",         0, {"XANDES", 0}, "d,s,t",MATCH_FFB, MASK_FFB, match_opcode, 0 },
+{"ffzmism",     0, {"XANDES", 0}, "d,s,t",MATCH_FFZMISM, MASK_FFZMISM, match_opcode, 0 },
+{"ffmism",      0, {"XANDES", 0}, "d,s,t",MATCH_FFMISM, MASK_FFMISM, match_opcode, 0 },
+{"flmism",      0, {"XANDES", 0}, "d,s,t",MATCH_FLMISM, MASK_FLMISM, match_opcode, 0 },
+{"exec.it",     0, {"XANDES", "C", 0}, "Cet",  MATCH_C_EXECIT, MASK_C_EXECIT, match_opcode, 0 },
+{"ex9.it",      0, {"XANDES", "C", 0}, "Cei",  MATCH_C_EX9IT, MASK_C_EX9IT, match_opcode, 0 },
+
+{"fcvt.s.bf16", 0, {"XEBFHW", "XANDES", "F", 0}, "D,T",  MATCH_FCVT_S_BF16, MASK_FCVT_S_BF16, match_opcode, 0 },
+{"fcvt.bf16.s", 0, {"XEBFHW", "XANDES", "F", 0}, "D,T",  MATCH_FCVT_BF16_S, MASK_FCVT_BF16_S, match_opcode, 0 },
+{"vfwcvt.s.bf16",0,{"XANDES", "V", "F", 0}, "Vd,Vt", MATCH_VFWCVT_S_BF16, MASK_VFWCVT_S_BF16, match_opcode, 0},
+{"vfncvt.bf16.s",0,{"XANDES", "V", "F", 0}, "Vd,Vt", MATCH_VFNCVT_BF16_S, MASK_VFNCVT_BF16_S, match_opcode, 0},
+
+/* NDS V5 DSP Extension.  */
+{"add8",        0, {"P", 0}, "d,s,t",     MATCH_ADD8, MASK_ADD8, match_opcode, 0 },
+{"add16",       0, {"P", 0}, "d,s,t",     MATCH_ADD16, MASK_ADD16, match_opcode, 0 },
+{"add64",       0, {"P", 0}, "nds_rdp,nds_rsp,nds_rtp", MATCH_ADD64, MASK_ADD64, match_opcode, 0 },
+{"ave",         0, {"P", 0}, "d,s,t",     MATCH_AVE, MASK_AVE, match_opcode, 0 },
+{"bitrev",      0, {"P", 0}, "d,s,t",     MATCH_BITREV, MASK_BITREV, match_opcode, 0 },
+{"bitrevi",     0, {"P", 0}, "d,s,l",     MATCH_BITREVI, MASK_BITREVI, match_opcode, 0 },
+{"bpick",       0, {"P", 0}, "d,s,t,nds_rc", MATCH_BPICK, MASK_BPICK, match_opcode, 0 },
+{"clrs8",       0, {"P", 0}, "d,s",       MATCH_CLRS8, MASK_CLRS8, match_opcode, 0 },
+{"clrs16",      0, {"P", 0}, "d,s",       MATCH_CLRS16, MASK_CLRS16, match_opcode, 0 },
+{"clrs32",      0, {"P", 0}, "d,s",       MATCH_CLRS32, MASK_CLRS32, match_opcode, 0 },
+{"clo8",        0, {"P", 0}, "d,s",       MATCH_CLO8, MASK_CLO8, match_opcode, 0 },
+{"clo16",       0, {"P", 0}, "d,s",       MATCH_CLO16, MASK_CLO16, match_opcode, 0 },
+{"clo32",       0, {"P", 0}, "d,s",       MATCH_CLO32, MASK_CLO32, match_opcode, 0 },
+{"clz8",        0, {"P", 0}, "d,s",       MATCH_CLZ8, MASK_CLZ8, match_opcode, 0 },
+{"clz16",       0, {"P", 0}, "d,s",       MATCH_CLZ16, MASK_CLZ16, match_opcode, 0 },
+{"clz32",       0, {"P", 0}, "d,s",       MATCH_CLZ32, MASK_CLZ32, match_opcode, 0 },
+{"cmpeq8",      0, {"P", 0}, "d,s,t",     MATCH_CMPEQ8, MASK_CMPEQ8, match_opcode, 0 },
+{"cmpeq16",     0, {"P", 0}, "d,s,t",     MATCH_CMPEQ16, MASK_CMPEQ16, match_opcode, 0 },
+{"cras16",      0, {"P", 0}, "d,s,t",     MATCH_CRAS16, MASK_CRAS16, match_opcode, 0 },
+{"crsa16",      0, {"P", 0}, "d,s,t",     MATCH_CRSA16, MASK_CRSA16, match_opcode, 0 },
+{"insb",        0, {"P", 0}, "d,s,nds_i3u", MATCH_INSB, MASK_INSB, match_opcode, 0 },
+{"kabs8",       0, {"P", 0}, "d,s",       MATCH_KABS8, MASK_KABS8, match_opcode, 0 },
+{"kabs16",      0, {"P", 0}, "d,s",       MATCH_KABS16, MASK_KABS16, match_opcode, 0 },
+{"kabsw",       0, {"P", 0}, "d,s",       MATCH_KABSW, MASK_KABSW, match_opcode, 0 },
+{"kadd8",       0, {"P", 0}, "d,s,t",     MATCH_KADD8, MASK_KADD8, match_opcode, 0 },
+{"kadd16",      0, {"P", 0}, "d,s,t",     MATCH_KADD16, MASK_KADD16, match_opcode, 0 },
+{"kadd64",      0, {"P", 0}, "nds_rdp,nds_rsp,nds_rtp", MATCH_KADD64, MASK_KADD64, match_opcode, 0 },
+{"kaddh",       0, {"P", 0}, "d,s,t",     MATCH_KADDH, MASK_KADDH, match_opcode, 0 },
+{"kaddw",       0, {"P", 0}, "d,s,t",     MATCH_KADDW, MASK_KADDW, match_opcode, 0 },
+{"kcras16",     0, {"P", 0}, "d,s,t",     MATCH_KCRAS16, MASK_KCRAS16, match_opcode, 0 },
+{"kcrsa16",     0, {"P", 0}, "d,s,t",     MATCH_KCRSA16, MASK_KCRSA16, match_opcode, 0 },
+{"kdmbb",       0, {"P", 0}, "d,s,t",     MATCH_KDMBB, MASK_KDMBB, match_opcode, 0 },
+{"kdmbt",       0, {"P", 0}, "d,s,t",     MATCH_KDMBT, MASK_KDMBT, match_opcode, 0 },
+{"kdmtt",       0, {"P", 0}, "d,s,t",     MATCH_KDMTT, MASK_KDMTT, match_opcode, 0 },
+{"kdmabb",      0, {"P", 0}, "d,s,t",     MATCH_KDMABB, MASK_KDMABB, match_opcode, 0 },
+{"kdmabt",      0, {"P", 0}, "d,s,t",     MATCH_KDMABT, MASK_KDMABT, match_opcode, 0 },
+{"kdmatt",      0, {"P", 0}, "d,s,t",     MATCH_KDMATT, MASK_KDMATT, match_opcode, 0 },
+{"khm8",        0, {"P", 0}, "d,s,t",     MATCH_KHM8, MASK_KHM8, match_opcode, 0 },
+{"khmx8",       0, {"P", 0}, "d,s,t",     MATCH_KHMX8, MASK_KHMX8, match_opcode, 0 },
+{"khm16",       0, {"P", 0}, "d,s,t",     MATCH_KHM16, MASK_KHM16, match_opcode, 0 },
+{"khmx16",      0, {"P", 0}, "d,s,t",     MATCH_KHMX16, MASK_KHMX16, match_opcode, 0 },
+{"khmbb",       0, {"P", 0}, "d,s,t",     MATCH_KHMBB, MASK_KHMBB, match_opcode, 0 },
+{"khmbt",       0, {"P", 0}, "d,s,t",     MATCH_KHMBT, MASK_KHMBT, match_opcode, 0 },
+{"khmtt",       0, {"P", 0}, "d,s,t",     MATCH_KHMTT, MASK_KHMTT, match_opcode, 0 },
+{"kmabb",       0, {"P", 0}, "d,s,t",     MATCH_KMABB, MASK_KMABB, match_opcode, 0 },
+{"kmabt",       0, {"P", 0}, "d,s,t",     MATCH_KMABT, MASK_KMABT, match_opcode, 0 },
+{"kmatt",       0, {"P", 0}, "d,s,t",     MATCH_KMATT, MASK_KMATT, match_opcode, 0 },
+{"kmada",       0, {"P", 0}, "d,s,t",     MATCH_KMADA, MASK_KMADA, match_opcode, 0 },
+{"kmaxda",      0, {"P", 0}, "d,s,t",     MATCH_KMAXDA, MASK_KMAXDA, match_opcode, 0 },
+{"kmads",       0, {"P", 0}, "d,s,t",     MATCH_KMADS, MASK_KMADS, match_opcode, 0 },
+{"kmadrs",      0, {"P", 0}, "d,s,t",     MATCH_KMADRS, MASK_KMADRS, match_opcode, 0 },
+{"kmaxds",      0, {"P", 0}, "d,s,t",     MATCH_KMAXDS, MASK_KMAXDS, match_opcode, 0 },
+{"kmar64",      0, {"P", 0}, "nds_rdp,s,t", MATCH_KMAR64, MASK_KMAR64, match_opcode, 0 },
+{"kmda",        0, {"P", 0}, "d,s,t",     MATCH_KMDA, MASK_KMDA, match_opcode, 0 },
+{"kmxda",       0, {"P", 0}, "d,s,t",     MATCH_KMXDA, MASK_KMXDA, match_opcode, 0 },
+{"kmmac",       0, {"P", 0}, "d,s,t",     MATCH_KMMAC, MASK_KMMAC, match_opcode, 0 },
+{"kmmac.u",     0, {"P", 0}, "d,s,t",     MATCH_KMMAC_U, MASK_KMMAC_U, match_opcode, 0 },
+{"kmmawb",      0, {"P", 0}, "d,s,t",     MATCH_KMMAWB, MASK_KMMAWB, match_opcode, 0 },
+{"kmmawb.u",    0, {"P", 0}, "d,s,t",     MATCH_KMMAWB_U, MASK_KMMAWB_U, match_opcode, 0 },
+{"kmmawb2",     0, {"P", 0}, "d,s,t",     MATCH_KMMAWB2, MASK_KMMAWB2, match_opcode, 0 },
+{"kmmawb2.u",   0, {"P", 0}, "d,s,t",     MATCH_KMMAWB2_U, MASK_KMMAWB2_U, match_opcode, 0 },
+{"kmmawt",      0, {"P", 0}, "d,s,t",     MATCH_KMMAWT, MASK_KMMAWT, match_opcode, 0 },
+{"kmmawt.u",    0, {"P", 0}, "d,s,t",     MATCH_KMMAWT_U, MASK_KMMAWT_U, match_opcode, 0 },
+{"kmmawt2",     0, {"P", 0}, "d,s,t",     MATCH_KMMAWT2, MASK_KMMAWT2, match_opcode, 0 },
+{"kmmawt2.u",   0, {"P", 0}, "d,s,t",     MATCH_KMMAWT2_U, MASK_KMMAWT2_U, match_opcode, 0 },
+{"kmmsb",       0, {"P", 0}, "d,s,t",     MATCH_KMMSB, MASK_KMMSB, match_opcode, 0 },
+{"kmmsb.u",     0, {"P", 0}, "d,s,t",     MATCH_KMMSB_U, MASK_KMMSB_U, match_opcode, 0 },
+{"kmmwb2",      0, {"P", 0}, "d,s,t",     MATCH_KMMWB2, MASK_KMMWB2, match_opcode, 0 },
+{"kmmwb2.u",    0, {"P", 0}, "d,s,t",     MATCH_KMMWB2_U, MASK_KMMWB2_U, match_opcode, 0 },
+{"kmmwt2",      0, {"P", 0}, "d,s,t",     MATCH_KMMWT2, MASK_KMMWT2, match_opcode, 0 },
+{"kmmwt2.u",    0, {"P", 0}, "d,s,t",     MATCH_KMMWT2_U, MASK_KMMWT2_U, match_opcode, 0 },
+{"kmsda",       0, {"P", 0}, "d,s,t",     MATCH_KMSDA, MASK_KMSDA, match_opcode, 0 },
+{"kmsxda",      0, {"P", 0}, "d,s,t",     MATCH_KMSXDA, MASK_KMSXDA, match_opcode, 0 },
+{"kmsr64",      0, {"P", 0}, "nds_rdp,s,t", MATCH_KMSR64, MASK_KMSR64, match_opcode, 0 },
+{"ksllw",       0, {"P", 0}, "d,s,t",     MATCH_KSLLW, MASK_KSLLW, match_opcode, 0 },
+{"kslliw",      0, {"P", 0}, "d,s,nds_i5u", MATCH_KSLLIW, MASK_KSLLIW, match_opcode, 0 },
+{"ksll8",       0, {"P", 0}, "d,s,t",     MATCH_KSLL8, MASK_KSLL8, match_opcode, 0 },
+{"kslli8",      0, {"P", 0}, "d,s,nds_i3u", MATCH_KSLLI8, MASK_KSLLI8, match_opcode, 0 },
+{"ksll16",      0, {"P", 0}, "d,s,t",     MATCH_KSLL16, MASK_KSLL16, match_opcode, 0 },
+{"kslli16",     0, {"P", 0}, "d,s,nds_i4u", MATCH_KSLLI16, MASK_KSLLI16, match_opcode, 0 },
+{"kslra8",      0, {"P", 0}, "d,s,t",     MATCH_KSLRA8, MASK_KSLRA8, match_opcode, 0 },
+{"kslra8.u",    0, {"P", 0}, "d,s,t",     MATCH_KSLRA8_U, MASK_KSLRA8_U, match_opcode, 0 },
+{"kslra16",     0, {"P", 0}, "d,s,t",     MATCH_KSLRA16, MASK_KSLRA16, match_opcode, 0 },
+{"kslra16.u",   0, {"P", 0}, "d,s,t",     MATCH_KSLRA16_U, MASK_KSLRA16_U, match_opcode, 0 },
+{"kslraw",      0, {"P", 0}, "d,s,t",     MATCH_KSLRAW, MASK_KSLRAW, match_opcode, 0 },
+{"kslraw.u",    0, {"P", 0}, "d,s,t",     MATCH_KSLRAW_U, MASK_KSLRAW_U, match_opcode, 0 },
+{"kstas16",     0, {"P", 0}, "d,s,t",     MATCH_KSTAS16, MASK_KSTAS16, match_opcode, 0 },
+{"kstsa16",     0, {"P", 0}, "d,s,t",     MATCH_KSTSA16, MASK_KSTSA16, match_opcode, 0 },
+{"ksub8",       0, {"P", 0}, "d,s,t",     MATCH_KSUB8, MASK_KSUB8, match_opcode, 0 },
+{"ksub16",      0, {"P", 0}, "d,s,t",     MATCH_KSUB16, MASK_KSUB16, match_opcode, 0 },
+{"ksub64",      0, {"P", 0}, "nds_rdp,nds_rsp,nds_rtp", MATCH_KSUB64, MASK_KSUB64, match_opcode, 0 },
+{"ksubh",       0, {"P", 0}, "d,s,t",     MATCH_KSUBH, MASK_KSUBH, match_opcode, 0 },
+{"ksubw",       0, {"P", 0}, "d,s,t",     MATCH_KSUBW, MASK_KSUBW, match_opcode, 0 },
+{"kwmmul",      0, {"P", 0}, "d,s,t",     MATCH_KWMMUL, MASK_KWMMUL, match_opcode, 0 },
+{"kwmmul.u",    0, {"P", 0}, "d,s,t",     MATCH_KWMMUL_U, MASK_KWMMUL_U, match_opcode, 0 },
+{"mtlbi",       0, {"P", 0}, "nds_i15s",  MATCH_MTLBI, MASK_MTLBI, match_opcode, 0 },
+{"mtlei",       0, {"P", 0}, "nds_i15s",  MATCH_MTLEI, MASK_MTLEI, match_opcode, 0 },
+{"maddr32",     0, {"P", 0}, "d,s,t",     MATCH_MADDR32, MASK_MADDR32, match_opcode, 0 },
+{"maxw",        0, {"P", 0}, "d,s,t",     MATCH_MAXW, MASK_MAXW, match_opcode, 0 },
+{"minw",        0, {"P", 0}, "d,s,t",     MATCH_MINW, MASK_MINW, match_opcode, 0 },
+{"msubr32",     0, {"P", 0}, "d,s,t",     MATCH_MSUBR32, MASK_MSUBR32, match_opcode, 0 },
+{"mulr64",      0, {"P", 0}, "nds_rdp,s,t", MATCH_MULR64, MASK_MULR64, match_opcode, 0 },
+{"mulsr64",     0, {"P", 0}, "nds_rdp,s,t", MATCH_MULSR64, MASK_MULSR64, match_opcode, 0 },
+{"pbsad",       0, {"P", 0}, "d,s,t",     MATCH_PBSAD, MASK_PBSAD, match_opcode, 0 },
+{"pbsada",      0, {"P", 0}, "d,s,t",     MATCH_PBSADA, MASK_PBSADA, match_opcode, 0 },
+{"pkbb16",      0, {"P", 0}, "d,s,t",     MATCH_PKBB16, MASK_PKBB16, match_opcode, 0 },
+{"pkbt16",      0, {"P", 0}, "d,s,t",     MATCH_PKBT16, MASK_PKBT16, match_opcode, 0 },
+{"pktt16",      0, {"P", 0}, "d,s,t",     MATCH_PKTT16, MASK_PKTT16, match_opcode, 0 },
+{"pktb16",      0, {"P", 0}, "d,s,t",     MATCH_PKTB16, MASK_PKTB16, match_opcode, 0 },
+{"radd8",       0, {"P", 0}, "d,s,t",     MATCH_RADD8, MASK_RADD8, match_opcode, 0 },
+{"radd16",      0, {"P", 0}, "d,s,t",     MATCH_RADD16, MASK_RADD16, match_opcode, 0 },
+{"radd64",      0, {"P", 0}, "nds_rdp,nds_rsp,nds_rtp", MATCH_RADD64, MASK_RADD64, match_opcode, 0 },
+{"raddw",       0, {"P", 0}, "d,s,t",     MATCH_RADDW, MASK_RADDW, match_opcode, 0 },
+{"rcras16",     0, {"P", 0}, "d,s,t",     MATCH_RCRAS16, MASK_RCRAS16, match_opcode, 0 },
+{"rcrsa16",     0, {"P", 0}, "d,s,t",     MATCH_RCRSA16, MASK_RCRSA16, match_opcode, 0 },
+{"rstas16",     0, {"P", 0}, "d,s,t",     MATCH_RSTAS16, MASK_RSTAS16, match_opcode, 0 },
+{"rstsa16",     0, {"P", 0}, "d,s,t",     MATCH_RSTSA16, MASK_RSTSA16, match_opcode, 0 },
+{"rsub8",       0, {"P", 0}, "d,s,t",     MATCH_RSUB8, MASK_RSUB8, match_opcode, 0 },
+{"rsub16",      0, {"P", 0}, "d,s,t",     MATCH_RSUB16, MASK_RSUB16, match_opcode, 0 },
+{"rsub64",      0, {"P", 0}, "nds_rdp,nds_rsp,nds_rtp", MATCH_RSUB64, MASK_RSUB64, match_opcode, 0 },
+{"rsubw",       0, {"P", 0}, "d,s,t",     MATCH_RSUBW, MASK_RSUBW, match_opcode, 0 },
+{"sclip8",      0, {"P", 0}, "d,s,nds_i3u", MATCH_SCLIP8, MASK_SCLIP8, match_opcode, 0 },
+{"sclip16",     0, {"P", 0}, "d,s,nds_i4u", MATCH_SCLIP16, MASK_SCLIP16, match_opcode, 0 },
+{"sclip32",     0, {"P", 0}, "d,s,nds_i5u", MATCH_SCLIP32, MASK_SCLIP32, match_opcode, 0 },
+{"scmple8",     0, {"P", 0}, "d,s,t",     MATCH_SCMPLE8, MASK_SCMPLE8, match_opcode, 0 },
+{"scmple16",    0, {"P", 0}, "d,s,t",     MATCH_SCMPLE16, MASK_SCMPLE16, match_opcode, 0 },
+{"scmplt8",     0, {"P", 0}, "d,s,t",     MATCH_SCMPLT8, MASK_SCMPLT8, match_opcode, 0 },
+{"scmplt16",    0, {"P", 0}, "d,s,t",     MATCH_SCMPLT16, MASK_SCMPLT16, match_opcode, 0 },
+{"sll8",        0, {"P", 0}, "d,s,t",     MATCH_SLL8, MASK_SLL8, match_opcode, 0 },
+{"slli8",       0, {"P", 0}, "d,s,nds_i3u", MATCH_SLLI8, MASK_SLLI8, match_opcode, 0 },
+{"sll16",       0, {"P", 0}, "d,s,t",     MATCH_SLL16, MASK_SLL16, match_opcode, 0 },
+{"slli16",      0, {"P", 0}, "d,s,nds_i4u", MATCH_SLLI16, MASK_SLLI16, match_opcode, 0 },
+{"smal",        0, {"P", 0}, "nds_rdp,nds_rsp,t", MATCH_SMAL, MASK_SMAL, match_opcode, 0 },
+{"smalbb",      0, {"P", 0}, "nds_rdp,s,t", MATCH_SMALBB, MASK_SMALBB, match_opcode, 0 },
+{"smalbt",      0, {"P", 0}, "nds_rdp,s,t", MATCH_SMALBT, MASK_SMALBT, match_opcode, 0 },
+{"smaltt",      0, {"P", 0}, "nds_rdp,s,t", MATCH_SMALTT, MASK_SMALTT, match_opcode, 0 },
+{"smalda",      0, {"P", 0}, "nds_rdp,s,t", MATCH_SMALDA, MASK_SMALDA, match_opcode, 0 },
+{"smalxda",     0, {"P", 0}, "nds_rdp,s,t", MATCH_SMALXDA, MASK_SMALXDA, match_opcode, 0 },
+{"smalds",      0, {"P", 0}, "nds_rdp,s,t", MATCH_SMALDS, MASK_SMALDS, match_opcode, 0 },
+{"smaldrs",     0, {"P", 0}, "nds_rdp,s,t", MATCH_SMALDRS, MASK_SMALDRS, match_opcode, 0 },
+{"smalxds",     0, {"P", 0}, "nds_rdp,s,t", MATCH_SMALXDS, MASK_SMALXDS, match_opcode, 0 },
+{"smar64",      0, {"P", 0}, "nds_rdp,s,t", MATCH_SMAR64, MASK_SMAR64, match_opcode, 0 },
+{"smaqa",       0, {"P", 0}, "d,s,t",     MATCH_SMAQA, MASK_SMAQA, match_opcode, 0 },
+{"smaqa.su",    0, {"P", 0}, "d,s,t",     MATCH_SMAQA_SU, MASK_SMAQA_SU, match_opcode, 0 },
+{"smax8",       0, {"P", 0}, "d,s,t",     MATCH_SMAX8, MASK_SMAX8, match_opcode, 0 },
+{"smax16",      0, {"P", 0}, "d,s,t",     MATCH_SMAX16, MASK_SMAX16, match_opcode, 0 },
+{"smbb16",      0, {"P", 0}, "d,s,t",     MATCH_SMBB16, MASK_SMBB16, match_opcode, 0 },
+{"smbt16",      0, {"P", 0}, "d,s,t",     MATCH_SMBT16, MASK_SMBT16, match_opcode, 0 },
+{"smtt16",      0, {"P", 0}, "d,s,t",     MATCH_SMTT16, MASK_SMTT16, match_opcode, 0 },
+{"smds",        0, {"P", 0}, "d,s,t",     MATCH_SMDS, MASK_SMDS, match_opcode, 0 },
+{"smdrs",       0, {"P", 0}, "d,s,t",     MATCH_SMDRS, MASK_SMDRS, match_opcode, 0 },
+{"smxds",       0, {"P", 0}, "d,s,t",     MATCH_SMXDS, MASK_SMXDS, match_opcode, 0 },
+{"smin8",       0, {"P", 0}, "d,s,t",     MATCH_SMIN8, MASK_SMIN8, match_opcode, 0 },
+{"smin16",      0, {"P", 0}, "d,s,t",     MATCH_SMIN16, MASK_SMIN16, match_opcode, 0 },
+{"smmul",       0, {"P", 0}, "d,s,t",     MATCH_SMMUL, MASK_SMMUL, match_opcode, 0 },
+{"smmul.u",     0, {"P", 0}, "d,s,t",     MATCH_SMMUL_U, MASK_SMMUL_U, match_opcode, 0 },
+{"smmwb",       0, {"P", 0}, "d,s,t",     MATCH_SMMWB, MASK_SMMWB, match_opcode, 0 },
+{"smmwb.u",     0, {"P", 0}, "d,s,t",     MATCH_SMMWB_U, MASK_SMMWB_U, match_opcode, 0 },
+{"smmwt",       0, {"P", 0}, "d,s,t",     MATCH_SMMWT, MASK_SMMWT, match_opcode, 0 },
+{"smmwt.u",     0, {"P", 0}, "d,s,t",     MATCH_SMMWT_U, MASK_SMMWT_U, match_opcode, 0 },
+{"smslda",      0, {"P", 0}, "nds_rdp,s,t", MATCH_SMSLDA, MASK_SMSLDA, match_opcode, 0 },
+{"smslxda",     0, {"P", 0}, "nds_rdp,s,t", MATCH_SMSLXDA, MASK_SMSLXDA, match_opcode, 0 },
+{"smsr64",      0, {"P", 0}, "nds_rdp,s,t", MATCH_SMSR64, MASK_SMSR64, match_opcode, 0 },
+{"smul8",       0, {"P", 0}, "nds_rdp,s,t", MATCH_SMUL8, MASK_SMUL8, match_opcode, 0 },
+{"smulx8",      0, {"P", 0}, "nds_rdp,s,t", MATCH_SMULX8, MASK_SMULX8, match_opcode, 0 },
+{"smul16",      0, {"P", 0}, "nds_rdp,s,t", MATCH_SMUL16, MASK_SMUL16, match_opcode, 0 },
+{"smulx16",     0, {"P", 0}, "nds_rdp,s,t", MATCH_SMULX16, MASK_SMULX16, match_opcode, 0 },
+{"sra.u",       0, {"P", 0}, "d,s,t",     MATCH_SRA_U, MASK_SRA_U, match_opcode, 0 },
+{"srai.u",      0, {"P", 0}, "d,s,nds_i6u", MATCH_SRAI_U, MASK_SRAI_U, match_opcode, 0 },
+{"sra8",        0, {"P", 0}, "d,s,t",     MATCH_SRA8, MASK_SRA8, match_opcode, 0 },
+{"sra8.u",      0, {"P", 0}, "d,s,t",     MATCH_SRA8_U, MASK_SRA8_U, match_opcode, 0 },
+{"srai8",       0, {"P", 0}, "d,s,nds_i3u", MATCH_SRAI8, MASK_SRAI8, match_opcode, 0 },
+{"srai8.u",     0, {"P", 0}, "d,s,nds_i3u", MATCH_SRAI8_U, MASK_SRAI8_U, match_opcode, 0 },
+{"sra16",       0, {"P", 0}, "d,s,t",     MATCH_SRA16, MASK_SRA16, match_opcode, 0 },
+{"sra16.u",     0, {"P", 0}, "d,s,t",     MATCH_SRA16_U, MASK_SRA16_U, match_opcode, 0 },
+{"srai16",      0, {"P", 0}, "d,s,nds_i4u", MATCH_SRAI16, MASK_SRAI16, match_opcode, 0 },
+{"srai16.u",    0, {"P", 0}, "d,s,nds_i4u", MATCH_SRAI16_U, MASK_SRAI16_U, match_opcode, 0 },
+{"srl8",        0, {"P", 0}, "d,s,t",     MATCH_SRL8, MASK_SRL8, match_opcode, 0 },
+{"srl8.u",      0, {"P", 0}, "d,s,t",     MATCH_SRL8_U, MASK_SRL8_U, match_opcode, 0 },
+{"srli8",       0, {"P", 0}, "d,s,nds_i3u", MATCH_SRLI8, MASK_SRLI8, match_opcode, 0 },
+{"srli8.u",     0, {"P", 0}, "d,s,nds_i3u", MATCH_SRLI8_U, MASK_SRLI8_U, match_opcode, 0 },
+{"srl16",       0, {"P", 0}, "d,s,t",     MATCH_SRL16, MASK_SRL16, match_opcode, 0 },
+{"srl16.u",     0, {"P", 0}, "d,s,t",     MATCH_SRL16_U, MASK_SRL16_U, match_opcode, 0 },
+{"srli16",      0, {"P", 0}, "d,s,nds_i4u", MATCH_SRLI16, MASK_SRLI16, match_opcode, 0 },
+{"srli16.u",    0, {"P", 0}, "d,s,nds_i4u", MATCH_SRLI16_U, MASK_SRLI16_U, match_opcode, 0 },
+{"stas16",      0, {"P", 0}, "d,s,t",     MATCH_STAS16, MASK_STAS16, match_opcode, 0 },
+{"stsa16",      0, {"P", 0}, "d,s,t",     MATCH_STSA16, MASK_STSA16, match_opcode, 0 },
+{"sub8",        0, {"P", 0}, "d,s,t",     MATCH_SUB8, MASK_SUB8, match_opcode, 0 },
+{"sub16",       0, {"P", 0}, "d,s,t",     MATCH_SUB16, MASK_SUB16, match_opcode, 0 },
+{"sub64",       0, {"P", 0}, "nds_rdp,nds_rsp,nds_rtp", MATCH_SUB64, MASK_SUB64, match_opcode, 0 },
+{"sunpkd810",   0, {"P", 0}, "d,s",       MATCH_SUNPKD810, MASK_SUNPKD810, match_opcode, 0 },
+{"sunpkd820",   0, {"P", 0}, "d,s",       MATCH_SUNPKD820, MASK_SUNPKD820, match_opcode, 0 },
+{"sunpkd830",   0, {"P", 0}, "d,s",       MATCH_SUNPKD830, MASK_SUNPKD830, match_opcode, 0 },
+{"sunpkd831",   0, {"P", 0}, "d,s",       MATCH_SUNPKD831, MASK_SUNPKD831, match_opcode, 0 },
+{"sunpkd832",   0, {"P", 0}, "d,s",       MATCH_SUNPKD832, MASK_SUNPKD832, match_opcode, 0 },
+{"swap8",       0, {"P", 0}, "d,s",       MATCH_SWAP8, MASK_SWAP8, match_opcode, 0 },
+{"swap16",      0, {"P", 0}, "d,s",       MATCH_SWAP16, MASK_SWAP16, match_opcode, 0 },
+{"uclip8",      0, {"P", 0}, "d,s,nds_i3u", MATCH_UCLIP8, MASK_UCLIP8, match_opcode, 0 },
+{"uclip16",     0, {"P", 0}, "d,s,nds_i4u", MATCH_UCLIP16, MASK_UCLIP16, match_opcode, 0 },
+{"uclip32",     0, {"P", 0}, "d,s,nds_i5u", MATCH_UCLIP32, MASK_UCLIP32, match_opcode, 0 },
+{"ucmple8",     0, {"P", 0}, "d,s,t",     MATCH_UCMPLE8, MASK_UCMPLE8, match_opcode, 0 },
+{"ucmple16",    0, {"P", 0}, "d,s,t",     MATCH_UCMPLE16, MASK_UCMPLE16, match_opcode, 0 },
+{"ucmplt8",     0, {"P", 0}, "d,s,t",     MATCH_UCMPLT8, MASK_UCMPLT8, match_opcode, 0 },
+{"ucmplt16",    0, {"P", 0}, "d,s,t",     MATCH_UCMPLT16, MASK_UCMPLT16, match_opcode, 0 },
+{"ukadd8",      0, {"P", 0}, "d,s,t",     MATCH_UKADD8, MASK_UKADD8, match_opcode, 0 },
+{"ukadd16",     0, {"P", 0}, "d,s,t",     MATCH_UKADD16, MASK_UKADD16, match_opcode, 0 },
+{"ukadd64",     0, {"P", 0}, "nds_rdp,nds_rsp,nds_rtp", MATCH_UKADD64, MASK_UKADD64, match_opcode, 0 },
+{"ukaddh",      0, {"P", 0}, "d,s,t",     MATCH_UKADDH, MASK_UKADDH, match_opcode, 0 },
+{"ukaddw",      0, {"P", 0}, "d,s,t",     MATCH_UKADDW, MASK_UKADDW, match_opcode, 0 },
+{"ukcras16",    0, {"P", 0}, "d,s,t",     MATCH_UKCRAS16, MASK_UKCRAS16, match_opcode, 0 },
+{"ukcrsa16",    0, {"P", 0}, "d,s,t",     MATCH_UKCRSA16, MASK_UKCRSA16, match_opcode, 0 },
+{"ukmar64",     0, {"P", 0}, "nds_rdp,s,t", MATCH_UKMAR64, MASK_UKMAR64, match_opcode, 0 },
+{"ukmsr64",     0, {"P", 0}, "nds_rdp,s,t", MATCH_UKMSR64, MASK_UKMSR64, match_opcode, 0 },
+{"ukstas16",    0, {"P", 0}, "d,s,t",     MATCH_UKSTAS16, MASK_UKSTAS16, match_opcode, 0 },
+{"ukstsa16",    0, {"P", 0}, "d,s,t",     MATCH_UKSTSA16, MASK_UKSTSA16, match_opcode, 0 },
+{"uksub8",      0, {"P", 0}, "d,s,t",     MATCH_UKSUB8, MASK_UKSUB8, match_opcode, 0 },
+{"uksub16",     0, {"P", 0}, "d,s,t",     MATCH_UKSUB16, MASK_UKSUB16, match_opcode, 0 },
+{"uksub64",     0, {"P", 0}, "nds_rdp,nds_rsp,nds_rtp", MATCH_UKSUB64, MASK_UKSUB64, match_opcode, 0 },
+{"uksubh",      0, {"P", 0}, "d,s,t",     MATCH_UKSUBH, MASK_UKSUBH, match_opcode, 0 },
+{"uksubw",      0, {"P", 0}, "d,s,t",     MATCH_UKSUBW, MASK_UKSUBW, match_opcode, 0 },
+{"umar64",      0, {"P", 0}, "nds_rdp,s,t", MATCH_UMAR64, MASK_UMAR64, match_opcode, 0 },
+{"umaqa",       0, {"P", 0}, "d,s,t",     MATCH_UMAQA, MASK_UMAQA, match_opcode, 0 },
+{"umax8",       0, {"P", 0}, "d,s,t",     MATCH_UMAX8, MASK_UMAX8, match_opcode, 0 },
+{"umax16",      0, {"P", 0}, "d,s,t",     MATCH_UMAX16, MASK_UMAX16, match_opcode, 0 },
+{"umin8",       0, {"P", 0}, "d,s,t",     MATCH_UMIN8, MASK_UMIN8, match_opcode, 0 },
+{"umin16",      0, {"P", 0}, "d,s,t",     MATCH_UMIN16, MASK_UMIN16, match_opcode, 0 },
+{"umsr64",      0, {"P", 0}, "nds_rdp,s,t", MATCH_UMSR64, MASK_UMSR64, match_opcode, 0 },
+{"umul8",       0, {"P", 0}, "d,s,t",     MATCH_UMUL8, MASK_UMUL8, match_opcode, 0 },
+{"umulx8",      0, {"P", 0}, "d,s,t",     MATCH_UMULX8, MASK_UMULX8, match_opcode, 0 },
+{"umul16",      0, {"P", 0}, "nds_rdp,s,t", MATCH_UMUL16, MASK_UMUL16, match_opcode, 0 },
+{"umulx16",     0, {"P", 0}, "nds_rdp,s,t", MATCH_UMULX16, MASK_UMULX16, match_opcode, 0 },
+{"uradd8",      0, {"P", 0}, "d,s,t",     MATCH_URADD8, MASK_URADD8, match_opcode, 0 },
+{"uradd16",     0, {"P", 0}, "d,s,t",     MATCH_URADD16, MASK_URADD16, match_opcode, 0 },
+{"uradd64",     0, {"P", 0}, "nds_rdp,nds_rsp,nds_rtp", MATCH_URADD64, MASK_URADD64, match_opcode, 0 },
+{"uraddw",      0, {"P", 0}, "d,s,t",     MATCH_URADDW, MASK_URADDW, match_opcode, 0 },
+{"urcras16",    0, {"P", 0}, "d,s,t",     MATCH_URCRAS16, MASK_URCRAS16, match_opcode, 0 },
+{"urcrsa16",    0, {"P", 0}, "d,s,t",     MATCH_URCRSA16, MASK_URCRSA16, match_opcode, 0 },
+{"urstas16",    0, {"P", 0}, "d,s,t",     MATCH_URSTAS16, MASK_URSTAS16, match_opcode, 0 },
+{"urstsa16",    0, {"P", 0}, "d,s,t",     MATCH_URSTSA16, MASK_URSTSA16, match_opcode, 0 },
+{"ursub8",      0, {"P", 0}, "d,s,t",     MATCH_URSUB8, MASK_URSUB8, match_opcode, 0 },
+{"ursub16",     0, {"P", 0}, "d,s,t",     MATCH_URSUB16, MASK_URSUB16, match_opcode, 0 },
+{"ursub64",     0, {"P", 0}, "nds_rdp,nds_rsp,nds_rtp", MATCH_URSUB64, MASK_URSUB64, match_opcode, 0 },
+{"ursubw",      0, {"P", 0}, "d,s,t",     MATCH_URSUBW, MASK_URSUBW, match_opcode, 0 },
+{"wexti",       0, {"P", 0}, "d,nds_rsp,nds_i5u", MATCH_WEXTI, MASK_WEXTI, match_opcode, 0 },
+{"wext",        0, {"P", 0}, "d,nds_rsp,t", MATCH_WEXT, MASK_WEXT, match_opcode, 0 },
+{"zunpkd810",   0, {"P", 0}, "d,s",       MATCH_ZUNPKD810, MASK_ZUNPKD810, match_opcode, 0 },
+{"zunpkd820",   0, {"P", 0}, "d,s",       MATCH_ZUNPKD820, MASK_ZUNPKD820, match_opcode, 0 },
+{"zunpkd830",   0, {"P", 0}, "d,s",       MATCH_ZUNPKD830, MASK_ZUNPKD830, match_opcode, 0 },
+{"zunpkd831",   0, {"P", 0}, "d,s",       MATCH_ZUNPKD831, MASK_ZUNPKD831, match_opcode, 0 },
+{"zunpkd832",   0, {"P", 0}, "d,s",       MATCH_ZUNPKD832, MASK_ZUNPKD832, match_opcode, 0 },
+{"rdov",        0, {"P", 0}, "d",         MATCH_RDOV, MASK_RDOV, match_opcode, INSN_ALIAS },
+{"clrov",       0, {"P", 0}, "",          MATCH_CLROV, MASK_CLROV, match_opcode, INSN_ALIAS },
+
+/* NDS V5 DSP Extension (RV64 only).  */
+{"add32",      64, {"P", 0}, "d,s,t",     MATCH_ADD32, MASK_ADD32, match_opcode, 0 },
+{"cras32",     64, {"P", 0}, "d,s,t",     MATCH_CRAS32, MASK_CRAS32, match_opcode, 0 },
+{"crsa32",     64, {"P", 0}, "d,s,t",     MATCH_CRSA32, MASK_CRSA32, match_opcode, 0 },
+{"kabs32",     64, {"P", 0}, "d,s",       MATCH_KABS32, MASK_KABS32, match_opcode, 0 },
+{"kadd32",     64, {"P", 0}, "d,s,t",     MATCH_KADD32, MASK_KADD32, match_opcode, 0 },
+{"kcras32",    64, {"P", 0}, "d,s,t",     MATCH_KCRAS32, MASK_KCRAS32, match_opcode, 0 },
+{"kcrsa32",    64, {"P", 0}, "d,s,t",     MATCH_KCRSA32, MASK_KCRSA32, match_opcode, 0 },
+{"kdmbb16",    64, {"P", 0}, "d,s,t",     MATCH_KDMBB16, MASK_KDMBB16, match_opcode, 0 },
+{"kdmbt16",    64, {"P", 0}, "d,s,t",     MATCH_KDMBT16, MASK_KDMBT16, match_opcode, 0 },
+{"kdmtt16",    64, {"P", 0}, "d,s,t",     MATCH_KDMTT16, MASK_KDMTT16, match_opcode, 0 },
+{"kdmabb16",   64, {"P", 0}, "d,s,t",     MATCH_KDMABB16, MASK_KDMABB16, match_opcode, 0 },
+{"kdmabt16",   64, {"P", 0}, "d,s,t",     MATCH_KDMABT16, MASK_KDMABT16, match_opcode, 0 },
+{"kdmatt16",   64, {"P", 0}, "d,s,t",     MATCH_KDMATT16, MASK_KDMATT16, match_opcode, 0 },
+{"khmbb16",    64, {"P", 0}, "d,s,t",     MATCH_KHMBB16, MASK_KHMBB16, match_opcode, 0 },
+{"khmbt16",    64, {"P", 0}, "d,s,t",     MATCH_KHMBT16, MASK_KHMBT16, match_opcode, 0 },
+{"khmtt16",    64, {"P", 0}, "d,s,t",     MATCH_KHMTT16, MASK_KHMTT16, match_opcode, 0 },
+{"kmabb32",    64, {"P", 0}, "d,s,t",     MATCH_KMABB32, MASK_KMABB32, match_opcode, 0 },
+{"kmabt32",    64, {"P", 0}, "d,s,t",     MATCH_KMABT32, MASK_KMABT32, match_opcode, 0 },
+{"kmatt32",    64, {"P", 0}, "d,s,t",     MATCH_KMATT32, MASK_KMATT32, match_opcode, 0 },
+{"kmada32",    64, {"P", 0}, "d,s,t",     MATCH_KMADA32, MASK_KMADA32, match_opcode, INSN_ALIAS },
+{"kmaxda32",   64, {"P", 0}, "d,s,t",     MATCH_KMAXDA32, MASK_KMAXDA32, match_opcode, 0 },
+{"kmda32",     64, {"P", 0}, "d,s,t",     MATCH_KMDA32, MASK_KMDA32, match_opcode, 0 },
+{"kmxda32",    64, {"P", 0}, "d,s,t",     MATCH_KMXDA32, MASK_KMXDA32, match_opcode, 0 },
+{"kmads32",    64, {"P", 0}, "d,s,t",     MATCH_KMADS32, MASK_KMADS32, match_opcode, 0 },
+{"kmadrs32",   64, {"P", 0}, "d,s,t",     MATCH_KMADRS32, MASK_KMADRS32, match_opcode, 0 },
+{"kmaxds32",   64, {"P", 0}, "d,s,t",     MATCH_KMAXDS32, MASK_KMAXDS32, match_opcode, 0 },
+{"kmsda32",    64, {"P", 0}, "d,s,t",     MATCH_KMSDA32, MASK_KMSDA32, match_opcode, 0 },
+{"kmsxda32",   64, {"P", 0}, "d,s,t",     MATCH_KMSXDA32, MASK_KMSXDA32, match_opcode, 0 },
+{"ksll32",     64, {"P", 0}, "d,s,t",     MATCH_KSLL32, MASK_KSLL32, match_opcode, 0 },
+{"kslli32",    64, {"P", 0}, "d,s,nds_i5u", MATCH_KSLLI32, MASK_KSLLI32, match_opcode, 0 },
+{"kslra32",    64, {"P", 0}, "d,s,t",     MATCH_KSLRA32, MASK_KSLRA32, match_opcode, 0 },
+{"kslra32.u",  64, {"P", 0}, "d,s,t",     MATCH_KSLRA32_U, MASK_KSLRA32_U, match_opcode, 0 },
+{"kstas32",    64, {"P", 0}, "d,s,t",     MATCH_KSTAS32, MASK_KSTAS32, match_opcode, 0 },
+{"kstsa32",    64, {"P", 0}, "d,s,t",     MATCH_KSTSA32, MASK_KSTSA32, match_opcode, 0 },
+{"ksub32",     64, {"P", 0}, "d,s,t",     MATCH_KSUB32, MASK_KSUB32, match_opcode, 0 },
+{"pkbb32",     64, {"P", 0}, "d,s,t",     MATCH_PKBB32, MASK_PKBB32, match_opcode, 0 },
+{"pkbt32",     64, {"P", 0}, "d,s,t",     MATCH_PKBT32, MASK_PKBT32, match_opcode, 0 },
+{"pktt32",     64, {"P", 0}, "d,s,t",     MATCH_PKTT32, MASK_PKTT32, match_opcode, 0 },
+{"pktb32",     64, {"P", 0}, "d,s,t",     MATCH_PKTB32, MASK_PKTB32, match_opcode, 0 },
+{"radd32",     64, {"P", 0}, "d,s,t",     MATCH_RADD32, MASK_RADD32, match_opcode, 0 },
+{"rcras32",    64, {"P", 0}, "d,s,t",     MATCH_RCRAS32, MASK_RCRAS32, match_opcode, 0 },
+{"rcrsa32",    64, {"P", 0}, "d,s,t",     MATCH_RCRSA32, MASK_RCRSA32, match_opcode, 0 },
+{"rstas32",    64, {"P", 0}, "d,s,t",     MATCH_RSTAS32, MASK_RSTAS32, match_opcode, 0 },
+{"rstsa32",    64, {"P", 0}, "d,s,t",     MATCH_RSTSA32, MASK_RSTSA32, match_opcode, 0 },
+{"rsub32",     64, {"P", 0}, "d,s,t",     MATCH_RSUB32, MASK_RSUB32, match_opcode, 0 },
+{"sll32",      64, {"P", 0}, "d,s,t",     MATCH_SLL32, MASK_SLL32, match_opcode, 0 },
+{"slli32",     64, {"P", 0}, "d,s,nds_i5u", MATCH_SLLI32, MASK_SLLI32, match_opcode, 0 },
+{"smax32",     64, {"P", 0}, "d,s,t",     MATCH_SMAX32, MASK_SMAX32, match_opcode, 0 },
+{"smbb32",     64, {"P", 0}, "d,s,t",     MATCH_SMBB32, MASK_SMBB32, match_opcode, 0 },
+{"smbt32",     64, {"P", 0}, "d,s,t",     MATCH_SMBT32, MASK_SMBT32, match_opcode, 0 },
+{"smtt32",     64, {"P", 0}, "d,s,t",     MATCH_SMTT32, MASK_SMTT32, match_opcode, 0 },
+{"smds32",     64, {"P", 0}, "d,s,t",     MATCH_SMDS32, MASK_SMDS32, match_opcode, 0 },
+{"smdrs32",    64, {"P", 0}, "d,s,t",     MATCH_SMDRS32, MASK_SMDRS32, match_opcode, 0 },
+{"smxds32",    64, {"P", 0}, "d,s,t",     MATCH_SMXDS32, MASK_SMXDS32, match_opcode, 0 },
+{"smin32",     64, {"P", 0}, "d,s,t",     MATCH_SMIN32, MASK_SMIN32, match_opcode, 0 },
+{"sra32",      64, {"P", 0}, "d,s,t",     MATCH_SRA32, MASK_SRA32, match_opcode, 0 },
+{"sra32.u",    64, {"P", 0}, "d,s,t",     MATCH_SRA32_U, MASK_SRA32_U, match_opcode, 0 },
+{"srai32",     64, {"P", 0}, "d,s,nds_i5u", MATCH_SRAI32, MASK_SRAI32, match_opcode, 0 },
+{"srai32.u",   64, {"P", 0}, "d,s,nds_i5u", MATCH_SRAI32_U, MASK_SRAI32_U, match_opcode, 0 },
+{"sraiw.u",    64, {"P", 0}, "d,s,nds_i5u", MATCH_SRAIW_U, MASK_SRAIW_U, match_opcode, 0 },
+{"srl32",      64, {"P", 0}, "d,s,t",     MATCH_SRL32, MASK_SRL32, match_opcode, 0 },
+{"srl32.u",    64, {"P", 0}, "d,s,t",     MATCH_SRL32_U, MASK_SRL32_U, match_opcode, 0 },
+{"srli32",     64, {"P", 0}, "d,s,nds_i5u", MATCH_SRLI32, MASK_SRLI32, match_opcode, 0 },
+{"srli32.u",   64, {"P", 0}, "d,s,nds_i5u", MATCH_SRLI32_U, MASK_SRLI32_U, match_opcode, 0 },
+{"stas32",     64, {"P", 0}, "d,s,t",     MATCH_STAS32, MASK_STAS32, match_opcode, 0 },
+{"stsa32",     64, {"P", 0}, "d,s,t",     MATCH_STSA32, MASK_STSA32, match_opcode, 0 },
+{"sub32",      64, {"P", 0}, "d,s,t",     MATCH_SUB32, MASK_SUB32, match_opcode, 0 },
+{"ukadd32",    64, {"P", 0}, "d,s,t",     MATCH_UKADD32, MASK_UKADD32, match_opcode, 0 },
+{"ukcras32",   64, {"P", 0}, "d,s,t",     MATCH_UKCRAS32, MASK_UKCRAS32, match_opcode, 0 },
+{"ukcrsa32",   64, {"P", 0}, "d,s,t",     MATCH_UKCRSA32, MASK_UKCRSA32, match_opcode, 0 },
+{"ukstas32",   64, {"P", 0}, "d,s,t",     MATCH_UKSTAS32, MASK_UKSTAS32, match_opcode, 0 },
+{"ukstsa32",   64, {"P", 0}, "d,s,t",     MATCH_UKSTSA32, MASK_UKSTSA32, match_opcode, 0 },
+{"uksub32",    64, {"P", 0}, "d,s,t",     MATCH_UKSUB32, MASK_UKSUB32, match_opcode, 0 },
+{"umax32",     64, {"P", 0}, "d,s,t",     MATCH_UMAX32, MASK_UMAX32, match_opcode, 0 },
+{"umin32",     64, {"P", 0}, "d,s,t",     MATCH_UMIN32, MASK_UMIN32, match_opcode, 0 },
+{"uradd32",    64, {"P", 0}, "d,s,t",     MATCH_URADD32, MASK_URADD32, match_opcode, 0 },
+{"urcras32",   64, {"P", 0}, "d,s,t",     MATCH_URCRAS32, MASK_URCRAS32, match_opcode, 0 },
+{"urcrsa32",   64, {"P", 0}, "d,s,t",     MATCH_URCRSA32, MASK_URCRSA32, match_opcode, 0 },
+{"urstas32",   64, {"P", 0}, "d,s,t",     MATCH_URSTAS32, MASK_URSTAS32, match_opcode, 0 },
+{"urstsa32",   64, {"P", 0}, "d,s,t",     MATCH_URSTSA32, MASK_URSTSA32, match_opcode, 0 },
+{"ursub32",    64, {"P", 0}, "d,s,t",     MATCH_URSUB32, MASK_URSUB32, match_opcode, 0 },
+
+/* Andes X_efhw extension */
+{"flhw",        0, {"XEFHW", 0}, "D,o(s)", MATCH_FLHW, MASK_FLHW, match_opcode, 0 },
+{"fshw",        0, {"XEFHW", 0}, "T,q(s)", MATCH_FSHW, MASK_FSHW, match_opcode, 0 },
+
 /* Atomic memory operation instruction subset */
 {"lr.w",         0, {"A", 0},   "d,0(s)",    MATCH_LR_W, MASK_LR_W | MASK_AQRL, match_opcode, INSN_DREF|INSN_4_BYTE },
 {"sc.w",         0, {"A", 0},   "d,t,0(s)",  MATCH_SC_W, MASK_SC_W | MASK_AQRL, match_opcode, INSN_DREF|INSN_4_BYTE },
@@ -774,6 +1401,76 @@ const struct riscv_opcode riscv_opcodes[] =
 {"divuw",    64, {"M", 0}, "d,s,t",  MATCH_DIVUW, MASK_DIVUW, match_opcode, 0 },
 {"remw",     64, {"M", 0}, "d,s,t",  MATCH_REMW, MASK_REMW, match_opcode, 0 },
 {"remuw",    64, {"M", 0}, "d,s,t",  MATCH_REMUW, MASK_REMUW, match_opcode, 0 },
+
+/* Half-precision floating-point instruction subset */
+// {"flh",         32, {"ZFH", "C", 0},  "D,Cm(Cc)", MATCH_C_FLHSP, MASK_C_FLHSP, match_opcode, INSN_ALIAS|INSN_DREF|INSN_2_BYTE },
+// {"flh",         32, {"ZFH", "C", 0},  "CD,Ck(Cs)",MATCH_C_FLH, MASK_C_FLH, match_opcode, INSN_ALIAS|INSN_DREF|INSN_2_BYTE },
+{"flh",          0, {"ZFH", 0},       "D,o(s)",   MATCH_FLH, MASK_FLH, match_opcode, INSN_DREF|INSN_2_BYTE },
+{"flh",          0, {"ZFH", 0},       "D,A,s",    0,  (int) M_FLH, match_never, INSN_MACRO },
+// {"fsh",         32, {"ZFH", "C", 0},  "CT,CM(Cc)",MATCH_C_FSHSP, MASK_C_FSHSP, match_opcode, INSN_ALIAS|INSN_DREF|INSN_2_BYTE },
+// {"fsh",         32, {"ZFH", "C", 0},  "CD,Ck(Cs)",MATCH_C_FSH, MASK_C_FSH, match_opcode, INSN_ALIAS|INSN_DREF|INSN_2_BYTE },
+{"fsh",          0, {"ZFH", 0},       "T,q(s)",   MATCH_FSH, MASK_FSH, match_opcode, INSN_DREF|INSN_2_BYTE },
+{"fsh",          0, {"ZFH", 0},       "T,A,s",    0, (int) M_FSH, match_never, INSN_MACRO },
+
+{"fmv.x.h",      0, {"ZFH", 0},       "d,S",      MATCH_FMV_X_H, MASK_FMV_X_H, match_opcode, 0 },
+{"fmv.h.x",      0, {"ZFH", 0},       "D,s",      MATCH_FMV_H_X, MASK_FMV_H_X, match_opcode, 0 },
+
+{"fmv.h",        0, {"ZFH", 0},       "D,U",      MATCH_FSGNJ_H, MASK_FSGNJ_H, match_rs1_eq_rs2, INSN_ALIAS },
+{"fneg.h",       0, {"ZFH", 0},       "D,U",      MATCH_FSGNJN_H, MASK_FSGNJN_H, match_rs1_eq_rs2, INSN_ALIAS },
+{"fabs.h",       0, {"ZFH", 0},       "D,U",      MATCH_FSGNJX_H, MASK_FSGNJX_H, match_rs1_eq_rs2, INSN_ALIAS },
+{"fsgnj.h",      0, {"ZFH", 0},       "D,S,T",    MATCH_FSGNJ_H, MASK_FSGNJ_H, match_opcode, 0 },
+{"fsgnjn.h",     0, {"ZFH", 0},       "D,S,T",    MATCH_FSGNJN_H, MASK_FSGNJN_H, match_opcode, 0 },
+{"fsgnjx.h",     0, {"ZFH", 0},       "D,S,T",    MATCH_FSGNJX_H, MASK_FSGNJX_H, match_opcode, 0 },
+{"fadd.h",       0, {"ZFH", 0},       "D,S,T",    MATCH_FADD_H | MASK_RM, MASK_FADD_H | MASK_RM, match_opcode, 0 },
+{"fadd.h",       0, {"ZFH", 0},       "D,S,T,m",  MATCH_FADD_H, MASK_FADD_H, match_opcode, 0 },
+{"fsub.h",       0, {"ZFH", 0},       "D,S,T",    MATCH_FSUB_H | MASK_RM, MASK_FSUB_H | MASK_RM, match_opcode, 0 },
+{"fsub.h",       0, {"ZFH", 0},       "D,S,T,m",  MATCH_FSUB_H, MASK_FSUB_H, match_opcode, 0 },
+{"fmul.h",       0, {"ZFH", 0},       "D,S,T",    MATCH_FMUL_H | MASK_RM, MASK_FMUL_H | MASK_RM, match_opcode, 0 },
+{"fmul.h",       0, {"ZFH", 0},       "D,S,T,m",  MATCH_FMUL_H, MASK_FMUL_H, match_opcode, 0 },
+{"fdiv.h",       0, {"ZFH", 0},       "D,S,T",    MATCH_FDIV_H | MASK_RM, MASK_FDIV_H | MASK_RM, match_opcode, 0 },
+{"fdiv.h",       0, {"ZFH", 0},       "D,S,T,m",  MATCH_FDIV_H, MASK_FDIV_H, match_opcode, 0 },
+{"fsqrt.h",      0, {"ZFH", 0},       "D,S",      MATCH_FSQRT_H | MASK_RM, MASK_FSQRT_H | MASK_RM, match_opcode, 0 },
+{"fsqrt.h",      0, {"ZFH", 0},       "D,S,m",    MATCH_FSQRT_H, MASK_FSQRT_H, match_opcode, 0 },
+{"fmin.h",       0, {"ZFH", 0},       "D,S,T",    MATCH_FMIN_H, MASK_FMIN_H, match_opcode, 0 },
+{"fmax.h",       0, {"ZFH", 0},       "D,S,T",    MATCH_FMAX_H, MASK_FMAX_H, match_opcode, 0 },
+{"fmadd.h",      0, {"ZFH", 0},       "D,S,T,R",  MATCH_FMADD_H | MASK_RM, MASK_FMADD_H | MASK_RM, match_opcode, 0 },
+{"fmadd.h",      0, {"ZFH", 0},       "D,S,T,R,m",MATCH_FMADD_H, MASK_FMADD_H, match_opcode, 0 },
+{"fnmadd.h",     0, {"ZFH", 0},       "D,S,T,R",  MATCH_FNMADD_H | MASK_RM, MASK_FNMADD_H | MASK_RM, match_opcode, 0 },
+{"fnmadd.h",     0, {"ZFH", 0},       "D,S,T,R,m",MATCH_FNMADD_H, MASK_FNMADD_H, match_opcode, 0 },
+{"fmsub.h",      0, {"ZFH", 0},       "D,S,T,R",  MATCH_FMSUB_H | MASK_RM, MASK_FMSUB_H | MASK_RM, match_opcode, 0 },
+{"fmsub.h",      0, {"ZFH", 0},       "D,S,T,R,m",MATCH_FMSUB_H, MASK_FMSUB_H, match_opcode, 0 },
+{"fnmsub.h",     0, {"ZFH", 0},       "D,S,T,R",  MATCH_FNMSUB_H | MASK_RM, MASK_FNMSUB_H | MASK_RM, match_opcode, 0 },
+{"fnmsub.h",     0, {"ZFH", 0},       "D,S,T,R,m",MATCH_FNMSUB_H, MASK_FNMSUB_H, match_opcode, 0 },
+{"fcvt.w.h",     0, {"ZFH", 0},       "d,S",      MATCH_FCVT_W_H | MASK_RM, MASK_FCVT_W_H | MASK_RM, match_opcode, 0 },
+{"fcvt.w.h",     0, {"ZFH", 0},       "d,S,m",    MATCH_FCVT_W_H, MASK_FCVT_W_H, match_opcode, 0 },
+{"fcvt.wu.h",    0, {"ZFH", 0},       "d,S",      MATCH_FCVT_WU_H | MASK_RM, MASK_FCVT_WU_H | MASK_RM, match_opcode, 0 },
+{"fcvt.wu.h",    0, {"ZFH", 0},       "d,S,m",    MATCH_FCVT_WU_H, MASK_FCVT_WU_H, match_opcode, 0 },
+{"fcvt.h.w",     0, {"ZFH", 0},       "D,s",      MATCH_FCVT_H_W | MASK_RM, MASK_FCVT_H_W | MASK_RM, match_opcode, 0 },
+{"fcvt.h.w",     0, {"ZFH", 0},       "D,s,m",    MATCH_FCVT_H_W, MASK_FCVT_H_W, match_opcode, 0 },
+{"fcvt.h.wu",    0, {"ZFH", 0},       "D,s",      MATCH_FCVT_H_WU | MASK_RM, MASK_FCVT_H_W | MASK_RM, match_opcode, 0 },
+{"fcvt.h.wu",    0, {"ZFH", 0},       "D,s,m",    MATCH_FCVT_H_WU, MASK_FCVT_H_WU, match_opcode, 0 },
+{"fclass.h",     0, {"ZFH", 0},       "d,S",      MATCH_FCLASS_H, MASK_FCLASS_H, match_opcode, 0 },
+{"feq.h",        0, {"ZFH", 0},       "d,S,T",    MATCH_FEQ_H, MASK_FEQ_H, match_opcode, 0 },
+{"flt.h",        0, {"ZFH", 0},       "d,S,T",    MATCH_FLT_H, MASK_FLT_H, match_opcode, 0 },
+{"fle.h",        0, {"ZFH", 0},       "d,S,T",    MATCH_FLE_H, MASK_FLE_H, match_opcode, 0 },
+{"fgt.h",        0, {"ZFH", 0},       "d,T,S",    MATCH_FLT_H, MASK_FLT_H, match_opcode, 0 },
+{"fge.h",        0, {"ZFH", 0},       "d,T,S",    MATCH_FLE_H, MASK_FLE_H, match_opcode, 0 },
+{"fcvt.l.h",    64, {"ZFH", 0},       "d,S",      MATCH_FCVT_L_H | MASK_RM, MASK_FCVT_L_H | MASK_RM, match_opcode, 0 },
+{"fcvt.l.h",    64, {"ZFH", 0},       "d,S,m",    MATCH_FCVT_L_H, MASK_FCVT_L_H, match_opcode, 0 },
+{"fcvt.lu.h",   64, {"ZFH", 0},       "d,S",      MATCH_FCVT_LU_H | MASK_RM, MASK_FCVT_LU_H | MASK_RM, match_opcode, 0 },
+{"fcvt.lu.h",   64, {"ZFH", 0},       "d,S,m",    MATCH_FCVT_LU_H, MASK_FCVT_LU_H, match_opcode, 0 },
+{"fcvt.h.l",    64, {"ZFH", 0},       "D,s",      MATCH_FCVT_H_L | MASK_RM, MASK_FCVT_H_L | MASK_RM, match_opcode, 0 },
+{"fcvt.h.l",    64, {"ZFH", 0},       "D,s,m",    MATCH_FCVT_H_L, MASK_FCVT_H_L, match_opcode, 0 },
+{"fcvt.h.lu",   64, {"ZFH", 0},       "D,s",      MATCH_FCVT_H_LU | MASK_RM, MASK_FCVT_H_L | MASK_RM, match_opcode, 0 },
+{"fcvt.h.lu",   64, {"ZFH", 0},       "D,s,m",    MATCH_FCVT_H_LU, MASK_FCVT_H_LU, match_opcode, 0 },
+
+{"fcvt.s.h",     0, {"F", "ZFH", 0},  "D,S",      MATCH_FCVT_S_H, MASK_FCVT_S_H | MASK_RM, match_opcode, 0 },
+{"fcvt.h.s",     0, {"F", "ZFH", 0},  "D,S",      MATCH_FCVT_H_S | MASK_RM, MASK_FCVT_H_S | MASK_RM, match_opcode, 0 },
+{"fcvt.h.s",     0, {"F", "ZFH", 0},  "D,S,m",    MATCH_FCVT_H_S, MASK_FCVT_H_S, match_opcode, 0 },
+
+{"fcvt.d.h",     0, {"D", "ZFH", 0},  "D,S",      MATCH_FCVT_D_H, MASK_FCVT_D_H | MASK_RM, match_opcode, 0 },
+{"fcvt.h.d",     0, {"D", "ZFH", 0},  "D,S",      MATCH_FCVT_H_D | MASK_RM, MASK_FCVT_H_D | MASK_RM, match_opcode, 0 },
+{"fcvt.h.d",     0, {"D", "ZFH", 0},  "D,S,m",    MATCH_FCVT_H_D, MASK_FCVT_H_D, match_opcode, 0 },
 
 /* Single-precision floating-point instruction subset */
 {"frsr",      0, {"F", 0},   "d",  MATCH_FRCSR, MASK_FRCSR, match_opcode, 0 },
@@ -977,55 +1674,6 @@ const struct riscv_opcode riscv_opcodes[] =
 {"fcvt.q.lu", 64, {"Q", 0}, "D,s",  MATCH_FCVT_Q_LU | MASK_RM, MASK_FCVT_Q_L | MASK_RM, match_opcode, 0 },
 {"fcvt.q.lu", 64, {"Q", 0}, "D,s,m",  MATCH_FCVT_Q_LU, MASK_FCVT_Q_LU, match_opcode, 0 },
 
-/* Compressed instructions.  */
-{"c.unimp",    0, {"C", 0},   "",  0, 0xffffU,  match_opcode, 0 },
-{"c.ebreak",   0, {"C", 0},   "",  MATCH_C_EBREAK, MASK_C_EBREAK, match_opcode, 0 },
-{"c.jr",       0, {"C", 0},   "d",  MATCH_C_JR, MASK_C_JR, match_rd_nonzero, INSN_BRANCH },
-{"c.jalr",     0, {"C", 0},   "d",  MATCH_C_JALR, MASK_C_JALR, match_rd_nonzero, INSN_JSR },
-{"c.j",        0, {"C", 0},   "Ca",  MATCH_C_J, MASK_C_J, match_opcode, INSN_BRANCH },
-{"c.jal",     32, {"C", 0}, "Ca",  MATCH_C_JAL, MASK_C_JAL, match_opcode, INSN_JSR },
-{"c.beqz",     0, {"C", 0},   "Cs,Cp",  MATCH_C_BEQZ, MASK_C_BEQZ, match_opcode, INSN_CONDBRANCH },
-{"c.bnez",     0, {"C", 0},   "Cs,Cp",  MATCH_C_BNEZ, MASK_C_BNEZ, match_opcode, INSN_CONDBRANCH },
-{"c.lwsp",     0, {"C", 0},   "d,Cm(Cc)",  MATCH_C_LWSP, MASK_C_LWSP, match_rd_nonzero, 0 },
-{"c.lw",       0, {"C", 0},   "Ct,Ck(Cs)",  MATCH_C_LW, MASK_C_LW, match_opcode, INSN_DREF|INSN_4_BYTE },
-{"c.swsp",     0, {"C", 0},   "CV,CM(Cc)",  MATCH_C_SWSP, MASK_C_SWSP, match_opcode, INSN_DREF|INSN_4_BYTE },
-{"c.sw",       0, {"C", 0},   "Ct,Ck(Cs)",  MATCH_C_SW, MASK_C_SW, match_opcode, INSN_DREF|INSN_4_BYTE },
-{"c.nop",      0, {"C", 0},   "",  MATCH_C_ADDI, 0xffff, match_opcode, INSN_ALIAS },
-{"c.nop",      0, {"C", 0},   "Cj",  MATCH_C_ADDI, MASK_C_ADDI | MASK_RD, match_opcode, INSN_ALIAS },
-{"c.mv",       0, {"C", 0},   "d,CV",  MATCH_C_MV, MASK_C_MV, match_c_add_with_hint, 0 },
-{"c.lui",      0, {"C", 0},   "d,Cu",  MATCH_C_LUI, MASK_C_LUI, match_c_lui_with_hint, 0 },
-{"c.li",       0, {"C", 0},   "d,Co",  MATCH_C_LI, MASK_C_LI, match_opcode, 0 },
-{"c.addi4spn", 0, {"C", 0},   "Ct,Cc,CK", MATCH_C_ADDI4SPN, MASK_C_ADDI4SPN, match_c_addi4spn, 0 },
-{"c.addi16sp", 0, {"C", 0},   "Cc,CL", MATCH_C_ADDI16SP, MASK_C_ADDI16SP, match_c_addi16sp, 0 },
-{"c.addi",     0, {"C", 0},   "d,Co",  MATCH_C_ADDI, MASK_C_ADDI, match_opcode, 0 },
-{"c.add",      0, {"C", 0},   "d,CV",  MATCH_C_ADD, MASK_C_ADD, match_c_add_with_hint, 0 },
-{"c.sub",      0, {"C", 0},   "Cs,Ct",  MATCH_C_SUB, MASK_C_SUB, match_opcode, 0 },
-{"c.and",      0, {"C", 0},   "Cs,Ct",  MATCH_C_AND, MASK_C_AND, match_opcode, 0 },
-{"c.or",       0, {"C", 0},   "Cs,Ct",  MATCH_C_OR, MASK_C_OR, match_opcode, 0 },
-{"c.xor",      0, {"C", 0},   "Cs,Ct",  MATCH_C_XOR, MASK_C_XOR, match_opcode, 0 },
-{"c.slli",     0, {"C", 0},   "d,C>",  MATCH_C_SLLI, MASK_C_SLLI, match_c_slli, 0 },
-{"c.srli",     0, {"C", 0},   "Cs,C>",  MATCH_C_SRLI, MASK_C_SRLI, match_c_slli, 0 },
-{"c.srai",     0, {"C", 0},   "Cs,C>",  MATCH_C_SRAI, MASK_C_SRAI, match_c_slli, 0 },
-{"c.slli64",   0, {"C", 0},   "d",  MATCH_C_SLLI64, MASK_C_SLLI64, match_c_slli64, 0 },
-{"c.srli64",   0, {"C", 0},   "Cs",  MATCH_C_SRLI64, MASK_C_SRLI64, match_c_slli64, 0 },
-{"c.srai64",   0, {"C", 0},   "Cs",  MATCH_C_SRAI64, MASK_C_SRAI64, match_c_slli64, 0 },
-{"c.andi",     0, {"C", 0},   "Cs,Co",  MATCH_C_ANDI, MASK_C_ANDI, match_opcode, 0 },
-{"c.addiw",   64, {"C", 0}, "d,Co",  MATCH_C_ADDIW, MASK_C_ADDIW, match_rd_nonzero, 0 },
-{"c.addw",    64, {"C", 0}, "Cs,Ct",  MATCH_C_ADDW, MASK_C_ADDW, match_opcode, 0 },
-{"c.subw",    64, {"C", 0}, "Cs,Ct",  MATCH_C_SUBW, MASK_C_SUBW, match_opcode, 0 },
-{"c.ldsp",    64, {"C", 0}, "d,Cn(Cc)",  MATCH_C_LDSP, MASK_C_LDSP, match_rd_nonzero, INSN_DREF|INSN_8_BYTE },
-{"c.ld",      64, {"C", 0}, "Ct,Cl(Cs)",  MATCH_C_LD, MASK_C_LD, match_opcode, INSN_DREF|INSN_8_BYTE },
-{"c.sdsp",    64, {"C", 0}, "CV,CN(Cc)",  MATCH_C_SDSP, MASK_C_SDSP, match_opcode, INSN_DREF|INSN_8_BYTE },
-{"c.sd",      64, {"C", 0}, "Ct,Cl(Cs)",  MATCH_C_SD, MASK_C_SD, match_opcode, INSN_DREF|INSN_8_BYTE },
-{"c.fldsp",    0, {"D", "C", 0},   "D,Cn(Cc)",  MATCH_C_FLDSP, MASK_C_FLDSP, match_opcode, INSN_DREF|INSN_8_BYTE },
-{"c.fld",      0, {"D", "C", 0},   "CD,Cl(Cs)",  MATCH_C_FLD, MASK_C_FLD, match_opcode, INSN_DREF|INSN_8_BYTE },
-{"c.fsdsp",    0, {"D", "C", 0},   "CT,CN(Cc)",  MATCH_C_FSDSP, MASK_C_FSDSP, match_opcode, INSN_DREF|INSN_8_BYTE },
-{"c.fsd",      0, {"D", "C", 0},   "CD,Cl(Cs)",  MATCH_C_FSD, MASK_C_FSD, match_opcode, INSN_DREF|INSN_8_BYTE },
-{"c.flwsp",   32, {"F", "C", 0}, "D,Cm(Cc)",  MATCH_C_FLWSP, MASK_C_FLWSP, match_opcode, INSN_DREF|INSN_4_BYTE },
-{"c.flw",     32, {"F", "C", 0}, "CD,Ck(Cs)",  MATCH_C_FLW, MASK_C_FLW, match_opcode, INSN_DREF|INSN_4_BYTE },
-{"c.fswsp",   32, {"F", "C", 0}, "CT,CM(Cc)",  MATCH_C_FSWSP, MASK_C_FSWSP, match_opcode, INSN_DREF|INSN_4_BYTE },
-{"c.fsw",     32, {"F", "C", 0}, "CD,Ck(Cs)",  MATCH_C_FSW, MASK_C_FSW, match_opcode, INSN_DREF|INSN_4_BYTE },
-
 /* Supervisor instructions */
 {"csrr",       0, {"I", 0},   "d,E",  MATCH_CSRRS, MASK_CSRRS | MASK_RS1, match_opcode, INSN_ALIAS },
 {"csrwi",      0, {"I", 0},   "E,Z",  MATCH_CSRRWI, MASK_CSRRWI | MASK_RD, match_opcode, INSN_ALIAS },
@@ -1058,953 +1706,966 @@ const struct riscv_opcode riscv_opcodes[] =
 {"sfence.vma", 0, {"I", 0},   "s,t",  MATCH_SFENCE_VMA, MASK_SFENCE_VMA, match_opcode, 0 },
 {"wfi",        0, {"I", 0},   "",     MATCH_WFI, MASK_WFI, match_opcode, 0 },
 
+/* Zbb or zbkb instructions  */
+{"clz",        0, {"ZBB", 0},  "d,s",      MATCH_CLZ, MASK_CLZ, match_opcode, 0 },
+{"ctz",        0, {"ZBB", 0},  "d,s",      MATCH_CTZ, MASK_CTZ, match_opcode, 0 },
+{"cpop",       0, {"ZBB", 0},  "d,s",      MATCH_CPOP, MASK_CPOP, match_opcode, 0 },
+{"min",        0, {"ZBB", 0},  "d,s,t",    MATCH_MIN, MASK_MIN, match_opcode, 0 },
+{"max",        0, {"ZBB", 0},  "d,s,t",    MATCH_MAX, MASK_MAX, match_opcode, 0 },
+{"minu",       0, {"ZBB", 0},  "d,s,t",    MATCH_MINU, MASK_MINU, match_opcode, 0 },
+{"maxu",       0, {"ZBB", 0},  "d,s,t",    MATCH_MAXU, MASK_MAXU, match_opcode, 0 },
+{"sext.b",     0, {"ZBB", 0},  "d,s",      MATCH_SEXT_B, MASK_SEXT_B, match_opcode, 0 },
+{"sext.b",     0, {"I", 0},    "d,s",      0, (int) M_SEXTB, match_never, INSN_MACRO },
+{"sext.h",     0, {"ZBB", 0},  "d,s",      MATCH_SEXT_H, MASK_SEXT_H, match_opcode, 0 },
+{"sext.h",     0, {"I", 0},    "d,s",      0, (int) M_SEXTH, match_never, INSN_MACRO },
+{"zext.h",    32, {"ZBB", 0},  "d,s",      MATCH_ZEXT_H_32, MASK_ZEXT_H | MASK_RS2, match_opcode, 0 },
+{"zext.h",    64, {"ZBB", 0},  "d,s",      MATCH_ZEXT_H_64, MASK_ZEXT_H | MASK_RS2, match_opcode, 0 },
+{"zext.h",     0, {"I", 0},    "d,s",      0, (int) M_ZEXTH, match_never, INSN_MACRO },
+{"andn",       0, {"ZBB", 0},  "d,s,t",    MATCH_ANDN, MASK_ANDN, match_opcode, 0 },
+{"orn",        0, {"ZBB", 0},  "d,s,t",    MATCH_ORN, MASK_ORN, match_opcode, 0 },
+{"xnor",       0, {"ZBB", 0},  "d,s,t",    MATCH_XNOR, MASK_XNOR, match_opcode, 0 },
+{"rol",        0, {"ZBB", 0},  "d,s,t",    MATCH_ROL, MASK_ROL, match_opcode, 0 },
+{"rori",       0, {"ZBB", 0},  "d,s,>",    MATCH_RORI, MASK_RORI, match_opcode, 0 },
+{"ror",        0, {"ZBB", 0},  "d,s,t",    MATCH_ROR, MASK_ROR, match_opcode, 0 },
+{"ror",        0, {"ZBB", 0},  "d,s,>",    MATCH_RORI, MASK_RORI, match_opcode, INSN_ALIAS },
+{"rev8",      32, {"ZBB", 0},  "d,s",      MATCH_GREVI|MATCH_SHAMT_REV8_32, MASK_GREVI|MASK_SHAMT, match_opcode, 0 },
+{"rev8",      64, {"ZBB", 0},  "d,s",      MATCH_GREVI|MATCH_SHAMT_REV8_64, MASK_GREVI|MASK_SHAMT, match_opcode, 0 },
+{"orc.b",      0, {"ZBB", 0},  "d,s",      MATCH_GORCI|MATCH_SHAMT_ORC_B, MASK_GORCI|MASK_SHAMT, match_opcode, 0 },
+{"clzw",      64, {"ZBB", 0},  "d,s",      MATCH_CLZW, MASK_CLZW, match_opcode, 0 },
+{"ctzw",      64, {"ZBB", 0},  "d,s",      MATCH_CTZW, MASK_CTZW, match_opcode, 0 },
+{"cpopw",     64, {"ZBB", 0},  "d,s",      MATCH_CPOPW, MASK_CPOPW, match_opcode, 0 },
+{"rolw",      64, {"ZBB", 0},  "d,s,t",    MATCH_ROLW, MASK_ROLW, match_opcode, 0 },
+{"roriw",     64, {"ZBB", 0},  "d,s,<",    MATCH_RORIW, MASK_RORIW, match_opcode, 0 },
+{"rorw",      64, {"ZBB", 0},  "d,s,t",    MATCH_RORW, MASK_RORW, match_opcode, 0 },
+{"rorw",      64, {"ZBB", 0},  "d,s,<",    MATCH_RORIW, MASK_RORIW, match_opcode, 0 },
+{"sh1add",     0, {"ZBA", 0},  "d,s,t",    MATCH_SH1ADD, MASK_SH1ADD, match_opcode, 0 },
+{"sh2add",     0, {"ZBA", 0},  "d,s,t",    MATCH_SH2ADD, MASK_SH2ADD, match_opcode, 0 },
+{"sh3add",     0, {"ZBA", 0},  "d,s,t",    MATCH_SH3ADD, MASK_SH3ADD, match_opcode, 0 },
+{"sh1add.uw", 64, {"ZBA", 0},  "d,s,t",    MATCH_SH1ADD_UW, MASK_SH1ADD_UW, match_opcode, 0 },
+{"sh2add.uw", 64, {"ZBA", 0},  "d,s,t",    MATCH_SH2ADD_UW, MASK_SH2ADD_UW, match_opcode, 0 },
+{"sh3add.uw", 64, {"ZBA", 0},  "d,s,t",    MATCH_SH3ADD_UW, MASK_SH3ADD_UW, match_opcode, 0 },
+{"zext.w",    64, {"ZBA", 0},  "d,s",      MATCH_ADD_UW, MASK_ADD_UW|MASK_RS2, match_opcode, INSN_ALIAS },
+{"zext.w",    64, {"I", 0},    "d,s",      0, (int) M_ZEXTW, match_never, INSN_MACRO },
+{"add.uw",    64, {"ZBA", 0},  "d,s,t",    MATCH_ADD_UW, MASK_ADD_UW, match_opcode, 0 },
+{"slli.uw",   64, {"ZBA", 0},  "d,s,>",    MATCH_SLLI_UW, MASK_SLLI_UW, match_opcode, 0 },
+{"clmul",      0, {"ZBC", 0},  "d,s,t",    MATCH_CLMUL, MASK_CLMUL, match_opcode, 0 },
+{"clmulh",     0, {"ZBC", 0},  "d,s,t",    MATCH_CLMULH, MASK_CLMULH, match_opcode, 0 },
+{"clmulr",     0, {"ZBC", 0},  "d,s,t",    MATCH_CLMULR, MASK_CLMULR, match_opcode, 0 },
+{"bclr",       0, {"ZBS", 0},  "d,s,t",    MATCH_BCLR, MASK_BCLR, match_opcode, 0 },
+{"bclri",      0, {"ZBS", 0},  "d,s,>",    MATCH_BCLRI, MASK_BCLRI, match_opcode, 0 },
+{"bext",       0, {"ZBS", 0},  "d,s,t",    MATCH_BEXT, MASK_BEXT, match_opcode, 0 },
+{"bexti",      0, {"ZBS", 0},  "d,s,>",    MATCH_BEXTI, MASK_BEXTI, match_opcode, 0 },
+{"binv",       0, {"ZBS", 0},  "d,s,t",    MATCH_BINV, MASK_BINV, match_opcode, 0 },
+{"binvi",      0, {"ZBS", 0},  "d,s,>",    MATCH_BINVI, MASK_BINVI, match_opcode, 0 },
+{"bset",       0, {"ZBS", 0},  "d,s,t",    MATCH_BSET, MASK_BSET, match_opcode, 0 },
+{"bseti",      0, {"ZBS", 0},  "d,s,>",    MATCH_BSETI, MASK_BSETI, match_opcode, 0 },
+
+{"brev8",     32, {"ZBKB", 0},  "d,s",      MATCH_GREVI | MATCH_SHAMT_BREV8, MASK_GREVI | MASK_SHAMT, match_opcode, 0 },
+{"brev8",     64, {"ZBKB", 0},  "d,s",      MATCH_GREVI | MATCH_SHAMT_BREV8, MASK_GREVI | MASK_SHAMT, match_opcode, 0 },
+{"zip",       32, {"ZBKB", 0},  "d,s",      MATCH_SHFLI|MATCH_SHAMT_ZIP_32, MASK_SHFLI|MASK_SHAMT, match_opcode, INSN_ALIAS },
+{"unzip",     32, {"ZBKB", 0},  "d,s",      MATCH_UNSHFLI|MATCH_SHAMT_ZIP_32, MASK_UNSHFLI|MASK_SHAMT, match_opcode, INSN_ALIAS },
+{"pack",       0, {"ZBKB", 0},  "d,s,t",    MATCH_PACK, MASK_PACK, match_opcode, 0 },
+{"packh",      0, {"ZBKB", 0},  "d,s,t",    MATCH_PACKH, MASK_PACKH, match_opcode, 0 },
+{"packw",     64, {"ZBKB", 0},  "d,s,t",    MATCH_PACKW, MASK_PACKW, match_opcode, 0 },
+// {"andn",       0, {"ZBB", "ZBKB", 0},  "d,s,t", MATCH_ANDN, MASK_ANDN, match_opcode, 0 },
+// {"orn",        0, {"ZBB", "ZBKB", 0},  "d,s,t", MATCH_ORN, MASK_ORN, match_opcode, 0 },
+// {"xnor",       0, {"ZBB", "ZBKB", 0},  "d,s,t", MATCH_XNOR, MASK_XNOR, match_opcode, 0 },
+// {"rol",        0, {"ZBB", "ZBKB", 0},  "d,s,t", MATCH_ROL, MASK_ROL, match_opcode, 0 },
+// {"rori",       0, {"ZBB", "ZBKB", 0},  "d,s,>", MATCH_RORI, MASK_RORI, match_opcode, 0 },
+// {"ror",        0, {"ZBB", "ZBKB", 0},  "d,s,t", MATCH_ROR, MASK_ROR, match_opcode, 0 },
+// {"ror",        0, {"ZBB", "ZBKB", 0},  "d,s,>", MATCH_RORI, MASK_RORI, match_opcode, INSN_ALIAS },
+// {"rev8",      32, {"ZBB", "ZBKB", 0},  "d,s",   MATCH_GREVI | MATCH_SHAMT_REV8_32, MASK_GREVI | MASK_SHAMT, match_opcode, 0 },
+// {"rev8",      64, {"ZBB", "ZBKB", 0},  "d,s",   MATCH_GREVI | MATCH_SHAMT_REV8_64, MASK_GREVI | MASK_SHAMT, match_opcode, 0 },
+// {"rolw",      64, {"ZBB", "ZBKB", 0},  "d,s,t", MATCH_ROLW, MASK_ROLW, match_opcode, 0 },
+// {"roriw",     64, {"ZBB", "ZBKB", 0},  "d,s,<", MATCH_RORIW, MASK_RORIW, match_opcode, 0 },
+// {"rorw",      64, {"ZBB", "ZBKB", 0},  "d,s,t", MATCH_RORW, MASK_RORW, match_opcode, 0 },
+// {"rorw",      64, {"ZBB", "ZBKB", 0},  "d,s,<", MATCH_RORIW, MASK_RORIW, match_opcode, 0 },
+
+/* Zbc or zbkc instructions  */
+// {"clmul",      0, {"ZBC", "ZBKC", 0},  "d,s,t", MATCH_CLMUL, MASK_CLMUL, match_opcode, 0 },
+// {"clmulh",     0, {"ZBC", "ZBKC", 0},  "d,s,t", MATCH_CLMULH, MASK_CLMULH, match_opcode, 0 },
+
+/* RVX Andes V5 Vector Dot Product Extension  */
+{"vd4dots.vv",  0, {"XANDES", "V", 0},  "Vd,Vs,VtVm", MATCH_VD4DOTS_VV, MASK_VD4DOTS_VV, match_opcode, 0},
+{"vd4dotu.vv",  0, {"XANDES", "V", 0},  "Vd,Vs,VtVm", MATCH_VD4DOTU_VV, MASK_VD4DOTU_VV, match_opcode, 0},
+{"vd4dotsu.vv", 0, {"XANDES", "V", 0},  "Vd,Vs,VtVm", MATCH_VD4DOTSU_VV, MASK_VD4DOTSU_VV, match_opcode, 0},
+
 /* RVV */
-{"vsetvl",     0, {"V", 0},  "d,s,t", MATCH_VSETVL, MASK_VSETVL, match_opcode, 0},
+/* Andes V5 vector small INT handling extension  */
+{"vle4.v",        0, {"XANDES", "V", 0},  "Vd,0(s)", MATCH_VLE4_V, MASK_VLE4_V, match_opcode, INSN_DREF },
+{"vfwcvt.f.n.v",  0, {"XANDES", "V", "F", 0}, "Vd,VtVm", MATCH_VFWCVT_F_N_V, MASK_VFWCVT_F_N_V, match_widen_vd_neq_vs2_neq_vm, 0},
+{"vfwcvt.f.nu.v", 0, {"XANDES", "V", "F", 0}, "Vd,VtVm", MATCH_VFWCVT_F_NU_V, MASK_VFWCVT_F_NU_V, match_widen_vd_neq_vs2_neq_vm, 0},
+{"vfwcvt.f.b.v",  0, {"XANDES", "V", "F", 0}, "Vd,VtVm", MATCH_VFWCVT_F_B_V, MASK_VFWCVT_F_B_V, match_widen_vd_neq_vs2_neq_vm, 0},
+{"vfwcvt.f.bu.v", 0, {"XANDES", "V", "F", 0}, "Vd,VtVm", MATCH_VFWCVT_F_BU_V, MASK_VFWCVT_F_BU_V, match_widen_vd_neq_vs2_neq_vm, 0},
+{"vfpmadt.vf",    0, {"XANDES", "V", "F", 0}, "Vd,S,VtVm", MATCH_VFPMADT_VF, MASK_VFPMADT_VF, match_opcode, 0},
+{"vfpmadb.vf",    0, {"XANDES", "V", "F", 0}, "Vd,S,VtVm", MATCH_VFPMADB_VF, MASK_VFPMADB_VF, match_opcode, 0},
+
+/* Andes Xv5 INT4 Load (vln.v => vle4.v)  */
+{"vln.v",       0, {"XANDES", "V", 0}, "Vd,0(s)Vm",  MATCH_VLN_V, MASK_VLN_V, match_opcode, INSN_DREF | INSN_ALIAS},
+{"vlnu.v",      0, {"XANDES", "V", 0}, "Vd,0(s)Vm",  MATCH_VLNU_V, MASK_VLNU_V, match_opcode, INSN_DREF },
+{"vln8.v",      0, {"XANDES", "V", 0}, "Vd,0(s)Vm", MATCH_VLN8_V, MASK_VLN8_V, match_opcode, INSN_DREF},
+{"vlnu8.v",     0, {"XANDES", "V", 0}, "Vd,0(s)Vm", MATCH_VLNU8_V, MASK_VLNU8_V, match_opcode, INSN_DREF},
+
+/* RVV standard exetension  */
+{"vsetvl",     0, {"V", 0},  "d,s,t",  MATCH_VSETVL, MASK_VSETVL, match_opcode, 0},
 {"vsetvli",    0, {"V", 0},  "d,s,Vc", MATCH_VSETVLI, MASK_VSETVLI, match_opcode, 0},
+{"vsetivli",   0, {"V", 0},  "d,Z,Vb", MATCH_VSETIVLI, MASK_VSETIVLI, match_opcode, 0},
 
-{"vle8.v",     0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLE8V, MASK_VLE8V, match_opcode, INSN_DREF },
-{"vle16.v",    0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLE16V, MASK_VLE16V, match_opcode, INSN_DREF },
-{"vle32.v",    0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLE32V, MASK_VLE32V, match_opcode, INSN_DREF },
-{"vle64.v",    0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLE64V, MASK_VLE64V, match_opcode, INSN_DREF },
-{"vle128.v",   0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLE128V, MASK_VLE128V, match_opcode, INSN_DREF },
-{"vle256.v",   0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLE256V, MASK_VLE256V, match_opcode, INSN_DREF },
-{"vle512.v",   0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLE512V, MASK_VLE512V, match_opcode, INSN_DREF },
-{"vle1024.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLE1024V, MASK_VLE1024V, match_opcode, INSN_DREF },
+{"vle1.v",     0, {"V", 0},  "Vd,0(s)", MATCH_VLE1_V, MASK_VLE1_V, match_opcode, INSN_DREF },
+{"vse1.v",     0, {"V", 0},  "Vd,0(s)", MATCH_VSE1_V, MASK_VSE1_V, match_opcode, INSN_DREF },
 
-{"vse8.v",     0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSE8V, MASK_VSE8V, match_opcode, INSN_DREF },
-{"vse16.v",    0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSE16V, MASK_VSE16V, match_opcode, INSN_DREF },
-{"vse32.v",    0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSE32V, MASK_VSE32V, match_opcode, INSN_DREF },
-{"vse64.v",    0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSE64V, MASK_VSE64V, match_opcode, INSN_DREF },
-{"vse128.v",   0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSE128V, MASK_VSE128V, match_opcode, INSN_DREF },
-{"vse256.v",   0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSE256V, MASK_VSE256V, match_opcode, INSN_DREF },
-{"vse512.v",   0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSE512V, MASK_VSE512V, match_opcode, INSN_DREF },
-{"vse1024.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSE1024V, MASK_VSE1024V, match_opcode, INSN_DREF },
+{"vle8.v",     0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLE8_V, MASK_VLE8_V, match_vd_neq_vm, INSN_DREF },
+{"vle16.v",    0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLE16_V, MASK_VLE16_V, match_vd_neq_vm, INSN_DREF },
+{"vle32.v",    0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLE32_V, MASK_VLE32_V, match_vd_neq_vm, INSN_DREF },
+{"vle64.v",    0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLE64_V, MASK_VLE64_V, match_vd_neq_vm, INSN_DREF },
 
-{"vlse8.v",    0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSE8V, MASK_VLSE8V, match_opcode, INSN_DREF },
-{"vlse16.v",   0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSE16V, MASK_VLSE16V, match_opcode, INSN_DREF },
-{"vlse32.v",   0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSE32V, MASK_VLSE32V, match_opcode, INSN_DREF },
-{"vlse64.v",   0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSE64V, MASK_VLSE64V, match_opcode, INSN_DREF },
-{"vlse128.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSE128V, MASK_VLSE128V, match_opcode, INSN_DREF },
-{"vlse256.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSE256V, MASK_VLSE256V, match_opcode, INSN_DREF },
-{"vlse512.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSE512V, MASK_VLSE512V, match_opcode, INSN_DREF },
-{"vlse1024.v", 0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSE1024V, MASK_VLSE1024V, match_opcode, INSN_DREF },
+{"vse8.v",     0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSE8_V, MASK_VSE8_V, match_vd_neq_vm, INSN_DREF },
+{"vse16.v",    0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSE16_V, MASK_VSE16_V, match_vd_neq_vm, INSN_DREF },
+{"vse32.v",    0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSE32_V, MASK_VSE32_V, match_vd_neq_vm, INSN_DREF },
+{"vse64.v",    0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSE64_V, MASK_VSE64_V, match_vd_neq_vm, INSN_DREF },
 
-{"vsse8.v",    0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSE8V, MASK_VSSE8V, match_opcode, INSN_DREF },
-{"vsse16.v",   0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSE16V, MASK_VSSE16V, match_opcode, INSN_DREF },
-{"vsse32.v",   0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSE32V, MASK_VSSE32V, match_opcode, INSN_DREF },
-{"vsse64.v",   0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSE64V, MASK_VSSE64V, match_opcode, INSN_DREF },
-{"vsse128.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSE128V, MASK_VSSE128V, match_opcode, INSN_DREF },
-{"vsse256.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSE256V, MASK_VSSE256V, match_opcode, INSN_DREF },
-{"vsse512.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSE512V, MASK_VSSE512V, match_opcode, INSN_DREF },
-{"vsse1024.v", 0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSE1024V, MASK_VSSE1024V, match_opcode, INSN_DREF },
+{"vlse8.v",    0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSE8_V, MASK_VLSE8_V, match_vd_neq_vm, INSN_DREF },
+{"vlse16.v",   0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSE16_V, MASK_VLSE16_V, match_vd_neq_vm, INSN_DREF },
+{"vlse32.v",   0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSE32_V, MASK_VLSE32_V, match_vd_neq_vm, INSN_DREF },
+{"vlse64.v",   0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSE64_V, MASK_VLSE64_V, match_vd_neq_vm, INSN_DREF },
 
-{"vlxei8.v",   0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXEI8V, MASK_VLXEI8V, match_opcode, INSN_DREF },
-{"vlxei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXEI16V, MASK_VLXEI16V, match_opcode, INSN_DREF },
-{"vlxei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXEI32V, MASK_VLXEI32V, match_opcode, INSN_DREF },
-{"vlxei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXEI64V, MASK_VLXEI64V, match_opcode, INSN_DREF },
-{"vlxei128.v", 0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXEI128V, MASK_VLXEI128V, match_opcode, INSN_DREF },
-{"vlxei256.v", 0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXEI256V, MASK_VLXEI256V, match_opcode, INSN_DREF },
-{"vlxei512.v", 0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXEI512V, MASK_VLXEI512V, match_opcode, INSN_DREF },
-{"vlxei1024.v",0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXEI1024V, MASK_VLXEI1024V, match_opcode, INSN_DREF },
+{"vsse8.v",    0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSE8_V, MASK_VSSE8_V, match_vd_neq_vm, INSN_DREF },
+{"vsse16.v",   0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSE16_V, MASK_VSSE16_V, match_vd_neq_vm, INSN_DREF },
+{"vsse32.v",   0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSE32_V, MASK_VSSE32_V, match_vd_neq_vm, INSN_DREF },
+{"vsse64.v",   0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSE64_V, MASK_VSSE64_V, match_vd_neq_vm, INSN_DREF },
 
-{"vsxei8.v",   0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXEI8V, MASK_VSXEI8V, match_opcode, INSN_DREF },
-{"vsxei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXEI16V, MASK_VSXEI16V, match_opcode, INSN_DREF },
-{"vsxei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXEI32V, MASK_VSXEI32V, match_opcode, INSN_DREF },
-{"vsxei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXEI64V, MASK_VSXEI64V, match_opcode, INSN_DREF },
-{"vsxei128.v", 0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXEI128V, MASK_VSXEI128V, match_opcode, INSN_DREF },
-{"vsxei256.v", 0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXEI256V, MASK_VSXEI256V, match_opcode, INSN_DREF },
-{"vsxei512.v", 0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXEI512V, MASK_VSXEI512V, match_opcode, INSN_DREF },
-{"vsxei1024.v",0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXEI1024V, MASK_VSXEI1024V, match_opcode, INSN_DREF },
+{"vloxei8.v",   0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXEI8_V, MASK_VLOXEI8_V, match_vd_neq_vm, INSN_DREF },
+{"vloxei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXEI16_V, MASK_VLOXEI16_V, match_vd_neq_vm, INSN_DREF },
+{"vloxei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXEI32_V, MASK_VLOXEI32_V, match_vd_neq_vm, INSN_DREF },
+{"vloxei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXEI64_V, MASK_VLOXEI64_V, match_vd_neq_vm, INSN_DREF },
 
-{"vsuxei8.v",   0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXEI8V, MASK_VSUXEI8V, match_opcode, INSN_DREF },
-{"vsuxei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXEI16V, MASK_VSUXEI16V, match_opcode, INSN_DREF },
-{"vsuxei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXEI32V, MASK_VSUXEI32V, match_opcode, INSN_DREF },
-{"vsuxei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXEI64V, MASK_VSUXEI64V, match_opcode, INSN_DREF },
-{"vsuxei128.v", 0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXEI128V, MASK_VSUXEI128V, match_opcode, INSN_DREF },
-{"vsuxei256.v", 0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXEI256V, MASK_VSUXEI256V, match_opcode, INSN_DREF },
-{"vsuxei512.v", 0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXEI512V, MASK_VSUXEI512V, match_opcode, INSN_DREF },
-{"vsuxei1024.v",0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXEI1024V, MASK_VSUXEI1024V, match_opcode, INSN_DREF },
+{"vsoxei8.v",   0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXEI8_V, MASK_VSOXEI8_V, match_vd_neq_vm, INSN_DREF },
+{"vsoxei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXEI16_V, MASK_VSOXEI16_V, match_vd_neq_vm, INSN_DREF },
+{"vsoxei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXEI32_V, MASK_VSOXEI32_V, match_vd_neq_vm, INSN_DREF },
+{"vsoxei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXEI64_V, MASK_VSOXEI64_V, match_vd_neq_vm, INSN_DREF },
 
-{"vle8ff.v",    0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLE8FFV, MASK_VLE8FFV, match_opcode, INSN_DREF },
-{"vle16ff.v",   0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLE16FFV, MASK_VLE16FFV, match_opcode, INSN_DREF },
-{"vle32ff.v",   0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLE32FFV, MASK_VLE32FFV, match_opcode, INSN_DREF },
-{"vle64ff.v",   0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLE64FFV, MASK_VLE64FFV, match_opcode, INSN_DREF },
-{"vle128ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLE128FFV, MASK_VLE128FFV, match_opcode, INSN_DREF },
-{"vle256ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLE256FFV, MASK_VLE256FFV, match_opcode, INSN_DREF },
-{"vle512ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLE512FFV, MASK_VLE512FFV, match_opcode, INSN_DREF },
-{"vle1024ff.v", 0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLE1024FFV, MASK_VLE1024FFV, match_opcode, INSN_DREF },
+{"vluxei8.v",   0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXEI8_V, MASK_VLUXEI8_V, match_vd_neq_vm, INSN_DREF },
+{"vluxei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXEI16_V, MASK_VLUXEI16_V, match_vd_neq_vm, INSN_DREF },
+{"vluxei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXEI32_V, MASK_VLUXEI32_V, match_vd_neq_vm, INSN_DREF },
+{"vluxei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXEI64_V, MASK_VLUXEI64_V, match_vd_neq_vm, INSN_DREF },
 
-{"vlseg2e8.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG2E8V, MASK_VLSEG2E8V, match_vd_neq_vm, INSN_DREF },
-{"vsseg2e8.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG2E8V, MASK_VSSEG2E8V, match_opcode, INSN_DREF },
-{"vlseg3e8.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG3E8V, MASK_VLSEG3E8V, match_vd_neq_vm, INSN_DREF },
-{"vsseg3e8.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG3E8V, MASK_VSSEG3E8V, match_opcode, INSN_DREF },
-{"vlseg4e8.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG4E8V, MASK_VLSEG4E8V, match_vd_neq_vm, INSN_DREF },
-{"vsseg4e8.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG4E8V, MASK_VSSEG4E8V, match_opcode, INSN_DREF },
-{"vlseg5e8.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG5E8V, MASK_VLSEG5E8V, match_vd_neq_vm, INSN_DREF },
-{"vsseg5e8.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG5E8V, MASK_VSSEG5E8V, match_opcode, INSN_DREF },
-{"vlseg6e8.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG6E8V, MASK_VLSEG6E8V, match_vd_neq_vm, INSN_DREF },
-{"vsseg6e8.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG6E8V, MASK_VSSEG6E8V, match_opcode, INSN_DREF },
-{"vlseg7e8.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG7E8V, MASK_VLSEG7E8V, match_vd_neq_vm, INSN_DREF },
-{"vsseg7e8.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG7E8V, MASK_VSSEG7E8V, match_opcode, INSN_DREF },
-{"vlseg8e8.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG8E8V, MASK_VLSEG8E8V, match_vd_neq_vm, INSN_DREF },
-{"vsseg8e8.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG8E8V, MASK_VSSEG8E8V, match_opcode, INSN_DREF },
+{"vsuxei8.v",   0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXEI8_V, MASK_VSUXEI8_V, match_vd_neq_vm, INSN_DREF },
+{"vsuxei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXEI16_V, MASK_VSUXEI16_V, match_vd_neq_vm, INSN_DREF },
+{"vsuxei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXEI32_V, MASK_VSUXEI32_V, match_vd_neq_vm, INSN_DREF },
+{"vsuxei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXEI64_V, MASK_VSUXEI64_V, match_vd_neq_vm, INSN_DREF },
 
-{"vlseg2e16.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG2E16V, MASK_VLSEG2E16V, match_vd_neq_vm, INSN_DREF },
-{"vsseg2e16.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG2E16V, MASK_VSSEG2E16V, match_opcode, INSN_DREF },
-{"vlseg3e16.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG3E16V, MASK_VLSEG3E16V, match_vd_neq_vm, INSN_DREF },
-{"vsseg3e16.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG3E16V, MASK_VSSEG3E16V, match_opcode, INSN_DREF },
-{"vlseg4e16.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG4E16V, MASK_VLSEG4E16V, match_vd_neq_vm, INSN_DREF },
-{"vsseg4e16.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG4E16V, MASK_VSSEG4E16V, match_opcode, INSN_DREF },
-{"vlseg5e16.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG5E16V, MASK_VLSEG5E16V, match_vd_neq_vm, INSN_DREF },
-{"vsseg5e16.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG5E16V, MASK_VSSEG5E16V, match_opcode, INSN_DREF },
-{"vlseg6e16.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG6E16V, MASK_VLSEG6E16V, match_vd_neq_vm, INSN_DREF },
-{"vsseg6e16.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG6E16V, MASK_VSSEG6E16V, match_opcode, INSN_DREF },
-{"vlseg7e16.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG7E16V, MASK_VLSEG7E16V, match_vd_neq_vm, INSN_DREF },
-{"vsseg7e16.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG7E16V, MASK_VSSEG7E16V, match_opcode, INSN_DREF },
-{"vlseg8e16.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG8E16V, MASK_VLSEG8E16V, match_vd_neq_vm, INSN_DREF },
-{"vsseg8e16.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG8E16V, MASK_VSSEG8E16V, match_opcode, INSN_DREF },
+{"vle8ff.v",    0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLE8FF_V, MASK_VLE8FF_V, match_vd_neq_vm, INSN_DREF },
+{"vle16ff.v",   0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLE16FF_V, MASK_VLE16FF_V, match_vd_neq_vm, INSN_DREF },
+{"vle32ff.v",   0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLE32FF_V, MASK_VLE32FF_V, match_vd_neq_vm, INSN_DREF },
+{"vle64ff.v",   0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLE64FF_V, MASK_VLE64FF_V, match_vd_neq_vm, INSN_DREF },
 
-{"vlseg2e32.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG2E32V, MASK_VLSEG2E32V, match_vd_neq_vm, INSN_DREF },
-{"vsseg2e32.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG2E32V, MASK_VSSEG2E32V, match_opcode, INSN_DREF },
-{"vlseg3e32.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG3E32V, MASK_VLSEG3E32V, match_vd_neq_vm, INSN_DREF },
-{"vsseg3e32.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG3E32V, MASK_VSSEG3E32V, match_opcode, INSN_DREF },
-{"vlseg4e32.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG4E32V, MASK_VLSEG4E32V, match_vd_neq_vm, INSN_DREF },
-{"vsseg4e32.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG4E32V, MASK_VSSEG4E32V, match_opcode, INSN_DREF },
-{"vlseg5e32.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG5E32V, MASK_VLSEG5E32V, match_vd_neq_vm, INSN_DREF },
-{"vsseg5e32.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG5E32V, MASK_VSSEG5E32V, match_opcode, INSN_DREF },
-{"vlseg6e32.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG6E32V, MASK_VLSEG6E32V, match_vd_neq_vm, INSN_DREF },
-{"vsseg6e32.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG6E32V, MASK_VSSEG6E32V, match_opcode, INSN_DREF },
-{"vlseg7e32.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG7E32V, MASK_VLSEG7E32V, match_vd_neq_vm, INSN_DREF },
-{"vsseg7e32.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG7E32V, MASK_VSSEG7E32V, match_opcode, INSN_DREF },
-{"vlseg8e32.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG8E32V, MASK_VLSEG8E32V, match_vd_neq_vm, INSN_DREF },
-{"vsseg8e32.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG8E32V, MASK_VSSEG8E32V, match_opcode, INSN_DREF },
+{"vlseg2e8.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG2E8_V, MASK_VLSEG2E8_V, match_vd_neq_vm, INSN_DREF },
+{"vsseg2e8.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG2E8_V, MASK_VSSEG2E8_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg3e8.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG3E8_V, MASK_VLSEG3E8_V, match_vd_neq_vm, INSN_DREF },
+{"vsseg3e8.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG3E8_V, MASK_VSSEG3E8_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg4e8.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG4E8_V, MASK_VLSEG4E8_V, match_vd_neq_vm, INSN_DREF },
+{"vsseg4e8.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG4E8_V, MASK_VSSEG4E8_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg5e8.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG5E8_V, MASK_VLSEG5E8_V, match_vd_neq_vm, INSN_DREF },
+{"vsseg5e8.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG5E8_V, MASK_VSSEG5E8_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg6e8.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG6E8_V, MASK_VLSEG6E8_V, match_vd_neq_vm, INSN_DREF },
+{"vsseg6e8.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG6E8_V, MASK_VSSEG6E8_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg7e8.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG7E8_V, MASK_VLSEG7E8_V, match_vd_neq_vm, INSN_DREF },
+{"vsseg7e8.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG7E8_V, MASK_VSSEG7E8_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg8e8.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG8E8_V, MASK_VLSEG8E8_V, match_vd_neq_vm, INSN_DREF },
+{"vsseg8e8.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG8E8_V, MASK_VSSEG8E8_V, match_vd_neq_vm, INSN_DREF },
 
-{"vlseg2e64.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG2E64V, MASK_VLSEG2E64V, match_vd_neq_vm, INSN_DREF },
-{"vsseg2e64.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG2E64V, MASK_VSSEG2E64V, match_opcode, INSN_DREF },
-{"vlseg3e64.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG3E64V, MASK_VLSEG3E64V, match_vd_neq_vm, INSN_DREF },
-{"vsseg3e64.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG3E64V, MASK_VSSEG3E64V, match_opcode, INSN_DREF },
-{"vlseg4e64.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG4E64V, MASK_VLSEG4E64V, match_vd_neq_vm, INSN_DREF },
-{"vsseg4e64.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG4E64V, MASK_VSSEG4E64V, match_opcode, INSN_DREF },
-{"vlseg5e64.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG5E64V, MASK_VLSEG5E64V, match_vd_neq_vm, INSN_DREF },
-{"vsseg5e64.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG5E64V, MASK_VSSEG5E64V, match_opcode, INSN_DREF },
-{"vlseg6e64.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG6E64V, MASK_VLSEG6E64V, match_vd_neq_vm, INSN_DREF },
-{"vsseg6e64.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG6E64V, MASK_VSSEG6E64V, match_opcode, INSN_DREF },
-{"vlseg7e64.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG7E64V, MASK_VLSEG7E64V, match_vd_neq_vm, INSN_DREF },
-{"vsseg7e64.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG7E64V, MASK_VSSEG7E64V, match_opcode, INSN_DREF },
-{"vlseg8e64.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG8E64V, MASK_VLSEG8E64V, match_vd_neq_vm, INSN_DREF },
-{"vsseg8e64.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG8E64V, MASK_VSSEG8E64V, match_opcode, INSN_DREF },
+{"vlseg2e16.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG2E16_V, MASK_VLSEG2E16_V, match_vd_neq_vm, INSN_DREF },
+{"vsseg2e16.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG2E16_V, MASK_VSSEG2E16_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg3e16.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG3E16_V, MASK_VLSEG3E16_V, match_vd_neq_vm, INSN_DREF },
+{"vsseg3e16.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG3E16_V, MASK_VSSEG3E16_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg4e16.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG4E16_V, MASK_VLSEG4E16_V, match_vd_neq_vm, INSN_DREF },
+{"vsseg4e16.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG4E16_V, MASK_VSSEG4E16_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg5e16.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG5E16_V, MASK_VLSEG5E16_V, match_vd_neq_vm, INSN_DREF },
+{"vsseg5e16.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG5E16_V, MASK_VSSEG5E16_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg6e16.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG6E16_V, MASK_VLSEG6E16_V, match_vd_neq_vm, INSN_DREF },
+{"vsseg6e16.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG6E16_V, MASK_VSSEG6E16_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg7e16.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG7E16_V, MASK_VLSEG7E16_V, match_vd_neq_vm, INSN_DREF },
+{"vsseg7e16.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG7E16_V, MASK_VSSEG7E16_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg8e16.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG8E16_V, MASK_VLSEG8E16_V, match_vd_neq_vm, INSN_DREF },
+{"vsseg8e16.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG8E16_V, MASK_VSSEG8E16_V, match_vd_neq_vm, INSN_DREF },
 
-{"vlseg2e128.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG2E128V, MASK_VLSEG2E128V, match_vd_neq_vm, INSN_DREF },
-{"vsseg2e128.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG2E128V, MASK_VSSEG2E128V, match_opcode, INSN_DREF },
-{"vlseg3e128.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG3E128V, MASK_VLSEG3E128V, match_vd_neq_vm, INSN_DREF },
-{"vsseg3e128.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG3E128V, MASK_VSSEG3E128V, match_opcode, INSN_DREF },
-{"vlseg4e128.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG4E128V, MASK_VLSEG4E128V, match_vd_neq_vm, INSN_DREF },
-{"vsseg4e128.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG4E128V, MASK_VSSEG4E128V, match_opcode, INSN_DREF },
-{"vlseg5e128.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG5E128V, MASK_VLSEG5E128V, match_vd_neq_vm, INSN_DREF },
-{"vsseg5e128.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG5E128V, MASK_VSSEG5E128V, match_opcode, INSN_DREF },
-{"vlseg6e128.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG6E128V, MASK_VLSEG6E128V, match_vd_neq_vm, INSN_DREF },
-{"vsseg6e128.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG6E128V, MASK_VSSEG6E128V, match_opcode, INSN_DREF },
-{"vlseg7e128.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG7E128V, MASK_VLSEG7E128V, match_vd_neq_vm, INSN_DREF },
-{"vsseg7e128.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG7E128V, MASK_VSSEG7E128V, match_opcode, INSN_DREF },
-{"vlseg8e128.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG8E128V, MASK_VLSEG8E128V, match_vd_neq_vm, INSN_DREF },
-{"vsseg8e128.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG8E128V, MASK_VSSEG8E128V, match_opcode, INSN_DREF },
+{"vlseg2e32.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG2E32_V, MASK_VLSEG2E32_V, match_vd_neq_vm, INSN_DREF },
+{"vsseg2e32.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG2E32_V, MASK_VSSEG2E32_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg3e32.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG3E32_V, MASK_VLSEG3E32_V, match_vd_neq_vm, INSN_DREF },
+{"vsseg3e32.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG3E32_V, MASK_VSSEG3E32_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg4e32.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG4E32_V, MASK_VLSEG4E32_V, match_vd_neq_vm, INSN_DREF },
+{"vsseg4e32.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG4E32_V, MASK_VSSEG4E32_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg5e32.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG5E32_V, MASK_VLSEG5E32_V, match_vd_neq_vm, INSN_DREF },
+{"vsseg5e32.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG5E32_V, MASK_VSSEG5E32_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg6e32.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG6E32_V, MASK_VLSEG6E32_V, match_vd_neq_vm, INSN_DREF },
+{"vsseg6e32.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG6E32_V, MASK_VSSEG6E32_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg7e32.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG7E32_V, MASK_VLSEG7E32_V, match_vd_neq_vm, INSN_DREF },
+{"vsseg7e32.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG7E32_V, MASK_VSSEG7E32_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg8e32.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG8E32_V, MASK_VLSEG8E32_V, match_vd_neq_vm, INSN_DREF },
+{"vsseg8e32.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG8E32_V, MASK_VSSEG8E32_V, match_vd_neq_vm, INSN_DREF },
 
-{"vlseg2e256.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG2E256V, MASK_VLSEG2E256V, match_vd_neq_vm, INSN_DREF },
-{"vsseg2e256.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG2E256V, MASK_VSSEG2E256V, match_opcode, INSN_DREF },
-{"vlseg3e256.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG3E256V, MASK_VLSEG3E256V, match_vd_neq_vm, INSN_DREF },
-{"vsseg3e256.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG3E256V, MASK_VSSEG3E256V, match_opcode, INSN_DREF },
-{"vlseg4e256.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG4E256V, MASK_VLSEG4E256V, match_vd_neq_vm, INSN_DREF },
-{"vsseg4e256.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG4E256V, MASK_VSSEG4E256V, match_opcode, INSN_DREF },
-{"vlseg5e256.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG5E256V, MASK_VLSEG5E256V, match_vd_neq_vm, INSN_DREF },
-{"vsseg5e256.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG5E256V, MASK_VSSEG5E256V, match_opcode, INSN_DREF },
-{"vlseg6e256.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG6E256V, MASK_VLSEG6E256V, match_vd_neq_vm, INSN_DREF },
-{"vsseg6e256.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG6E256V, MASK_VSSEG6E256V, match_opcode, INSN_DREF },
-{"vlseg7e256.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG7E256V, MASK_VLSEG7E256V, match_vd_neq_vm, INSN_DREF },
-{"vsseg7e256.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG7E256V, MASK_VSSEG7E256V, match_opcode, INSN_DREF },
-{"vlseg8e256.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG8E256V, MASK_VLSEG8E256V, match_vd_neq_vm, INSN_DREF },
-{"vsseg8e256.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG8E256V, MASK_VSSEG8E256V, match_opcode, INSN_DREF },
+{"vlseg2e64.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG2E64_V, MASK_VLSEG2E64_V, match_vd_neq_vm, INSN_DREF },
+{"vsseg2e64.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG2E64_V, MASK_VSSEG2E64_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg3e64.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG3E64_V, MASK_VLSEG3E64_V, match_vd_neq_vm, INSN_DREF },
+{"vsseg3e64.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG3E64_V, MASK_VSSEG3E64_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg4e64.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG4E64_V, MASK_VLSEG4E64_V, match_vd_neq_vm, INSN_DREF },
+{"vsseg4e64.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG4E64_V, MASK_VSSEG4E64_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg5e64.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG5E64_V, MASK_VLSEG5E64_V, match_vd_neq_vm, INSN_DREF },
+{"vsseg5e64.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG5E64_V, MASK_VSSEG5E64_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg6e64.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG6E64_V, MASK_VLSEG6E64_V, match_vd_neq_vm, INSN_DREF },
+{"vsseg6e64.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG6E64_V, MASK_VSSEG6E64_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg7e64.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG7E64_V, MASK_VLSEG7E64_V, match_vd_neq_vm, INSN_DREF },
+{"vsseg7e64.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG7E64_V, MASK_VSSEG7E64_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg8e64.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG8E64_V, MASK_VLSEG8E64_V, match_vd_neq_vm, INSN_DREF },
+{"vsseg8e64.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG8E64_V, MASK_VSSEG8E64_V, match_vd_neq_vm, INSN_DREF },
 
-{"vlseg2e512.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG2E512V, MASK_VLSEG2E512V, match_vd_neq_vm, INSN_DREF },
-{"vsseg2e512.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG2E512V, MASK_VSSEG2E512V, match_opcode, INSN_DREF },
-{"vlseg3e512.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG3E512V, MASK_VLSEG3E512V, match_vd_neq_vm, INSN_DREF },
-{"vsseg3e512.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG3E512V, MASK_VSSEG3E512V, match_opcode, INSN_DREF },
-{"vlseg4e512.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG4E512V, MASK_VLSEG4E512V, match_vd_neq_vm, INSN_DREF },
-{"vsseg4e512.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG4E512V, MASK_VSSEG4E512V, match_opcode, INSN_DREF },
-{"vlseg5e512.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG5E512V, MASK_VLSEG5E512V, match_vd_neq_vm, INSN_DREF },
-{"vsseg5e512.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG5E512V, MASK_VSSEG5E512V, match_opcode, INSN_DREF },
-{"vlseg6e512.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG6E512V, MASK_VLSEG6E512V, match_vd_neq_vm, INSN_DREF },
-{"vsseg6e512.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG6E512V, MASK_VSSEG6E512V, match_opcode, INSN_DREF },
-{"vlseg7e512.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG7E512V, MASK_VLSEG7E512V, match_vd_neq_vm, INSN_DREF },
-{"vsseg7e512.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG7E512V, MASK_VSSEG7E512V, match_opcode, INSN_DREF },
-{"vlseg8e512.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG8E512V, MASK_VLSEG8E512V, match_vd_neq_vm, INSN_DREF },
-{"vsseg8e512.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG8E512V, MASK_VSSEG8E512V, match_opcode, INSN_DREF },
+{"vlsseg2e8.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG2E8_V, MASK_VLSSEG2E8_V, match_vd_neq_vm, INSN_DREF },
+{"vssseg2e8.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG2E8_V, MASK_VSSSEG2E8_V, match_vd_neq_vm, INSN_DREF },
+{"vlsseg3e8.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG3E8_V, MASK_VLSSEG3E8_V, match_vd_neq_vm, INSN_DREF },
+{"vssseg3e8.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG3E8_V, MASK_VSSSEG3E8_V, match_vd_neq_vm, INSN_DREF },
+{"vlsseg4e8.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG4E8_V, MASK_VLSSEG4E8_V, match_vd_neq_vm, INSN_DREF },
+{"vssseg4e8.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG4E8_V, MASK_VSSSEG4E8_V, match_vd_neq_vm, INSN_DREF },
+{"vlsseg5e8.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG5E8_V, MASK_VLSSEG5E8_V, match_vd_neq_vm, INSN_DREF },
+{"vssseg5e8.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG5E8_V, MASK_VSSSEG5E8_V, match_vd_neq_vm, INSN_DREF },
+{"vlsseg6e8.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG6E8_V, MASK_VLSSEG6E8_V, match_vd_neq_vm, INSN_DREF },
+{"vssseg6e8.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG6E8_V, MASK_VSSSEG6E8_V, match_vd_neq_vm, INSN_DREF },
+{"vlsseg7e8.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG7E8_V, MASK_VLSSEG7E8_V, match_vd_neq_vm, INSN_DREF },
+{"vssseg7e8.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG7E8_V, MASK_VSSSEG7E8_V, match_vd_neq_vm, INSN_DREF },
+{"vlsseg8e8.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG8E8_V, MASK_VLSSEG8E8_V, match_vd_neq_vm, INSN_DREF },
+{"vssseg8e8.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG8E8_V, MASK_VSSSEG8E8_V, match_vd_neq_vm, INSN_DREF },
 
-{"vlseg2e1024.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG2E1024V, MASK_VLSEG2E1024V, match_vd_neq_vm, INSN_DREF },
-{"vsseg2e1024.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG2E1024V, MASK_VSSEG2E1024V, match_opcode, INSN_DREF },
-{"vlseg3e1024.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG3E1024V, MASK_VLSEG3E1024V, match_vd_neq_vm, INSN_DREF },
-{"vsseg3e1024.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG3E1024V, MASK_VSSEG3E1024V, match_opcode, INSN_DREF },
-{"vlseg4e1024.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG4E1024V, MASK_VLSEG4E1024V, match_vd_neq_vm, INSN_DREF },
-{"vsseg4e1024.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG4E1024V, MASK_VSSEG4E1024V, match_opcode, INSN_DREF },
-{"vlseg5e1024.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG5E1024V, MASK_VLSEG5E1024V, match_vd_neq_vm, INSN_DREF },
-{"vsseg5e1024.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG5E1024V, MASK_VSSEG5E1024V, match_opcode, INSN_DREF },
-{"vlseg6e1024.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG6E1024V, MASK_VLSEG6E1024V, match_vd_neq_vm, INSN_DREF },
-{"vsseg6e1024.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG6E1024V, MASK_VSSEG6E1024V, match_opcode, INSN_DREF },
-{"vlseg7e1024.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG7E1024V, MASK_VLSEG7E1024V, match_vd_neq_vm, INSN_DREF },
-{"vsseg7e1024.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG7E1024V, MASK_VSSEG7E1024V, match_opcode, INSN_DREF },
-{"vlseg8e1024.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG8E1024V, MASK_VLSEG8E1024V, match_vd_neq_vm, INSN_DREF },
-{"vsseg8e1024.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VSSEG8E1024V, MASK_VSSEG8E1024V, match_opcode, INSN_DREF },
+{"vlsseg2e16.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG2E16_V, MASK_VLSSEG2E16_V, match_vd_neq_vm, INSN_DREF },
+{"vssseg2e16.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG2E16_V, MASK_VSSSEG2E16_V, match_vd_neq_vm, INSN_DREF },
+{"vlsseg3e16.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG3E16_V, MASK_VLSSEG3E16_V, match_vd_neq_vm, INSN_DREF },
+{"vssseg3e16.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG3E16_V, MASK_VSSSEG3E16_V, match_vd_neq_vm, INSN_DREF },
+{"vlsseg4e16.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG4E16_V, MASK_VLSSEG4E16_V, match_vd_neq_vm, INSN_DREF },
+{"vssseg4e16.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG4E16_V, MASK_VSSSEG4E16_V, match_vd_neq_vm, INSN_DREF },
+{"vlsseg5e16.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG5E16_V, MASK_VLSSEG5E16_V, match_vd_neq_vm, INSN_DREF },
+{"vssseg5e16.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG5E16_V, MASK_VSSSEG5E16_V, match_vd_neq_vm, INSN_DREF },
+{"vlsseg6e16.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG6E16_V, MASK_VLSSEG6E16_V, match_vd_neq_vm, INSN_DREF },
+{"vssseg6e16.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG6E16_V, MASK_VSSSEG6E16_V, match_vd_neq_vm, INSN_DREF },
+{"vlsseg7e16.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG7E16_V, MASK_VLSSEG7E16_V, match_vd_neq_vm, INSN_DREF },
+{"vssseg7e16.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG7E16_V, MASK_VSSSEG7E16_V, match_vd_neq_vm, INSN_DREF },
+{"vlsseg8e16.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG8E16_V, MASK_VLSSEG8E16_V, match_vd_neq_vm, INSN_DREF },
+{"vssseg8e16.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG8E16_V, MASK_VSSSEG8E16_V, match_vd_neq_vm, INSN_DREF },
 
-{"vlsseg2e8.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG2E8V, MASK_VLSSEG2E8V, match_vd_neq_vm, INSN_DREF },
-{"vssseg2e8.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG2E8V, MASK_VSSSEG2E8V, match_opcode, INSN_DREF },
-{"vlsseg3e8.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG3E8V, MASK_VLSSEG3E8V, match_vd_neq_vm, INSN_DREF },
-{"vssseg3e8.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG3E8V, MASK_VSSSEG3E8V, match_opcode, INSN_DREF },
-{"vlsseg4e8.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG4E8V, MASK_VLSSEG4E8V, match_vd_neq_vm, INSN_DREF },
-{"vssseg4e8.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG4E8V, MASK_VSSSEG4E8V, match_opcode, INSN_DREF },
-{"vlsseg5e8.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG5E8V, MASK_VLSSEG5E8V, match_vd_neq_vm, INSN_DREF },
-{"vssseg5e8.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG5E8V, MASK_VSSSEG5E8V, match_opcode, INSN_DREF },
-{"vlsseg6e8.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG6E8V, MASK_VLSSEG6E8V, match_vd_neq_vm, INSN_DREF },
-{"vssseg6e8.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG6E8V, MASK_VSSSEG6E8V, match_opcode, INSN_DREF },
-{"vlsseg7e8.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG7E8V, MASK_VLSSEG7E8V, match_vd_neq_vm, INSN_DREF },
-{"vssseg7e8.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG7E8V, MASK_VSSSEG7E8V, match_opcode, INSN_DREF },
-{"vlsseg8e8.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG8E8V, MASK_VLSSEG8E8V, match_vd_neq_vm, INSN_DREF },
-{"vssseg8e8.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG8E8V, MASK_VSSSEG8E8V, match_opcode, INSN_DREF },
+{"vlsseg2e32.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG2E32_V, MASK_VLSSEG2E32_V, match_vd_neq_vm, INSN_DREF },
+{"vssseg2e32.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG2E32_V, MASK_VSSSEG2E32_V, match_vd_neq_vm, INSN_DREF },
+{"vlsseg3e32.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG3E32_V, MASK_VLSSEG3E32_V, match_vd_neq_vm, INSN_DREF },
+{"vssseg3e32.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG3E32_V, MASK_VSSSEG3E32_V, match_vd_neq_vm, INSN_DREF },
+{"vlsseg4e32.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG4E32_V, MASK_VLSSEG4E32_V, match_vd_neq_vm, INSN_DREF },
+{"vssseg4e32.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG4E32_V, MASK_VSSSEG4E32_V, match_vd_neq_vm, INSN_DREF },
+{"vlsseg5e32.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG5E32_V, MASK_VLSSEG5E32_V, match_vd_neq_vm, INSN_DREF },
+{"vssseg5e32.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG5E32_V, MASK_VSSSEG5E32_V, match_vd_neq_vm, INSN_DREF },
+{"vlsseg6e32.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG6E32_V, MASK_VLSSEG6E32_V, match_vd_neq_vm, INSN_DREF },
+{"vssseg6e32.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG6E32_V, MASK_VSSSEG6E32_V, match_vd_neq_vm, INSN_DREF },
+{"vlsseg7e32.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG7E32_V, MASK_VLSSEG7E32_V, match_vd_neq_vm, INSN_DREF },
+{"vssseg7e32.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG7E32_V, MASK_VSSSEG7E32_V, match_vd_neq_vm, INSN_DREF },
+{"vlsseg8e32.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG8E32_V, MASK_VLSSEG8E32_V, match_vd_neq_vm, INSN_DREF },
+{"vssseg8e32.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG8E32_V, MASK_VSSSEG8E32_V, match_vd_neq_vm, INSN_DREF },
 
-{"vlsseg2e16.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG2E16V, MASK_VLSSEG2E16V, match_vd_neq_vm, INSN_DREF },
-{"vssseg2e16.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG2E16V, MASK_VSSSEG2E16V, match_opcode, INSN_DREF },
-{"vlsseg3e16.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG3E16V, MASK_VLSSEG3E16V, match_vd_neq_vm, INSN_DREF },
-{"vssseg3e16.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG3E16V, MASK_VSSSEG3E16V, match_opcode, INSN_DREF },
-{"vlsseg4e16.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG4E16V, MASK_VLSSEG4E16V, match_vd_neq_vm, INSN_DREF },
-{"vssseg4e16.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG4E16V, MASK_VSSSEG4E16V, match_opcode, INSN_DREF },
-{"vlsseg5e16.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG5E16V, MASK_VLSSEG5E16V, match_vd_neq_vm, INSN_DREF },
-{"vssseg5e16.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG5E16V, MASK_VSSSEG5E16V, match_opcode, INSN_DREF },
-{"vlsseg6e16.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG6E16V, MASK_VLSSEG6E16V, match_vd_neq_vm, INSN_DREF },
-{"vssseg6e16.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG6E16V, MASK_VSSSEG6E16V, match_opcode, INSN_DREF },
-{"vlsseg7e16.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG7E16V, MASK_VLSSEG7E16V, match_vd_neq_vm, INSN_DREF },
-{"vssseg7e16.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG7E16V, MASK_VSSSEG7E16V, match_opcode, INSN_DREF },
-{"vlsseg8e16.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG8E16V, MASK_VLSSEG8E16V, match_vd_neq_vm, INSN_DREF },
-{"vssseg8e16.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG8E16V, MASK_VSSSEG8E16V, match_opcode, INSN_DREF },
+{"vlsseg2e64.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG2E64_V, MASK_VLSSEG2E64_V, match_vd_neq_vm, INSN_DREF },
+{"vssseg2e64.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG2E64_V, MASK_VSSSEG2E64_V, match_vd_neq_vm, INSN_DREF },
+{"vlsseg3e64.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG3E64_V, MASK_VLSSEG3E64_V, match_vd_neq_vm, INSN_DREF },
+{"vssseg3e64.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG3E64_V, MASK_VSSSEG3E64_V, match_vd_neq_vm, INSN_DREF },
+{"vlsseg4e64.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG4E64_V, MASK_VLSSEG4E64_V, match_vd_neq_vm, INSN_DREF },
+{"vssseg4e64.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG4E64_V, MASK_VSSSEG4E64_V, match_vd_neq_vm, INSN_DREF },
+{"vlsseg5e64.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG5E64_V, MASK_VLSSEG5E64_V, match_vd_neq_vm, INSN_DREF },
+{"vssseg5e64.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG5E64_V, MASK_VSSSEG5E64_V, match_vd_neq_vm, INSN_DREF },
+{"vlsseg6e64.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG6E64_V, MASK_VLSSEG6E64_V, match_vd_neq_vm, INSN_DREF },
+{"vssseg6e64.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG6E64_V, MASK_VSSSEG6E64_V, match_vd_neq_vm, INSN_DREF },
+{"vlsseg7e64.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG7E64_V, MASK_VLSSEG7E64_V, match_vd_neq_vm, INSN_DREF },
+{"vssseg7e64.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG7E64_V, MASK_VSSSEG7E64_V, match_vd_neq_vm, INSN_DREF },
+{"vlsseg8e64.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG8E64_V, MASK_VLSSEG8E64_V, match_vd_neq_vm, INSN_DREF },
+{"vssseg8e64.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG8E64_V, MASK_VSSSEG8E64_V, match_vd_neq_vm, INSN_DREF },
 
-{"vlsseg2e32.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG2E32V, MASK_VLSSEG2E32V, match_vd_neq_vm, INSN_DREF },
-{"vssseg2e32.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG2E32V, MASK_VSSSEG2E32V, match_opcode, INSN_DREF },
-{"vlsseg3e32.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG3E32V, MASK_VLSSEG3E32V, match_vd_neq_vm, INSN_DREF },
-{"vssseg3e32.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG3E32V, MASK_VSSSEG3E32V, match_opcode, INSN_DREF },
-{"vlsseg4e32.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG4E32V, MASK_VLSSEG4E32V, match_vd_neq_vm, INSN_DREF },
-{"vssseg4e32.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG4E32V, MASK_VSSSEG4E32V, match_opcode, INSN_DREF },
-{"vlsseg5e32.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG5E32V, MASK_VLSSEG5E32V, match_vd_neq_vm, INSN_DREF },
-{"vssseg5e32.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG5E32V, MASK_VSSSEG5E32V, match_opcode, INSN_DREF },
-{"vlsseg6e32.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG6E32V, MASK_VLSSEG6E32V, match_vd_neq_vm, INSN_DREF },
-{"vssseg6e32.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG6E32V, MASK_VSSSEG6E32V, match_opcode, INSN_DREF },
-{"vlsseg7e32.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG7E32V, MASK_VLSSEG7E32V, match_vd_neq_vm, INSN_DREF },
-{"vssseg7e32.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG7E32V, MASK_VSSSEG7E32V, match_opcode, INSN_DREF },
-{"vlsseg8e32.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG8E32V, MASK_VLSSEG8E32V, match_vd_neq_vm, INSN_DREF },
-{"vssseg8e32.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG8E32V, MASK_VSSSEG8E32V, match_opcode, INSN_DREF },
+{"vloxseg2ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXSEG2EI8_V, MASK_VLOXSEG2EI8_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsoxseg2ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXSEG2EI8_V, MASK_VSOXSEG2EI8_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vloxseg3ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXSEG3EI8_V, MASK_VLOXSEG3EI8_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsoxseg3ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXSEG3EI8_V, MASK_VSOXSEG3EI8_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vloxseg4ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXSEG4EI8_V, MASK_VLOXSEG4EI8_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsoxseg4ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXSEG4EI8_V, MASK_VSOXSEG4EI8_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vloxseg5ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXSEG5EI8_V, MASK_VLOXSEG5EI8_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsoxseg5ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXSEG5EI8_V, MASK_VSOXSEG5EI8_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vloxseg6ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXSEG6EI8_V, MASK_VLOXSEG6EI8_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsoxseg6ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXSEG6EI8_V, MASK_VSOXSEG6EI8_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vloxseg7ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXSEG7EI8_V, MASK_VLOXSEG7EI8_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsoxseg7ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXSEG7EI8_V, MASK_VSOXSEG7EI8_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vloxseg8ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXSEG8EI8_V, MASK_VLOXSEG8EI8_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsoxseg8ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXSEG8EI8_V, MASK_VSOXSEG8EI8_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
 
-{"vlsseg2e64.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG2E64V, MASK_VLSSEG2E64V, match_vd_neq_vm, INSN_DREF },
-{"vssseg2e64.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG2E64V, MASK_VSSSEG2E64V, match_opcode, INSN_DREF },
-{"vlsseg3e64.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG3E64V, MASK_VLSSEG3E64V, match_vd_neq_vm, INSN_DREF },
-{"vssseg3e64.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG3E64V, MASK_VSSSEG3E64V, match_opcode, INSN_DREF },
-{"vlsseg4e64.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG4E64V, MASK_VLSSEG4E64V, match_vd_neq_vm, INSN_DREF },
-{"vssseg4e64.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG4E64V, MASK_VSSSEG4E64V, match_opcode, INSN_DREF },
-{"vlsseg5e64.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG5E64V, MASK_VLSSEG5E64V, match_vd_neq_vm, INSN_DREF },
-{"vssseg5e64.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG5E64V, MASK_VSSSEG5E64V, match_opcode, INSN_DREF },
-{"vlsseg6e64.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG6E64V, MASK_VLSSEG6E64V, match_vd_neq_vm, INSN_DREF },
-{"vssseg6e64.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG6E64V, MASK_VSSSEG6E64V, match_opcode, INSN_DREF },
-{"vlsseg7e64.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG7E64V, MASK_VLSSEG7E64V, match_vd_neq_vm, INSN_DREF },
-{"vssseg7e64.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG7E64V, MASK_VSSSEG7E64V, match_opcode, INSN_DREF },
-{"vlsseg8e64.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG8E64V, MASK_VLSSEG8E64V, match_vd_neq_vm, INSN_DREF },
-{"vssseg8e64.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG8E64V, MASK_VSSSEG8E64V, match_opcode, INSN_DREF },
+{"vloxseg2ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXSEG2EI16_V, MASK_VLOXSEG2EI16_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsoxseg2ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXSEG2EI16_V, MASK_VSOXSEG2EI16_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vloxseg3ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXSEG3EI16_V, MASK_VLOXSEG3EI16_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsoxseg3ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXSEG3EI16_V, MASK_VSOXSEG3EI16_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vloxseg4ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXSEG4EI16_V, MASK_VLOXSEG4EI16_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsoxseg4ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXSEG4EI16_V, MASK_VSOXSEG4EI16_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vloxseg5ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXSEG5EI16_V, MASK_VLOXSEG5EI16_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsoxseg5ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXSEG5EI16_V, MASK_VSOXSEG5EI16_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vloxseg6ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXSEG6EI16_V, MASK_VLOXSEG6EI16_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsoxseg6ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXSEG6EI16_V, MASK_VSOXSEG6EI16_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vloxseg7ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXSEG7EI16_V, MASK_VLOXSEG7EI16_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsoxseg7ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXSEG7EI16_V, MASK_VSOXSEG7EI16_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vloxseg8ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXSEG8EI16_V, MASK_VLOXSEG8EI16_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsoxseg8ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXSEG8EI16_V, MASK_VSOXSEG8EI16_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
 
-{"vlsseg2e128.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG2E128V, MASK_VLSSEG2E128V, match_vd_neq_vm, INSN_DREF },
-{"vssseg2e128.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG2E128V, MASK_VSSSEG2E128V, match_opcode, INSN_DREF },
-{"vlsseg3e128.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG3E128V, MASK_VLSSEG3E128V, match_vd_neq_vm, INSN_DREF },
-{"vssseg3e128.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG3E128V, MASK_VSSSEG3E128V, match_opcode, INSN_DREF },
-{"vlsseg4e128.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG4E128V, MASK_VLSSEG4E128V, match_vd_neq_vm, INSN_DREF },
-{"vssseg4e128.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG4E128V, MASK_VSSSEG4E128V, match_opcode, INSN_DREF },
-{"vlsseg5e128.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG5E128V, MASK_VLSSEG5E128V, match_vd_neq_vm, INSN_DREF },
-{"vssseg5e128.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG5E128V, MASK_VSSSEG5E128V, match_opcode, INSN_DREF },
-{"vlsseg6e128.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG6E128V, MASK_VLSSEG6E128V, match_vd_neq_vm, INSN_DREF },
-{"vssseg6e128.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG6E128V, MASK_VSSSEG6E128V, match_opcode, INSN_DREF },
-{"vlsseg7e128.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG7E128V, MASK_VLSSEG7E128V, match_vd_neq_vm, INSN_DREF },
-{"vssseg7e128.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG7E128V, MASK_VSSSEG7E128V, match_opcode, INSN_DREF },
-{"vlsseg8e128.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG8E128V, MASK_VLSSEG8E128V, match_vd_neq_vm, INSN_DREF },
-{"vssseg8e128.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG8E128V, MASK_VSSSEG8E128V, match_opcode, INSN_DREF },
+{"vloxseg2ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXSEG2EI32_V, MASK_VLOXSEG2EI32_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsoxseg2ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXSEG2EI32_V, MASK_VSOXSEG2EI32_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vloxseg3ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXSEG3EI32_V, MASK_VLOXSEG3EI32_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsoxseg3ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXSEG3EI32_V, MASK_VSOXSEG3EI32_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vloxseg4ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXSEG4EI32_V, MASK_VLOXSEG4EI32_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsoxseg4ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXSEG4EI32_V, MASK_VSOXSEG4EI32_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vloxseg5ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXSEG5EI32_V, MASK_VLOXSEG5EI32_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsoxseg5ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXSEG5EI32_V, MASK_VSOXSEG5EI32_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vloxseg6ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXSEG6EI32_V, MASK_VLOXSEG6EI32_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsoxseg6ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXSEG6EI32_V, MASK_VSOXSEG6EI32_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vloxseg7ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXSEG7EI32_V, MASK_VLOXSEG7EI32_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsoxseg7ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXSEG7EI32_V, MASK_VSOXSEG7EI32_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vloxseg8ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXSEG8EI32_V, MASK_VLOXSEG8EI32_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsoxseg8ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXSEG8EI32_V, MASK_VSOXSEG8EI32_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
 
-{"vlsseg2e256.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG2E256V, MASK_VLSSEG2E256V, match_vd_neq_vm, INSN_DREF },
-{"vssseg2e256.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG2E256V, MASK_VSSSEG2E256V, match_opcode, INSN_DREF },
-{"vlsseg3e256.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG3E256V, MASK_VLSSEG3E256V, match_vd_neq_vm, INSN_DREF },
-{"vssseg3e256.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG3E256V, MASK_VSSSEG3E256V, match_opcode, INSN_DREF },
-{"vlsseg4e256.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG4E256V, MASK_VLSSEG4E256V, match_vd_neq_vm, INSN_DREF },
-{"vssseg4e256.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG4E256V, MASK_VSSSEG4E256V, match_opcode, INSN_DREF },
-{"vlsseg5e256.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG5E256V, MASK_VLSSEG5E256V, match_vd_neq_vm, INSN_DREF },
-{"vssseg5e256.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG5E256V, MASK_VSSSEG5E256V, match_opcode, INSN_DREF },
-{"vlsseg6e256.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG6E256V, MASK_VLSSEG6E256V, match_vd_neq_vm, INSN_DREF },
-{"vssseg6e256.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG6E256V, MASK_VSSSEG6E256V, match_opcode, INSN_DREF },
-{"vlsseg7e256.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG7E256V, MASK_VLSSEG7E256V, match_vd_neq_vm, INSN_DREF },
-{"vssseg7e256.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG7E256V, MASK_VSSSEG7E256V, match_opcode, INSN_DREF },
-{"vlsseg8e256.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG8E256V, MASK_VLSSEG8E256V, match_vd_neq_vm, INSN_DREF },
-{"vssseg8e256.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG8E256V, MASK_VSSSEG8E256V, match_opcode, INSN_DREF },
+{"vloxseg2ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXSEG2EI64_V, MASK_VLOXSEG2EI64_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsoxseg2ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXSEG2EI64_V, MASK_VSOXSEG2EI64_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vloxseg3ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXSEG3EI64_V, MASK_VLOXSEG3EI64_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsoxseg3ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXSEG3EI64_V, MASK_VSOXSEG3EI64_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vloxseg4ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXSEG4EI64_V, MASK_VLOXSEG4EI64_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsoxseg4ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXSEG4EI64_V, MASK_VSOXSEG4EI64_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vloxseg5ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXSEG5EI64_V, MASK_VLOXSEG5EI64_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsoxseg5ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXSEG5EI64_V, MASK_VSOXSEG5EI64_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vloxseg6ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXSEG6EI64_V, MASK_VLOXSEG6EI64_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsoxseg6ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXSEG6EI64_V, MASK_VSOXSEG6EI64_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vloxseg7ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXSEG7EI64_V, MASK_VLOXSEG7EI64_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsoxseg7ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXSEG7EI64_V, MASK_VSOXSEG7EI64_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vloxseg8ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLOXSEG8EI64_V, MASK_VLOXSEG8EI64_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsoxseg8ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSOXSEG8EI64_V, MASK_VSOXSEG8EI64_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
 
-{"vlsseg2e512.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG2E512V, MASK_VLSSEG2E512V, match_vd_neq_vm, INSN_DREF },
-{"vssseg2e512.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG2E512V, MASK_VSSSEG2E512V, match_opcode, INSN_DREF },
-{"vlsseg3e512.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG3E512V, MASK_VLSSEG3E512V, match_vd_neq_vm, INSN_DREF },
-{"vssseg3e512.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG3E512V, MASK_VSSSEG3E512V, match_opcode, INSN_DREF },
-{"vlsseg4e512.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG4E512V, MASK_VLSSEG4E512V, match_vd_neq_vm, INSN_DREF },
-{"vssseg4e512.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG4E512V, MASK_VSSSEG4E512V, match_opcode, INSN_DREF },
-{"vlsseg5e512.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG5E512V, MASK_VLSSEG5E512V, match_vd_neq_vm, INSN_DREF },
-{"vssseg5e512.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG5E512V, MASK_VSSSEG5E512V, match_opcode, INSN_DREF },
-{"vlsseg6e512.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG6E512V, MASK_VLSSEG6E512V, match_vd_neq_vm, INSN_DREF },
-{"vssseg6e512.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG6E512V, MASK_VSSSEG6E512V, match_opcode, INSN_DREF },
-{"vlsseg7e512.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG7E512V, MASK_VLSSEG7E512V, match_vd_neq_vm, INSN_DREF },
-{"vssseg7e512.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG7E512V, MASK_VSSSEG7E512V, match_opcode, INSN_DREF },
-{"vlsseg8e512.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG8E512V, MASK_VLSSEG8E512V, match_vd_neq_vm, INSN_DREF },
-{"vssseg8e512.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG8E512V, MASK_VSSSEG8E512V, match_opcode, INSN_DREF },
+{"vluxseg2ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXSEG2EI8_V, MASK_VLUXSEG2EI8_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsuxseg2ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXSEG2EI8_V, MASK_VSUXSEG2EI8_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vluxseg3ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXSEG3EI8_V, MASK_VLUXSEG3EI8_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsuxseg3ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXSEG3EI8_V, MASK_VSUXSEG3EI8_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vluxseg4ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXSEG4EI8_V, MASK_VLUXSEG4EI8_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsuxseg4ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXSEG4EI8_V, MASK_VSUXSEG4EI8_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vluxseg5ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXSEG5EI8_V, MASK_VLUXSEG5EI8_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsuxseg5ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXSEG5EI8_V, MASK_VSUXSEG5EI8_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vluxseg6ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXSEG6EI8_V, MASK_VLUXSEG6EI8_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsuxseg6ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXSEG6EI8_V, MASK_VSUXSEG6EI8_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vluxseg7ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXSEG7EI8_V, MASK_VLUXSEG7EI8_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsuxseg7ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXSEG7EI8_V, MASK_VSUXSEG7EI8_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vluxseg8ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXSEG8EI8_V, MASK_VLUXSEG8EI8_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsuxseg8ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXSEG8EI8_V, MASK_VSUXSEG8EI8_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
 
-{"vlsseg2e1024.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG2E1024V, MASK_VLSSEG2E1024V, match_vd_neq_vm, INSN_DREF },
-{"vssseg2e1024.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG2E1024V, MASK_VSSSEG2E1024V, match_opcode, INSN_DREF },
-{"vlsseg3e1024.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG3E1024V, MASK_VLSSEG3E1024V, match_vd_neq_vm, INSN_DREF },
-{"vssseg3e1024.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG3E1024V, MASK_VSSSEG3E1024V, match_opcode, INSN_DREF },
-{"vlsseg4e1024.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG4E1024V, MASK_VLSSEG4E1024V, match_vd_neq_vm, INSN_DREF },
-{"vssseg4e1024.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG4E1024V, MASK_VSSSEG4E1024V, match_opcode, INSN_DREF },
-{"vlsseg5e1024.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG5E1024V, MASK_VLSSEG5E1024V, match_vd_neq_vm, INSN_DREF },
-{"vssseg5e1024.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG5E1024V, MASK_VSSSEG5E1024V, match_opcode, INSN_DREF },
-{"vlsseg6e1024.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG6E1024V, MASK_VLSSEG6E1024V, match_vd_neq_vm, INSN_DREF },
-{"vssseg6e1024.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG6E1024V, MASK_VSSSEG6E1024V, match_opcode, INSN_DREF },
-{"vlsseg7e1024.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG7E1024V, MASK_VLSSEG7E1024V, match_vd_neq_vm, INSN_DREF },
-{"vssseg7e1024.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG7E1024V, MASK_VSSSEG7E1024V, match_opcode, INSN_DREF },
-{"vlsseg8e1024.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VLSSEG8E1024V, MASK_VLSSEG8E1024V, match_vd_neq_vm, INSN_DREF },
-{"vssseg8e1024.v",  0, {"V", 0},  "Vd,0(s),tVm", MATCH_VSSSEG8E1024V, MASK_VSSSEG8E1024V, match_opcode, INSN_DREF },
+{"vluxseg2ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXSEG2EI16_V, MASK_VLUXSEG2EI16_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsuxseg2ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXSEG2EI16_V, MASK_VSUXSEG2EI16_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vluxseg3ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXSEG3EI16_V, MASK_VLUXSEG3EI16_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsuxseg3ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXSEG3EI16_V, MASK_VSUXSEG3EI16_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vluxseg4ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXSEG4EI16_V, MASK_VLUXSEG4EI16_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsuxseg4ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXSEG4EI16_V, MASK_VSUXSEG4EI16_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vluxseg5ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXSEG5EI16_V, MASK_VLUXSEG5EI16_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsuxseg5ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXSEG5EI16_V, MASK_VSUXSEG5EI16_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vluxseg6ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXSEG6EI16_V, MASK_VLUXSEG6EI16_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsuxseg6ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXSEG6EI16_V, MASK_VSUXSEG6EI16_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vluxseg7ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXSEG7EI16_V, MASK_VLUXSEG7EI16_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsuxseg7ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXSEG7EI16_V, MASK_VSUXSEG7EI16_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vluxseg8ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXSEG8EI16_V, MASK_VLUXSEG8EI16_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsuxseg8ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXSEG8EI16_V, MASK_VSUXSEG8EI16_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
 
-{"vlxseg2ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG2EI8V, MASK_VLXSEG2EI8V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg2ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG2EI8V, MASK_VSXSEG2EI8V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg3ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG3EI8V, MASK_VLXSEG3EI8V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg3ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG3EI8V, MASK_VSXSEG3EI8V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg4ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG4EI8V, MASK_VLXSEG4EI8V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg4ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG4EI8V, MASK_VSXSEG4EI8V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg5ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG5EI8V, MASK_VLXSEG5EI8V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg5ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG5EI8V, MASK_VSXSEG5EI8V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg6ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG6EI8V, MASK_VLXSEG6EI8V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg6ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG6EI8V, MASK_VSXSEG6EI8V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg7ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG7EI8V, MASK_VLXSEG7EI8V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg7ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG7EI8V, MASK_VSXSEG7EI8V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg8ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG8EI8V, MASK_VLXSEG8EI8V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg8ei8.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG8EI8V, MASK_VSXSEG8EI8V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vluxseg2ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXSEG2EI32_V, MASK_VLUXSEG2EI32_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsuxseg2ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXSEG2EI32_V, MASK_VSUXSEG2EI32_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vluxseg3ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXSEG3EI32_V, MASK_VLUXSEG3EI32_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsuxseg3ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXSEG3EI32_V, MASK_VSUXSEG3EI32_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vluxseg4ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXSEG4EI32_V, MASK_VLUXSEG4EI32_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsuxseg4ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXSEG4EI32_V, MASK_VSUXSEG4EI32_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vluxseg5ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXSEG5EI32_V, MASK_VLUXSEG5EI32_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsuxseg5ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXSEG5EI32_V, MASK_VSUXSEG5EI32_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vluxseg6ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXSEG6EI32_V, MASK_VLUXSEG6EI32_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsuxseg6ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXSEG6EI32_V, MASK_VSUXSEG6EI32_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vluxseg7ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXSEG7EI32_V, MASK_VLUXSEG7EI32_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsuxseg7ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXSEG7EI32_V, MASK_VSUXSEG7EI32_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vluxseg8ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXSEG8EI32_V, MASK_VLUXSEG8EI32_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsuxseg8ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXSEG8EI32_V, MASK_VSUXSEG8EI32_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
 
-{"vlxseg2ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG2EI16V, MASK_VLXSEG2EI16V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg2ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG2EI16V, MASK_VSXSEG2EI16V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg3ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG3EI16V, MASK_VLXSEG3EI16V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg3ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG3EI16V, MASK_VSXSEG3EI16V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg4ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG4EI16V, MASK_VLXSEG4EI16V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg4ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG4EI16V, MASK_VSXSEG4EI16V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg5ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG5EI16V, MASK_VLXSEG5EI16V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg5ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG5EI16V, MASK_VSXSEG5EI16V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg6ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG6EI16V, MASK_VLXSEG6EI16V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg6ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG6EI16V, MASK_VSXSEG6EI16V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg7ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG7EI16V, MASK_VLXSEG7EI16V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg7ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG7EI16V, MASK_VSXSEG7EI16V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg8ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG8EI16V, MASK_VLXSEG8EI16V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg8ei16.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG8EI16V, MASK_VSXSEG8EI16V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vluxseg2ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXSEG2EI64_V, MASK_VLUXSEG2EI64_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsuxseg2ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXSEG2EI64_V, MASK_VSUXSEG2EI64_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vluxseg3ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXSEG3EI64_V, MASK_VLUXSEG3EI64_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsuxseg3ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXSEG3EI64_V, MASK_VSUXSEG3EI64_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vluxseg4ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXSEG4EI64_V, MASK_VLUXSEG4EI64_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsuxseg4ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXSEG4EI64_V, MASK_VSUXSEG4EI64_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vluxseg5ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXSEG5EI64_V, MASK_VLUXSEG5EI64_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsuxseg5ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXSEG5EI64_V, MASK_VSUXSEG5EI64_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vluxseg6ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXSEG6EI64_V, MASK_VLUXSEG6EI64_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsuxseg6ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXSEG6EI64_V, MASK_VSUXSEG6EI64_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vluxseg7ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXSEG7EI64_V, MASK_VLUXSEG7EI64_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsuxseg7ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXSEG7EI64_V, MASK_VSUXSEG7EI64_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vluxseg8ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLUXSEG8EI64_V, MASK_VLUXSEG8EI64_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vsuxseg8ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSUXSEG8EI64_V, MASK_VSUXSEG8EI64_V, match_vd_neq_vs2_neq_vm, INSN_DREF },
 
-{"vlxseg2ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG2EI32V, MASK_VLXSEG2EI32V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg2ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG2EI32V, MASK_VSXSEG2EI32V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg3ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG3EI32V, MASK_VLXSEG3EI32V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg3ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG3EI32V, MASK_VSXSEG3EI32V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg4ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG4EI32V, MASK_VLXSEG4EI32V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg4ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG4EI32V, MASK_VSXSEG4EI32V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg5ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG5EI32V, MASK_VLXSEG5EI32V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg5ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG5EI32V, MASK_VSXSEG5EI32V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg6ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG6EI32V, MASK_VLXSEG6EI32V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg6ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG6EI32V, MASK_VSXSEG6EI32V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg7ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG7EI32V, MASK_VLXSEG7EI32V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg7ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG7EI32V, MASK_VSXSEG7EI32V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg8ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG8EI32V, MASK_VLXSEG8EI32V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg8ei32.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG8EI32V, MASK_VSXSEG8EI32V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vlseg2e8ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG2E8FF_V, MASK_VLSEG2E8FF_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg3e8ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG3E8FF_V, MASK_VLSEG3E8FF_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg4e8ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG4E8FF_V, MASK_VLSEG4E8FF_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg5e8ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG5E8FF_V, MASK_VLSEG5E8FF_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg6e8ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG6E8FF_V, MASK_VLSEG6E8FF_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg7e8ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG7E8FF_V, MASK_VLSEG7E8FF_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg8e8ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG8E8FF_V, MASK_VLSEG8E8FF_V, match_vd_neq_vm, INSN_DREF },
 
-{"vlxseg2ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG2EI64V, MASK_VLXSEG2EI64V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg2ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG2EI64V, MASK_VSXSEG2EI64V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg3ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG3EI64V, MASK_VLXSEG3EI64V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg3ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG3EI64V, MASK_VSXSEG3EI64V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg4ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG4EI64V, MASK_VLXSEG4EI64V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg4ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG4EI64V, MASK_VSXSEG4EI64V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg5ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG5EI64V, MASK_VLXSEG5EI64V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg5ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG5EI64V, MASK_VSXSEG5EI64V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg6ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG6EI64V, MASK_VLXSEG6EI64V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg6ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG6EI64V, MASK_VSXSEG6EI64V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg7ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG7EI64V, MASK_VLXSEG7EI64V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg7ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG7EI64V, MASK_VSXSEG7EI64V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg8ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG8EI64V, MASK_VLXSEG8EI64V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg8ei64.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG8EI64V, MASK_VSXSEG8EI64V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vlseg2e16ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG2E16FF_V, MASK_VLSEG2E16FF_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg3e16ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG3E16FF_V, MASK_VLSEG3E16FF_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg4e16ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG4E16FF_V, MASK_VLSEG4E16FF_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg5e16ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG5E16FF_V, MASK_VLSEG5E16FF_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg6e16ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG6E16FF_V, MASK_VLSEG6E16FF_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg7e16ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG7E16FF_V, MASK_VLSEG7E16FF_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg8e16ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG8E16FF_V, MASK_VLSEG8E16FF_V, match_vd_neq_vm, INSN_DREF },
 
-{"vlxseg2ei128.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG2EI128V, MASK_VLXSEG2EI128V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg2ei128.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG2EI128V, MASK_VSXSEG2EI128V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg3ei128.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG3EI128V, MASK_VLXSEG3EI128V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg3ei128.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG3EI128V, MASK_VSXSEG3EI128V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg4ei128.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG4EI128V, MASK_VLXSEG4EI128V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg4ei128.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG4EI128V, MASK_VSXSEG4EI128V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg5ei128.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG5EI128V, MASK_VLXSEG5EI128V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg5ei128.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG5EI128V, MASK_VSXSEG5EI128V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg6ei128.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG6EI128V, MASK_VLXSEG6EI128V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg6ei128.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG6EI128V, MASK_VSXSEG6EI128V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg7ei128.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG7EI128V, MASK_VLXSEG7EI128V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg7ei128.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG7EI128V, MASK_VSXSEG7EI128V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg8ei128.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG8EI128V, MASK_VLXSEG8EI128V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg8ei128.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG8EI128V, MASK_VSXSEG8EI128V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vlseg2e32ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG2E32FF_V, MASK_VLSEG2E32FF_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg3e32ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG3E32FF_V, MASK_VLSEG3E32FF_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg4e32ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG4E32FF_V, MASK_VLSEG4E32FF_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg5e32ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG5E32FF_V, MASK_VLSEG5E32FF_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg6e32ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG6E32FF_V, MASK_VLSEG6E32FF_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg7e32ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG7E32FF_V, MASK_VLSEG7E32FF_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg8e32ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG8E32FF_V, MASK_VLSEG8E32FF_V, match_vd_neq_vm, INSN_DREF },
 
-{"vlxseg2ei256.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG2EI256V, MASK_VLXSEG2EI256V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg2ei256.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG2EI256V, MASK_VSXSEG2EI256V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg3ei256.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG3EI256V, MASK_VLXSEG3EI256V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg3ei256.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG3EI256V, MASK_VSXSEG3EI256V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg4ei256.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG4EI256V, MASK_VLXSEG4EI256V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg4ei256.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG4EI256V, MASK_VSXSEG4EI256V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg5ei256.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG5EI256V, MASK_VLXSEG5EI256V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg5ei256.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG5EI256V, MASK_VSXSEG5EI256V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg6ei256.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG6EI256V, MASK_VLXSEG6EI256V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg6ei256.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG6EI256V, MASK_VSXSEG6EI256V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg7ei256.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG7EI256V, MASK_VLXSEG7EI256V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg7ei256.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG7EI256V, MASK_VSXSEG7EI256V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg8ei256.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG8EI256V, MASK_VLXSEG8EI256V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg8ei256.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG8EI256V, MASK_VSXSEG8EI256V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vlseg2e64ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG2E64FF_V, MASK_VLSEG2E64FF_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg3e64ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG3E64FF_V, MASK_VLSEG3E64FF_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg4e64ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG4E64FF_V, MASK_VLSEG4E64FF_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg5e64ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG5E64FF_V, MASK_VLSEG5E64FF_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg6e64ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG6E64FF_V, MASK_VLSEG6E64FF_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg7e64ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG7E64FF_V, MASK_VLSEG7E64FF_V, match_vd_neq_vm, INSN_DREF },
+{"vlseg8e64ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG8E64FF_V, MASK_VLSEG8E64FF_V, match_vd_neq_vm, INSN_DREF },
 
-{"vlxseg2ei512.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG2EI512V, MASK_VLXSEG2EI512V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg2ei512.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG2EI512V, MASK_VSXSEG2EI512V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg3ei512.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG3EI512V, MASK_VLXSEG3EI512V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg3ei512.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG3EI512V, MASK_VSXSEG3EI512V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg4ei512.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG4EI512V, MASK_VLXSEG4EI512V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg4ei512.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG4EI512V, MASK_VSXSEG4EI512V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg5ei512.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG5EI512V, MASK_VLXSEG5EI512V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg5ei512.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG5EI512V, MASK_VSXSEG5EI512V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg6ei512.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG6EI512V, MASK_VLXSEG6EI512V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg6ei512.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG6EI512V, MASK_VSXSEG6EI512V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg7ei512.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG7EI512V, MASK_VLXSEG7EI512V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg7ei512.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG7EI512V, MASK_VSXSEG7EI512V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg8ei512.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG8EI512V, MASK_VLXSEG8EI512V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg8ei512.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG8EI512V, MASK_VSXSEG8EI512V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vl1r.v",      0, {"V", 0},  "Vd,0(s)", MATCH_VL1RE8_V,  MASK_VL1RE8_V,  match_vls_nf_rv, INSN_DREF|INSN_ALIAS },
+{"vl1re8.v",    0, {"V", 0},  "Vd,0(s)", MATCH_VL1RE8_V,  MASK_VL1RE8_V,  match_vls_nf_rv, INSN_DREF },
+{"vl1re16.v",   0, {"V", 0},  "Vd,0(s)", MATCH_VL1RE16_V, MASK_VL1RE16_V, match_vls_nf_rv, INSN_DREF },
+{"vl1re32.v",   0, {"V", 0},  "Vd,0(s)", MATCH_VL1RE32_V, MASK_VL1RE32_V, match_vls_nf_rv, INSN_DREF },
+{"vl1re64.v",   0, {"V", 0},  "Vd,0(s)", MATCH_VL1RE64_V, MASK_VL1RE64_V, match_vls_nf_rv, INSN_DREF },
 
-{"vlxseg2ei1024.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG2EI1024V, MASK_VLXSEG2EI1024V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg2ei1024.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG2EI1024V, MASK_VSXSEG2EI1024V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg3ei1024.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG3EI1024V, MASK_VLXSEG3EI1024V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg3ei1024.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG3EI1024V, MASK_VSXSEG3EI1024V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg4ei1024.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG4EI1024V, MASK_VLXSEG4EI1024V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg4ei1024.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG4EI1024V, MASK_VSXSEG4EI1024V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg5ei1024.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG5EI1024V, MASK_VLXSEG5EI1024V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg5ei1024.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG5EI1024V, MASK_VSXSEG5EI1024V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg6ei1024.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG6EI1024V, MASK_VLXSEG6EI1024V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg6ei1024.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG6EI1024V, MASK_VSXSEG6EI1024V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg7ei1024.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG7EI1024V, MASK_VLXSEG7EI1024V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg7ei1024.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG7EI1024V, MASK_VSXSEG7EI1024V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vlxseg8ei1024.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VLXSEG8EI1024V, MASK_VLXSEG8EI1024V, match_vd_neq_vs2_neq_vm, INSN_DREF },
-{"vsxseg8ei1024.v",  0, {"V", 0},  "Vd,0(s),VtVm", MATCH_VSXSEG8EI1024V, MASK_VSXSEG8EI1024V, match_vd_neq_vs2_neq_vm, INSN_DREF },
+{"vl2r.v",      0, {"V", 0},  "Vd,0(s)", MATCH_VL2RE8_V,  MASK_VL2RE8_V,  match_vls_nf_rv, INSN_DREF|INSN_ALIAS },
+{"vl2re8.v",    0, {"V", 0},  "Vd,0(s)", MATCH_VL2RE8_V,  MASK_VL2RE8_V,  match_vls_nf_rv, INSN_DREF },
+{"vl2re16.v",   0, {"V", 0},  "Vd,0(s)", MATCH_VL2RE16_V, MASK_VL2RE16_V, match_vls_nf_rv, INSN_DREF },
+{"vl2re32.v",   0, {"V", 0},  "Vd,0(s)", MATCH_VL2RE32_V, MASK_VL2RE32_V, match_vls_nf_rv, INSN_DREF },
+{"vl2re64.v",   0, {"V", 0},  "Vd,0(s)", MATCH_VL2RE64_V, MASK_VL2RE64_V, match_vls_nf_rv, INSN_DREF },
 
-{"vlseg2e8ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG2E8FFV, MASK_VLSEG2E8FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg3e8ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG3E8FFV, MASK_VLSEG3E8FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg4e8ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG4E8FFV, MASK_VLSEG4E8FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg5e8ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG5E8FFV, MASK_VLSEG5E8FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg6e8ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG6E8FFV, MASK_VLSEG6E8FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg7e8ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG7E8FFV, MASK_VLSEG7E8FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg8e8ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG8E8FFV, MASK_VLSEG8E8FFV, match_vd_neq_vm, INSN_DREF },
+{"vl4r.v",      0, {"V", 0},  "Vd,0(s)", MATCH_VL4RE8_V,  MASK_VL4RE8_V,  match_vls_nf_rv, INSN_DREF|INSN_ALIAS },
+{"vl4re8.v",    0, {"V", 0},  "Vd,0(s)", MATCH_VL4RE8_V,  MASK_VL4RE8_V,  match_vls_nf_rv, INSN_DREF },
+{"vl4re16.v",   0, {"V", 0},  "Vd,0(s)", MATCH_VL4RE16_V, MASK_VL4RE16_V, match_vls_nf_rv, INSN_DREF },
+{"vl4re32.v",   0, {"V", 0},  "Vd,0(s)", MATCH_VL4RE32_V, MASK_VL4RE32_V, match_vls_nf_rv, INSN_DREF },
+{"vl4re64.v",   0, {"V", 0},  "Vd,0(s)", MATCH_VL4RE64_V, MASK_VL4RE64_V, match_vls_nf_rv, INSN_DREF },
 
-{"vlseg2e16ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG2E16FFV, MASK_VLSEG2E16FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg3e16ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG3E16FFV, MASK_VLSEG3E16FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg4e16ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG4E16FFV, MASK_VLSEG4E16FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg5e16ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG5E16FFV, MASK_VLSEG5E16FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg6e16ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG6E16FFV, MASK_VLSEG6E16FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg7e16ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG7E16FFV, MASK_VLSEG7E16FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg8e16ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG8E16FFV, MASK_VLSEG8E16FFV, match_vd_neq_vm, INSN_DREF },
+{"vl8r.v",      0, {"V", 0},  "Vd,0(s)", MATCH_VL8RE8_V,  MASK_VL8RE8_V,  match_vls_nf_rv, INSN_DREF|INSN_ALIAS },
+{"vl8re8.v",    0, {"V", 0},  "Vd,0(s)", MATCH_VL8RE8_V,  MASK_VL8RE8_V,  match_vls_nf_rv, INSN_DREF },
+{"vl8re16.v",   0, {"V", 0},  "Vd,0(s)", MATCH_VL8RE16_V, MASK_VL8RE16_V, match_vls_nf_rv, INSN_DREF },
+{"vl8re32.v",   0, {"V", 0},  "Vd,0(s)", MATCH_VL8RE32_V, MASK_VL8RE32_V, match_vls_nf_rv, INSN_DREF },
+{"vl8re64.v",   0, {"V", 0},  "Vd,0(s)", MATCH_VL8RE64_V, MASK_VL8RE64_V, match_vls_nf_rv, INSN_DREF },
 
-{"vlseg2e32ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG2E32FFV, MASK_VLSEG2E32FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg3e32ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG3E32FFV, MASK_VLSEG3E32FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg4e32ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG4E32FFV, MASK_VLSEG4E32FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg5e32ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG5E32FFV, MASK_VLSEG5E32FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg6e32ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG6E32FFV, MASK_VLSEG6E32FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg7e32ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG7E32FFV, MASK_VLSEG7E32FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg8e32ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG8E32FFV, MASK_VLSEG8E32FFV, match_vd_neq_vm, INSN_DREF },
+{"vs1r.v",  0, {"V", 0},  "Vd,0(s)", MATCH_VS1R_V, MASK_VS1R_V, match_vls_nf_rv, INSN_DREF },
+{"vs2r.v",  0, {"V", 0},  "Vd,0(s)", MATCH_VS2R_V, MASK_VS2R_V, match_vls_nf_rv, INSN_DREF },
+{"vs4r.v",  0, {"V", 0},  "Vd,0(s)", MATCH_VS4R_V, MASK_VS4R_V, match_vls_nf_rv, INSN_DREF },
+{"vs8r.v",  0, {"V", 0},  "Vd,0(s)", MATCH_VS8R_V, MASK_VS8R_V, match_vls_nf_rv, INSN_DREF },
 
-{"vlseg2e64ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG2E64FFV, MASK_VLSEG2E64FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg3e64ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG3E64FFV, MASK_VLSEG3E64FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg4e64ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG4E64FFV, MASK_VLSEG4E64FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg5e64ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG5E64FFV, MASK_VLSEG5E64FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg6e64ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG6E64FFV, MASK_VLSEG6E64FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg7e64ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG7E64FFV, MASK_VLSEG7E64FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg8e64ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG8E64FFV, MASK_VLSEG8E64FFV, match_vd_neq_vm, INSN_DREF },
+{"vamoaddei8.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOADDEI8_V, MASK_VAMOADDEI8_V, match_vd_neq_vm, INSN_DREF},
+{"vamoswapei8.v",  0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOSWAPEI8_V, MASK_VAMOSWAPEI8_V, match_vd_neq_vm, INSN_DREF},
+{"vamoxorei8.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOXOREI8_V, MASK_VAMOXOREI8_V, match_vd_neq_vm, INSN_DREF},
+{"vamoandei8.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOANDEI8_V, MASK_VAMOANDEI8_V, match_vd_neq_vm, INSN_DREF},
+{"vamoorei8.v",    0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOOREI8_V, MASK_VAMOOREI8_V, match_vd_neq_vm, INSN_DREF},
+{"vamominei8.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMINEI8_V, MASK_VAMOMINEI8_V, match_vd_neq_vm, INSN_DREF},
+{"vamomaxei8.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMAXEI8_V, MASK_VAMOMAXEI8_V, match_vd_neq_vm, INSN_DREF},
+{"vamominuei8.v",  0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMINUEI8_V, MASK_VAMOMINUEI8_V, match_vd_neq_vm, INSN_DREF},
+{"vamomaxuei8.v",  0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMAXUEI8_V, MASK_VAMOMAXUEI8_V, match_vd_neq_vm, INSN_DREF},
 
-{"vlseg2e128ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG2E128FFV, MASK_VLSEG2E128FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg3e128ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG3E128FFV, MASK_VLSEG3E128FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg4e128ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG4E128FFV, MASK_VLSEG4E128FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg5e128ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG5E128FFV, MASK_VLSEG5E128FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg6e128ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG6E128FFV, MASK_VLSEG6E128FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg7e128ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG7E128FFV, MASK_VLSEG7E128FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg8e128ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG8E128FFV, MASK_VLSEG8E128FFV, match_vd_neq_vm, INSN_DREF },
+{"vamoaddei16.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOADDEI16_V, MASK_VAMOADDEI16_V, match_vd_neq_vm, INSN_DREF},
+{"vamoswapei16.v",  0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOSWAPEI16_V, MASK_VAMOSWAPEI16_V, match_vd_neq_vm, INSN_DREF},
+{"vamoxorei16.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOXOREI16_V, MASK_VAMOXOREI16_V, match_vd_neq_vm, INSN_DREF},
+{"vamoandei16.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOANDEI16_V, MASK_VAMOANDEI16_V, match_vd_neq_vm, INSN_DREF},
+{"vamoorei16.v",    0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOOREI16_V, MASK_VAMOOREI16_V, match_vd_neq_vm, INSN_DREF},
+{"vamominei16.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMINEI16_V, MASK_VAMOMINEI16_V, match_vd_neq_vm, INSN_DREF},
+{"vamomaxei16.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMAXEI16_V, MASK_VAMOMAXEI16_V, match_vd_neq_vm, INSN_DREF},
+{"vamominuei16.v",  0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMINUEI16_V, MASK_VAMOMINUEI16_V, match_vd_neq_vm, INSN_DREF},
+{"vamomaxuei16.v",  0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMAXUEI16_V, MASK_VAMOMAXUEI16_V, match_vd_neq_vm, INSN_DREF},
 
-{"vlseg2e256ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG2E256FFV, MASK_VLSEG2E256FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg3e256ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG3E256FFV, MASK_VLSEG3E256FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg4e256ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG4E256FFV, MASK_VLSEG4E256FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg5e256ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG5E256FFV, MASK_VLSEG5E256FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg6e256ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG6E256FFV, MASK_VLSEG6E256FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg7e256ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG7E256FFV, MASK_VLSEG7E256FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg8e256ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG8E256FFV, MASK_VLSEG8E256FFV, match_vd_neq_vm, INSN_DREF },
+{"vamoaddei32.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOADDEI32_V, MASK_VAMOADDEI32_V, match_vd_neq_vm, INSN_DREF},
+{"vamoswapei32.v",  0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOSWAPEI32_V, MASK_VAMOSWAPEI32_V, match_vd_neq_vm, INSN_DREF},
+{"vamoxorei32.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOXOREI32_V, MASK_VAMOXOREI32_V, match_vd_neq_vm, INSN_DREF},
+{"vamoandei32.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOANDEI32_V, MASK_VAMOANDEI32_V, match_vd_neq_vm, INSN_DREF},
+{"vamoorei32.v",    0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOOREI32_V, MASK_VAMOOREI32_V, match_vd_neq_vm, INSN_DREF},
+{"vamominei32.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMINEI32_V, MASK_VAMOMINEI32_V, match_vd_neq_vm, INSN_DREF},
+{"vamomaxei32.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMAXEI32_V, MASK_VAMOMAXEI32_V, match_vd_neq_vm, INSN_DREF},
+{"vamominuei32.v",  0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMINUEI32_V, MASK_VAMOMINUEI32_V, match_vd_neq_vm, INSN_DREF},
+{"vamomaxuei32.v",  0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMAXUEI32_V, MASK_VAMOMAXUEI32_V, match_vd_neq_vm, INSN_DREF},
 
-{"vlseg2e512ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG2E512FFV, MASK_VLSEG2E512FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg3e512ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG3E512FFV, MASK_VLSEG3E512FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg4e512ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG4E512FFV, MASK_VLSEG4E512FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg5e512ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG5E512FFV, MASK_VLSEG5E512FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg6e512ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG6E512FFV, MASK_VLSEG6E512FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg7e512ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG7E512FFV, MASK_VLSEG7E512FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg8e512ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG8E512FFV, MASK_VLSEG8E512FFV, match_vd_neq_vm, INSN_DREF },
+{"vamoaddei64.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOADDEI64_V, MASK_VAMOADDEI64_V, match_vd_neq_vm, INSN_DREF},
+{"vamoswapei64.v",  0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOSWAPEI64_V, MASK_VAMOSWAPEI64_V, match_vd_neq_vm, INSN_DREF},
+{"vamoxorei64.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOXOREI64_V, MASK_VAMOXOREI64_V, match_vd_neq_vm, INSN_DREF},
+{"vamoandei64.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOANDEI64_V, MASK_VAMOANDEI64_V, match_vd_neq_vm, INSN_DREF},
+{"vamoorei64.v",    0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOOREI64_V, MASK_VAMOOREI64_V, match_vd_neq_vm, INSN_DREF},
+{"vamominei64.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMINEI64_V, MASK_VAMOMINEI64_V, match_vd_neq_vm, INSN_DREF},
+{"vamomaxei64.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMAXEI64_V, MASK_VAMOMAXEI64_V, match_vd_neq_vm, INSN_DREF},
+{"vamominuei64.v",  0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMINUEI64_V, MASK_VAMOMINUEI64_V, match_vd_neq_vm, INSN_DREF},
+{"vamomaxuei64.v",  0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMAXUEI64_V, MASK_VAMOMAXUEI64_V, match_vd_neq_vm, INSN_DREF},
 
-{"vlseg2e1024ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG2E1024FFV, MASK_VLSEG2E1024FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg3e1024ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG3E1024FFV, MASK_VLSEG3E1024FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg4e1024ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG4E1024FFV, MASK_VLSEG4E1024FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg5e1024ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG5E1024FFV, MASK_VLSEG5E1024FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg6e1024ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG6E1024FFV, MASK_VLSEG6E1024FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg7e1024ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG7E1024FFV, MASK_VLSEG7E1024FFV, match_vd_neq_vm, INSN_DREF },
-{"vlseg8e1024ff.v",  0, {"V", 0},  "Vd,0(s)Vm", MATCH_VLSEG8E1024FFV, MASK_VLSEG8E1024FFV, match_vd_neq_vm, INSN_DREF },
+{"vneg.v",     0, {"V", 0},  "Vd,VtVm",  MATCH_VRSUB_VX, MASK_VRSUB_VX | MASK_RS1, match_vd_neq_vm, INSN_ALIAS },
 
-{"vl1r.v",  0, {"V", 0},  "Vd,0(s)", MATCH_VL1RV, MASK_VL1RV, match_opcode, INSN_DREF },
-{"vs1r.v",  0, {"V", 0},  "Vd,0(s)", MATCH_VS1RV, MASK_VS1RV, match_opcode, INSN_DREF },
+{"vadd.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VADD_VV,  MASK_VADD_VV, match_vd_neq_vm, 0 },
+{"vadd.vx",    0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VADD_VX,  MASK_VADD_VX, match_vd_neq_vm, 0 },
+{"vadd.vi",    0, {"V", 0},  "Vd,Vt,ViVm", MATCH_VADD_VI,  MASK_VADD_VI, match_vd_neq_vm, 0 },
+{"vsub.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VSUB_VV,  MASK_VSUB_VV, match_vd_neq_vm, 0 },
+{"vsub.vx",    0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VSUB_VX,  MASK_VSUB_VX, match_vd_neq_vm, 0 },
+{"vrsub.vx",   0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VRSUB_VX, MASK_VRSUB_VX, match_vd_neq_vm, 0 },
+{"vrsub.vi",   0, {"V", 0},  "Vd,Vt,ViVm", MATCH_VRSUB_VI, MASK_VRSUB_VI, match_vd_neq_vm, 0 },
 
-{"vamoaddei8.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOADDEI8V, MASK_VAMOADDEI8V, match_opcode, INSN_DREF},
-{"vamoswapei8.v",  0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOSWAPEI8V, MASK_VAMOSWAPEI8V, match_opcode, INSN_DREF},
-{"vamoxorei8.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOXOREI8V, MASK_VAMOXOREI8V, match_opcode, INSN_DREF},
-{"vamoandei8.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOANDEI8V, MASK_VAMOANDEI8V, match_opcode, INSN_DREF},
-{"vamoorei8.v",    0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOOREI8V, MASK_VAMOOREI8V, match_opcode, INSN_DREF},
-{"vamominei8.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMINEI8V, MASK_VAMOMINEI8V, match_opcode, INSN_DREF},
-{"vamomaxei8.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMAXEI8V, MASK_VAMOMAXEI8V, match_opcode, INSN_DREF},
-{"vamominuei8.v",  0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMINUEI8V, MASK_VAMOMINUEI8V, match_opcode, INSN_DREF},
-{"vamomaxuei8.v",  0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMAXUEI8V, MASK_VAMOMAXUEI8V, match_opcode, INSN_DREF},
+{"vwcvt.x.x.v",  0, {"V", 0},  "Vd,VtVm", MATCH_VWCVT_X_X_V,  MASK_VWCVT_X_X_V,  match_widen_vd_neq_vs2_neq_vm, INSN_ALIAS },
+{"vwcvtu.x.x.v", 0, {"V", 0},  "Vd,VtVm", MATCH_VWCVTU_X_X_V, MASK_VWCVTU_X_X_V, match_widen_vd_neq_vs2_neq_vm, INSN_ALIAS },
 
-{"vamoaddei16.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOADDEI16V, MASK_VAMOADDEI16V, match_opcode, INSN_DREF},
-{"vamoswapei16.v",  0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOSWAPEI16V, MASK_VAMOSWAPEI16V, match_opcode, INSN_DREF},
-{"vamoxorei16.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOXOREI16V, MASK_VAMOXOREI16V, match_opcode, INSN_DREF},
-{"vamoandei16.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOANDEI16V, MASK_VAMOANDEI16V, match_opcode, INSN_DREF},
-{"vamoorei16.v",    0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOOREI16V, MASK_VAMOOREI16V, match_opcode, INSN_DREF},
-{"vamominei16.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMINEI16V, MASK_VAMOMINEI16V, match_opcode, INSN_DREF},
-{"vamomaxei16.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMAXEI16V, MASK_VAMOMAXEI16V, match_opcode, INSN_DREF},
-{"vamominuei16.v",  0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMINUEI16V, MASK_VAMOMINUEI16V, match_opcode, INSN_DREF},
-{"vamomaxuei16.v",  0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMAXUEI16V, MASK_VAMOMAXUEI16V, match_opcode, INSN_DREF},
+{"vwaddu.vv",  0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VWADDU_VV, MASK_VWADDU_VV, match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0 },
+{"vwaddu.vx",  0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VWADDU_VX, MASK_VWADDU_VX, match_widen_vd_neq_vs2_neq_vm, 0 },
+{"vwsubu.vv",  0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VWSUBU_VV, MASK_VWSUBU_VV, match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0 },
+{"vwsubu.vx",  0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VWSUBU_VX, MASK_VWSUBU_VX, match_widen_vd_neq_vs2_neq_vm, 0 },
+{"vwadd.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VWADD_VV, MASK_VWADD_VV, match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0 },
+{"vwadd.vx",   0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VWADD_VX, MASK_VWADD_VX, match_widen_vd_neq_vs2_neq_vm, 0 },
+{"vwsub.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VWSUB_VV, MASK_VWSUB_VV, match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0 },
+{"vwsub.vx",   0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VWSUB_VX, MASK_VWSUB_VX, match_widen_vd_neq_vs2_neq_vm, 0 },
+{"vwaddu.wv",  0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VWADDU_WV, MASK_VWADDU_WV, match_widen_vd_neq_vs1_neq_vm, 0 },
+{"vwaddu.wx",  0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VWADDU_WX, MASK_VWADDU_WX, match_widen_vd_neq_vm, 0 },
+{"vwsubu.wv",  0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VWSUBU_WV, MASK_VWSUBU_WV, match_widen_vd_neq_vs1_neq_vm, 0 },
+{"vwsubu.wx",  0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VWSUBU_WX, MASK_VWSUBU_WX, match_widen_vd_neq_vm, 0 },
+{"vwadd.wv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VWADD_WV, MASK_VWADD_WV, match_widen_vd_neq_vs1_neq_vm, 0 },
+{"vwadd.wx",   0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VWADD_WX, MASK_VWADD_WX, match_widen_vd_neq_vm, 0 },
+{"vwsub.wv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VWSUB_WV, MASK_VWSUB_WV, match_widen_vd_neq_vs1_neq_vm, 0 },
+{"vwsub.wx",   0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VWSUB_WX, MASK_VWSUB_WX, match_widen_vd_neq_vm, 0 },
 
-{"vamoaddei32.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOADDEI32V, MASK_VAMOADDEI32V, match_opcode, INSN_DREF},
-{"vamoswapei32.v",  0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOSWAPEI32V, MASK_VAMOSWAPEI32V, match_opcode, INSN_DREF},
-{"vamoxorei32.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOXOREI32V, MASK_VAMOXOREI32V, match_opcode, INSN_DREF},
-{"vamoandei32.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOANDEI32V, MASK_VAMOANDEI32V, match_opcode, INSN_DREF},
-{"vamoorei32.v",    0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOOREI32V, MASK_VAMOOREI32V, match_opcode, INSN_DREF},
-{"vamominei32.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMINEI32V, MASK_VAMOMINEI32V, match_opcode, INSN_DREF},
-{"vamomaxei32.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMAXEI32V, MASK_VAMOMAXEI32V, match_opcode, INSN_DREF},
-{"vamominuei32.v",  0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMINUEI32V, MASK_VAMOMINUEI32V, match_opcode, INSN_DREF},
-{"vamomaxuei32.v",  0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMAXUEI32V, MASK_VAMOMAXUEI32V, match_opcode, INSN_DREF},
+{"vzext.vf2",  0, {"V", 0},  "Vd,VtVm", MATCH_VZEXT_VF2, MASK_VZEXT_VF2, match_vd_neq_vm, 0 },
+{"vsext.vf2",  0, {"V", 0},  "Vd,VtVm", MATCH_VSEXT_VF2, MASK_VSEXT_VF2, match_vd_neq_vm, 0 },
+{"vzext.vf4",  0, {"V", 0},  "Vd,VtVm", MATCH_VZEXT_VF4, MASK_VZEXT_VF4, match_vd_neq_vm, 0 },
+{"vsext.vf4",  0, {"V", 0},  "Vd,VtVm", MATCH_VSEXT_VF4, MASK_VSEXT_VF4, match_vd_neq_vm, 0 },
+{"vzext.vf8",  0, {"V", 0},  "Vd,VtVm", MATCH_VZEXT_VF8, MASK_VZEXT_VF8, match_vd_neq_vm, 0 },
+{"vsext.vf8",  0, {"V", 0},  "Vd,VtVm", MATCH_VSEXT_VF8, MASK_VSEXT_VF8, match_vd_neq_vm, 0 },
 
-{"vamoaddei64.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOADDEI64V, MASK_VAMOADDEI64V, match_opcode, INSN_DREF},
-{"vamoswapei64.v",  0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOSWAPEI64V, MASK_VAMOSWAPEI64V, match_opcode, INSN_DREF},
-{"vamoxorei64.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOXOREI64V, MASK_VAMOXOREI64V, match_opcode, INSN_DREF},
-{"vamoandei64.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOANDEI64V, MASK_VAMOANDEI64V, match_opcode, INSN_DREF},
-{"vamoorei64.v",    0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOOREI64V, MASK_VAMOOREI64V, match_opcode, INSN_DREF},
-{"vamominei64.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMINEI64V, MASK_VAMOMINEI64V, match_opcode, INSN_DREF},
-{"vamomaxei64.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMAXEI64V, MASK_VAMOMAXEI64V, match_opcode, INSN_DREF},
-{"vamominuei64.v",  0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMINUEI64V, MASK_VAMOMINUEI64V, match_opcode, INSN_DREF},
-{"vamomaxuei64.v",  0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOMAXUEI64V, MASK_VAMOMAXUEI64V, match_opcode, INSN_DREF},
+{"vadc.vvm",   0, {"V", 0},  "Vd,Vt,Vs,V0", MATCH_VADC_VVM,  MASK_VADC_VVM,  match_vd_neq_vm, 0 },
+{"vadc.vxm",   0, {"V", 0},  "Vd,Vt,s,V0",  MATCH_VADC_VXM,  MASK_VADC_VXM,  match_vd_neq_vm, 0 },
+{"vadc.vim",   0, {"V", 0},  "Vd,Vt,Vi,V0", MATCH_VADC_VIM,  MASK_VADC_VIM,  match_vd_neq_vm, 0 },
+{"vmadc.vvm",  0, {"V", 0},  "Vd,Vt,Vs,V0", MATCH_VMADC_VVM, MASK_VMADC_VVM, match_opcode, 0 },
+{"vmadc.vxm",  0, {"V", 0},  "Vd,Vt,s,V0",  MATCH_VMADC_VXM, MASK_VMADC_VXM, match_opcode, 0 },
+{"vmadc.vim",  0, {"V", 0},  "Vd,Vt,Vi,V0", MATCH_VMADC_VIM, MASK_VMADC_VIM, match_opcode, 0 },
+{"vmadc.vv",   0, {"V", 0},  "Vd,Vt,Vs",    MATCH_VMADC_VV,  MASK_VMADC_VV,  match_opcode, 0 },
+{"vmadc.vx",   0, {"V", 0},  "Vd,Vt,s",     MATCH_VMADC_VX,  MASK_VMADC_VX,  match_opcode, 0 },
+{"vmadc.vi",   0, {"V", 0},  "Vd,Vt,Vi",    MATCH_VMADC_VI,  MASK_VMADC_VI,  match_opcode, 0 },
+{"vsbc.vvm",   0, {"V", 0},  "Vd,Vt,Vs,V0", MATCH_VSBC_VVM,  MASK_VSBC_VVM,  match_vd_neq_vm, 0 },
+{"vsbc.vxm",   0, {"V", 0},  "Vd,Vt,s,V0",  MATCH_VSBC_VXM,  MASK_VSBC_VXM,  match_vd_neq_vm, 0 },
+{"vmsbc.vvm",  0, {"V", 0},  "Vd,Vt,Vs,V0", MATCH_VMSBC_VVM, MASK_VMSBC_VVM, match_opcode, 0 },
+{"vmsbc.vxm",  0, {"V", 0},  "Vd,Vt,s,V0",  MATCH_VMSBC_VXM, MASK_VMSBC_VXM, match_opcode, 0 },
+{"vmsbc.vv",   0, {"V", 0},  "Vd,Vt,Vs",    MATCH_VMSBC_VV,  MASK_VMSBC_VV,  match_opcode, 0 },
+{"vmsbc.vx",   0, {"V", 0},  "Vd,Vt,s",     MATCH_VMSBC_VX,  MASK_VMSBC_VX,  match_opcode, 0 },
 
-{"vadd.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VADDVV, MASK_VADDVV, match_opcode, 0 },
-{"vadd.vx",    0, {"V", 0},  "Vd,Vt,sVm", MATCH_VADDVX, MASK_VADDVX, match_opcode, 0 },
-{"vadd.vi",    0, {"V", 0},  "Vd,Vt,ViVm", MATCH_VADDVI, MASK_VADDVI, match_opcode, 0 },
-{"vsub.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VSUBVV, MASK_VSUBVV, match_opcode, 0 },
-{"vsub.vx",    0, {"V", 0},  "Vd,Vt,sVm", MATCH_VSUBVX, MASK_VSUBVX, match_opcode, 0 },
-{"vrsub.vx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VRSUBVX, MASK_VRSUBVX, match_opcode, 0 },
-{"vrsub.vi",   0, {"V", 0},  "Vd,Vt,ViVm", MATCH_VRSUBVI, MASK_VRSUBVI, match_opcode, 0 },
+{"vnot.v",     0, {"V", 0},  "Vd,VtVm", MATCH_VNOT_V, MASK_VNOT_V, match_vd_neq_vm, INSN_ALIAS },
 
-{"vwcvt.x.x.v",  0, {"V", 0},  "Vd,VtVm", MATCH_VWCVTXXV, MASK_VWCVTXXV, match_widen_vd_neq_vs2_neq_vm, INSN_ALIAS },
-{"vwcvtu.x.x.v", 0, {"V", 0},  "Vd,VtVm", MATCH_VWCVTUXXV, MASK_VWCVTUXXV, match_widen_vd_neq_vs2_neq_vm, INSN_ALIAS },
+{"vand.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VAND_VV, MASK_VAND_VV, match_vd_neq_vm, 0 },
+{"vand.vx",    0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VAND_VX, MASK_VAND_VX, match_vd_neq_vm, 0 },
+{"vand.vi",    0, {"V", 0},  "Vd,Vt,ViVm", MATCH_VAND_VI, MASK_VAND_VI, match_vd_neq_vm, 0 },
+{"vor.vv",     0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VOR_VV,  MASK_VOR_VV,  match_vd_neq_vm, 0 },
+{"vor.vx",     0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VOR_VX,  MASK_VOR_VX,  match_vd_neq_vm, 0 },
+{"vor.vi",     0, {"V", 0},  "Vd,Vt,ViVm", MATCH_VOR_VI,  MASK_VOR_VI,  match_vd_neq_vm, 0 },
+{"vxor.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VXOR_VV, MASK_VXOR_VV, match_vd_neq_vm, 0 },
+{"vxor.vx",    0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VXOR_VX, MASK_VXOR_VX, match_vd_neq_vm, 0 },
+{"vxor.vi",    0, {"V", 0},  "Vd,Vt,ViVm", MATCH_VXOR_VI, MASK_VXOR_VI, match_vd_neq_vm, 0 },
 
-{"vwaddu.vv",  0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VWADDUVV, MASK_VWADDUVV, match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0 },
-{"vwaddu.vx",  0, {"V", 0},  "Vd,Vt,sVm", MATCH_VWADDUVX, MASK_VWADDUVX, match_widen_vd_neq_vs2_neq_vm, 0 },
-{"vwsubu.vv",  0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VWSUBUVV, MASK_VWSUBUVV, match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0 },
-{"vwsubu.vx",  0, {"V", 0},  "Vd,Vt,sVm", MATCH_VWSUBUVX, MASK_VWSUBUVX, match_widen_vd_neq_vs2_neq_vm, 0 },
-{"vwadd.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VWADDVV, MASK_VWADDVV, match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0 },
-{"vwadd.vx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VWADDVX, MASK_VWADDVX, match_widen_vd_neq_vs2_neq_vm, 0 },
-{"vwsub.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VWSUBVV, MASK_VWSUBVV, match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0 },
-{"vwsub.vx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VWSUBVX, MASK_VWSUBVX, match_widen_vd_neq_vs2_neq_vm, 0 },
-{"vwaddu.wv",  0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VWADDUWV, MASK_VWADDUWV, match_widen_vd_neq_vs1_neq_vm, 0 },
-{"vwaddu.wx",  0, {"V", 0},  "Vd,Vt,sVm", MATCH_VWADDUWX, MASK_VWADDUWX, match_widen_vd_neq_vm, 0 },
-{"vwsubu.wv",  0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VWSUBUWV, MASK_VWSUBUWV, match_widen_vd_neq_vs1_neq_vm, 0 },
-{"vwsubu.wx",  0, {"V", 0},  "Vd,Vt,sVm", MATCH_VWSUBUWX, MASK_VWSUBUWX, match_widen_vd_neq_vm, 0 },
-{"vwadd.wv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VWADDWV, MASK_VWADDWV, match_widen_vd_neq_vs1_neq_vm, 0 },
-{"vwadd.wx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VWADDWX, MASK_VWADDWX, match_widen_vd_neq_vm, 0 },
-{"vwsub.wv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VWSUBWV, MASK_VWSUBWV, match_widen_vd_neq_vs1_neq_vm, 0 },
-{"vwsub.wx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VWSUBWX, MASK_VWSUBWX, match_widen_vd_neq_vm, 0 },
+{"vsll.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VSLL_VV, MASK_VSLL_VV, match_vd_neq_vm, 0 },
+{"vsll.vx",    0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VSLL_VX, MASK_VSLL_VX, match_vd_neq_vm, 0 },
+{"vsll.vi",    0, {"V", 0},  "Vd,Vt,VjVm", MATCH_VSLL_VI, MASK_VSLL_VI, match_vd_neq_vm, 0 },
+{"vsrl.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VSRL_VV, MASK_VSRL_VV, match_vd_neq_vm, 0 },
+{"vsrl.vx",    0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VSRL_VX, MASK_VSRL_VX, match_vd_neq_vm, 0 },
+{"vsrl.vi",    0, {"V", 0},  "Vd,Vt,VjVm", MATCH_VSRL_VI, MASK_VSRL_VI, match_vd_neq_vm, 0 },
+{"vsra.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VSRA_VV, MASK_VSRA_VV, match_vd_neq_vm, 0 },
+{"vsra.vx",    0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VSRA_VX, MASK_VSRA_VX, match_vd_neq_vm, 0 },
+{"vsra.vi",    0, {"V", 0},  "Vd,Vt,VjVm", MATCH_VSRA_VI, MASK_VSRA_VI, match_vd_neq_vm, 0 },
 
-{"vzext.vf2",  0, {"V", 0},  "Vd,VtVm", MATCH_VZEXT_VF2, MASK_VZEXT_VF2, match_opcode, 0 },
-{"vsext.vf2",  0, {"V", 0},  "Vd,VtVm", MATCH_VSEXT_VF2, MASK_VSEXT_VF2, match_opcode, 0 },
-{"vzext.vf4",  0, {"V", 0},  "Vd,VtVm", MATCH_VZEXT_VF4, MASK_VZEXT_VF4, match_opcode, 0 },
-{"vsext.vf4",  0, {"V", 0},  "Vd,VtVm", MATCH_VSEXT_VF4, MASK_VSEXT_VF4, match_opcode, 0 },
-{"vzext.vf8",  0, {"V", 0},  "Vd,VtVm", MATCH_VZEXT_VF8, MASK_VZEXT_VF8, match_opcode, 0 },
-{"vsext.vf8",  0, {"V", 0},  "Vd,VtVm", MATCH_VSEXT_VF8, MASK_VSEXT_VF8, match_opcode, 0 },
+{"vncvt.x.x.w",0, {"V", 0},  "Vd,VtVm", MATCH_VNCVT_X_X_W, MASK_VNCVT_X_X_W, match_narrow_vd_neq_vs2_neq_vm, INSN_ALIAS },
 
-{"vadc.vvm",   0, {"V", 0},  "Vd,Vt,Vs,V0", MATCH_VADCVVM, MASK_VADCVVM, match_opcode, 0 },
-{"vadc.vxm",   0, {"V", 0},  "Vd,Vt,s,V0", MATCH_VADCVXM, MASK_VADCVXM, match_opcode, 0 },
-{"vadc.vim",   0, {"V", 0},  "Vd,Vt,Vi,V0", MATCH_VADCVIM, MASK_VADCVIM, match_opcode, 0 },
-{"vmadc.vvm",  0, {"V", 0},  "Vd,Vt,Vs,V0", MATCH_VMADCVVM, MASK_VMADCVVM, match_opcode, 0 },
-{"vmadc.vxm",  0, {"V", 0},  "Vd,Vt,s,V0", MATCH_VMADCVXM, MASK_VMADCVXM, match_opcode, 0 },
-{"vmadc.vim",  0, {"V", 0},  "Vd,Vt,Vi,V0", MATCH_VMADCVIM, MASK_VMADCVIM, match_opcode, 0 },
-{"vmadc.vv",   0, {"V", 0},  "Vd,Vt,Vs", MATCH_VMADCVV, MASK_VMADCVV, match_opcode, 0 },
-{"vmadc.vx",   0, {"V", 0},  "Vd,Vt,s", MATCH_VMADCVX, MASK_VMADCVX, match_opcode, 0 },
-{"vmadc.vi",   0, {"V", 0},  "Vd,Vt,Vi", MATCH_VMADCVI, MASK_VMADCVI, match_opcode, 0 },
-{"vsbc.vvm",   0, {"V", 0},  "Vd,Vt,Vs,V0", MATCH_VSBCVVM, MASK_VSBCVVM, match_opcode, 0 },
-{"vsbc.vxm",   0, {"V", 0},  "Vd,Vt,s,V0", MATCH_VSBCVXM, MASK_VSBCVXM, match_opcode, 0 },
-{"vmsbc.vvm",  0, {"V", 0},  "Vd,Vt,Vs,V0", MATCH_VMSBCVVM, MASK_VMSBCVVM, match_opcode, 0 },
-{"vmsbc.vxm",  0, {"V", 0},  "Vd,Vt,s,V0", MATCH_VMSBCVXM, MASK_VMSBCVXM, match_opcode, 0 },
-{"vmsbc.vv",   0, {"V", 0},  "Vd,Vt,Vs", MATCH_VMSBCVV, MASK_VMSBCVV, match_opcode, 0 },
-{"vmsbc.vx",   0, {"V", 0},  "Vd,Vt,s", MATCH_VMSBCVX, MASK_VMSBCVX, match_opcode, 0 },
+{"vnsrl.wv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VNSRL_WV, MASK_VNSRL_WV, match_narrow_vd_neq_vs2_neq_vm, 0 },
+{"vnsrl.wx",   0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VNSRL_WX, MASK_VNSRL_WX, match_narrow_vd_neq_vs2_neq_vm, 0 },
+{"vnsrl.wi",   0, {"V", 0},  "Vd,Vt,VjVm", MATCH_VNSRL_WI, MASK_VNSRL_WI, match_narrow_vd_neq_vs2_neq_vm, 0 },
+{"vnsra.wv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VNSRA_WV, MASK_VNSRA_WV, match_narrow_vd_neq_vs2_neq_vm, 0 },
+{"vnsra.wx",   0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VNSRA_WX, MASK_VNSRA_WX, match_narrow_vd_neq_vs2_neq_vm, 0 },
+{"vnsra.wi",   0, {"V", 0},  "Vd,Vt,VjVm", MATCH_VNSRA_WI, MASK_VNSRA_WI, match_narrow_vd_neq_vs2_neq_vm, 0 },
 
-{"vnot.v",     0, {"V", 0},  "Vd,VtVm", MATCH_VNOTV, MASK_VNOTV, match_opcode, INSN_ALIAS },
-
-{"vand.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VANDVV, MASK_VANDVV, match_opcode, 0 },
-{"vand.vx",    0, {"V", 0},  "Vd,Vt,sVm", MATCH_VANDVX, MASK_VANDVX, match_opcode, 0 },
-{"vand.vi",    0, {"V", 0},  "Vd,Vt,ViVm", MATCH_VANDVI, MASK_VANDVI, match_opcode, 0 },
-{"vor.vv",     0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VORVV, MASK_VORVV, match_opcode, 0 },
-{"vor.vx",     0, {"V", 0},  "Vd,Vt,sVm", MATCH_VORVX, MASK_VORVX, match_opcode, 0 },
-{"vor.vi",     0, {"V", 0},  "Vd,Vt,ViVm", MATCH_VORVI, MASK_VORVI, match_opcode, 0 },
-{"vxor.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VXORVV, MASK_VXORVV, match_opcode, 0 },
-{"vxor.vx",    0, {"V", 0},  "Vd,Vt,sVm", MATCH_VXORVX, MASK_VXORVX, match_opcode, 0 },
-{"vxor.vi",    0, {"V", 0},  "Vd,Vt,ViVm", MATCH_VXORVI, MASK_VXORVI, match_opcode, 0 },
-
-{"vsll.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VSLLVV, MASK_VSLLVV, match_opcode, 0 },
-{"vsll.vx",    0, {"V", 0},  "Vd,Vt,sVm", MATCH_VSLLVX, MASK_VSLLVX, match_opcode, 0 },
-{"vsll.vi",    0, {"V", 0},  "Vd,Vt,VjVm", MATCH_VSLLVI, MASK_VSLLVI, match_opcode, 0 },
-{"vsrl.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VSRLVV, MASK_VSRLVV, match_opcode, 0 },
-{"vsrl.vx",    0, {"V", 0},  "Vd,Vt,sVm", MATCH_VSRLVX, MASK_VSRLVX, match_opcode, 0 },
-{"vsrl.vi",    0, {"V", 0},  "Vd,Vt,VjVm", MATCH_VSRLVI, MASK_VSRLVI, match_opcode, 0 },
-{"vsra.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VSRAVV, MASK_VSRAVV, match_opcode, 0 },
-{"vsra.vx",    0, {"V", 0},  "Vd,Vt,sVm", MATCH_VSRAVX, MASK_VSRAVX, match_opcode, 0 },
-{"vsra.vi",    0, {"V", 0},  "Vd,Vt,VjVm", MATCH_VSRAVI, MASK_VSRAVI, match_opcode, 0 },
-
-{"vnsrl.wv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VNSRLWV, MASK_VNSRLWV, match_narrow_vd_neq_vs2, 0 },
-{"vnsrl.wx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VNSRLWX, MASK_VNSRLWX, match_narrow_vd_neq_vs2, 0 },
-{"vnsrl.wi",   0, {"V", 0},  "Vd,Vt,VjVm", MATCH_VNSRLWI, MASK_VNSRLWI, match_narrow_vd_neq_vs2, 0 },
-{"vnsra.wv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VNSRAWV, MASK_VNSRAWV, match_narrow_vd_neq_vs2, 0 },
-{"vnsra.wx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VNSRAWX, MASK_VNSRAWX, match_narrow_vd_neq_vs2, 0 },
-{"vnsra.wi",   0, {"V", 0},  "Vd,Vt,VjVm", MATCH_VNSRAWI, MASK_VNSRAWI, match_narrow_vd_neq_vs2, 0 },
-
-{"vmseq.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VMSEQVV, MASK_VMSEQVV, match_opcode, 0 },
-{"vmseq.vx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VMSEQVX, MASK_VMSEQVX, match_opcode, 0 },
-{"vmseq.vi",   0, {"V", 0},  "Vd,Vt,ViVm", MATCH_VMSEQVI, MASK_VMSEQVI, match_opcode, 0 },
-{"vmsne.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VMSNEVV, MASK_VMSNEVV, match_opcode, 0 },
-{"vmsne.vx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VMSNEVX, MASK_VMSNEVX, match_opcode, 0 },
-{"vmsne.vi",   0, {"V", 0},  "Vd,Vt,ViVm", MATCH_VMSNEVI, MASK_VMSNEVI, match_opcode, 0 },
-{"vmsltu.vv",  0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VMSLTUVV, MASK_VMSLTUVV, match_opcode, 0 },
-{"vmsltu.vx",  0, {"V", 0},  "Vd,Vt,sVm", MATCH_VMSLTUVX, MASK_VMSLTUVX, match_opcode, 0 },
-{"vmslt.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VMSLTVV, MASK_VMSLTVV, match_opcode, 0 },
-{"vmslt.vx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VMSLTVX, MASK_VMSLTVX, match_opcode, 0 },
-{"vmsleu.vv",  0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VMSLEUVV, MASK_VMSLEUVV, match_opcode, 0 },
-{"vmsleu.vx",  0, {"V", 0},  "Vd,Vt,sVm", MATCH_VMSLEUVX, MASK_VMSLEUVX, match_opcode, 0 },
-{"vmsleu.vi",  0, {"V", 0},  "Vd,Vt,ViVm", MATCH_VMSLEUVI, MASK_VMSLEUVI, match_opcode, 0 },
-{"vmsle.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VMSLEVV, MASK_VMSLEVV, match_opcode, 0 },
-{"vmsle.vx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VMSLEVX, MASK_VMSLEVX, match_opcode, 0 },
-{"vmsle.vi",   0, {"V", 0},  "Vd,Vt,ViVm", MATCH_VMSLEVI, MASK_VMSLEVI, match_opcode, 0 },
-{"vmsgtu.vx",  0, {"V", 0},  "Vd,Vt,sVm", MATCH_VMSGTUVX, MASK_VMSGTUVX, match_opcode, 0 },
-{"vmsgtu.vi",  0, {"V", 0},  "Vd,Vt,ViVm", MATCH_VMSGTUVI, MASK_VMSGTUVI, match_opcode, 0 },
-{"vmsgt.vx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VMSGTVX, MASK_VMSGTVX, match_opcode, 0 },
-{"vmsgt.vi",   0, {"V", 0},  "Vd,Vt,ViVm", MATCH_VMSGTVI, MASK_VMSGTVI, match_opcode, 0 },
+{"vmseq.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VMSEQ_VV,  MASK_VMSEQ_VV,  match_opcode, 0 },
+{"vmseq.vx",   0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VMSEQ_VX,  MASK_VMSEQ_VX,  match_opcode, 0 },
+{"vmseq.vi",   0, {"V", 0},  "Vd,Vt,ViVm", MATCH_VMSEQ_VI,  MASK_VMSEQ_VI,  match_opcode, 0 },
+{"vmsne.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VMSNE_VV,  MASK_VMSNE_VV,  match_opcode, 0 },
+{"vmsne.vx",   0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VMSNE_VX,  MASK_VMSNE_VX,  match_opcode, 0 },
+{"vmsne.vi",   0, {"V", 0},  "Vd,Vt,ViVm", MATCH_VMSNE_VI,  MASK_VMSNE_VI,  match_opcode, 0 },
+{"vmsltu.vv",  0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VMSLTU_VV, MASK_VMSLTU_VV, match_opcode, 0 },
+{"vmsltu.vx",  0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VMSLTU_VX, MASK_VMSLTU_VX, match_opcode, 0 },
+{"vmslt.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VMSLT_VV,  MASK_VMSLT_VV,  match_opcode, 0 },
+{"vmslt.vx",   0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VMSLT_VX,  MASK_VMSLT_VX,  match_opcode, 0 },
+{"vmsleu.vv",  0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VMSLEU_VV, MASK_VMSLEU_VV, match_opcode, 0 },
+{"vmsleu.vx",  0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VMSLEU_VX, MASK_VMSLEU_VX, match_opcode, 0 },
+{"vmsleu.vi",  0, {"V", 0},  "Vd,Vt,ViVm", MATCH_VMSLEU_VI, MASK_VMSLEU_VI, match_opcode, 0 },
+{"vmsle.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VMSLE_VV,  MASK_VMSLE_VV,  match_opcode, 0 },
+{"vmsle.vx",   0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VMSLE_VX,  MASK_VMSLE_VX,  match_opcode, 0 },
+{"vmsle.vi",   0, {"V", 0},  "Vd,Vt,ViVm", MATCH_VMSLE_VI,  MASK_VMSLE_VI,  match_opcode, 0 },
+{"vmsgtu.vx",  0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VMSGTU_VX, MASK_VMSGTU_VX, match_opcode, 0 },
+{"vmsgtu.vi",  0, {"V", 0},  "Vd,Vt,ViVm", MATCH_VMSGTU_VI, MASK_VMSGTU_VI, match_opcode, 0 },
+{"vmsgt.vx",   0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VMSGT_VX,  MASK_VMSGT_VX,  match_opcode, 0 },
+{"vmsgt.vi",   0, {"V", 0},  "Vd,Vt,ViVm", MATCH_VMSGT_VI,  MASK_VMSGT_VI,  match_opcode, 0 },
 
 /* These aliases are for assembly but not disassembly.  */
-{"vmsgt.vv",   0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VMSLTVV, MASK_VMSLTVV, match_opcode, INSN_ALIAS },
-{"vmsgtu.vv",  0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VMSLTUVV, MASK_VMSLTUVV, match_opcode, INSN_ALIAS },
-{"vmsge.vv",   0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VMSLEVV, MASK_VMSLEVV, match_opcode, INSN_ALIAS },
-{"vmsgeu.vv",  0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VMSLEUVV, MASK_VMSLEUVV, match_opcode, INSN_ALIAS },
-{"vmslt.vi",   0, {"V", 0},  "Vd,Vt,VkVm", MATCH_VMSLEVI, MASK_VMSLEVI, match_opcode, INSN_ALIAS },
-{"vmsltu.vi",  0, {"V", 0},  "Vd,Vu,0Vm", MATCH_VMSNEVV, MASK_VMSNEVV, match_opcode, INSN_ALIAS },
-{"vmsltu.vi",  0, {"V", 0},  "Vd,Vt,VkVm", MATCH_VMSLEUVI, MASK_VMSLEUVI, match_opcode, INSN_ALIAS },
-{"vmsge.vi",   0, {"V", 0},  "Vd,Vt,VkVm", MATCH_VMSGTVI, MASK_VMSGTVI, match_opcode, INSN_ALIAS },
-{"vmsgeu.vi",  0, {"V", 0},  "Vd,Vu,0Vm", MATCH_VMSEQVV, MASK_VMSEQVV, match_opcode, INSN_ALIAS },
-{"vmsgeu.vi",  0, {"V", 0},  "Vd,Vt,VkVm", MATCH_VMSGTUVI, MASK_VMSGTUVI, match_opcode, INSN_ALIAS },
+{"vmsgt.vv",   0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VMSLT_VV,  MASK_VMSLT_VV,  match_opcode, INSN_ALIAS },
+{"vmsgtu.vv",  0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VMSLTU_VV, MASK_VMSLTU_VV, match_opcode, INSN_ALIAS },
+{"vmsge.vv",   0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VMSLE_VV,  MASK_VMSLE_VV,  match_opcode, INSN_ALIAS },
+{"vmsgeu.vv",  0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VMSLEU_VV, MASK_VMSLEU_VV, match_opcode, INSN_ALIAS },
+{"vmslt.vi",   0, {"V", 0},  "Vd,Vt,VkVm", MATCH_VMSLE_VI,  MASK_VMSLE_VI,  match_opcode, INSN_ALIAS },
+{"vmsltu.vi",  0, {"V", 0},  "Vd,Vu,0Vm",  MATCH_VMSNE_VV,  MASK_VMSNE_VV,  match_opcode, INSN_ALIAS },
+{"vmsltu.vi",  0, {"V", 0},  "Vd,Vt,VkVm", MATCH_VMSLEU_VI, MASK_VMSLEU_VI, match_opcode, INSN_ALIAS },
+{"vmsge.vi",   0, {"V", 0},  "Vd,Vt,VkVm", MATCH_VMSGT_VI,  MASK_VMSGT_VI,  match_opcode, INSN_ALIAS },
+{"vmsgeu.vi",  0, {"V", 0},  "Vd,Vu,0Vm",  MATCH_VMSEQ_VV,  MASK_VMSEQ_VV,  match_opcode, INSN_ALIAS },
+{"vmsgeu.vi",  0, {"V", 0},  "Vd,Vt,VkVm", MATCH_VMSGTU_VI, MASK_VMSGTU_VI, match_opcode, INSN_ALIAS },
 
 {"vmsge.vx",   0, {"V", 0}, "Vd,Vt,sVm", 0, (int) M_VMSGE, match_never, INSN_MACRO },
 {"vmsge.vx",   0, {"V", 0}, "Vd,Vt,s,VM,VT", 0, (int) M_VMSGE, match_never, INSN_MACRO },
 {"vmsgeu.vx",  0, {"V", 0}, "Vd,Vt,sVm", 0, (int) M_VMSGEU, match_never, INSN_MACRO },
 {"vmsgeu.vx",  0, {"V", 0}, "Vd,Vt,s,VM,VT", 0, (int) M_VMSGEU, match_never, INSN_MACRO },
 
-{"vminu.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VMINUVV, MASK_VMINUVV, match_opcode, 0},
-{"vminu.vx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VMINUVX, MASK_VMINUVX, match_opcode, 0},
-{"vmin.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VMINVV, MASK_VMINVV, match_opcode, 0},
-{"vmin.vx",    0, {"V", 0},  "Vd,Vt,sVm", MATCH_VMINVX, MASK_VMINVX, match_opcode, 0},
-{"vmaxu.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VMAXUVV, MASK_VMAXUVV, match_opcode, 0},
-{"vmaxu.vx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VMAXUVX, MASK_VMAXUVX, match_opcode, 0},
-{"vmax.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VMAXVV, MASK_VMAXVV, match_opcode, 0},
-{"vmax.vx",    0, {"V", 0},  "Vd,Vt,sVm", MATCH_VMAXVX, MASK_VMAXVX, match_opcode, 0},
+{"vminu.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VMINU_VV, MASK_VMINU_VV, match_vd_neq_vm, 0},
+{"vminu.vx",   0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VMINU_VX, MASK_VMINU_VX, match_vd_neq_vm, 0},
+{"vmin.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VMIN_VV,  MASK_VMIN_VV,  match_vd_neq_vm, 0},
+{"vmin.vx",    0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VMIN_VX,  MASK_VMIN_VX,  match_vd_neq_vm, 0},
+{"vmaxu.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VMAXU_VV, MASK_VMAXU_VV, match_vd_neq_vm, 0},
+{"vmaxu.vx",   0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VMAXU_VX, MASK_VMAXU_VX, match_vd_neq_vm, 0},
+{"vmax.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VMAX_VV,  MASK_VMAX_VV,  match_vd_neq_vm, 0},
+{"vmax.vx",    0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VMAX_VX,  MASK_VMAX_VX,  match_vd_neq_vm, 0},
 
-{"vmul.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VMULVV, MASK_VMULVV, match_opcode, 0 },
-{"vmul.vx",    0, {"V", 0},  "Vd,Vt,sVm", MATCH_VMULVX, MASK_VMULVX, match_opcode, 0 },
-{"vmulh.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VMULHVV, MASK_VMULHVV, match_opcode, 0 },
-{"vmulh.vx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VMULHVX, MASK_VMULHVX, match_opcode, 0 },
-{"vmulhu.vv",  0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VMULHUVV, MASK_VMULHUVV, match_opcode, 0 },
-{"vmulhu.vx",  0, {"V", 0},  "Vd,Vt,sVm", MATCH_VMULHUVX, MASK_VMULHUVX, match_opcode, 0 },
-{"vmulhsu.vv", 0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VMULHSUVV, MASK_VMULHSUVV, match_opcode, 0 },
-{"vmulhsu.vx", 0, {"V", 0},  "Vd,Vt,sVm", MATCH_VMULHSUVX, MASK_VMULHSUVX, match_opcode, 0 },
+{"vmul.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VMUL_VV,    MASK_VMUL_VV,    match_vd_neq_vm, 0 },
+{"vmul.vx",    0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VMUL_VX,    MASK_VMUL_VX,    match_vd_neq_vm, 0 },
+{"vmulh.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VMULH_VV,   MASK_VMULH_VV,   match_vd_neq_vm, 0 },
+{"vmulh.vx",   0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VMULH_VX,   MASK_VMULH_VX,   match_vd_neq_vm, 0 },
+{"vmulhu.vv",  0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VMULHU_VV,  MASK_VMULHU_VV,  match_vd_neq_vm, 0 },
+{"vmulhu.vx",  0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VMULHU_VX,  MASK_VMULHU_VX,  match_vd_neq_vm, 0 },
+{"vmulhsu.vv", 0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VMULHSU_VV, MASK_VMULHSU_VV, match_vd_neq_vm, 0 },
+{"vmulhsu.vx", 0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VMULHSU_VX, MASK_VMULHSU_VX, match_vd_neq_vm, 0 },
 
-{"vwmul.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VWMULVV, MASK_VWMULVV, match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0 },
-{"vwmul.vx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VWMULVX, MASK_VWMULVX, match_widen_vd_neq_vs2_neq_vm, 0 },
-{"vwmulu.vv",  0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VWMULUVV, MASK_VWMULUVV, match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0 },
-{"vwmulu.vx",  0, {"V", 0},  "Vd,Vt,sVm", MATCH_VWMULUVX, MASK_VWMULUVX, match_widen_vd_neq_vs2_neq_vm, 0 },
-{"vwmulsu.vv", 0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VWMULSUVV, MASK_VWMULSUVV, match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0 },
-{"vwmulsu.vx", 0, {"V", 0},  "Vd,Vt,sVm", MATCH_VWMULSUVX, MASK_VWMULSUVX, match_widen_vd_neq_vs2_neq_vm, 0 },
+{"vwmul.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VWMUL_VV,   MASK_VWMUL_VV,   match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0 },
+{"vwmul.vx",   0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VWMUL_VX,   MASK_VWMUL_VX,   match_widen_vd_neq_vs2_neq_vm, 0 },
+{"vwmulu.vv",  0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VWMULU_VV,  MASK_VWMULU_VV,  match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0 },
+{"vwmulu.vx",  0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VWMULU_VX,  MASK_VWMULU_VX,  match_widen_vd_neq_vs2_neq_vm, 0 },
+{"vwmulsu.vv", 0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VWMULSU_VV, MASK_VWMULSU_VV, match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0 },
+{"vwmulsu.vx", 0, {"V", 0},  "Vd,Vt,sVm",  MATCH_VWMULSU_VX, MASK_VWMULSU_VX, match_widen_vd_neq_vs2_neq_vm, 0 },
 
-{"vmacc.vv",   0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VMACCVV, MASK_VMACCVV, match_opcode, 0},
-{"vmacc.vx",   0, {"V", 0},  "Vd,s,VtVm", MATCH_VMACCVX, MASK_VMACCVX, match_opcode, 0},
-{"vnmsac.vv",  0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VNMSACVV, MASK_VNMSACVV, match_opcode, 0},
-{"vnmsac.vx",  0, {"V", 0},  "Vd,s,VtVm", MATCH_VNMSACVX, MASK_VNMSACVX, match_opcode, 0},
-{"vmadd.vv",   0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VMADDVV, MASK_VMADDVV, match_opcode, 0},
-{"vmadd.vx",   0, {"V", 0},  "Vd,s,VtVm", MATCH_VMADDVX, MASK_VMADDVX, match_opcode, 0},
-{"vnmsub.vv",  0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VNMSUBVV, MASK_VNMSUBVV, match_opcode, 0},
-{"vnmsub.vx",  0, {"V", 0},  "Vd,s,VtVm", MATCH_VNMSUBVX, MASK_VNMSUBVX, match_opcode, 0},
+{"vmacc.vv",   0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VMACC_VV,  MASK_VMACC_VV,  match_vd_neq_vm, 0},
+{"vmacc.vx",   0, {"V", 0},  "Vd,s,VtVm",  MATCH_VMACC_VX,  MASK_VMACC_VX,  match_vd_neq_vm, 0},
+{"vnmsac.vv",  0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VNMSAC_VV, MASK_VNMSAC_VV, match_vd_neq_vm, 0},
+{"vnmsac.vx",  0, {"V", 0},  "Vd,s,VtVm",  MATCH_VNMSAC_VX, MASK_VNMSAC_VX, match_vd_neq_vm, 0},
+{"vmadd.vv",   0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VMADD_VV,  MASK_VMADD_VV,  match_vd_neq_vm, 0},
+{"vmadd.vx",   0, {"V", 0},  "Vd,s,VtVm",  MATCH_VMADD_VX,  MASK_VMADD_VX,  match_vd_neq_vm, 0},
+{"vnmsub.vv",  0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VNMSUB_VV, MASK_VNMSUB_VV, match_vd_neq_vm, 0},
+{"vnmsub.vx",  0, {"V", 0},  "Vd,s,VtVm",  MATCH_VNMSUB_VX, MASK_VNMSUB_VX, match_vd_neq_vm, 0},
 
-{"vwmaccu.vv",  0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VWMACCUVV, MASK_VWMACCUVV, match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0},
-{"vwmaccu.vx",  0, {"V", 0},  "Vd,s,VtVm", MATCH_VWMACCUVX, MASK_VWMACCUVX, match_widen_vd_neq_vs2_neq_vm, 0},
-{"vwmacc.vv",   0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VWMACCVV, MASK_VWMACCVV, match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0},
-{"vwmacc.vx",   0, {"V", 0},  "Vd,s,VtVm", MATCH_VWMACCVX, MASK_VWMACCVX, match_widen_vd_neq_vs2_neq_vm, 0},
-{"vwmaccsu.vv", 0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VWMACCSUVV, MASK_VWMACCSUVV, match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0},
-{"vwmaccsu.vx", 0, {"V", 0},  "Vd,s,VtVm", MATCH_VWMACCSUVX, MASK_VWMACCSUVX, match_widen_vd_neq_vs2_neq_vm, 0},
-{"vwmaccus.vx", 0, {"V", 0},  "Vd,s,VtVm", MATCH_VWMACCUSVX, MASK_VWMACCUSVX, match_widen_vd_neq_vs2_neq_vm, 0},
+{"vwmaccu.vv",  0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VWMACCU_VV,  MASK_VWMACCU_VV,  match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0},
+{"vwmaccu.vx",  0, {"V", 0},  "Vd,s,VtVm",  MATCH_VWMACCU_VX,  MASK_VWMACCU_VX,  match_widen_vd_neq_vs2_neq_vm, 0},
+{"vwmacc.vv",   0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VWMACC_VV,   MASK_VWMACC_VV,   match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0},
+{"vwmacc.vx",   0, {"V", 0},  "Vd,s,VtVm",  MATCH_VWMACC_VX,   MASK_VWMACC_VX,   match_widen_vd_neq_vs2_neq_vm, 0},
+{"vwmaccsu.vv", 0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VWMACCSU_VV, MASK_VWMACCSU_VV, match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0},
+{"vwmaccsu.vx", 0, {"V", 0},  "Vd,s,VtVm",  MATCH_VWMACCSU_VX, MASK_VWMACCSU_VX, match_widen_vd_neq_vs2_neq_vm, 0},
+{"vwmaccus.vx", 0, {"V", 0},  "Vd,s,VtVm",  MATCH_VWMACCUS_VX, MASK_VWMACCUS_VX, match_widen_vd_neq_vs2_neq_vm, 0},
 
-{"vqmaccu.vv",  0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VQMACCUVV, MASK_VQMACCUVV, match_quad_vd_neq_vs1_neq_vs2_neq_vm, 0},
-{"vqmaccu.vx",  0, {"V", 0},  "Vd,s,VtVm",  MATCH_VQMACCUVX, MASK_VQMACCUVX, match_quad_vd_neq_vs2_neq_vm, 0},
-{"vqmacc.vv",   0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VQMACCVV, MASK_VQMACCVV, match_quad_vd_neq_vs1_neq_vs2_neq_vm, 0},
-{"vqmacc.vx",   0, {"V", 0},  "Vd,s,VtVm",  MATCH_VQMACCVX, MASK_VQMACCVX, match_quad_vd_neq_vs2_neq_vm, 0},
-{"vqmaccsu.vv", 0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VQMACCSUVV, MASK_VQMACCSUVV, match_quad_vd_neq_vs1_neq_vs2_neq_vm, 0},
-{"vqmaccsu.vx", 0, {"V", 0},  "Vd,s,VtVm",  MATCH_VQMACCSUVX, MASK_VQMACCSUVX, match_quad_vd_neq_vs2_neq_vm, 0},
-{"vqmaccus.vx", 0, {"V", 0},  "Vd,s,VtVm",  MATCH_VQMACCUSVX, MASK_VQMACCUSVX, match_quad_vd_neq_vs2_neq_vm, 0},
+{"vqmaccu.vv",  0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VQMACCU_VV,  MASK_VQMACCU_VV,  match_quad_vd_neq_vs1_neq_vs2_neq_vm, 0},
+{"vqmaccu.vx",  0, {"V", 0},  "Vd,s,VtVm",  MATCH_VQMACCU_VX,  MASK_VQMACCU_VX,  match_quad_vd_neq_vs2_neq_vm, 0},
+{"vqmacc.vv",   0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VQMACC_VV,   MASK_VQMACC_VV,   match_quad_vd_neq_vs1_neq_vs2_neq_vm, 0},
+{"vqmacc.vx",   0, {"V", 0},  "Vd,s,VtVm",  MATCH_VQMACC_VX,   MASK_VQMACC_VX,   match_quad_vd_neq_vs2_neq_vm, 0},
+{"vqmaccsu.vv", 0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VQMACCSU_VV, MASK_VQMACCSU_VV, match_quad_vd_neq_vs1_neq_vs2_neq_vm, 0},
+{"vqmaccsu.vx", 0, {"V", 0},  "Vd,s,VtVm",  MATCH_VQMACCSU_VX, MASK_VQMACCSU_VX, match_quad_vd_neq_vs2_neq_vm, 0},
+{"vqmaccus.vx", 0, {"V", 0},  "Vd,s,VtVm",  MATCH_VQMACCUS_VX, MASK_VQMACCUS_VX, match_quad_vd_neq_vs2_neq_vm, 0},
 
-{"vdivu.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VDIVUVV, MASK_VDIVUVV, match_opcode, 0 },
-{"vdivu.vx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VDIVUVX, MASK_VDIVUVX, match_opcode, 0 },
-{"vdiv.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VDIVVV, MASK_VDIVVV, match_opcode, 0 },
-{"vdiv.vx",    0, {"V", 0},  "Vd,Vt,sVm", MATCH_VDIVVX, MASK_VDIVVX, match_opcode, 0 },
-{"vremu.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VREMUVV, MASK_VREMUVV, match_opcode, 0 },
-{"vremu.vx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VREMUVX, MASK_VREMUVX, match_opcode, 0 },
-{"vrem.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VREMVV, MASK_VREMVV, match_opcode, 0 },
-{"vrem.vx",    0, {"V", 0},  "Vd,Vt,sVm", MATCH_VREMVX, MASK_VREMVX, match_opcode, 0 },
+{"vdivu.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VDIVU_VV, MASK_VDIVU_VV, match_vd_neq_vm, 0 },
+{"vdivu.vx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VDIVU_VX, MASK_VDIVU_VX, match_vd_neq_vm, 0 },
+{"vdiv.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VDIV_VV, MASK_VDIV_VV, match_vd_neq_vm, 0 },
+{"vdiv.vx",    0, {"V", 0},  "Vd,Vt,sVm", MATCH_VDIV_VX, MASK_VDIV_VX, match_vd_neq_vm, 0 },
+{"vremu.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VREMU_VV, MASK_VREMU_VV, match_vd_neq_vm, 0 },
+{"vremu.vx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VREMU_VX, MASK_VREMU_VX, match_vd_neq_vm, 0 },
+{"vrem.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VREM_VV, MASK_VREM_VV, match_vd_neq_vm, 0 },
+{"vrem.vx",    0, {"V", 0},  "Vd,Vt,sVm", MATCH_VREM_VX, MASK_VREM_VX, match_vd_neq_vm, 0 },
 
-{"vmerge.vvm", 0, {"V", 0},  "Vd,Vt,Vs,V0", MATCH_VMERGEVVM, MASK_VMERGEVVM, match_opcode, 0 },
-{"vmerge.vxm", 0, {"V", 0},  "Vd,Vt,s,V0", MATCH_VMERGEVXM, MASK_VMERGEVXM, match_opcode, 0 },
-{"vmerge.vim", 0, {"V", 0},  "Vd,Vt,Vi,V0", MATCH_VMERGEVIM, MASK_VMERGEVIM, match_opcode, 0 },
+{"vmerge.vvm", 0, {"V", 0},  "Vd,Vt,Vs,V0", MATCH_VMERGE_VVM, MASK_VMERGE_VVM, match_opcode, 0 },
+{"vmerge.vxm", 0, {"V", 0},  "Vd,Vt,s,V0", MATCH_VMERGE_VXM, MASK_VMERGE_VXM, match_opcode, 0 },
+{"vmerge.vim", 0, {"V", 0},  "Vd,Vt,Vi,V0", MATCH_VMERGE_VIM, MASK_VMERGE_VIM, match_opcode, 0 },
 
-{"vmv.v.v",    0, {"V", 0},  "Vd,Vs", MATCH_VMVVV, MASK_VMVVV, match_opcode, 0 },
-{"vmv.v.x",    0, {"V", 0},  "Vd,s", MATCH_VMVVX, MASK_VMVVX, match_opcode, 0 },
-{"vmv.v.i",    0, {"V", 0},  "Vd,Vi", MATCH_VMVVI, MASK_VMVVI, match_opcode, 0 },
+{"vmv.v.v",    0, {"V", 0},  "Vd,Vs", MATCH_VMV_V_V, MASK_VMV_V_V, match_opcode, 0 },
+{"vmv.v.x",    0, {"V", 0},  "Vd,s", MATCH_VMV_V_X, MASK_VMV_V_X, match_opcode, 0 },
+{"vmv.v.i",    0, {"V", 0},  "Vd,Vi", MATCH_VMV_V_I, MASK_VMV_V_I, match_opcode, 0 },
 
-{"vsaddu.vv",  0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VSADDUVV, MASK_VSADDUVV, match_opcode, 0 },
-{"vsaddu.vx",  0, {"V", 0},  "Vd,Vt,sVm", MATCH_VSADDUVX, MASK_VSADDUVX, match_opcode, 0 },
-{"vsaddu.vi",  0, {"V", 0},  "Vd,Vt,ViVm", MATCH_VSADDUVI, MASK_VSADDUVI, match_opcode, 0 },
-{"vsadd.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VSADDVV, MASK_VSADDVV, match_opcode, 0 },
-{"vsadd.vx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VSADDVX, MASK_VSADDVX, match_opcode, 0 },
-{"vsadd.vi",   0, {"V", 0},  "Vd,Vt,ViVm", MATCH_VSADDVI, MASK_VSADDVI, match_opcode, 0 },
-{"vssubu.vv",  0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VSSUBUVV, MASK_VSSUBUVV, match_opcode, 0 },
-{"vssubu.vx",  0, {"V", 0},  "Vd,Vt,sVm", MATCH_VSSUBUVX, MASK_VSSUBUVX, match_opcode, 0 },
-{"vssub.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VSSUBVV, MASK_VSSUBVV, match_opcode, 0 },
-{"vssub.vx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VSSUBVX, MASK_VSSUBVX, match_opcode, 0 },
+{"vsaddu.vv",  0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VSADDU_VV, MASK_VSADDU_VV, match_vd_neq_vm, 0 },
+{"vsaddu.vx",  0, {"V", 0},  "Vd,Vt,sVm", MATCH_VSADDU_VX, MASK_VSADDU_VX, match_vd_neq_vm, 0 },
+{"vsaddu.vi",  0, {"V", 0},  "Vd,Vt,ViVm", MATCH_VSADDU_VI, MASK_VSADDU_VI, match_vd_neq_vm, 0 },
+{"vsadd.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VSADD_VV, MASK_VSADD_VV, match_vd_neq_vm, 0 },
+{"vsadd.vx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VSADD_VX, MASK_VSADD_VX, match_vd_neq_vm, 0 },
+{"vsadd.vi",   0, {"V", 0},  "Vd,Vt,ViVm", MATCH_VSADD_VI, MASK_VSADD_VI, match_vd_neq_vm, 0 },
+{"vssubu.vv",  0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VSSUBU_VV, MASK_VSSUBU_VV, match_vd_neq_vm, 0 },
+{"vssubu.vx",  0, {"V", 0},  "Vd,Vt,sVm", MATCH_VSSUBU_VX, MASK_VSSUBU_VX, match_vd_neq_vm, 0 },
+{"vssub.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VSSUB_VV, MASK_VSSUB_VV, match_vd_neq_vm, 0 },
+{"vssub.vx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VSSUB_VX, MASK_VSSUB_VX, match_vd_neq_vm, 0 },
 
-{"vaaddu.vv",  0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VAADDUVV, MASK_VAADDUVV, match_opcode, 0 },
-{"vaaddu.vx",  0, {"V", 0},  "Vd,Vt,sVm", MATCH_VAADDUVX, MASK_VAADDUVX, match_opcode, 0 },
-{"vaadd.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VAADDVV, MASK_VAADDVV, match_opcode, 0 },
-{"vaadd.vx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VAADDVX, MASK_VAADDVX, match_opcode, 0 },
-{"vasubu.vv",  0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VASUBUVV, MASK_VASUBUVV, match_opcode, 0 },
-{"vasubu.vx",  0, {"V", 0},  "Vd,Vt,sVm", MATCH_VASUBUVX, MASK_VASUBUVX, match_opcode, 0 },
-{"vasub.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VASUBVV, MASK_VASUBVV, match_opcode, 0 },
-{"vasub.vx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VASUBVX, MASK_VASUBVX, match_opcode, 0 },
+{"vaaddu.vv",  0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VAADDU_VV, MASK_VAADDU_VV, match_vd_neq_vm, 0 },
+{"vaaddu.vx",  0, {"V", 0},  "Vd,Vt,sVm", MATCH_VAADDU_VX, MASK_VAADDU_VX, match_vd_neq_vm, 0 },
+{"vaadd.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VAADD_VV, MASK_VAADD_VV, match_vd_neq_vm, 0 },
+{"vaadd.vx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VAADD_VX, MASK_VAADD_VX, match_vd_neq_vm, 0 },
+{"vasubu.vv",  0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VASUBU_VV, MASK_VASUBU_VV, match_vd_neq_vm, 0 },
+{"vasubu.vx",  0, {"V", 0},  "Vd,Vt,sVm", MATCH_VASUBU_VX, MASK_VASUBU_VX, match_vd_neq_vm, 0 },
+{"vasub.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VASUB_VV, MASK_VASUB_VV, match_vd_neq_vm, 0 },
+{"vasub.vx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VASUB_VX, MASK_VASUB_VX, match_vd_neq_vm, 0 },
 
-{"vsmul.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VSMULVV, MASK_VSMULVV, match_opcode, 0 },
-{"vsmul.vx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VSMULVX, MASK_VSMULVX, match_opcode, 0 },
+{"vsmul.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VSMUL_VV, MASK_VSMUL_VV, match_vd_neq_vm, 0 },
+{"vsmul.vx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VSMUL_VX, MASK_VSMUL_VX, match_vd_neq_vm, 0 },
 
-{"vssrl.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VSSRLVV, MASK_VSSRLVV, match_opcode, 0 },
-{"vssrl.vx",    0, {"V", 0},  "Vd,Vt,sVm", MATCH_VSSRLVX, MASK_VSSRLVX, match_opcode, 0 },
-{"vssrl.vi",    0, {"V", 0},  "Vd,Vt,VjVm", MATCH_VSSRLVI, MASK_VSSRLVI, match_opcode, 0 },
-{"vssra.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VSSRAVV, MASK_VSSRAVV, match_opcode, 0 },
-{"vssra.vx",    0, {"V", 0},  "Vd,Vt,sVm", MATCH_VSSRAVX, MASK_VSSRAVX, match_opcode, 0 },
-{"vssra.vi",    0, {"V", 0},  "Vd,Vt,VjVm", MATCH_VSSRAVI, MASK_VSSRAVI, match_opcode, 0 },
+{"vssrl.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VSSRL_VV, MASK_VSSRL_VV, match_vd_neq_vm, 0 },
+{"vssrl.vx",    0, {"V", 0},  "Vd,Vt,sVm", MATCH_VSSRL_VX, MASK_VSSRL_VX, match_vd_neq_vm, 0 },
+{"vssrl.vi",    0, {"V", 0},  "Vd,Vt,VjVm", MATCH_VSSRL_VI, MASK_VSSRL_VI, match_vd_neq_vm, 0 },
+{"vssra.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VSSRA_VV, MASK_VSSRA_VV, match_vd_neq_vm, 0 },
+{"vssra.vx",    0, {"V", 0},  "Vd,Vt,sVm", MATCH_VSSRA_VX, MASK_VSSRA_VX, match_vd_neq_vm, 0 },
+{"vssra.vi",    0, {"V", 0},  "Vd,Vt,VjVm", MATCH_VSSRA_VI, MASK_VSSRA_VI, match_vd_neq_vm, 0 },
 
-{"vnclipu.wv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VNCLIPUWV, MASK_VNCLIPUWV, match_narrow_vd_neq_vs2, 0 },
-{"vnclipu.wx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VNCLIPUWX, MASK_VNCLIPUWX, match_narrow_vd_neq_vs2, 0 },
-{"vnclipu.wi",   0, {"V", 0},  "Vd,Vt,VjVm", MATCH_VNCLIPUWI, MASK_VNCLIPUWI, match_narrow_vd_neq_vs2, 0 },
-{"vnclip.wv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VNCLIPWV, MASK_VNCLIPWV, match_narrow_vd_neq_vs2, 0 },
-{"vnclip.wx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VNCLIPWX, MASK_VNCLIPWX, match_narrow_vd_neq_vs2, 0 },
-{"vnclip.wi",   0, {"V", 0},  "Vd,Vt,VjVm", MATCH_VNCLIPWI, MASK_VNCLIPWI, match_narrow_vd_neq_vs2, 0 },
+{"vnclipu.wv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VNCLIPU_WV, MASK_VNCLIPU_WV, match_narrow_vd_neq_vs2_neq_vm, 0 },
+{"vnclipu.wx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VNCLIPU_WX, MASK_VNCLIPU_WX, match_narrow_vd_neq_vs2_neq_vm, 0 },
+{"vnclipu.wi",   0, {"V", 0},  "Vd,Vt,VjVm", MATCH_VNCLIPU_WI, MASK_VNCLIPU_WI, match_narrow_vd_neq_vs2_neq_vm, 0 },
+{"vnclip.wv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VNCLIP_WV, MASK_VNCLIP_WV, match_narrow_vd_neq_vs2_neq_vm, 0 },
+{"vnclip.wx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VNCLIP_WX, MASK_VNCLIP_WX, match_narrow_vd_neq_vs2_neq_vm, 0 },
+{"vnclip.wi",   0, {"V", 0},  "Vd,Vt,VjVm", MATCH_VNCLIP_WI, MASK_VNCLIP_WI, match_narrow_vd_neq_vs2_neq_vm, 0 },
 
-{"vfadd.vv",   0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFADDVV, MASK_VFADDVV, match_opcode, 0},
-{"vfadd.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFADDVF, MASK_VFADDVF, match_opcode, 0},
-{"vfsub.vv",   0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFSUBVV, MASK_VFSUBVV, match_opcode, 0},
-{"vfsub.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFSUBVF, MASK_VFSUBVF, match_opcode, 0},
-{"vfrsub.vf",  0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFRSUBVF, MASK_VFRSUBVF, match_opcode, 0},
+{"vfadd.vv",   0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFADD_VV, MASK_VFADD_VV, match_vd_neq_vm, 0},
+{"vfadd.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFADD_VF, MASK_VFADD_VF, match_vd_neq_vm, 0},
+{"vfsub.vv",   0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFSUB_VV, MASK_VFSUB_VV, match_vd_neq_vm, 0},
+{"vfsub.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFSUB_VF, MASK_VFSUB_VF, match_vd_neq_vm, 0},
+{"vfrsub.vf",  0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFRSUB_VF, MASK_VFRSUB_VF, match_vd_neq_vm, 0},
 
-{"vfwadd.vv",   0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFWADDVV, MASK_VFWADDVV, match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0},
-{"vfwadd.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFWADDVF, MASK_VFWADDVF, match_widen_vd_neq_vs2_neq_vm, 0},
-{"vfwsub.vv",   0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFWSUBVV, MASK_VFWSUBVV, match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0},
-{"vfwsub.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFWSUBVF, MASK_VFWSUBVF, match_widen_vd_neq_vs2_neq_vm, 0},
-{"vfwadd.wv",   0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFWADDWV, MASK_VFWADDWV, match_widen_vd_neq_vs1_neq_vm, 0},
-{"vfwadd.wf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFWADDWF, MASK_VFWADDWF, match_widen_vd_neq_vm, 0},
-{"vfwsub.wv",   0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFWSUBWV, MASK_VFWSUBWV, match_widen_vd_neq_vs1_neq_vm, 0},
-{"vfwsub.wf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFWSUBWF, MASK_VFWSUBWF, match_widen_vd_neq_vm, 0},
+{"vfwadd.vv",   0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFWADD_VV, MASK_VFWADD_VV, match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0},
+{"vfwadd.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFWADD_VF, MASK_VFWADD_VF, match_widen_vd_neq_vs2_neq_vm, 0},
+{"vfwsub.vv",   0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFWSUB_VV, MASK_VFWSUB_VV, match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0},
+{"vfwsub.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFWSUB_VF, MASK_VFWSUB_VF, match_widen_vd_neq_vs2_neq_vm, 0},
+{"vfwadd.wv",   0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFWADD_WV, MASK_VFWADD_WV, match_widen_vd_neq_vs1_neq_vm, 0},
+{"vfwadd.wf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFWADD_WF, MASK_VFWADD_WF, match_widen_vd_neq_vm, 0},
+{"vfwsub.wv",   0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFWSUB_WV, MASK_VFWSUB_WV, match_widen_vd_neq_vs1_neq_vm, 0},
+{"vfwsub.wf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFWSUB_WF, MASK_VFWSUB_WF, match_widen_vd_neq_vm, 0},
 
-{"vfmul.vv",   0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFMULVV, MASK_VFMULVV, match_opcode, 0},
-{"vfmul.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFMULVF, MASK_VFMULVF, match_opcode, 0},
-{"vfdiv.vv",   0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFDIVVV, MASK_VFDIVVV, match_opcode, 0},
-{"vfdiv.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFDIVVF, MASK_VFDIVVF, match_opcode, 0},
-{"vfrdiv.vf",  0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFRDIVVF, MASK_VFRDIVVF, match_opcode, 0},
+{"vfmul.vv",   0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFMUL_VV, MASK_VFMUL_VV, match_vd_neq_vm, 0},
+{"vfmul.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFMUL_VF, MASK_VFMUL_VF, match_vd_neq_vm, 0},
+{"vfdiv.vv",   0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFDIV_VV, MASK_VFDIV_VV, match_vd_neq_vm, 0},
+{"vfdiv.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFDIV_VF, MASK_VFDIV_VF, match_vd_neq_vm, 0},
+{"vfrdiv.vf",  0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFRDIV_VF, MASK_VFRDIV_VF, match_vd_neq_vm, 0},
 
-{"vfwmul.vv",  0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFWMULVV, MASK_VFWMULVV, match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0},
-{"vfwmul.vf",  0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFWMULVF, MASK_VFWMULVF, match_widen_vd_neq_vs2_neq_vm, 0},
+{"vfwmul.vv",  0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFWMUL_VV, MASK_VFWMUL_VV, match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0},
+{"vfwmul.vf",  0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFWMUL_VF, MASK_VFWMUL_VF, match_widen_vd_neq_vs2_neq_vm, 0},
 
-{"vfmadd.vv",  0, {"V", "F", 0}, "Vd,Vs,VtVm", MATCH_VFMADDVV, MASK_VFMADDVV, match_opcode, 0},
-{"vfmadd.vf",  0, {"V", "F", 0}, "Vd,S,VtVm", MATCH_VFMADDVF, MASK_VFMADDVF, match_opcode, 0},
-{"vfnmadd.vv", 0, {"V", "F", 0}, "Vd,Vs,VtVm", MATCH_VFNMADDVV, MASK_VFNMADDVV, match_opcode, 0},
-{"vfnmadd.vf", 0, {"V", "F", 0}, "Vd,S,VtVm", MATCH_VFNMADDVF, MASK_VFNMADDVF, match_opcode, 0},
-{"vfmsub.vv",  0, {"V", "F", 0}, "Vd,Vs,VtVm", MATCH_VFMSUBVV, MASK_VFMSUBVV, match_opcode, 0},
-{"vfmsub.vf",  0, {"V", "F", 0}, "Vd,S,VtVm", MATCH_VFMSUBVF, MASK_VFMSUBVF, match_opcode, 0},
-{"vfnmsub.vv", 0, {"V", "F", 0}, "Vd,Vs,VtVm", MATCH_VFNMSUBVV, MASK_VFNMSUBVV, match_opcode, 0},
-{"vfnmsub.vf", 0, {"V", "F", 0}, "Vd,S,VtVm", MATCH_VFNMSUBVF, MASK_VFNMSUBVF, match_opcode, 0},
-{"vfmacc.vv",  0, {"V", "F", 0}, "Vd,Vs,VtVm", MATCH_VFMACCVV, MASK_VFMACCVV, match_opcode, 0},
-{"vfmacc.vf",  0, {"V", "F", 0}, "Vd,S,VtVm", MATCH_VFMACCVF, MASK_VFMACCVF, match_opcode, 0},
-{"vfnmacc.vv", 0, {"V", "F", 0}, "Vd,Vs,VtVm", MATCH_VFNMACCVV, MASK_VFNMACCVV, match_opcode, 0},
-{"vfnmacc.vf", 0, {"V", "F", 0}, "Vd,S,VtVm", MATCH_VFNMACCVF, MASK_VFNMACCVF, match_opcode, 0},
-{"vfmsac.vv",  0, {"V", "F", 0}, "Vd,Vs,VtVm", MATCH_VFMSACVV, MASK_VFMSACVV, match_opcode, 0},
-{"vfmsac.vf",  0, {"V", "F", 0}, "Vd,S,VtVm", MATCH_VFMSACVF, MASK_VFMSACVF, match_opcode, 0},
-{"vfnmsac.vv", 0, {"V", "F", 0}, "Vd,Vs,VtVm", MATCH_VFNMSACVV, MASK_VFNMSACVV, match_opcode, 0},
-{"vfnmsac.vf", 0, {"V", "F", 0}, "Vd,S,VtVm", MATCH_VFNMSACVF, MASK_VFNMSACVF, match_opcode, 0},
+{"vfmadd.vv",  0, {"V", "F", 0}, "Vd,Vs,VtVm", MATCH_VFMADD_VV, MASK_VFMADD_VV, match_vd_neq_vm, 0},
+{"vfmadd.vf",  0, {"V", "F", 0}, "Vd,S,VtVm", MATCH_VFMADD_VF, MASK_VFMADD_VF, match_vd_neq_vm, 0},
+{"vfnmadd.vv", 0, {"V", "F", 0}, "Vd,Vs,VtVm", MATCH_VFNMADD_VV, MASK_VFNMADD_VV, match_vd_neq_vm, 0},
+{"vfnmadd.vf", 0, {"V", "F", 0}, "Vd,S,VtVm", MATCH_VFNMADD_VF, MASK_VFNMADD_VF, match_vd_neq_vm, 0},
+{"vfmsub.vv",  0, {"V", "F", 0}, "Vd,Vs,VtVm", MATCH_VFMSUB_VV, MASK_VFMSUB_VV, match_vd_neq_vm, 0},
+{"vfmsub.vf",  0, {"V", "F", 0}, "Vd,S,VtVm", MATCH_VFMSUB_VF, MASK_VFMSUB_VF, match_vd_neq_vm, 0},
+{"vfnmsub.vv", 0, {"V", "F", 0}, "Vd,Vs,VtVm", MATCH_VFNMSUB_VV, MASK_VFNMSUB_VV, match_vd_neq_vm, 0},
+{"vfnmsub.vf", 0, {"V", "F", 0}, "Vd,S,VtVm", MATCH_VFNMSUB_VF, MASK_VFNMSUB_VF, match_vd_neq_vm, 0},
+{"vfmacc.vv",  0, {"V", "F", 0}, "Vd,Vs,VtVm", MATCH_VFMACC_VV, MASK_VFMACC_VV, match_vd_neq_vm, 0},
+{"vfmacc.vf",  0, {"V", "F", 0}, "Vd,S,VtVm", MATCH_VFMACC_VF, MASK_VFMACC_VF, match_vd_neq_vm, 0},
+{"vfnmacc.vv", 0, {"V", "F", 0}, "Vd,Vs,VtVm", MATCH_VFNMACC_VV, MASK_VFNMACC_VV, match_vd_neq_vm, 0},
+{"vfnmacc.vf", 0, {"V", "F", 0}, "Vd,S,VtVm", MATCH_VFNMACC_VF, MASK_VFNMACC_VF, match_vd_neq_vm, 0},
+{"vfmsac.vv",  0, {"V", "F", 0}, "Vd,Vs,VtVm", MATCH_VFMSAC_VV, MASK_VFMSAC_VV, match_vd_neq_vm, 0},
+{"vfmsac.vf",  0, {"V", "F", 0}, "Vd,S,VtVm", MATCH_VFMSAC_VF, MASK_VFMSAC_VF, match_vd_neq_vm, 0},
+{"vfnmsac.vv", 0, {"V", "F", 0}, "Vd,Vs,VtVm", MATCH_VFNMSAC_VV, MASK_VFNMSAC_VV, match_vd_neq_vm, 0},
+{"vfnmsac.vf", 0, {"V", "F", 0}, "Vd,S,VtVm", MATCH_VFNMSAC_VF, MASK_VFNMSAC_VF, match_vd_neq_vm, 0},
 
-{"vfwmacc.vv",  0, {"V", "F", 0}, "Vd,Vs,VtVm", MATCH_VFWMACCVV, MASK_VFWMACCVV, match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0},
-{"vfwmacc.vf",  0, {"V", "F", 0}, "Vd,S,VtVm", MATCH_VFWMACCVF, MASK_VFWMACCVF, match_widen_vd_neq_vs2_neq_vm, 0},
-{"vfwnmacc.vv", 0, {"V", "F", 0}, "Vd,Vs,VtVm", MATCH_VFWNMACCVV, MASK_VFWNMACCVV, match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0},
-{"vfwnmacc.vf", 0, {"V", "F", 0}, "Vd,S,VtVm", MATCH_VFWNMACCVF, MASK_VFWNMACCVF, match_widen_vd_neq_vs2_neq_vm, 0},
-{"vfwmsac.vv",  0, {"V", "F", 0}, "Vd,Vs,VtVm", MATCH_VFWMSACVV, MASK_VFWMSACVV, match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0},
-{"vfwmsac.vf",  0, {"V", "F", 0}, "Vd,S,VtVm", MATCH_VFWMSACVF, MASK_VFWMSACVF, match_widen_vd_neq_vs2_neq_vm, 0},
-{"vfwnmsac.vv", 0, {"V", "F", 0}, "Vd,Vs,VtVm", MATCH_VFWNMSACVV, MASK_VFWNMSACVV, match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0},
-{"vfwnmsac.vf", 0, {"V", "F", 0}, "Vd,S,VtVm", MATCH_VFWNMSACVF, MASK_VFWNMSACVF, match_widen_vd_neq_vs2_neq_vm, 0},
+{"vfwmacc.vv",  0, {"V", "F", 0}, "Vd,Vs,VtVm", MATCH_VFWMACC_VV, MASK_VFWMACC_VV, match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0},
+{"vfwmacc.vf",  0, {"V", "F", 0}, "Vd,S,VtVm", MATCH_VFWMACC_VF, MASK_VFWMACC_VF, match_widen_vd_neq_vs2_neq_vm, 0},
+{"vfwnmacc.vv", 0, {"V", "F", 0}, "Vd,Vs,VtVm", MATCH_VFWNMACC_VV, MASK_VFWNMACC_VV, match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0},
+{"vfwnmacc.vf", 0, {"V", "F", 0}, "Vd,S,VtVm", MATCH_VFWNMACC_VF, MASK_VFWNMACC_VF, match_widen_vd_neq_vs2_neq_vm, 0},
+{"vfwmsac.vv",  0, {"V", "F", 0}, "Vd,Vs,VtVm", MATCH_VFWMSAC_VV, MASK_VFWMSAC_VV, match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0},
+{"vfwmsac.vf",  0, {"V", "F", 0}, "Vd,S,VtVm", MATCH_VFWMSAC_VF, MASK_VFWMSAC_VF, match_widen_vd_neq_vs2_neq_vm, 0},
+{"vfwnmsac.vv", 0, {"V", "F", 0}, "Vd,Vs,VtVm", MATCH_VFWNMSAC_VV, MASK_VFWNMSAC_VV, match_widen_vd_neq_vs1_neq_vs2_neq_vm, 0},
+{"vfwnmsac.vf", 0, {"V", "F", 0}, "Vd,S,VtVm", MATCH_VFWNMSAC_VF, MASK_VFWNMSAC_VF, match_widen_vd_neq_vs2_neq_vm, 0},
 
-{"vfsqrt.v",   0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFSQRTV, MASK_VFSQRTV, match_opcode, 0},
+{"vfsqrt.v",   0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFSQRT_V, MASK_VFSQRT_V, match_vd_neq_vm, 0},
+{"vfrsqrt7.v", 0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFRSQRT7_V, MASK_VFRSQRT7_V, match_vd_neq_vm, 0},
+{"vfrsqrte7.v",0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFRSQRT7_V, MASK_VFRSQRT7_V, match_vd_neq_vm, 0},
+{"vfrec7.v",   0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFREC7_V, MASK_VFREC7_V, match_vd_neq_vm, 0},
+{"vfrece7.v",  0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFREC7_V, MASK_VFREC7_V, match_vd_neq_vm, 0},
+{"vfclass.v",  0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFCLASS_V, MASK_VFCLASS_V, match_vd_neq_vm, 0},
 
-{"vfmin.vv",   0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFMINVV, MASK_VFMINVV, match_opcode, 0},
-{"vfmin.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFMINVF, MASK_VFMINVF, match_opcode, 0},
-{"vfmax.vv",   0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFMAXVV, MASK_VFMAXVV, match_opcode, 0},
-{"vfmax.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFMAXVF, MASK_VFMAXVF, match_opcode, 0},
+{"vfmin.vv",   0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFMIN_VV, MASK_VFMIN_VV, match_vd_neq_vm, 0},
+{"vfmin.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFMIN_VF, MASK_VFMIN_VF, match_vd_neq_vm, 0},
+{"vfmax.vv",   0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFMAX_VV, MASK_VFMAX_VV, match_vd_neq_vm, 0},
+{"vfmax.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFMAX_VF, MASK_VFMAX_VF, match_vd_neq_vm, 0},
 
-{"vfsgnj.vv",  0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFSGNJVV, MASK_VFSGNJVV, match_opcode, 0},
-{"vfsgnj.vf",  0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFSGNJVF, MASK_VFSGNJVF, match_opcode, 0},
-{"vfsgnjn.vv", 0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFSGNJNVV, MASK_VFSGNJNVV, match_opcode, 0},
-{"vfsgnjn.vf", 0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFSGNJNVF, MASK_VFSGNJNVF, match_opcode, 0},
-{"vfsgnjx.vv", 0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFSGNJXVV, MASK_VFSGNJXVV, match_opcode, 0},
-{"vfsgnjx.vf", 0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFSGNJXVF, MASK_VFSGNJXVF, match_opcode, 0},
+{"vfneg.v",    0, {"V", "F", 0}, "Vd,VuVm", MATCH_VFSGNJN_VV, MASK_VFSGNJN_VV, match_vs1_eq_vs2_neq_vm, INSN_ALIAS },
+{"vfabs.v",    0, {"V", "F", 0}, "Vd,VuVm", MATCH_VFSGNJX_VV, MASK_VFSGNJX_VV, match_vs1_eq_vs2_neq_vm, INSN_ALIAS },
 
-{"vmfeq.vv",   0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VMFEQVV, MASK_VMFEQVV, match_opcode, 0},
-{"vmfeq.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VMFEQVF, MASK_VMFEQVF, match_opcode, 0},
-{"vmfne.vv",   0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VMFNEVV, MASK_VMFNEVV, match_opcode, 0},
-{"vmfne.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VMFNEVF, MASK_VMFNEVF, match_opcode, 0},
-{"vmflt.vv",   0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VMFLTVV, MASK_VMFLTVV, match_opcode, 0},
-{"vmflt.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VMFLTVF, MASK_VMFLTVF, match_opcode, 0},
-{"vmfle.vv",   0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VMFLEVV, MASK_VMFLEVV, match_opcode, 0},
-{"vmfle.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VMFLEVF, MASK_VMFLEVF, match_opcode, 0},
-{"vmfgt.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VMFGTVF, MASK_VMFGTVF, match_opcode, 0},
-{"vmfge.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VMFGEVF, MASK_VMFGEVF, match_opcode, 0},
+{"vfsgnj.vv",  0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFSGNJ_VV, MASK_VFSGNJ_VV, match_vd_neq_vm, 0},
+{"vfsgnj.vf",  0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFSGNJ_VF, MASK_VFSGNJ_VF, match_vd_neq_vm, 0},
+{"vfsgnjn.vv", 0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFSGNJN_VV, MASK_VFSGNJN_VV, match_vd_neq_vm, 0},
+{"vfsgnjn.vf", 0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFSGNJN_VF, MASK_VFSGNJN_VF, match_vd_neq_vm, 0},
+{"vfsgnjx.vv", 0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFSGNJX_VV, MASK_VFSGNJX_VV, match_vd_neq_vm, 0},
+{"vfsgnjx.vf", 0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFSGNJX_VF, MASK_VFSGNJX_VF, match_vd_neq_vm, 0},
+
+{"vmfeq.vv",   0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VMFEQ_VV, MASK_VMFEQ_VV, match_opcode, 0},
+{"vmfeq.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VMFEQ_VF, MASK_VMFEQ_VF, match_opcode, 0},
+{"vmfne.vv",   0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VMFNE_VV, MASK_VMFNE_VV, match_opcode, 0},
+{"vmfne.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VMFNE_VF, MASK_VMFNE_VF, match_opcode, 0},
+{"vmflt.vv",   0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VMFLT_VV, MASK_VMFLT_VV, match_opcode, 0},
+{"vmflt.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VMFLT_VF, MASK_VMFLT_VF, match_opcode, 0},
+{"vmfle.vv",   0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VMFLE_VV, MASK_VMFLE_VV, match_opcode, 0},
+{"vmfle.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VMFLE_VF, MASK_VMFLE_VF, match_opcode, 0},
+{"vmfgt.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VMFGT_VF, MASK_VMFGT_VF, match_opcode, 0},
+{"vmfge.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VMFGE_VF, MASK_VMFGE_VF, match_opcode, 0},
 
 /* These aliases are for assembly but not disassembly.  */
-{"vmfgt.vv",   0, {"V", "F", 0}, "Vd,Vs,VtVm", MATCH_VMFLTVV, MASK_VMFLTVV, match_opcode, INSN_ALIAS},
-{"vmfge.vv",   0, {"V", "F", 0}, "Vd,Vs,VtVm", MATCH_VMFLEVV, MASK_VMFLEVV, match_opcode, INSN_ALIAS},
+{"vmfgt.vv",   0, {"V", "F", 0}, "Vd,Vs,VtVm", MATCH_VMFLT_VV, MASK_VMFLT_VV, match_opcode, INSN_ALIAS},
+{"vmfge.vv",   0, {"V", "F", 0}, "Vd,Vs,VtVm", MATCH_VMFLE_VV, MASK_VMFLE_VV, match_opcode, INSN_ALIAS},
 
-{"vfclass.v",  0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFCLASSV, MASK_VFCLASSV, match_opcode, 0},
+{"vfmerge.vfm",0, {"V", "F", 0}, "Vd,Vt,S,V0", MATCH_VFMERGE_VFM, MASK_VFMERGE_VFM, match_opcode, 0},
+{"vfmv.v.f",   0, {"V", "F", 0}, "Vd,S", MATCH_VFMV_V_F, MASK_VFMV_V_F, match_opcode, 0 },
 
-{"vfmerge.vfm",0, {"V", "F", 0}, "Vd,Vt,S,V0", MATCH_VFMERGEVFM, MASK_VFMERGEVFM, match_opcode, 0},
-{"vfmv.v.f",   0, {"V", "F", 0}, "Vd,S", MATCH_VFMVVF, MASK_VFMVVF, match_opcode, 0 },
+{"vfcvt.xu.f.v",     0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFCVT_XU_F_V, MASK_VFCVT_XU_F_V, match_vd_neq_vm, 0},
+{"vfcvt.x.f.v",      0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFCVT_X_F_V, MASK_VFCVT_X_F_V, match_vd_neq_vm, 0},
+{"vfcvt.rtz.xu.f.v", 0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFCVT_RTZ_XU_F_V, MASK_VFCVT_RTZ_XU_F_V, match_vd_neq_vm, 0},
+{"vfcvt.rtz.x.f.v",  0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFCVT_RTZ_X_F_V, MASK_VFCVT_RTZ_X_F_V, match_vd_neq_vm, 0},
+{"vfcvt.f.xu.v",     0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFCVT_F_XU_V, MASK_VFCVT_F_XU_V, match_vd_neq_vm, 0},
+{"vfcvt.f.x.v",      0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFCVT_F_X_V, MASK_VFCVT_F_X_V, match_vd_neq_vm, 0},
 
-{"vfcvt.xu.f.v",     0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFCVTXUFV, MASK_VFCVTXUFV, match_opcode, 0},
-{"vfcvt.x.f.v",      0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFCVTXFV, MASK_VFCVTXFV, match_opcode, 0},
-{"vfcvt.rtz.xu.f.v", 0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFCVTRTZXUFV, MASK_VFCVTRTZXUFV, match_opcode, 0},
-{"vfcvt.rtz.x.f.v",  0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFCVTRTZXFV, MASK_VFCVTRTZXFV, match_opcode, 0},
-{"vfcvt.f.xu.v",     0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFCVTFXUV, MASK_VFCVTFXUV, match_opcode, 0},
-{"vfcvt.f.x.v",      0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFCVTFXV, MASK_VFCVTFXV, match_opcode, 0},
+{"vfwcvt.xu.f.v",     0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFWCVT_XU_F_V, MASK_VFWCVT_XU_F_V, match_widen_vd_neq_vs2_neq_vm, 0},
+{"vfwcvt.x.f.v",      0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFWCVT_X_F_V, MASK_VFWCVT_X_F_V, match_widen_vd_neq_vs2_neq_vm, 0},
+{"vfwcvt.rtz.xu.f.v", 0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFWCVT_RTZ_XU_F_V, MASK_VFWCVT_RTZ_XU_F_V, match_widen_vd_neq_vs2_neq_vm, 0},
+{"vfwcvt.rtz.x.f.v",  0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFWCVT_RTZ_X_F_V, MASK_VFWCVT_RTZ_X_F_V, match_widen_vd_neq_vs2_neq_vm, 0},
+{"vfwcvt.f.xu.v",     0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFWCVT_F_XU_V, MASK_VFWCVT_F_XU_V, match_widen_vd_neq_vs2_neq_vm, 0},
+{"vfwcvt.f.x.v",      0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFWCVT_F_X_V, MASK_VFWCVT_F_X_V, match_widen_vd_neq_vs2_neq_vm, 0},
+{"vfwcvt.f.f.v",      0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFWCVT_F_F_V, MASK_VFWCVT_F_F_V, match_widen_vd_neq_vs2_neq_vm, 0},
 
-{"vfwcvt.xu.f.v",     0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFWCVTXUFV, MASK_VFWCVTXUFV, match_widen_vd_neq_vs2_neq_vm, 0},
-{"vfwcvt.x.f.v",      0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFWCVTXFV, MASK_VFWCVTXFV, match_widen_vd_neq_vs2_neq_vm, 0},
-{"vfwcvt.rtz.xu.f.v", 0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFWCVTRTZXUFV, MASK_VFWCVTRTZXUFV, match_widen_vd_neq_vs2_neq_vm, 0},
-{"vfwcvt.rtz.x.f.v",  0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFWCVTRTZXFV, MASK_VFWCVTRTZXFV, match_widen_vd_neq_vs2_neq_vm, 0},
-{"vfwcvt.f.xu.v",     0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFWCVTFXUV, MASK_VFWCVTFXUV, match_widen_vd_neq_vs2_neq_vm, 0},
-{"vfwcvt.f.x.v",      0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFWCVTFXV, MASK_VFWCVTFXV, match_widen_vd_neq_vs2_neq_vm, 0},
-{"vfwcvt.f.f.v",      0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFWCVTFFV, MASK_VFWCVTFFV, match_widen_vd_neq_vs2_neq_vm, 0},
+{"vfncvt.xu.f.w",     0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVT_XU_F_W, MASK_VFNCVT_XU_F_W, match_narrow_vd_neq_vs2_neq_vm, 0},
+{"vfncvt.x.f.w",      0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVT_X_F_W, MASK_VFNCVT_X_F_W, match_narrow_vd_neq_vs2_neq_vm, 0},
+{"vfncvt.rtz.xu.f.w", 0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVT_RTZ_XU_F_W, MASK_VFNCVT_RTZ_XU_F_W, match_narrow_vd_neq_vs2_neq_vm, 0},
+{"vfncvt.rtz.x.f.w",  0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVT_RTZ_X_F_W, MASK_VFNCVT_RTZ_X_F_W, match_narrow_vd_neq_vs2_neq_vm, 0},
+{"vfncvt.f.xu.w",     0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVT_F_XU_W, MASK_VFNCVT_F_XU_W, match_narrow_vd_neq_vs2_neq_vm, 0},
+{"vfncvt.f.x.w",      0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVT_F_X_W, MASK_VFNCVT_F_X_W, match_narrow_vd_neq_vs2_neq_vm, 0},
+{"vfncvt.f.f.w",      0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVT_F_F_W, MASK_VFNCVT_F_F_W, match_narrow_vd_neq_vs2_neq_vm, 0},
+{"vfncvt.rod.f.f.w",  0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVT_ROD_F_F_W, MASK_VFNCVT_ROD_F_F_W, match_narrow_vd_neq_vs2_neq_vm, 0},
 
-{"vfncvt.xu.f.w",     0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVTXUFW, MASK_VFNCVTXUFW, match_narrow_vd_neq_vs2, 0},
-{"vfncvt.x.f.w",      0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVTXFW, MASK_VFNCVTXFW, match_narrow_vd_neq_vs2, 0},
-{"vfncvt.rtz.xu.f.w", 0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVTRTZXUFW, MASK_VFNCVTRTZXUFW, match_narrow_vd_neq_vs2, 0},
-{"vfncvt.rtz.x.f.w",  0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVTRTZXFW, MASK_VFNCVTRTZXFW, match_narrow_vd_neq_vs2, 0},
-{"vfncvt.f.xu.w",     0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVTFXUW, MASK_VFNCVTFXUW, match_narrow_vd_neq_vs2, 0},
-{"vfncvt.f.x.w",      0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVTFXW, MASK_VFNCVTFXW, match_narrow_vd_neq_vs2, 0},
-{"vfncvt.f.f.w",      0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVTFFW, MASK_VFNCVTFFW, match_narrow_vd_neq_vs2, 0},
-{"vfncvt.rod.f.f.w",  0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVTRODFFW, MASK_VFNCVTRODFFW, match_narrow_vd_neq_vs2, 0},
+{"vredsum.vs", 0, {"V", 0}, "Vd,Vt,VsVm", MATCH_VREDSUM_VS, MASK_VREDSUM_VS, match_opcode, 0},
+{"vredmaxu.vs",0, {"V", 0}, "Vd,Vt,VsVm", MATCH_VREDMAXU_VS, MASK_VREDMAXU_VS, match_opcode, 0},
+{"vredmax.vs", 0, {"V", 0}, "Vd,Vt,VsVm", MATCH_VREDMAX_VS, MASK_VREDMAX_VS, match_opcode, 0},
+{"vredminu.vs",0, {"V", 0}, "Vd,Vt,VsVm", MATCH_VREDMINU_VS, MASK_VREDMINU_VS, match_opcode, 0},
+{"vredmin.vs", 0, {"V", 0}, "Vd,Vt,VsVm", MATCH_VREDMIN_VS, MASK_VREDMIN_VS, match_opcode, 0},
+{"vredand.vs", 0, {"V", 0}, "Vd,Vt,VsVm", MATCH_VREDAND_VS, MASK_VREDAND_VS, match_opcode, 0},
+{"vredor.vs",  0, {"V", 0}, "Vd,Vt,VsVm", MATCH_VREDOR_VS, MASK_VREDOR_VS, match_opcode, 0},
+{"vredxor.vs", 0, {"V", 0}, "Vd,Vt,VsVm", MATCH_VREDXOR_VS, MASK_VREDXOR_VS, match_opcode, 0},
 
-{"vredsum.vs", 0, {"V", 0}, "Vd,Vt,VsVm", MATCH_VREDSUMVS, MASK_VREDSUMVS, match_opcode, 0},
-{"vredmaxu.vs",0, {"V", 0}, "Vd,Vt,VsVm", MATCH_VREDMAXUVS, MASK_VREDMAXUVS, match_opcode, 0},
-{"vredmax.vs", 0, {"V", 0}, "Vd,Vt,VsVm", MATCH_VREDMAXVS, MASK_VREDMAXVS, match_opcode, 0},
-{"vredminu.vs",0, {"V", 0}, "Vd,Vt,VsVm", MATCH_VREDMINUVS, MASK_VREDMINUVS, match_opcode, 0},
-{"vredmin.vs", 0, {"V", 0}, "Vd,Vt,VsVm", MATCH_VREDMINVS, MASK_VREDMINVS, match_opcode, 0},
-{"vredand.vs", 0, {"V", 0}, "Vd,Vt,VsVm", MATCH_VREDANDVS, MASK_VREDANDVS, match_opcode, 0},
-{"vredor.vs",  0, {"V", 0}, "Vd,Vt,VsVm", MATCH_VREDORVS, MASK_VREDORVS, match_opcode, 0},
-{"vredxor.vs", 0, {"V", 0}, "Vd,Vt,VsVm", MATCH_VREDXORVS, MASK_VREDXORVS, match_opcode, 0},
+{"vwredsumu.vs",0, {"V", 0}, "Vd,Vt,VsVm", MATCH_VWREDSUMU_VS, MASK_VWREDSUMU_VS, match_opcode, 0},
+{"vwredsum.vs",0, {"V", 0}, "Vd,Vt,VsVm", MATCH_VWREDSUM_VS, MASK_VWREDSUM_VS, match_opcode, 0},
 
-{"vwredsumu.vs",0, {"V", 0}, "Vd,Vt,VsVm", MATCH_VWREDSUMUVS, MASK_VWREDSUMUVS, match_opcode, 0},
-{"vwredsum.vs",0, {"V", 0}, "Vd,Vt,VsVm", MATCH_VWREDSUMVS, MASK_VWREDSUMVS, match_opcode, 0},
+{"vfredosum.vs",0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFREDOSUM_VS, MASK_VFREDOSUM_VS, match_opcode, 0},
+{"vfredsum.vs", 0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFREDSUM_VS, MASK_VFREDSUM_VS, match_opcode, 0},
+{"vfredmax.vs", 0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFREDMAX_VS, MASK_VFREDMAX_VS, match_opcode, 0},
+{"vfredmin.vs", 0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFREDMIN_VS, MASK_VFREDMIN_VS, match_opcode, 0},
 
-{"vfredosum.vs",0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFREDOSUMVS, MASK_VFREDOSUMVS, match_opcode, 0},
-{"vfredsum.vs", 0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFREDSUMVS, MASK_VFREDSUMVS, match_opcode, 0},
-{"vfredmax.vs", 0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFREDMAXVS, MASK_VFREDMAXVS, match_opcode, 0},
-{"vfredmin.vs", 0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFREDMINVS, MASK_VFREDMINVS, match_opcode, 0},
+{"vfwredosum.vs",0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFWREDOSUM_VS, MASK_VFWREDOSUM_VS, match_opcode, 0},
+{"vfwredsum.vs", 0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFWREDSUM_VS, MASK_VFWREDSUM_VS, match_opcode, 0},
 
-{"vfwredosum.vs",0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFWREDOSUMVS, MASK_VFWREDOSUMVS, match_opcode, 0},
-{"vfwredsum.vs", 0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFWREDSUMVS, MASK_VFWREDSUMVS, match_opcode, 0},
+{"vmmv.m",     0, {"V", 0}, "Vd,Vu", MATCH_VMAND_MM, MASK_VMAND_MM, match_vs1_eq_vs2, INSN_ALIAS},
+{"vmcpy.m",    0, {"V", 0}, "Vd,Vu", MATCH_VMAND_MM, MASK_VMAND_MM, match_vs1_eq_vs2, INSN_ALIAS},
+{"vmclr.m",    0, {"V", 0}, "Vv", MATCH_VMXOR_MM, MASK_VMXOR_MM, match_vd_eq_vs1_eq_vs2, INSN_ALIAS},
+{"vmset.m",    0, {"V", 0}, "Vv", MATCH_VMXNOR_MM, MASK_VMXNOR_MM, match_vd_eq_vs1_eq_vs2, INSN_ALIAS},
+{"vmnot.m",    0, {"V", 0}, "Vd,Vu", MATCH_VMNAND_MM, MASK_VMNAND_MM, match_vs1_eq_vs2, INSN_ALIAS},
 
-{"vmmv.m",     0, {"V", 0}, "Vd,Vu", MATCH_VMANDMM, MASK_VMANDMM, match_vs1_eq_vs2, INSN_ALIAS},
-{"vmcpy.m",    0, {"V", 0}, "Vd,Vu", MATCH_VMANDMM, MASK_VMANDMM, match_vs1_eq_vs2, INSN_ALIAS},
-{"vmclr.m",    0, {"V", 0}, "Vv", MATCH_VMXORMM, MASK_VMXORMM, match_vd_eq_vs1_eq_vs2, INSN_ALIAS},
-{"vmset.m",    0, {"V", 0}, "Vv", MATCH_VMXNORMM, MASK_VMXNORMM, match_vd_eq_vs1_eq_vs2, INSN_ALIAS},
-{"vmnot.m",    0, {"V", 0}, "Vd,Vu", MATCH_VMNANDMM, MASK_VMNANDMM, match_vs1_eq_vs2, INSN_ALIAS},
+{"vmand.mm",   0, {"V", 0}, "Vd,Vt,Vs", MATCH_VMAND_MM, MASK_VMAND_MM, match_opcode, 0},
+{"vmnand.mm",  0, {"V", 0}, "Vd,Vt,Vs", MATCH_VMNAND_MM, MASK_VMNAND_MM, match_opcode, 0},
+{"vmandnot.mm",0, {"V", 0}, "Vd,Vt,Vs", MATCH_VMANDNOT_MM, MASK_VMANDNOT_MM, match_opcode, 0},
+{"vmxor.mm",   0, {"V", 0}, "Vd,Vt,Vs", MATCH_VMXOR_MM, MASK_VMXOR_MM, match_opcode, 0},
+{"vmor.mm",    0, {"V", 0}, "Vd,Vt,Vs", MATCH_VMOR_MM, MASK_VMOR_MM, match_opcode, 0},
+{"vmnor.mm",   0, {"V", 0}, "Vd,Vt,Vs", MATCH_VMNOR_MM, MASK_VMNOR_MM, match_opcode, 0},
+{"vmornot.mm", 0, {"V", 0}, "Vd,Vt,Vs", MATCH_VMORNOT_MM, MASK_VMORNOT_MM, match_opcode, 0},
+{"vmxnor.mm",  0, {"V", 0}, "Vd,Vt,Vs", MATCH_VMXNOR_MM, MASK_VMXNOR_MM, match_opcode, 0},
 
-{"vmand.mm",   0, {"V", 0}, "Vd,Vt,Vs", MATCH_VMANDMM, MASK_VMANDMM, match_opcode, 0},
-{"vmnand.mm",  0, {"V", 0}, "Vd,Vt,Vs", MATCH_VMNANDMM, MASK_VMNANDMM, match_opcode, 0},
-{"vmandnot.mm",0, {"V", 0}, "Vd,Vt,Vs", MATCH_VMANDNOTMM, MASK_VMANDNOTMM, match_opcode, 0},
-{"vmxor.mm",   0, {"V", 0}, "Vd,Vt,Vs", MATCH_VMXORMM, MASK_VMXORMM, match_opcode, 0},
-{"vmor.mm",    0, {"V", 0}, "Vd,Vt,Vs", MATCH_VMORMM, MASK_VMORMM, match_opcode, 0},
-{"vmnor.mm",   0, {"V", 0}, "Vd,Vt,Vs", MATCH_VMNORMM, MASK_VMNORMM, match_opcode, 0},
-{"vmornot.mm", 0, {"V", 0}, "Vd,Vt,Vs", MATCH_VMORNOTMM, MASK_VMORNOTMM, match_opcode, 0},
-{"vmxnor.mm",  0, {"V", 0}, "Vd,Vt,Vs", MATCH_VMXNORMM, MASK_VMXNORMM, match_opcode, 0},
+{"vpopc.m",    0, {"V", 0}, "d,VtVm", MATCH_VPOPC_M, MASK_VPOPC_M, match_opcode, 0},
+{"vfirst.m",   0, {"V", 0}, "d,VtVm", MATCH_VFIRST_M, MASK_VFIRST_M, match_opcode, 0},
+{"vmsbf.m",    0, {"V", 0}, "Vd,VtVm", MATCH_VMSBF_M, MASK_VMSBF_M, match_vd_neq_vs2_neq_vm, 0},
+{"vmsif.m",    0, {"V", 0}, "Vd,VtVm", MATCH_VMSIF_M, MASK_VMSIF_M, match_vd_neq_vs2_neq_vm, 0},
+{"vmsof.m",    0, {"V", 0}, "Vd,VtVm", MATCH_VMSOF_M, MASK_VMSOF_M, match_vd_neq_vs2_neq_vm, 0},
+{"viota.m",    0, {"V", 0}, "Vd,VtVm", MATCH_VIOTA_M, MASK_VIOTA_M, match_vd_neq_vs2_neq_vm, 0},
+{"vid.v",      0, {"V", 0}, "VdVm", MATCH_VID_V, MASK_VID_V, match_vd_neq_vm, 0},
 
-{"vpopc.m",    0, {"V", 0}, "d,VtVm", MATCH_VPOPCM, MASK_VPOPCM, match_opcode, 0},
-{"vfirst.m",   0, {"V", 0}, "d,VtVm", MATCH_VFIRSTM, MASK_VFIRSTM, match_opcode, 0},
-{"vmsbf.m",    0, {"V", 0}, "Vd,VtVm", MATCH_VMSBFM, MASK_VMSBFM, match_opcode, 0},
-{"vmsif.m",    0, {"V", 0}, "Vd,VtVm", MATCH_VMSIFM, MASK_VMSIFM, match_opcode, 0},
-{"vmsof.m",    0, {"V", 0}, "Vd,VtVm", MATCH_VMSOFM, MASK_VMSOFM, match_opcode, 0},
-{"viota.m",    0, {"V", 0}, "Vd,VtVm", MATCH_VIOTAM, MASK_VIOTAM, match_vd_neq_vs2_neq_vm, 0},
-{"vid.v",      0, {"V", 0}, "VdVm", MATCH_VIDV, MASK_VIDV, match_opcode, 0},
+{"vmv.x.s",    0, {"V", 0}, "d,Vt", MATCH_VMV_X_S, MASK_VMV_X_S, match_opcode, 0},
+{"vmv.s.x",    0, {"V", 0}, "Vd,s", MATCH_VMV_S_X, MASK_VMV_S_X, match_opcode, 0},
 
-{"vmv.x.s",    0, {"V", 0}, "d,Vt", MATCH_VMVXS, MASK_VMVXS, match_opcode, 0},
-{"vmv.s.x",    0, {"V", 0}, "Vd,s", MATCH_VMVSX, MASK_VMVSX, match_opcode, 0},
+{"vfmv.f.s",   0, {"V", "F", 0}, "D,Vt", MATCH_VFMV_F_S, MASK_VFMV_F_S, match_opcode, 0},
+{"vfmv.s.f",   0, {"V", "F", 0}, "Vd,S", MATCH_VFMV_S_F, MASK_VFMV_S_F, match_opcode, 0},
 
-{"vfmv.f.s",   0, {"V", "F", 0}, "D,Vt", MATCH_VFMVFS, MASK_VFMVFS, match_opcode, 0},
-{"vfmv.s.f",   0, {"V", "F", 0}, "Vd,S", MATCH_VFMVSF, MASK_VFMVSF, match_opcode, 0},
+{"vslideup.vx",0, {"V", 0}, "Vd,Vt,sVm", MATCH_VSLIDEUP_VX, MASK_VSLIDEUP_VX, match_vd_neq_vs2_neq_vm, 0},
+{"vslideup.vi",0, {"V", 0}, "Vd,Vt,VjVm", MATCH_VSLIDEUP_VI, MASK_VSLIDEUP_VI, match_vd_neq_vs2_neq_vm, 0},
+{"vslidedown.vx",0,{"V", 0}, "Vd,Vt,sVm", MATCH_VSLIDEDOWN_VX, MASK_VSLIDEDOWN_VX, match_vd_neq_vm, 0},
+{"vslidedown.vi",0,{"V", 0}, "Vd,Vt,VjVm", MATCH_VSLIDEDOWN_VI, MASK_VSLIDEDOWN_VI, match_vd_neq_vm, 0},
 
-{"vslideup.vx",0, {"V", 0}, "Vd,Vt,sVm", MATCH_VSLIDEUPVX, MASK_VSLIDEUPVX, match_vd_neq_vs2, 0},
-{"vslideup.vi",0, {"V", 0}, "Vd,Vt,VjVm", MATCH_VSLIDEUPVI, MASK_VSLIDEUPVI, match_vd_neq_vs2, 0},
-{"vslidedown.vx",0,{"V", 0}, "Vd,Vt,sVm", MATCH_VSLIDEDOWNVX, MASK_VSLIDEDOWNVX, match_opcode, 0},
-{"vslidedown.vi",0,{"V", 0}, "Vd,Vt,VjVm", MATCH_VSLIDEDOWNVI, MASK_VSLIDEDOWNVI, match_opcode, 0},
+{"vslide1up.vx",    0, {"V", 0}, "Vd,Vt,sVm", MATCH_VSLIDE1UP_VX, MASK_VSLIDE1UP_VX, match_vd_neq_vs2_neq_vm, 0},
+{"vslide1down.vx",  0, {"V", 0}, "Vd,Vt,sVm", MATCH_VSLIDE1DOWN_VX, MASK_VSLIDE1DOWN_VX, match_vd_neq_vm, 0},
+{"vfslide1up.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFSLIDE1UP_VF, MASK_VFSLIDE1UP_VF, match_vd_neq_vs2_neq_vm, 0},
+{"vfslide1down.vf", 0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFSLIDE1DOWN_VF, MASK_VFSLIDE1DOWN_VF, match_vd_neq_vm, 0},
 
-{"vslide1up.vx",    0, {"V", 0}, "Vd,Vt,sVm", MATCH_VSLIDE1UPVX, MASK_VSLIDE1UPVX, match_vd_neq_vs2, 0},
-{"vslide1down.vx",  0, {"V", 0}, "Vd,Vt,sVm", MATCH_VSLIDE1DOWNVX, MASK_VSLIDE1DOWNVX, match_opcode, 0},
-{"vfslide1up.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFSLIDE1UPVF, MASK_VFSLIDE1UPVF, match_vd_neq_vs2, 0},
-{"vfslide1down.vf", 0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFSLIDE1DOWNVF, MASK_VFSLIDE1DOWNVF, match_opcode, 0},
+{"vrgather.vv",    0, {"V", 0}, "Vd,Vt,VsVm", MATCH_VRGATHER_VV, MASK_VRGATHER_VV, match_vd_neq_vs1_neq_vs2_neq_vm, 0},
+{"vrgather.vx",    0, {"V", 0}, "Vd,Vt,sVm", MATCH_VRGATHER_VX, MASK_VRGATHER_VX, match_vd_neq_vs2_neq_vm, 0},
+{"vrgather.vi",    0, {"V", 0}, "Vd,Vt,VjVm", MATCH_VRGATHER_VI, MASK_VRGATHER_VI, match_vd_neq_vs2_neq_vm, 0},
+{"vrgatherei16.vv",0, {"V", 0}, "Vd,Vt,VsVm", MATCH_VRGATHEREI16_VV, MASK_VRGATHEREI16_VV, match_vd_neq_vs1_neq_vs2_neq_vm, 0},
 
-{"vrgather.vv",0, {"V", 0}, "Vd,Vt,VsVm", MATCH_VRGATHERVV, MASK_VRGATHERVV, match_vd_neq_vs1_neq_vs2_neq_vm, 0},
-{"vrgather.vx",0, {"V", 0}, "Vd,Vt,sVm", MATCH_VRGATHERVX, MASK_VRGATHERVX, match_vd_neq_vs2_neq_vm, 0},
-{"vrgather.vi",0, {"V", 0}, "Vd,Vt,VjVm", MATCH_VRGATHERVI, MASK_VRGATHERVI, match_vd_neq_vs2_neq_vm, 0},
+{"vcompress.vm",0, {"V", 0}, "Vd,Vt,Vs", MATCH_VCOMPRESS_VM, MASK_VCOMPRESS_VM, match_vd_neq_vs1_neq_vs2, 0},
 
-{"vcompress.vm",0, {"V", 0}, "Vd,Vt,Vs", MATCH_VCOMPRESSVM, MASK_VCOMPRESSVM, match_vd_neq_vs1_neq_vs2_neq_vm, 0},
+{"vmv1r.v",    0, {"V", 0}, "Vd,Vt", MATCH_VMV1R_V, MASK_VMV1R_V, match_vmv_nf_rv, 0},
+{"vmv2r.v",    0, {"V", 0}, "Vd,Vt", MATCH_VMV2R_V, MASK_VMV2R_V, match_vmv_nf_rv, 0},
+{"vmv4r.v",    0, {"V", 0}, "Vd,Vt", MATCH_VMV4R_V, MASK_VMV4R_V, match_vmv_nf_rv, 0},
+{"vmv8r.v",    0, {"V", 0}, "Vd,Vt", MATCH_VMV8R_V, MASK_VMV8R_V, match_vmv_nf_rv, 0},
 
-{"vmv1r.v",    0, {"V", 0}, "Vd,Vt", MATCH_VMV1RV, MASK_VMV1RV, match_vmv_nf_rv, 0},
-{"vmv2r.v",    0, {"V", 0}, "Vd,Vt", MATCH_VMV2RV, MASK_VMV2RV, match_vmv_nf_rv, 0},
-{"vmv4r.v",    0, {"V", 0}, "Vd,Vt", MATCH_VMV4RV, MASK_VMV4RV, match_vmv_nf_rv, 0},
-{"vmv8r.v",    0, {"V", 0}, "Vd,Vt", MATCH_VMV8RV, MASK_VMV8RV, match_vmv_nf_rv, 0},
-
-{"vdot.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VDOTVV, MASK_VDOTVV, match_opcode, 0},
-{"vdotu.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VDOTUVV, MASK_VDOTUVV, match_opcode, 0},
-{"vfdot.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VFDOTVV, MASK_VFDOTVV, match_opcode, 0},
+{"vdot.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VDOT_VV, MASK_VDOT_VV, match_opcode, 0},
+{"vdotu.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VDOTU_VV, MASK_VDOTU_VV, match_opcode, 0},
+{"vfdot.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VFDOT_VV, MASK_VFDOT_VV, match_opcode, 0},
 /* END RVV */
+
+/* Zbkx instructions  */
+{"xperm4",     0, {"ZBKX", 0},  "d,s,t",  MATCH_XPERM4, MASK_XPERM4, match_opcode, 0 },
+{"xperm8",     0, {"ZBKX", 0},  "d,s,t",  MATCH_XPERM8, MASK_XPERM8, match_opcode, 0 },
+
+/* Zknd instructions  */
+{"aes32dsi",  32, {"ZKND", 0},  "d,s,t,y",  MATCH_AES32DSI, MASK_AES32DSI, match_opcode, 0 },
+{"aes32dsmi", 32, {"ZKND", 0},  "d,s,t,y",  MATCH_AES32DSMI, MASK_AES32DSMI, match_opcode, 0 },
+{"aes64ds",   64, {"ZKND", 0},  "d,s,t",    MATCH_AES64DS, MASK_AES64DS, match_opcode, 0 },
+{"aes64dsm",  64, {"ZKND", 0},  "d,s,t",    MATCH_AES64DSM, MASK_AES64DSM, match_opcode, 0 },
+{"aes64im",   64, {"ZKND", 0},  "d,s",      MATCH_AES64IM, MASK_AES64IM, match_opcode, 0 },
+{"aes64ks1i", 64, {"ZKNE", 0}, "d,s,Y",    MATCH_AES64KS1I, MASK_AES64KS1I, match_opcode, 0 },
+{"aes64ks2",  64, {"ZKNE", 0}, "d,s,t",    MATCH_AES64KS2, MASK_AES64KS2, match_opcode, 0 },
+
+/* Zkne instructions  */
+{"aes32esi",  32, {"ZKNE", 0},  "d,s,t,y",  MATCH_AES32ESI, MASK_AES32ESI, match_opcode, 0 },
+{"aes32esmi", 32, {"ZKNE", 0},  "d,s,t,y",  MATCH_AES32ESMI, MASK_AES32ESMI, match_opcode, 0 },
+{"aes64es",   64, {"ZKNE", 0},  "d,s,t",    MATCH_AES64ES, MASK_AES64ES, match_opcode, 0 },
+{"aes64esm",  64, {"ZKNE", 0},  "d,s,t",    MATCH_AES64ESM, MASK_AES64ESM, match_opcode, 0 },
+
+/* Zknh instructions  */
+{"sha256sig0",   0, {"ZKNH", 0},    "d,s",    MATCH_SHA256SIG0, MASK_SHA256SIG0, match_opcode, 0 },
+{"sha256sig1",   0, {"ZKNH", 0},    "d,s",    MATCH_SHA256SIG1, MASK_SHA256SIG1, match_opcode, 0 },
+{"sha256sum0",   0, {"ZKNH", 0},    "d,s",    MATCH_SHA256SUM0, MASK_SHA256SUM0, match_opcode, 0 },
+{"sha256sum1",   0, {"ZKNH", 0},    "d,s",    MATCH_SHA256SUM1, MASK_SHA256SUM1, match_opcode, 0 },
+{"sha512sig0h", 32, {"ZKNH", 0},    "d,s,t",  MATCH_SHA512SIG0H, MASK_SHA512SIG0H, match_opcode, 0 },
+{"sha512sig0l", 32, {"ZKNH", 0},    "d,s,t",  MATCH_SHA512SIG0L, MASK_SHA512SIG0L, match_opcode, 0 },
+{"sha512sig1h", 32, {"ZKNH", 0},    "d,s,t",  MATCH_SHA512SIG1H, MASK_SHA512SIG1H, match_opcode, 0 },
+{"sha512sig1l", 32, {"ZKNH", 0},    "d,s,t",  MATCH_SHA512SIG1L, MASK_SHA512SIG1L, match_opcode, 0 },
+{"sha512sum0r", 32, {"ZKNH", 0},    "d,s,t",  MATCH_SHA512SUM0R, MASK_SHA512SUM0R, match_opcode, 0 },
+{"sha512sum1r", 32, {"ZKNH", 0},    "d,s,t",  MATCH_SHA512SUM1R, MASK_SHA512SUM1R, match_opcode, 0 },
+{"sha512sig0",  64, {"ZKNH", 0},    "d,s",    MATCH_SHA512SIG0, MASK_SHA512SIG0, match_opcode, 0 },
+{"sha512sig1",  64, {"ZKNH", 0},    "d,s",    MATCH_SHA512SIG1, MASK_SHA512SIG1, match_opcode, 0 },
+{"sha512sum0",  64, {"ZKNH", 0},    "d,s",    MATCH_SHA512SUM0, MASK_SHA512SUM0, match_opcode, 0 },
+{"sha512sum1",  64, {"ZKNH", 0},    "d,s",    MATCH_SHA512SUM1, MASK_SHA512SUM1, match_opcode, 0 },
+
+/* Zksed instructions  */
+{"sm4ed",    0, {"ZKSED", 0},   "d,s,t,y",  MATCH_SM4ED, MASK_SM4ED, match_opcode, 0 },
+{"sm4ks",    0, {"ZKSED", 0},   "d,s,t,y",  MATCH_SM4KS, MASK_SM4KS, match_opcode, 0 },
+
+/* Zksh instructions  */
+{"sm3p0",    0, {"ZKSH", 0},    "d,s",    MATCH_SM3P0, MASK_SM3P0, match_opcode, 0 },
+{"sm3p1",    0, {"ZKSH", 0},    "d,s",    MATCH_SM3P1, MASK_SM3P1, match_opcode, 0 },
+
+/* { RVSvinval  */
+{"sinval.vma",      0, {"SVINVAL", 0}, "s,t",  MATCH_SINVAL_VMA, MASK_SINVAL_VMA, match_opcode, 0 },
+{"sfence.w.inval",  0, {"SVINVAL", 0}, "",     MATCH_SFENCE_W_INVAL, MASK_SFENCE_W_INVAL, match_opcode, 0 },
+{"sfence.inval.ir", 0, {"SVINVAL", 0}, "",     MATCH_SFENCE_INVAL_IR, MASK_SFENCE_INVAL_IR, match_opcode, 0 },
+{"hinval.vvma",     0, {"SVINVAL", 0}, "s,t",  MATCH_HINVAL_VVMA, MASK_HINVAL_VVMA, match_opcode, 0 },
+{"hinval.gvma",     0, {"SVINVAL", 0}, "s,t",  MATCH_HINVAL_GVMA, MASK_HINVAL_GVMA, match_opcode, 0 },
+/* } RVSvinval  */
 
 /* Terminate the list.  */
 {0, 0, {0}, 0, 0, 0, 0, 0}
@@ -2015,96 +2676,293 @@ const struct riscv_opcode riscv_insn_types[] =
 {
 /* name, xlen, isa,          operands, match, mask,    match_func, pinfo.  */
 {"r",       0, {"I", 0},  "O4,F3,F7,d,s,t",     0,    0,  match_opcode, 0 },
-{"r",       0, {"I", 0},  "O4,F3,F7,D,s,t",     0,    0,  match_opcode, 0 },
-{"r",       0, {"I", 0},  "O4,F3,F7,d,S,t",     0,    0,  match_opcode, 0 },
-{"r",       0, {"I", 0},  "O4,F3,F7,D,S,t",     0,    0,  match_opcode, 0 },
-{"r",       0, {"I", 0},  "O4,F3,F7,d,s,T",     0,    0,  match_opcode, 0 },
-{"r",       0, {"I", 0},  "O4,F3,F7,D,s,T",     0,    0,  match_opcode, 0 },
-{"r",       0, {"I", 0},  "O4,F3,F7,d,S,T",     0,    0,  match_opcode, 0 },
-{"r",       0, {"I", 0},  "O4,F3,F7,D,S,T",     0,    0,  match_opcode, 0 },
+{"r",       0, {"F", 0},  "O4,F3,F7,D,s,t",     0,    0,  match_opcode, 0 },
+{"r",       0, {"F", 0},  "O4,F3,F7,d,S,t",     0,    0,  match_opcode, 0 },
+{"r",       0, {"F", 0},  "O4,F3,F7,D,S,t",     0,    0,  match_opcode, 0 },
+{"r",       0, {"F", 0},  "O4,F3,F7,d,s,T",     0,    0,  match_opcode, 0 },
+{"r",       0, {"F", 0},  "O4,F3,F7,D,s,T",     0,    0,  match_opcode, 0 },
+{"r",       0, {"F", 0},  "O4,F3,F7,d,S,T",     0,    0,  match_opcode, 0 },
+{"r",       0, {"F", 0},  "O4,F3,F7,D,S,T",     0,    0,  match_opcode, 0 },
 
-{"r",       0, {"V", 0},  "O4,F3,F7,Vd,s,t",    0,    0,  match_opcode, 0 },
-{"r",       0, {"V", 0},  "O4,F3,F7,Vd,S,t",    0,    0,  match_opcode, 0 },
-{"r",       0, {"V", 0},  "O4,F3,F7,Vd,s,T",    0,    0,  match_opcode, 0 },
-{"r",       0, {"V", 0},  "O4,F3,F7,Vd,S,T",    0,    0,  match_opcode, 0 },
-{"r",       0, {"V", 0},  "O4,F3,F7,d,Vs,t",    0,    0,  match_opcode, 0 },
-{"r",       0, {"V", 0},  "O4,F3,F7,D,Vs,t",    0,    0,  match_opcode, 0 },
-{"r",       0, {"V", 0},  "O4,F3,F7,d,Vs,T",    0,    0,  match_opcode, 0 },
-{"r",       0, {"V", 0},  "O4,F3,F7,D,Vs,T",    0,    0,  match_opcode, 0 },
-{"r",       0, {"V", 0},  "O4,F3,F7,d,s,Vt",    0,    0,  match_opcode, 0 },
-{"r",       0, {"V", 0},  "O4,F3,F7,D,s,Vt",    0,    0,  match_opcode, 0 },
-{"r",       0, {"V", 0},  "O4,F3,F7,d,S,Vt",    0,    0,  match_opcode, 0 },
-{"r",       0, {"V", 0},  "O4,F3,F7,D,S,Vt",    0,    0,  match_opcode, 0 },
-{"r",       0, {"V", 0},  "O4,F3,F7,Vd,Vs,t",   0,    0,  match_opcode, 0 },
-{"r",       0, {"V", 0},  "O4,F3,F7,Vd,Vs,T",   0,    0,  match_opcode, 0 },
-{"r",       0, {"V", 0},  "O4,F3,F7,Vd,s,Vt",   0,    0,  match_opcode, 0 },
-{"r",       0, {"V", 0},  "O4,F3,F7,Vd,S,Vt",   0,    0,  match_opcode, 0 },
-{"r",       0, {"V", 0},  "O4,F3,F7,d,Vs,Vt",   0,    0,  match_opcode, 0 },
-{"r",       0, {"V", 0},  "O4,F3,F7,D,Vs,Vt",   0,    0,  match_opcode, 0 },
-{"r",       0, {"V", 0},  "O4,F3,F7,Vd,Vs,Vt",  0,    0,  match_opcode, 0 },
+{"r",       0, {"V", 0},       "O4,F3,F7,Vd,s,t",    0,    0,  match_opcode, 0 },
+{"r",       0, {"V", "F", 0},  "O4,F3,F7,Vd,S,t",    0,    0,  match_opcode, 0 },
+{"r",       0, {"V", "F", 0},  "O4,F3,F7,Vd,s,T",    0,    0,  match_opcode, 0 },
+{"r",       0, {"V", "F", 0},  "O4,F3,F7,Vd,S,T",    0,    0,  match_opcode, 0 },
+{"r",       0, {"V", 0},       "O4,F3,F7,d,Vs,t",    0,    0,  match_opcode, 0 },
+{"r",       0, {"V", "F", 0},  "O4,F3,F7,D,Vs,t",    0,    0,  match_opcode, 0 },
+{"r",       0, {"V", "F", 0},  "O4,F3,F7,d,Vs,T",    0,    0,  match_opcode, 0 },
+{"r",       0, {"V", "F", 0},  "O4,F3,F7,D,Vs,T",    0,    0,  match_opcode, 0 },
+{"r",       0, {"V", 0},       "O4,F3,F7,d,s,Vt",    0,    0,  match_opcode, 0 },
+{"r",       0, {"V", "F", 0},  "O4,F3,F7,D,s,Vt",    0,    0,  match_opcode, 0 },
+{"r",       0, {"V", "F", 0},  "O4,F3,F7,d,S,Vt",    0,    0,  match_opcode, 0 },
+{"r",       0, {"V", "F", 0},  "O4,F3,F7,D,S,Vt",    0,    0,  match_opcode, 0 },
+{"r",       0, {"V", 0},       "O4,F3,F7,Vd,Vs,t",   0,    0,  match_opcode, 0 },
+{"r",       0, {"V", "F", 0},  "O4,F3,F7,Vd,Vs,T",   0,    0,  match_opcode, 0 },
+{"r",       0, {"V", 0},       "O4,F3,F7,Vd,s,Vt",   0,    0,  match_opcode, 0 },
+{"r",       0, {"V", "F", 0},  "O4,F3,F7,Vd,S,Vt",   0,    0,  match_opcode, 0 },
+{"r",       0, {"V", 0},       "O4,F3,F7,d,Vs,Vt",   0,    0,  match_opcode, 0 },
+{"r",       0, {"V", "F", 0},  "O4,F3,F7,D,Vs,Vt",   0,    0,  match_opcode, 0 },
+{"r",       0, {"V", 0},       "O4,F3,F7,Vd,Vs,Vt",  0,    0,  match_opcode, 0 },
 
 {"r",       0, {"I", 0},  "O4,F3,F2,d,s,t,r",   0,    0,  match_opcode, 0 },
-{"r",       0, {"I", 0},  "O4,F3,F2,D,s,t,r",   0,    0,  match_opcode, 0 },
-{"r",       0, {"I", 0},  "O4,F3,F2,d,S,t,r",   0,    0,  match_opcode, 0 },
-{"r",       0, {"I", 0},  "O4,F3,F2,D,S,t,r",   0,    0,  match_opcode, 0 },
-{"r",       0, {"I", 0},  "O4,F3,F2,d,s,T,r",   0,    0,  match_opcode, 0 },
-{"r",       0, {"I", 0},  "O4,F3,F2,D,s,T,r",   0,    0,  match_opcode, 0 },
-{"r",       0, {"I", 0},  "O4,F3,F2,d,S,T,r",   0,    0,  match_opcode, 0 },
-{"r",       0, {"I", 0},  "O4,F3,F2,D,S,T,r",   0,    0,  match_opcode, 0 },
-{"r",       0, {"I", 0},  "O4,F3,F2,d,s,t,R",   0,    0,  match_opcode, 0 },
-{"r",       0, {"I", 0},  "O4,F3,F2,D,s,t,R",   0,    0,  match_opcode, 0 },
-{"r",       0, {"I", 0},  "O4,F3,F2,d,S,t,R",   0,    0,  match_opcode, 0 },
-{"r",       0, {"I", 0},  "O4,F3,F2,D,S,t,R",   0,    0,  match_opcode, 0 },
-{"r",       0, {"I", 0},  "O4,F3,F2,d,s,T,R",   0,    0,  match_opcode, 0 },
-{"r",       0, {"I", 0},  "O4,F3,F2,D,s,T,R",   0,    0,  match_opcode, 0 },
-{"r",       0, {"I", 0},  "O4,F3,F2,d,S,T,R",   0,    0,  match_opcode, 0 },
-{"r",       0, {"I", 0},  "O4,F3,F2,D,S,T,R",   0,    0,  match_opcode, 0 },
+{"r",       0, {"F", 0},  "O4,F3,F2,D,s,t,r",   0,    0,  match_opcode, 0 },
+{"r",       0, {"F", 0},  "O4,F3,F2,d,S,t,r",   0,    0,  match_opcode, 0 },
+{"r",       0, {"F", 0},  "O4,F3,F2,D,S,t,r",   0,    0,  match_opcode, 0 },
+{"r",       0, {"F", 0},  "O4,F3,F2,d,s,T,r",   0,    0,  match_opcode, 0 },
+{"r",       0, {"F", 0},  "O4,F3,F2,D,s,T,r",   0,    0,  match_opcode, 0 },
+{"r",       0, {"F", 0},  "O4,F3,F2,d,S,T,r",   0,    0,  match_opcode, 0 },
+{"r",       0, {"F", 0},  "O4,F3,F2,D,S,T,r",   0,    0,  match_opcode, 0 },
+{"r",       0, {"F", 0},  "O4,F3,F2,d,s,t,R",   0,    0,  match_opcode, 0 },
+{"r",       0, {"F", 0},  "O4,F3,F2,D,s,t,R",   0,    0,  match_opcode, 0 },
+{"r",       0, {"F", 0},  "O4,F3,F2,d,S,t,R",   0,    0,  match_opcode, 0 },
+{"r",       0, {"F", 0},  "O4,F3,F2,D,S,t,R",   0,    0,  match_opcode, 0 },
+{"r",       0, {"F", 0},  "O4,F3,F2,d,s,T,R",   0,    0,  match_opcode, 0 },
+{"r",       0, {"F", 0},  "O4,F3,F2,D,s,T,R",   0,    0,  match_opcode, 0 },
+{"r",       0, {"F", 0},  "O4,F3,F2,d,S,T,R",   0,    0,  match_opcode, 0 },
+{"r",       0, {"F", 0},  "O4,F3,F2,D,S,T,R",   0,    0,  match_opcode, 0 },
+
+{"r4",      0, {"I", 0},  "O4,F3,F2,d,s,t,r",   0,    0,  match_opcode, 0 },
+{"r4",      0, {"F", 0},  "O4,F3,F2,D,s,t,r",   0,    0,  match_opcode, 0 },
+{"r4",      0, {"F", 0},  "O4,F3,F2,d,S,t,r",   0,    0,  match_opcode, 0 },
+{"r4",      0, {"F", 0},  "O4,F3,F2,D,S,t,r",   0,    0,  match_opcode, 0 },
+{"r4",      0, {"F", 0},  "O4,F3,F2,d,s,T,r",   0,    0,  match_opcode, 0 },
+{"r4",      0, {"F", 0},  "O4,F3,F2,D,s,T,r",   0,    0,  match_opcode, 0 },
+{"r4",      0, {"F", 0},  "O4,F3,F2,d,S,T,r",   0,    0,  match_opcode, 0 },
+{"r4",      0, {"F", 0},  "O4,F3,F2,D,S,T,r",   0,    0,  match_opcode, 0 },
+{"r4",      0, {"F", 0},  "O4,F3,F2,d,s,t,R",   0,    0,  match_opcode, 0 },
+{"r4",      0, {"F", 0},  "O4,F3,F2,D,s,t,R",   0,    0,  match_opcode, 0 },
+{"r4",      0, {"F", 0},  "O4,F3,F2,d,S,t,R",   0,    0,  match_opcode, 0 },
+{"r4",      0, {"F", 0},  "O4,F3,F2,D,S,t,R",   0,    0,  match_opcode, 0 },
+{"r4",      0, {"F", 0},  "O4,F3,F2,d,s,T,R",   0,    0,  match_opcode, 0 },
+{"r4",      0, {"F", 0},  "O4,F3,F2,D,s,T,R",   0,    0,  match_opcode, 0 },
+{"r4",      0, {"F", 0},  "O4,F3,F2,d,S,T,R",   0,    0,  match_opcode, 0 },
+{"r4",      0, {"F", 0},  "O4,F3,F2,D,S,T,R",   0,    0,  match_opcode, 0 },
 
 {"i",       0, {"I", 0},  "O4,F3,d,s,j",        0,    0,  match_opcode, 0 },
-{"i",       0, {"I", 0},  "O4,F3,D,s,j",        0,    0,  match_opcode, 0 },
-{"i",       0, {"I", 0},  "O4,F3,d,S,j",        0,    0,  match_opcode, 0 },
-{"i",       0, {"I", 0},  "O4,F3,D,S,j",        0,    0,  match_opcode, 0 },
+{"i",       0, {"F", 0},  "O4,F3,D,s,j",        0,    0,  match_opcode, 0 },
+{"i",       0, {"F", 0},  "O4,F3,d,S,j",        0,    0,  match_opcode, 0 },
+{"i",       0, {"F", 0},  "O4,F3,D,S,j",        0,    0,  match_opcode, 0 },
 
 {"i",       0, {"I", 0},  "O4,F3,d,o(s)",       0,    0,  match_opcode, 0 },
-{"i",       0, {"I", 0},  "O4,F3,D,o(s)",       0,    0,  match_opcode, 0 },
+{"i",       0, {"F", 0},  "O4,F3,D,o(s)",       0,    0,  match_opcode, 0 },
 
-{"s",       0, {"I", 0},  "O4,F3,d,o(s)",       0,    0,  match_opcode, 0 },
-{"s",       0, {"I", 0},  "O4,F3,D,o(s)",       0,    0,  match_opcode, 0 },
+{"s",       0, {"I", 0},  "O4,F3,t,q(s)",       0,    0,  match_opcode, 0 },
+{"s",       0, {"F", 0},  "O4,F3,T,q(s)",       0,    0,  match_opcode, 0 },
 
 {"sb",      0, {"I", 0},  "O4,F3,s,t,p",        0,    0,  match_opcode, 0 },
-{"sb",      0, {"I", 0},  "O4,F3,S,t,p",        0,    0,  match_opcode, 0 },
-{"sb",      0, {"I", 0},  "O4,F3,s,T,p",        0,    0,  match_opcode, 0 },
-{"sb",      0, {"I", 0},  "O4,F3,S,T,p",        0,    0,  match_opcode, 0 },
+{"sb",      0, {"F", 0},  "O4,F3,S,t,p",        0,    0,  match_opcode, 0 },
+{"sb",      0, {"F", 0},  "O4,F3,s,T,p",        0,    0,  match_opcode, 0 },
+{"sb",      0, {"F", 0},  "O4,F3,S,T,p",        0,    0,  match_opcode, 0 },
 
-{"sb",      0, {"I", 0},  "O4,F3,t,q(s)",       0,    0,  match_opcode, 0 },
-{"sb",      0, {"I", 0},  "O4,F3,T,q(s)",       0,    0,  match_opcode, 0 },
+{"b",       0, {"I", 0},  "O4,F3,s,t,p",        0,    0,  match_opcode, 0 },
+{"b",       0, {"F", 0},  "O4,F3,S,t,p",        0,    0,  match_opcode, 0 },
+{"b",       0, {"F", 0},  "O4,F3,s,T,p",        0,    0,  match_opcode, 0 },
+{"b",       0, {"F", 0},  "O4,F3,S,T,p",        0,    0,  match_opcode, 0 },
 
 {"u",       0, {"I", 0},  "O4,d,u",             0,    0,  match_opcode, 0 },
-{"u",       0, {"I", 0},  "O4,D,u",             0,    0,  match_opcode, 0 },
+{"u",       0, {"F", 0},  "O4,D,u",             0,    0,  match_opcode, 0 },
 
 {"uj",      0, {"I", 0},  "O4,d,a",             0,    0,  match_opcode, 0 },
-{"uj",      0, {"I", 0},  "O4,D,a",             0,    0,  match_opcode, 0 },
+{"uj",      0, {"F", 0},  "O4,D,a",             0,    0,  match_opcode, 0 },
 
-{"cr",      0, {"C", 0},  "O2,CF4,d,CV",        0,    0,  match_opcode, 0 },
-{"cr",      0, {"C", 0},  "O2,CF4,D,CV",        0,    0,  match_opcode, 0 },
-{"cr",      0, {"C", 0},  "O2,CF4,d,CT",        0,    0,  match_opcode, 0 },
-{"cr",      0, {"C", 0},  "O2,CF4,D,CT",        0,    0,  match_opcode, 0 },
+{"j",       0, {"I", 0},  "O4,d,a",             0,    0,  match_opcode, 0 },
+{"j",       0, {"F", 0},  "O4,D,a",             0,    0,  match_opcode, 0 },
 
-{"ci",      0, {"C", 0},  "O2,CF3,d,Co",        0,    0,  match_opcode, 0 },
-{"ci",      0, {"C", 0},  "O2,CF3,D,Co",        0,    0,  match_opcode, 0 },
+{"cr",      0, {"C", 0},       "O2,CF4,d,CV",        0,    0,  match_opcode, 0 },
+{"cr",      0, {"F", "C", 0},  "O2,CF4,D,CV",        0,    0,  match_opcode, 0 },
+{"cr",      0, {"F", "C", 0},  "O2,CF4,d,CT",        0,    0,  match_opcode, 0 },
+{"cr",      0, {"F", "C", 0},  "O2,CF4,D,CT",        0,    0,  match_opcode, 0 },
 
-{"ciw",     0, {"C", 0},  "O2,CF3,Ct,C8",       0,    0,  match_opcode, 0 },
-{"ciw",     0, {"C", 0},  "O2,CF3,CD,C8",       0,    0,  match_opcode, 0 },
+{"ci",      0, {"C", 0},       "O2,CF3,d,Co",        0,    0,  match_opcode, 0 },
+{"ci",      0, {"F", "C", 0},  "O2,CF3,D,Co",        0,    0,  match_opcode, 0 },
 
-{"ca",      0, {"C", 0},  "O2,CF6,CF2,Cs,Ct",   0,    0,  match_opcode, 0 },
-{"ca",      0, {"C", 0},  "O2,CF6,CF2,CS,Ct",   0,    0,  match_opcode, 0 },
-{"ca",      0, {"C", 0},  "O2,CF6,CF2,Cs,CD",   0,    0,  match_opcode, 0 },
-{"ca",      0, {"C", 0},  "O2,CF6,CF2,CS,CD",   0,    0,  match_opcode, 0 },
+{"ciw",     0, {"C", 0},       "O2,CF3,Ct,C8",       0,    0,  match_opcode, 0 },
+{"ciw",     0, {"F", "C", 0},  "O2,CF3,CD,C8",       0,    0,  match_opcode, 0 },
 
-{"cb",      0, {"C", 0},  "O2,CF3,Cs,Cp",       0,    0,  match_opcode, 0 },
-{"cb",      0, {"C", 0},  "O2,CF3,CS,Cp",       0,    0,  match_opcode, 0 },
+{"ca",      0, {"C", 0},       "O2,CF6,CF2,Cs,Ct",   0,    0,  match_opcode, 0 },
+{"ca",      0, {"F", "C", 0},  "O2,CF6,CF2,CS,Ct",   0,    0,  match_opcode, 0 },
+{"ca",      0, {"F", "C", 0},  "O2,CF6,CF2,Cs,CD",   0,    0,  match_opcode, 0 },
+{"ca",      0, {"F", "C", 0},  "O2,CF6,CF2,CS,CD",   0,    0,  match_opcode, 0 },
+
+{"cb",      0, {"C", 0},       "O2,CF3,Cs,Cp",       0,    0,  match_opcode, 0 },
+{"cb",      0, {"F", "C", 0},  "O2,CF3,CS,Cp",       0,    0,  match_opcode, 0 },
 
 {"cj",      0, {"C", 0},  "O2,CF3,Ca",          0,    0,  match_opcode, 0 },
 /* Terminate the list.  */
 {0, 0, {0}, 0, 0, 0, 0, 0}
 };
+
+/* All standard extensions defined in all supported ISA spec.  */
+const struct riscv_ext_version riscv_ext_version_table[] =
+{
+/* name, ISA spec, major version, minor_version.  */
+{"e", ISA_SPEC_CLASS_20191213, 1, 9},
+{"e", ISA_SPEC_CLASS_20190608, 1, 9},
+{"e", ISA_SPEC_CLASS_ANDES,    1, 9},
+{"e", ISA_SPEC_CLASS_2P2,      1, 9},
+
+{"i", ISA_SPEC_CLASS_20191213, 2, 1},
+{"i", ISA_SPEC_CLASS_20190608, 2, 1},
+{"i", ISA_SPEC_CLASS_ANDES,    2, 0},
+{"i", ISA_SPEC_CLASS_2P2,      2, 0},
+
+{"m", ISA_SPEC_CLASS_20191213, 2, 0},
+{"m", ISA_SPEC_CLASS_20190608, 2, 0},
+{"m", ISA_SPEC_CLASS_ANDES,    2, 0},
+{"m", ISA_SPEC_CLASS_2P2,      2, 0},
+
+{"a", ISA_SPEC_CLASS_20191213, 2, 1},
+{"a", ISA_SPEC_CLASS_20190608, 2, 0},
+{"a", ISA_SPEC_CLASS_ANDES,    2, 0},
+{"a", ISA_SPEC_CLASS_2P2,      2, 0},
+
+{"f", ISA_SPEC_CLASS_20191213, 2, 2},
+{"f", ISA_SPEC_CLASS_20190608, 2, 2},
+{"f", ISA_SPEC_CLASS_ANDES,    2, 0},
+{"f", ISA_SPEC_CLASS_2P2,      2, 0},
+
+{"d", ISA_SPEC_CLASS_20191213, 2, 2},
+{"d", ISA_SPEC_CLASS_20190608, 2, 2},
+{"d", ISA_SPEC_CLASS_ANDES,    2, 0},
+{"d", ISA_SPEC_CLASS_2P2,      2, 0},
+
+{"q", ISA_SPEC_CLASS_20191213, 2, 2},
+{"q", ISA_SPEC_CLASS_20190608, 2, 2},
+{"q", ISA_SPEC_CLASS_ANDES,    2, 0},
+{"q", ISA_SPEC_CLASS_2P2,      2, 0},
+
+{"c", ISA_SPEC_CLASS_20191213, 2, 0},
+{"c", ISA_SPEC_CLASS_20190608, 2, 0},
+{"c", ISA_SPEC_CLASS_ANDES,    2, 0},
+{"c", ISA_SPEC_CLASS_2P2,      2, 0},
+
+{"p", ISA_SPEC_CLASS_20191213, 0, 2},
+{"p", ISA_SPEC_CLASS_20190608, 0, 2},
+{"p", ISA_SPEC_CLASS_ANDES,    0, 5},
+{"p", ISA_SPEC_CLASS_2P2,      0, 1},
+
+{"v", ISA_SPEC_CLASS_ANDES,    1, 0},
+{"v", ISA_SPEC_CLASS_NONE,     1, 0},
+
+{"n", ISA_SPEC_CLASS_20190608, 1, 1},
+{"n", ISA_SPEC_CLASS_ANDES,    1, 1},
+{"n", ISA_SPEC_CLASS_2P2,      1, 1},
+
+{"sscofpmf", ISA_SPEC_CLASS_ANDES, 1, 0},
+{"sscofpmf", ISA_SPEC_CLASS_DRAFT, 1, 0},
+
+{"svinval", ISA_SPEC_CLASS_ANDES, 1, 0},
+{"svinval", ISA_SPEC_CLASS_DRAFT, 1, 0},
+
+{"zfh", ISA_SPEC_CLASS_ANDES,  0, 1},
+{"zfh", ISA_SPEC_CLASS_2P2,    0, 1},
+
+// {"zicsr", ISA_SPEC_CLASS_ANDES, 2, 0},
+{"zicsr", ISA_SPEC_CLASS_20191213, 2, 0},
+{"zicsr", ISA_SPEC_CLASS_20190608, 2, 0},
+
+// {"zifencei", ISA_SPEC_CLASS_ANDES, 2, 0},
+
+{"zicbom", ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zicbom", ISA_SPEC_CLASS_DRAFT, 1, 0},
+{"zicbop", ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zicbop", ISA_SPEC_CLASS_DRAFT, 1, 0},
+{"zicboz", ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zicboz", ISA_SPEC_CLASS_DRAFT, 1, 0},
+
+{"zvamo",   ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zvamo",   ISA_SPEC_CLASS_NONE,  1, 0},
+
+{"zvlsseg", ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zvlsseg", ISA_SPEC_CLASS_NONE,  1, 0},
+
+/* Andes  */
+{"xandes", ISA_SPEC_CLASS_ANDES, 5, 0},
+{"xandes", ISA_SPEC_CLASS_2P2,   5, 0},
+
+{"xefhw", ISA_SPEC_CLASS_ANDES,  1, 0},
+{"xefhw", ISA_SPEC_CLASS_2P2,    1, 0},
+
+/* RVB  */
+{"b",     ISA_SPEC_CLASS_ANDES, 1, 0},
+{"b",     ISA_SPEC_CLASS_DRAFT, 1, 0},
+{"zba",   ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zba",   ISA_SPEC_CLASS_DRAFT, 1, 0},
+{"zbb",   ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zbb",   ISA_SPEC_CLASS_DRAFT, 1, 0},
+{"zbc",   ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zbc",   ISA_SPEC_CLASS_DRAFT, 1, 0},
+{"zbs",   ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zbs",   ISA_SPEC_CLASS_DRAFT, 1, 0},
+
+/* RVK  */
+{"zbkb",   ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zbkb",   ISA_SPEC_CLASS_DRAFT, 1, 0},
+{"zbkc",   ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zbkc",   ISA_SPEC_CLASS_DRAFT, 1, 0},
+{"zbkx",   ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zbkx",   ISA_SPEC_CLASS_DRAFT, 1, 0},
+{"zknd",   ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zknd",   ISA_SPEC_CLASS_DRAFT, 1, 0},
+{"zkne",   ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zkne",   ISA_SPEC_CLASS_DRAFT, 1, 0},
+{"zknh",   ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zknh",   ISA_SPEC_CLASS_DRAFT, 1, 0},
+{"zksed",  ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zksed",  ISA_SPEC_CLASS_DRAFT, 1, 0},
+{"zksh",   ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zksh",   ISA_SPEC_CLASS_DRAFT, 1, 0},
+{"zkr",    ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zkr",    ISA_SPEC_CLASS_DRAFT, 1, 0},
+{"zkn",    ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zkn",    ISA_SPEC_CLASS_DRAFT, 1, 0},
+{"zks",    ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zks",    ISA_SPEC_CLASS_DRAFT, 1, 0},
+{"zkt",    ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zkt",    ISA_SPEC_CLASS_DRAFT, 1, 0},
+{"zk",     ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zk",     ISA_SPEC_CLASS_DRAFT, 1, 0},
+
+/* Terminate the list.  */
+{NULL, 0, 0, 0}
+};
+
+struct isa_spec_t
+{
+  const char *name;
+  enum riscv_isa_spec_class class;
+};
+
+/* List for all supported ISA spec versions.  */
+static const struct isa_spec_t isa_specs[] =
+{
+  {"andes",    ISA_SPEC_CLASS_ANDES},
+  {"2.2",      ISA_SPEC_CLASS_2P2},
+  {"20190608", ISA_SPEC_CLASS_20190608},
+  {"20191213", ISA_SPEC_CLASS_20191213},
+
+/* Terminate the list.  */
+  {NULL, 0}
+};
+
+/* Get the corresponding ISA spec class by giving a ISA spec string.  */
+
+int
+riscv_get_isa_spec_class (const char *s,
+                         enum riscv_isa_spec_class *class)
+{
+  const struct isa_spec_t *version;
+
+  if (s == NULL)
+    return 0;
+
+  for (version = &isa_specs[0]; version->name != NULL; ++version)
+    if (strcmp (version->name, s) == 0)
+      {
+       *class = version->class;
+       return 1;
+      }
+
+  /* Can not find the supported ISA spec.  */
+  return 0;
+}

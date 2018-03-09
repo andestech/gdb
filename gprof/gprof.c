@@ -44,6 +44,10 @@
 #include "sym_ids.h"
 #include "demangle.h"
 #include "getopt.h"
+#include "timeline.h"
+#include "prof_io.h"
+#include <sys/time.h>
+#include <time.h>
 
 static void usage (FILE *, int) ATTRIBUTE_NORETURN;
 
@@ -60,7 +64,9 @@ int debug_level = 0;
 int output_style = 0;
 int output_width = 80;
 bfd_boolean bsd_style_output = FALSE;
+bfd_boolean do_timeline = FALSE;
 bfd_boolean demangle = TRUE;
+bfd_boolean discard_underscores = TRUE;
 bfd_boolean ignore_direct_calls = FALSE;
 bfd_boolean ignore_static_funcs = FALSE;
 bfd_boolean ignore_zeros = TRUE;
@@ -73,6 +79,9 @@ File_Format file_format = FF_AUTO;
 
 bfd_boolean first_output = TRUE;
 
+FILE *log_fd = NULL;
+struct timeval TotalProfileTime, ReadProfOutDataTime, ParsingProfileDataTime, WriteTemplateFileTime, ReadTemplateFileTime, ProcessDataTime, WriteTimelineBinFileTime, StartTime, EndTime;
+int gErrorCode = 0;
 char copyright[] =
  "@(#) Copyright (c) 1983 Regents of the University of California.\n\
  All rights reserved.\n";
@@ -117,9 +126,11 @@ static struct option long_options[] =
   {"file-ordering", required_argument, 0, 'R'},
   {"file-info", no_argument, 0, 'i'},
   {"sum", no_argument, 0, 's'},
+  {"cache-usage", no_argument, 0, 'Y'},
 
     /* various options to affect output: */
 
+  {"timeline", no_argument, 0, 'X'},
   {"all-lines", no_argument, 0, 'x'},
   {"demangle", optional_argument, 0, OPTION_DEMANGLE},
   {"no-demangle", no_argument, 0, OPTION_NO_DEMANGLE},
@@ -160,7 +171,7 @@ static void
 usage (FILE *stream, int status)
 {
   fprintf (stream, _("\
-Usage: %s [-[abcDhilLsTvwxyz]] [-[ACeEfFJnNOpPqSQZ][name]] [-I dirs]\n\
+Usage: %s [-[abcDhilLsTvwxXyYz]] [-[ACeEfFJnNOpPqQZ][name]] [-I dirs]\n\
 	[-d[num]] [-k from/to] [-m min-count] [-t table-length]\n\
 	[--[no-]annotated-source[=name]] [--[no-]exec-counts[=name]]\n\
 	[--[no-]flat-profile[=name]] [--[no-]graph[=name]]\n\
@@ -179,6 +190,104 @@ Usage: %s [-[abcDhilLsTvwxyz]] [-[ACeEfFJnNOpPqSQZ][name]] [-I dirs]\n\
   done (status);
 }
 
+int update_TotalProfileTime(void){
+	TotalProfileTime.tv_sec += (EndTime.tv_sec - StartTime.tv_sec);
+	if(EndTime.tv_sec == StartTime.tv_sec){
+		TotalProfileTime.tv_usec += (EndTime.tv_usec - StartTime.tv_usec);
+	}else{
+		TotalProfileTime.tv_sec--;
+		TotalProfileTime.tv_usec += (EndTime.tv_usec + 1000000 - StartTime.tv_usec);
+	}
+	if(TotalProfileTime.tv_usec >= 1000000){
+		TotalProfileTime.tv_usec -= 1000000;
+		TotalProfileTime.tv_sec++;
+	}
+
+}
+
+int update_ReadProfOutDataTime(void){
+	ReadProfOutDataTime.tv_sec += (EndTime.tv_sec - StartTime.tv_sec);
+	if(EndTime.tv_sec == StartTime.tv_sec){
+		ReadProfOutDataTime.tv_usec += (EndTime.tv_usec - StartTime.tv_usec);
+	}else{
+		ReadProfOutDataTime.tv_sec--;
+		ReadProfOutDataTime.tv_usec += (EndTime.tv_usec + 1000000 - StartTime.tv_usec);
+	}
+	if(ReadProfOutDataTime.tv_usec >= 1000000){
+		ReadProfOutDataTime.tv_usec -= 1000000;
+		ReadProfOutDataTime.tv_sec++;
+	}
+}
+
+int update_ParsingProfileDataTime(void){
+	ParsingProfileDataTime.tv_sec += (EndTime.tv_sec - StartTime.tv_sec);
+	if(EndTime.tv_sec == StartTime.tv_sec){
+		ParsingProfileDataTime.tv_usec += (EndTime.tv_usec - StartTime.tv_usec);
+	}else{
+		ParsingProfileDataTime.tv_sec--;
+		ParsingProfileDataTime.tv_usec += (EndTime.tv_usec + 1000000 - StartTime.tv_usec);
+	}
+	if(ParsingProfileDataTime.tv_usec >= 1000000){
+		ParsingProfileDataTime.tv_usec -= 1000000;
+		ParsingProfileDataTime.tv_sec++;
+	}
+}
+
+int update_WriteTemplateFileTime(void){
+	WriteTemplateFileTime.tv_sec += (EndTime.tv_sec - StartTime.tv_sec);
+	if(EndTime.tv_sec == StartTime.tv_sec){
+		WriteTemplateFileTime.tv_usec += (EndTime.tv_usec - StartTime.tv_usec);
+	}else{
+		WriteTemplateFileTime.tv_sec--;
+		WriteTemplateFileTime.tv_usec += (EndTime.tv_usec + 1000000 - StartTime.tv_usec);
+	}
+	if(WriteTemplateFileTime.tv_usec >= 1000000){
+		WriteTemplateFileTime.tv_usec -= 1000000;
+		WriteTemplateFileTime.tv_sec++;
+	}
+}
+
+int update_ReadTemplateFileTime(void){
+	ReadTemplateFileTime.tv_sec += (EndTime.tv_sec - StartTime.tv_sec);
+	if(EndTime.tv_sec == StartTime.tv_sec){
+		ReadTemplateFileTime.tv_usec += (EndTime.tv_usec - StartTime.tv_usec);
+	}else{
+		ReadTemplateFileTime.tv_sec--;
+		ReadTemplateFileTime.tv_usec += (EndTime.tv_usec + 1000000 - StartTime.tv_usec);
+	}
+	if(ReadTemplateFileTime.tv_usec >= 1000000){
+		ReadTemplateFileTime.tv_usec -= 1000000;
+		ReadTemplateFileTime.tv_sec++;
+	}
+}
+
+int update_ProcessDataTime(void){
+	ProcessDataTime.tv_sec += (EndTime.tv_sec - StartTime.tv_sec);
+	if(EndTime.tv_sec == StartTime.tv_sec){
+		ProcessDataTime.tv_usec += (EndTime.tv_usec - StartTime.tv_usec);
+	}else{
+		ProcessDataTime.tv_sec--;
+		ProcessDataTime.tv_usec += (EndTime.tv_usec + 1000000 - StartTime.tv_usec);
+	}
+	if(ProcessDataTime.tv_usec >= 1000000){
+		ProcessDataTime.tv_usec -= 1000000;
+		ProcessDataTime.tv_sec++;
+	}
+}
+
+int update_WriteTimelineBinFileTime(void){
+	WriteTimelineBinFileTime.tv_sec += (EndTime.tv_sec - StartTime.tv_sec);
+	if(EndTime.tv_sec == StartTime.tv_sec){
+		WriteTimelineBinFileTime.tv_usec += (EndTime.tv_usec - StartTime.tv_usec);
+	}else{
+		WriteTimelineBinFileTime.tv_sec--;
+		WriteTimelineBinFileTime.tv_usec += (EndTime.tv_usec + 1000000 - StartTime.tv_usec);
+	}
+	if(WriteTimelineBinFileTime.tv_usec >= 1000000){
+		WriteTimelineBinFileTime.tv_usec -= 1000000;
+		WriteTimelineBinFileTime.tv_sec++;
+	}
+}
 
 int
 main (int argc, char **argv)
@@ -186,6 +295,13 @@ main (int argc, char **argv)
   char **sp, *str;
   Sym **cg = 0;
   int ch, user_specified = 0;
+  int err = 0;
+
+	// Analysis profile time
+	log_fd = fopen("timelog","w+");
+
+	// Analysis profile time
+	gettimeofday(&StartTime, NULL);
 
 #if defined (HAVE_SETLOCALE) && defined (HAVE_LC_MESSAGES)
   setlocale (LC_MESSAGES, "");
@@ -204,7 +320,7 @@ main (int argc, char **argv)
   expandargv (&argc, &argv);
 
   while ((ch = getopt_long (argc, argv,
-	"aA::bBcC::d::De:E:f:F:hiI:J::k:lLm:n:N:O:p::P::q::Q::rR:sS:t:Tvw:xyzZ::",
+	"aA::bBcC::d::De:E:f:F:hiI:J::k:lLm:n:N:O:p::P::q::Q::rR:sS:t:Tvw:xXyYzZ::",
 			    long_options, 0))
 	 != EOF)
     {
@@ -436,8 +552,15 @@ This program is free software.  This program has absolutely no warranty.\n"));
 	case 'x':
 	  bb_annotate_all_lines = TRUE;
 	  break;
+	case 'X':
+	  do_timeline = TRUE;
+	  break;
 	case 'y':
 	  create_annotation_files = TRUE;
+	  break;
+	case 'Y':
+	  output_style |= STYLE_CACHE_USAGE;
+	  user_specified |= STYLE_CACHE_USAGE;
 	  break;
 	case 'z':
 	  ignore_zeros = FALSE;
@@ -508,6 +631,10 @@ This program is free software.  This program has absolutely no warranty.\n"));
 
   if (optind < argc)
     gmon_name = argv[optind++];
+  else if (file_format == FF_PROF)
+    gmon_name = PROFNAME;
+  else
+    gmon_name = GMONNAME;
 
   /* Turn off default functions.  */
   for (sp = &default_excluded_list[0]; *sp; sp++)
@@ -538,10 +665,19 @@ This program is free software.  This program has absolutely no warranty.\n"));
 
   if (file_format == FF_PROF)
     {
-      fprintf (stderr,
-	       _("%s: sorry, file format `prof' is not yet supported\n"),
-	       whoami);
-      done (1);
+      if (output_style == 0)
+        {
+            output_style = STYLE_FLAT_PROFILE | STYLE_CALL_GRAPH;
+            output_style &= ~user_specified;
+        }
+      if (prof_out_read (gmon_name))
+	{
+		      fprintf (stderr,
+			       _("%s: %s failed, exam the error code\n"), whoami, "prof_out_read()" );
+		      return (gErrorCode);
+	}
+      tl_hist_assign_samples(); // no need if only for call-graph report?
+      cg=tl_cg_assemble();      // no need if only for flat report?
     }
   else
     {
@@ -591,13 +727,14 @@ This program is free software.  This program has absolutely no warranty.\n"));
 
   /* Do some simple sanity checks.  */
   if ((output_style & STYLE_FLAT_PROFILE)
-      && !(gmon_input & INPUT_HISTOGRAM))
+    &&!(gmon_input & (INPUT_HISTOGRAM | INPUT_TIMELINE1 | INPUT_TIMELINE2 | INPUT_TIMELINE3 | INPUT_TIMELINE4 | INPUT_TIMELINE5 | INPUT_TIMELINE6 | INPUT_TIMELINE7 | INPUT_TIMELINE8 | INPUT_TIMELINE9)))
     {
       fprintf (stderr, _("%s: gmon.out file is missing histogram\n"), whoami);
       done (1);
     }
 
-  if ((output_style & STYLE_CALL_GRAPH) && !(gmon_input & INPUT_CALL_GRAPH))
+  if ((output_style & STYLE_CALL_GRAPH)
+    &&!(gmon_input & (INPUT_CALL_GRAPH | INPUT_TIMELINE1 | INPUT_TIMELINE2 | INPUT_TIMELINE3 | INPUT_TIMELINE4 | INPUT_TIMELINE5 | INPUT_TIMELINE6 | INPUT_TIMELINE7 | INPUT_TIMELINE8 | INPUT_TIMELINE9)))
     {
       fprintf (stderr,
 	       _("%s: gmon.out file is missing call-graph data\n"), whoami);
@@ -614,30 +751,79 @@ This program is free software.  This program has absolutely no warranty.\n"));
   if (output_style & STYLE_FLAT_PROFILE)
     {
       /* Print the flat profile.  */
-      hist_print ();
+      if (file_format == FF_PROF)
+      {
+        tl_hist_print ();
+
+        if (!(output_style & STYLE_CALL_GRAPH))
+          tl_cg_print_index ();
+      }
+      else
+        hist_print ();
     }
 
   if (cg && (output_style & STYLE_CALL_GRAPH))
     {
-      if (!bsd_style_output)
+      if (do_timeline){
+
+        if (print_cgtimeline ())
 	{
-	  /* Print the dynamic profile.  */
-	  cg_print (cg);
+		      fprintf (stderr,
+			       _("%s: %s failed, exam the error code\n"), whoami, "print_cgtimeline()" );
+		      return (gErrorCode);
 	}
-      cg_print_index ();
+     }else if (cg)
+        {
+          if (!bsd_style_output)
+            {
+              /* Print the dynamic profile.  */
+              if (file_format == FF_PROF)
+                  tl_cg_print (cg);
+              else
+                  cg_print (cg);
+            }
+
+          if (file_format == FF_PROF)
+            tl_cg_print_index ();
+          else
+            cg_print_index ();
+        }
     }
 
   if (output_style & STYLE_EXEC_COUNTS)
     print_exec_counts ();
 
   if (output_style & STYLE_ANNOTATED_SOURCE)
-    print_annotated_source ();
+    {
+      if (do_timeline)
+        print_bbtimeline ();
+      else
+        print_annotated_source ();
+    }
 
   if (output_style & STYLE_FUNCTION_ORDER)
     cg_print_function_ordering ();
 
   if (output_style & STYLE_FILE_ORDER)
     cg_print_file_ordering ();
+
+  if (output_style & STYLE_CACHE_USAGE)
+    print_cacheusage ();
+
+  if (do_timeline)
+    unlink(prof_temp_file);
+
+// Analysis profile time
+gettimeofday(&EndTime, NULL);
+update_TotalProfileTime();
+fprintf(log_fd, _("TotalProfileTime = %d sec %d usec\n"), TotalProfileTime.tv_sec, TotalProfileTime.tv_usec);
+fprintf(log_fd, _("ReadProfOutDataTime = %d sec %d usec\n"), ReadProfOutDataTime.tv_sec, ReadProfOutDataTime.tv_usec);
+fprintf(log_fd, _("ParsingProfileDataTime = %d sec %d usec\n"), ParsingProfileDataTime.tv_sec, ParsingProfileDataTime.tv_usec);
+fprintf(log_fd, _("WriteTemplateFileTime = %d sec %d usec\n"), WriteTemplateFileTime.tv_sec, WriteTemplateFileTime.tv_usec);
+fprintf(log_fd, _("ReadTemplateFileTime = %d sec %d usec\n"), ReadTemplateFileTime.tv_sec, ReadTemplateFileTime.tv_usec);
+fprintf(log_fd, _("ProcessDataTime = %d sec %d usec\n"), ProcessDataTime.tv_sec, ProcessDataTime.tv_usec);
+fprintf(log_fd, _("WriteTimelineBinFileTime = %d sec %d usec\n"), WriteTimelineBinFileTime.tv_sec, WriteTimelineBinFileTime.tv_usec);
+fflush(log_fd);
 
   return 0;
 }

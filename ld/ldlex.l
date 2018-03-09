@@ -71,6 +71,7 @@ static int vers_node_nesting = 0;
 
 static int yy_input (char *, int);
 static void comment (void);
+static int try_split_comma (void);
 static void lex_warn_invalid (char *where, char *what);
 
 /* STATES
@@ -291,6 +292,7 @@ V_IDENTIFIER [*?.$_a-zA-Z\[\]\-\!\^\\]([*?.$_a-zA-Z0-9\[\]\-\!\^\\]|::)*
 <BOTH,SCRIPT>"QUAD"			{ RTOKEN( QUAD);}
 <BOTH,SCRIPT>"SQUAD"			{ RTOKEN( SQUAD);}
 <BOTH,SCRIPT>"LONG"			{ RTOKEN( LONG);}
+<BOTH,SCRIPT>"ICT_ENTRY"		{ RTOKEN(ICT_ENTRY);}
 <BOTH,SCRIPT>"SHORT"			{ RTOKEN( SHORT);}
 <BOTH,SCRIPT>"BYTE"			{ RTOKEN( BYTE);}
 <BOTH,SCRIPT>"NOFLOAT"			{ RTOKEN(NOFLOAT);}
@@ -411,8 +413,7 @@ V_IDENTIFIER [*?.$_a-zA-Z\[\]\-\!\^\\]([*?.$_a-zA-Z0-9\[\]\-\!\^\\]|::)*
 		  }
 		else
 		  {
-		    yylval.name = xstrdup (yytext);
-		    return NAME;
+		    return try_split_comma ();
 		  }
 	}
 
@@ -703,6 +704,39 @@ comment (void)
 	  break;
 	}
     }
+}
+
+static int
+try_split_comma (void)
+{
+  int len, i;
+  len = strlen (yytext);
+  while (1)
+    {
+      if ((len == 0) || !ISDIGIT (yytext[0]))
+	break;
+      for (i=1; i<len-1; ++i)
+	if (!ISDIGIT (yytext[i])) break;
+      if (yytext[i] != ',')
+	break;
+      yylval.integer = bfd_scan_vma (yytext, 0, 10);
+      yylval.bigint.str = NULL;
+      yyless (i);
+      return INT;
+    }
+
+  char *p = strchr (yytext, ',');
+  if (p)
+    {
+      i = (int) (p - yytext);
+      yytext[i] = 0;
+      yylval.name = xstrdup (yytext);
+      yytext[i] = ',';
+      yyless (i);
+    }
+  else
+    yylval.name = xstrdup (yytext);
+  return NAME;
 }
 
 /* Warn the user about a garbage character WHAT in the input

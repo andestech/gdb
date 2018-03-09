@@ -552,7 +552,17 @@ changequote([,])dnl
 	AC_MSG_RESULT($enable_zol_ext)
 	;;
 
-      aarch64 | i386 | riscv | s390 | sparc)
+      riscv)
+	AC_MSG_CHECKING(for default configuration of --with-arch)
+	if test "x${with_arch}" != x; then
+	  AC_DEFINE_UNQUOTED(DEFAULT_ARCH, "$with_arch", [Default architecture.])
+	else
+	  AC_DEFINE_UNQUOTED(DEFAULT_ARCH, "${arch}", [Default architecture.])
+	fi
+	AC_MSG_RESULT($with_arch)
+	;;
+
+      aarch64 | i386 | s390 | sparc)
 	if test $this_target = $target ; then
 	  AC_DEFINE_UNQUOTED(DEFAULT_ARCH, "${arch}", [Default architecture.])
 	fi

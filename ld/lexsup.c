@@ -892,7 +892,14 @@ parse_args (unsigned argc, char **argv)
 	  config.map_filename = "-";
 	  break;
 	case 'm':
-	  /* Ignore.  Was handled in a pre-parse.   */
+	  /* Ignore "-m" emulation options. Was handled in a pre-parse. */
+#ifdef ENABLE_PLUGINS
+	  if (strncmp(optarg, "ace=", 4) == 0)
+	    {
+	      if (plugin_opt_plugin_arg (argv[last_optind]))
+		einfo (_("%P%F: failed to set plugin argument: %s\n"), argv[last_optind]);
+	    }
+#endif /* ENABLE_PLUGINS */
 	  break;
 	case OPTION_MAP:
 	  config.map_filename = optarg;
@@ -1863,6 +1870,23 @@ elf_plt_unwind_list_options (FILE *file)
 }
 
 static void
+nds_ld_list_options (FILE *file)
+{
+  fprintf (file, _("\
+\nNDS specific command line options:\n\
+  --mexport-symbols=FILE      Exporting global symbols into linker script\n\
+  --m[no-]relax-cross-section-call Disable/enable cross-section relaxations\n\
+  --m[no-]execit              Disable/enable link-time EXECIT relaxation\n\
+  --mexport-execit=FILE       Export .exec.itable after linking\n\
+  --mimport-execit=FILE       Import .exec.itable for EXECIT relaxation\n\
+  --mkeep-import-execit       Keep imported .exec.itable\n\
+  --mupdate-execit            Update existing .exec.itable\n\
+  --mexecit-limit=NUM         Set maximum number of entries in .exec.itable for this times\n\
+  --mexecit-loop-aware        Avoid generate exec.it instruction inside loop\n\
+  "));
+}
+
+static void
 ld_list_options (FILE *file, bfd_boolean elf, bfd_boolean shlib,
 		 bfd_boolean plt_unwind)
 {
@@ -1990,7 +2014,9 @@ help (void)
   printf (_("%s: emulation specific options:\n"), program_name);
   ld_list_options (stdout, ELF_LIST_OPTIONS, ELF_SHLIB_LIST_OPTIONS,
 		   ELF_PLT_UNWIND_LIST_OPTIONS);
-  ldemul_list_emulation_options (stdout);
+  /* TODO: This method is temporarily. We should use
+     ldemul_list_emulation_options (stdout).  */
+  nds_ld_list_options (stdout);
   printf ("\n");
 
   if (REPORT_BUGS_TO[0])

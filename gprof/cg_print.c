@@ -36,15 +36,18 @@
 #define	EQUALTO		0
 #define	GREATERTHAN	1
 
+typedef int (*symcmpfunc)(Sym*,Sym*);
+typedef int (*arccmpfunc)(Arc*,Arc*);
+
 static void print_header (void);
 static void print_cycle (Sym *);
 static int cmp_member (Sym *, Sym *);
-static void sort_members (Sym *);
+static void sort_members (Sym *,symcmpfunc);
 static void print_members (Sym *);
 static int cmp_arc (Arc *, Arc *);
-static void sort_parents (Sym *);
+static void sort_parents (Sym *,arccmpfunc);
 static void print_parents (Sym *);
-static void sort_children (Sym *);
+static void sort_children (Sym *,arccmpfunc);
 static void print_children (Sym *);
 static void print_line (Sym *);
 static int cmp_name (const PTR, const PTR);
@@ -58,7 +61,8 @@ extern void bsd_callg_blurb (FILE * fp);
 extern void fsf_callg_blurb (FILE * fp);
 
 double print_time = 0.0;
-
+unsigned long long print_insn_cnt=0;
+unsigned long long print_cycle_cnt=0;
 
 static void
 print_header (void)
@@ -109,7 +113,34 @@ print_header (void)
       printf (_("index %% time    self  children    called     name\n"));
     }
 }
+// ----------------------------------------------------------------------------
+// tl_print_header
+// ----------------------------------------------------------------------------
+static void
+tl_print_header(void)
+{   if (first_output)
+        first_output = FALSE;
+    else
+        printf ("\f\n");
 
+    if (print_descriptions)
+        printf (_("\t\t     Call graph (explanation follows)\n\n"));
+    else
+        printf (_("\t\t\tCall graph\n\n"));
+
+    if (print_insn_cnt > 0)
+        printf (_("for %llu instructions and %llu cycles\n\n"),
+                print_insn_cnt, print_cycle_cnt);
+    else
+    {
+        printf (_(" no time propagated\n\n"));
+
+        // This doesn't hurt, since all the numerators will be 0.
+        print_insn_cnt = 1;
+    }
+
+    printf (_("index %% instr/cycle      self instr/cycle  children instr/cycle   called     name\n"));
+} // tl_print_header
 /* Print a cycle header.  */
 
 static void
@@ -131,6 +162,31 @@ print_cycle (Sym *cyc)
 
   printf (_(" <cycle %d as a whole> [%d]\n"), cyc->cg.cyc.num, cyc->cg.index);
 }
+
+// ----------------------------------------------------------------------------
+// tl_print_cycle
+//
+// This function prints a cycle header.
+// ----------------------------------------------------------------------------
+static void
+tl_print_cycle (Sym *cyc)
+{   char buf[BUFSIZ];
+
+    sprintf (buf, "[%d]", cyc->cg.index);
+    printf ("%-6.6s %5.1f %5.1f %10llu %10llu %10llu %10llu %7lu", buf,
+            100.0 * (cyc->cg.prop.self_insn_cnt + cyc->cg.prop.child_insn_cnt) / print_insn_cnt,
+            100.0 * (cyc->cg.prop.self_cycle_cnt + cyc->cg.prop.child_cycle_cnt) / print_cycle_cnt,
+            cyc->cg.prop.self_insn_cnt, cyc->cg.prop.self_cycle_cnt,
+            cyc->cg.prop.child_cycle_cnt, cyc->cg.prop.child_cycle_cnt,
+            cyc->ncalls);
+
+    if (cyc->cg.self_calls != 0)
+        printf ("+%-7lu", cyc->cg.self_calls);
+    else
+        printf (" %7.7s","");
+
+    printf (_(" <cycle %d as a whole> [%d]\n"), cyc->cg.cyc.num, cyc->cg.index);
+} // tl_print_cycle
 
 /* Compare LEFT and RIGHT membmer.  Major comparison key is
    CG.PROP.SELF+CG.PROP.CHILD, secondary key is NCALLS+CG.SELF_CALLS.  */
@@ -158,10 +214,40 @@ cmp_member (Sym *left, Sym *right)
   return EQUALTO;
 }
 
+// ----------------------------------------------------------------------------
+// tl_cmp_member
+//
+// This function compares LEFT and RIGHT membmer. Major comparison key is
+// CG.PROP.SELF_INSN_CNT+CG.PROP.CHILD_INSN_CNT, secondary key is
+// NCALLS+CG.SELF_CALLS.
+// ----------------------------------------------------------------------------
+static int
+tl_cmp_member(Sym *left,
+              Sym *right)
+{   unsigned long long left_icnt = left->cg.prop.self_insn_cnt + left->cg.prop.child_insn_cnt;
+    unsigned long long right_icnt = right->cg.prop.self_insn_cnt + right->cg.prop.child_insn_cnt;
+    unsigned long left_calls = left->ncalls + left->cg.self_calls;
+    unsigned long right_calls = right->ncalls + right->cg.self_calls;
+
+    if (left_icnt > right_icnt)
+        return GREATERTHAN;
+
+    if (left_icnt < right_icnt)
+        return LESSTHAN;
+
+    if (left_calls > right_calls)
+        return GREATERTHAN;
+
+    if (left_calls < right_calls)
+        return LESSTHAN;
+
+    return EQUALTO;
+} // tl_cmp_member
 /* Sort members of a cycle.  */
 
 static void
-sort_members (Sym *cyc)
+sort_members (Sym *cyc,
+              symcmpfunc cmpf)
 {
   Sym *todo, *doing, *prev;
 
@@ -176,7 +262,7 @@ sort_members (Sym *cyc)
 
       for (prev = cyc; prev->cg.cyc.next; prev = prev->cg.cyc.next)
 	{
-	  if (cmp_member (doing, prev->cg.cyc.next) == GREATERTHAN)
+	  if ((*cmpf)(doing, prev->cg.cyc.next) == GREATERTHAN)
 	    break;
 	}
 
@@ -192,7 +278,7 @@ print_members (Sym *cyc)
 {
   Sym *member;
 
-  sort_members (cyc);
+  sort_members (cyc,&cmp_member);
 
   for (member = cyc->cg.cyc.next; member; member = member->cg.cyc.next)
     {
@@ -212,6 +298,34 @@ print_members (Sym *cyc)
       printf ("\n");
     }
 }
+// ----------------------------------------------------------------------------
+// tl_print_members
+//
+// This function prints the members of a cycle.
+// ----------------------------------------------------------------------------
+static void
+tl_print_members(Sym *cyc)
+{   Sym *member;
+
+    sort_members (cyc,&tl_cmp_member);
+
+    for (member = cyc->cg.cyc.next; member; member = member->cg.cyc.next)
+    {
+        printf ("%6.6s %5.5s            %10llu %10llu %10llu %10llu %7lu",
+                "", "", member->cg.prop.self_insn_cnt,
+                member->cg.prop.self_cycle_cnt, member->cg.prop.child_insn_cnt,
+                member->cg.prop.child_cycle_cnt, member->ncalls);
+
+        if (member->cg.self_calls != 0)
+            printf ("+%-7lu", member->cg.self_calls);
+        else
+            printf (" %7.7s", "");
+
+        printf ("     ");
+        print_name (member);
+        printf ("\n");
+    }
+} // tl_print_member
 
 /* Compare two arcs to/from the same child/parent.
 	- if one arc is a self arc, it's least.
@@ -307,8 +421,96 @@ cmp_arc (Arc *left, Arc *right)
 }
 
 
+
+// ----------------------------------------------------------------------------
+// tl_cmp_arc
+//
+// This function compares two arcs to/from the same child/parent.
+// - if one arc is a self arc, it's least.
+// - if one arc is within a cycle, it's less than.
+// - if both arcs are within a cycle, compare arc counts.
+// - if neither arc is within a cycle, compare with
+//      time + child_time as major key
+//      arc count as minor key.
+// ----------------------------------------------------------------------------
+static int
+tl_cmp_arc(Arc *left,
+           Arc *right)
+{   Sym *left_parent = left->parent;
+    Sym *left_child = left->child;
+    Sym *right_parent = right->parent;
+    Sym *right_child = right->child;
+    double left_time, right_time;
+
+    DBG (TIMEDEBUG,
+        printf ("[cmp_arc] ");
+        print_name (left_parent);
+        printf (" calls ");
+        print_name (left_child);
+        printf (" %f + %f %lu/%lu\n", left->time, left->child_time,
+                left->count, left_child->ncalls);
+        printf ("[cmp_arc] ");
+        print_name (right_parent);
+        printf (" calls ");
+        print_name (right_child);
+        printf (" %f + %f %lu/%lu\n", right->time, right->child_time,
+                right->count, right_child->ncalls);
+        printf ("\n");
+    );
+
+    if (left_parent == left_child)
+        return LESSTHAN;		// Left is a self call.
+
+    if (right_parent == right_child)
+        return GREATERTHAN;		// Right is a self call.
+
+    if (left_parent->cg.cyc.num != 0 && left_child->cg.cyc.num != 0
+      && left_parent->cg.cyc.num == left_child->cg.cyc.num)
+    {   // Left is a call within a cycle.
+        if (right_parent->cg.cyc.num != 0 && right_child->cg.cyc.num != 0
+          && right_parent->cg.cyc.num == right_child->cg.cyc.num)
+        {   // Right is a call within the cycle, too.
+            if (left->count < right->count)
+                return LESSTHAN;
+
+            if (left->count > right->count)
+                return GREATERTHAN;
+
+            return EQUALTO;
+        } else
+        {   // Right isn't a call within the cycle.
+            return LESSTHAN;
+        }
+    } else
+    {   // Left isn't a call within a cycle.
+        if (right_parent->cg.cyc.num != 0 && right_child->cg.cyc.num != 0
+          && right_parent->cg.cyc.num == right_child->cg.cyc.num)
+        {   // Right is a call within a cycle.
+            return GREATERTHAN;
+        } else
+        {   // Neither is a call within a cycle.
+            left_time = left->time + left->child_time;
+            right_time = right->time + right->child_time;
+
+            if (left_time < right_time)
+                return LESSTHAN;
+
+            if (left_time > right_time)
+                return GREATERTHAN;
+
+            if (left->count < right->count)
+                return LESSTHAN;
+
+            if (left->count > right->count)
+                return GREATERTHAN;
+
+            return EQUALTO;
+        }
+    }
+} // tl_cmp_arc
 static void
-sort_parents (Sym * child)
+sort_parents (Sym * child,
+              arccmpfunc cmpf)
 {
   Arc *arc, *detached, sorted, *prev;
 
@@ -361,7 +563,7 @@ print_parents (Sym *child)
       return;
     }
 
-  sort_parents (child);
+  sort_parents (child,&cmp_arc);
 
   for (arc = child->cg.parents; arc; arc = arc->next_parent)
     {
@@ -394,8 +596,54 @@ print_parents (Sym *child)
 }
 
 
+
+// ----------------------------------------------------------------------------
+// tl_print_parents
+// ----------------------------------------------------------------------------
 static void
-sort_children (Sym *parent)
+tl_print_parents (Sym *child)
+{   Sym *parent;
+    Arc *arc;
+    Sym *cycle_head;
+
+    if (child->cg.cyc.head != 0)
+        cycle_head = child->cg.cyc.head;
+    else
+        cycle_head = child;
+
+    if (!child->cg.parents)
+    {
+        printf (_("%6.6s %5.5s       %10.10s %10.10s %10.10s %10.10s     <spontaneous>\n"),
+                "", "", "", "", "", "");
+        return;
+    }
+
+    sort_parents (child,&tl_cmp_arc);
+
+    for (arc = child->cg.parents; arc; arc = arc->next_parent)
+    {
+        parent = arc->parent;
+        if (child == parent || (child->cg.cyc.num != 0
+          && parent->cg.cyc.num == child->cg.cyc.num))
+        {   // Selfcall or call among siblings.
+            printf ("%6.6s %5.5s       %10.10s %10.10s %10lu %10.10s     ",
+                    "", "", "", "", arc->count, "");
+            print_name (parent);
+            printf ("\n");
+        } else
+        {   // Regular parent of child.
+            printf ("%6.6s %5.5s       %10llu %10llu %10llu %10llu %7lu/%-7lu     ",
+                    "", "", arc->total_insn_cnt, arc->total_cycle_cnt,
+                    arc->child_insn_cnt, arc->child_cycle_cnt,
+                    arc->count, cycle_head->ncalls);
+            print_name (parent);
+            printf ("\n");
+        }
+    }
+} // tl_print_parents
+static void
+sort_children (Sym *parent,
+               arccmpfunc cmpf)
 {
   Arc *arc, *detached, sorted, *prev;
 
@@ -414,7 +662,7 @@ sort_children (Sym *parent)
       /* Consider *arc as disconnected; insert it into sorted.  */
       for (prev = &sorted; prev->next_child; prev = prev->next_child)
 	{
-	  if (cmp_arc (arc, prev->next_child) != LESSTHAN)
+	  if ((*cmpf)(arc, prev->next_child) != LESSTHAN)
 	    break;
 	}
 
@@ -433,7 +681,7 @@ print_children (Sym *parent)
   Sym *child;
   Arc *arc;
 
-  sort_children (parent);
+  sort_children (parent,&cmp_arc);
   arc = parent->cg.children;
 
   for (arc = parent->cg.children; arc; arc = arc->next_child)
@@ -464,6 +712,38 @@ print_children (Sym *parent)
 	}
     }
 }
+// ----------------------------------------------------------------------------
+// tl_print_children
+// ----------------------------------------------------------------------------
+static void
+tl_print_children(Sym *parent)
+{   Sym *child;
+    Arc *arc;
+
+    sort_children (parent,&tl_cmp_arc);
+    arc = parent->cg.children;
+
+    for (arc = parent->cg.children; arc; arc = arc->next_child)
+    {
+        child = arc->child;
+        if (child == parent || (child->cg.cyc.num != 0
+          && child->cg.cyc.num == parent->cg.cyc.num))
+        {   // Self call or call to sibling.
+            printf ("%6.6s %5.5s       %10.10s %10.10s %10lu %10.10s     ",
+                    "", "", "", "", arc->count, "");
+            print_name (child);
+            printf ("\n");
+        } else
+        {   // Regular child of parent.
+            printf ("%6.6s %5.5s       %10llu %10llu %10llu %10llu %7lu/%-7lu     ",
+                    "", "", arc->total_insn_cnt, arc->total_cycle_cnt,
+                    arc->child_insn_cnt, arc->child_cycle_cnt,
+                    arc->count, child->cg.cyc.head->ncalls);
+            print_name (child);
+            printf ("\n");
+        }
+    }
+} // tl_print_child
 
 
 static void
@@ -497,6 +777,36 @@ print_line (Sym *np)
 }
 
 
+// ----------------------------------------------------------------------------
+// tl_print_line
+// ----------------------------------------------------------------------------
+static void
+tl_print_line(Sym *np)
+{   char buf[BUFSIZ];
+
+    sprintf (buf, "[%d]", np->cg.index);
+    printf ("%-6.6s %5.1f %5.1f %10llu %10llu %10llu %10llu", buf,
+            100.0 * (np->cg.prop.self_insn_cnt + np->cg.prop.child_insn_cnt) / print_insn_cnt,
+            100.0 * (np->cg.prop.self_cycle_cnt + np->cg.prop.child_cycle_cnt) / print_cycle_cnt,
+            np->cg.prop.self_insn_cnt, np->cg.prop.self_cycle_cnt,
+            np->cg.prop.child_insn_cnt, np->cg.prop.child_cycle_cnt);
+
+    if ((np->ncalls + np->cg.self_calls) != 0)
+    {
+        printf (" %7lu", np->ncalls);
+
+        if (np->cg.self_calls != 0)
+            printf ("+%-7lu ", np->cg.self_calls);
+        else
+            printf (" %7.7s ", "");
+    } else
+    {
+        printf (" %7.7s %7.7s ", "", "");
+    }
+
+    print_name (np);
+    printf ("\n");
+} // tl_print_line
 /* Print dynamic call graph.  */
 
 void
@@ -550,6 +860,50 @@ cg_print (Sym ** timesortsym)
 }
 
 
+
+// ============================================================================
+// tl_cg_print
+//
+// This function prints timeline based dynamic call graph.
+// ============================================================================
+void
+tl_cg_print (Sym ** timesortsym)
+{   unsigned int index;
+    Sym *parent;
+
+    tl_print_header ();
+
+    for (index = 0; index < symtab.len + num_cycles; ++index)
+    {
+        parent = timesortsym[index];
+
+        if ((ignore_zeros && parent->ncalls == 0
+           &&parent->cg.self_calls == 0
+           &&parent->cg.prop.self_insn_cnt == 0
+	   &&parent->cg.prop.child_insn_cnt == 0)
+          ||!parent->cg.print_flag
+          ||(line_granularity && ! parent->is_func))
+            continue;
+
+        if (!parent->name && parent->cg.cyc.num != 0)
+        {   // Cycle header.
+            tl_print_cycle (parent);
+            tl_print_members (parent);
+	} else
+        {
+            tl_print_parents (parent);
+            tl_print_line (parent);
+            tl_print_children (parent);
+        }
+
+        printf ("-----------------------------------------------\n");
+    }
+
+    free (timesortsym);
+
+    if (print_descriptions)
+        fsf_callg_blurb (stdout);
+} // tl_cg_print
 static int
 cmp_name (const PTR left, const PTR right)
 {
@@ -671,6 +1025,66 @@ cg_print_index (void)
   free (name_sorted_syms);
 }
 
+
+// ============================================================================
+// tl_cg_print_index
+//
+// This function prints the functions together with file name and line number
+// sorted by name.
+// ============================================================================
+void
+tl_cg_print_index(void)
+{   unsigned int index;
+    unsigned int nnames, todo, j;
+    Sym **name_sorted_syms, *sym;
+    char buf[20];
+
+    // Now, sort regular function name alphabetically to create an index.
+    name_sorted_syms = (Sym **) xmalloc ((symtab.len + num_cycles) * sizeof (Sym *));
+
+    for (index = 0, nnames = 0; index < symtab.len; index++)
+    {
+        if (ignore_zeros && symtab.base[index].ncalls == 0
+          &&symtab.base[index].hist.total_insn_cnt == 0)
+           continue;
+
+        name_sorted_syms[nnames++] = &symtab.base[index];
+    }
+
+    qsort (name_sorted_syms, nnames, sizeof (Sym *), cmp_name);
+
+    for (index = 1, todo = nnames; index <= num_cycles; index++)
+        name_sorted_syms[todo++] = &cycle_header[index];
+
+    printf ("\f\n");
+    printf (_("Index by function name\n\n"));
+
+    for (j = 0; j < todo; j++)
+    {
+        sym = name_sorted_syms[j];
+
+        if (sym->cg.print_flag)
+            sprintf (buf, "[%d]", sym->cg.index);
+        else
+            sprintf (buf, "(%d)", sym->cg.index);
+        printf (" %s ", buf);
+        print_name_only (sym);
+        if (j < nnames)
+        {
+            if (!line_granularity && sym->file)
+            {
+                printf (" \x03%s:%d\x03\n", sym->file->name,sym->line_num);
+            } else
+                printf ("\n");
+        } else
+        {
+            sprintf (buf, _("<cycle %d>"), sym->cg.cyc.num);
+            printf ("%s\n", buf);
+        }
+    }
+
+    free (name_sorted_syms);
+} // tl_cg_print_index
 /* Compare two arcs based on their usage counts.
    We want to sort in descending order.  */
 

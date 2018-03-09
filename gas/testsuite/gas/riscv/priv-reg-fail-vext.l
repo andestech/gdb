@@ -5,3 +5,4 @@
 .*Warning: Invalid CSR `vcsr' for the current ISA
 .*Warning: Invalid CSR `vl' for the current ISA
 .*Warning: Invalid CSR `vtype' for the current ISA
+.*Warning: Invalid CSR `seed' for the current ISA
