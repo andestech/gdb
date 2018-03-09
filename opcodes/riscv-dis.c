@@ -30,6 +30,7 @@
 
 #include "bfd_stdint.h"
 #include <ctype.h>
+#include <dlfcn.h>
 
 struct riscv_private_data
 {
@@ -41,6 +42,82 @@ struct riscv_private_data
 static const char * const *riscv_gpr_names;
 static const char * const *riscv_fpr_names;
 static const char * const *riscv_vecr_names;
+
+static int
+riscv_parse_opcode (bfd_vma, insn_t, disassemble_info *,
+		    struct riscv_private_data *, uint32_t);
+
+#define RISCV_PARSE_EX9IT       0x04
+#define RISCV_PARSE_EX9TAB      0x08
+
+static void
+riscv_ex9_info (bfd_vma pc ATTRIBUTE_UNUSED,
+		disassemble_info *info, uint32_t ex9_index)
+{
+  uint32_t insn;
+  static asection *section = NULL;
+  bfd_byte buffer[4];
+  int insnlen;
+  struct riscv_private_data *pd = info->private_data;
+
+  /* If no section info can be related to this ex9 insn, this may be just
+     a uninitial memory content, so not to decode it.  */
+  if (info->section == NULL)
+    return;
+
+  /* Lookup section in which itb is located.  */
+  if (!section)
+    {
+      section = bfd_get_section_by_name (info->section->owner, ".ex9.itable");
+
+      /* Lookup it only once, in case .ex9.itable doesn't exist at all.  */
+      if (section == NULL)
+	section = (void *) -1;
+    }
+
+  if (section == (void *) -1)
+    return;
+
+  if (!section->owner)
+    return;
+
+  bfd_get_section_contents (section->owner, section, buffer,
+			    ex9_index * 4, 4);
+  insn = bfd_get_32 (section->owner, buffer);
+  insnlen = riscv_insn_length (insn);
+
+  /* 16-bit instructions in ex9 table.  */
+  if (insnlen == 2)
+    riscv_parse_opcode (pc, (insn & 0x0000FFFF), info, pd, RISCV_PARSE_EX9IT);
+  /* 32-bit instructions in ex9 table.  */
+  else
+    riscv_parse_opcode (pc, insn, info, pd, RISCV_PARSE_EX9IT);
+}
+
+/* Data structures used by ACE */
+typedef struct ace_operand
+{
+  const char *name;  /* operand name */
+  int bitpos;  /* operand start position */
+  int bitsize;  /* operand width */
+  int shift;  /* operand shift amount */
+  int hw_res;  /* hardware resource */
+  const char *hw_name;  /* hardware/register name */
+} ace_op_t;
+
+enum
+{
+  HW_GPR,
+  HW_UINT,
+  HW_INT,
+  HW_ACR
+};
+
+/* Pointers for storing symbols from ACE shared library */
+struct riscv_opcode *ace_opcs;
+ace_op_t *ace_ops;
+/* Represent whether ACE shared library is loaded successfully */
+bfd_boolean ace_lib_load_success = FALSE;
 
 /* Other options.  */
 static int no_aliases;	/* If set disassemble as most general inst.  */
@@ -63,6 +140,38 @@ parse_riscv_dis_option (const char *option)
     {
       riscv_gpr_names = riscv_gpr_names_numeric;
       riscv_fpr_names = riscv_fpr_names_numeric;
+    }
+  else if (strcmp (option, "standard") == 0)
+    {
+      riscv_gpr_names = riscv_gpr_names_standard;
+      riscv_fpr_names = riscv_fpr_names_abi;
+    }
+  /* Load ACE shared library if ACE option is enable */
+  else if (strncmp (option, "ace=", 4) == 0)
+    {
+      char *ace_lib_path = malloc (strlen (option) - 4);
+      strcpy (ace_lib_path, option + 4);
+
+      void *dlc = dlopen (ace_lib_path, RTLD_NOW | RTLD_LOCAL);
+      char *err;
+
+      if (dlc == NULL)
+	err = (char *) dlerror ();
+      else
+	{
+	  ace_ops = (ace_op_t *) dlsym (dlc, "ace_operands");
+	  err = (char *) dlerror ();
+	  if (err == NULL)
+	    {
+	      ace_opcs = (struct riscv_opcode *) dlsym (dlc, "ace_opcodes");
+	      err = (char *) dlerror ();
+	    }
+	}
+
+      if (err == NULL)
+	ace_lib_load_success = TRUE;
+      else
+	fprintf (stderr, _("Fault to load ACE shared library: %s\n"), err);
     }
   else
     {
@@ -112,10 +221,141 @@ maybe_print_address (struct riscv_private_data *pd, int base_reg, int offset)
     pd->print_addr = offset;
 }
 
+static unsigned int
+ace_get_discrete_bit_value(unsigned int bit_value, char *op_name_discrete, const char *op)
+{
+  bfd_boolean found_or_token = TRUE;
+  unsigned val, ret = 0;
+  char *psep, *pval = op_name_discrete + strlen(op);
+  unsigned msb = 0, width = 0, width_acc = 0;
+
+  while (found_or_token)
+    {
+      /* Extract msb from string */
+      psep = strchr (pval, '_');
+      *psep = '\0';
+      msb = strtoul (pval, (char **) NULL, 10);
+      /* Extract width from string */
+      pval = psep + 1;
+      psep = strchr (pval, '|');
+      if (psep)
+	*psep = '\0';
+      else
+	found_or_token = FALSE;
+      width = strtoul (pval, (char **) NULL, 10);
+
+      /* Perform mask to truncate oversize value */
+      val = bit_value << (32 - msb - 1);
+      val >>= 32 - width;
+      val <<= width_acc;
+      ret |= val;
+      width_acc += width;
+
+      /* Prepare condition for next iteration */
+      pval = psep + 1;
+    }
+  return ret;
+}
+
+/* Print out ACE instruction assembly code */
+
+static void
+print_ace_args (const char **args, insn_t l, disassemble_info * info)
+{
+  fprintf_ftype print = info->fprintf_func;
+
+  /* Extract field attribute name from opcode description (ace_ops) and
+     store the extracted result to var of op_name for finding the
+     field attribute information from ace_field_hash */
+  bfd_boolean found_op_str_end = FALSE;
+  char *pch = strchr (*args, ',');
+  if (pch == NULL)
+    {
+      pch = strchr (*args, '\0');
+      found_op_str_end = TRUE;
+    }
+  if (pch == NULL)
+    return;
+
+  unsigned int op_name_size = pch - (*args + 1);
+  char *op_name = malloc (op_name_size + 1);
+  memcpy (op_name, *args + 1, op_name_size);
+  /* Cat null character to the end of op_name to avoid gash */
+  memcpy (op_name + op_name_size, "\0", 1);
+
+  /* With rGPR encoding format, operand bit-field may be discrete.
+     There is an "|" token in discrete format */
+  bfd_boolean is_discrete = FALSE;
+  char *por = strchr(op_name, '|');
+  char *op_name_discrete;
+  if (por != NULL)
+    {
+      is_discrete = TRUE;
+      op_name_discrete = malloc(op_name_size + 1);
+      strcpy(op_name_discrete, op_name);
+      *por = '\0';
+    }
+
+  /*  Find the field attribute from ace_field_hash and encode instruction */
+  ace_op_t *ace_op = NULL;
+  unsigned int i = 0;
+  while (ace_ops[i].name)
+    {
+      if (strcmp (ace_ops[i].name, op_name) == 0)
+	{
+	  ace_op = &ace_ops[i];
+	  break;
+	}
+      i++;
+    }
+
+  if (ace_op != NULL)
+    {
+      /* Extract the value from defined location */
+      unsigned int bit_value = l;
+      bit_value <<= 32 - (ace_op->bitpos + 1);
+      bit_value >>= 32 - ace_op->bitsize;
+
+      switch (ace_op->hw_res)
+	{
+	case HW_GPR:
+	  print (info->stream, "%s", riscv_gpr_names[bit_value]);
+	  break;
+
+	case HW_UINT:
+	  if (is_discrete)
+	    bit_value = ace_get_discrete_bit_value(l, op_name_discrete, "imm");
+	  print (info->stream, "%d", bit_value);
+	  break;
+
+	case HW_ACR:
+	  if (is_discrete)
+	    bit_value = ace_get_discrete_bit_value(l, op_name_discrete, ace_op->hw_name);
+	  print (info->stream, "%s_%d", ace_op->hw_name, bit_value);
+	  break;
+	}
+    }
+  else
+    {
+      fprintf (stderr, _("ace_op is NULL\n"));
+      return;
+    }
+
+  /* Update the address of pointer of the field attribute (*args) */
+  if (found_op_str_end == TRUE)
+    *args = pch - 1;
+  else
+    {
+      *args = pch;
+      print (info->stream, ",");
+    }
+}
+
 /* Print insn arguments for 32/64-bit code.  */
 
 static void
-print_insn_args (const char *d, insn_t l, bfd_vma pc, disassemble_info *info)
+print_insn_args (const char *d, insn_t l, bfd_vma pc,
+		 disassemble_info *info, uint32_t parse_mode)
 {
   struct riscv_private_data *pd = info->private_data;
   int rs1 = (l >> OP_SH_RS1) & OP_MASK_RS1;
@@ -158,6 +398,23 @@ print_insn_args (const char *d, insn_t l, bfd_vma pc, disassemble_info *info)
 	    case 'o':
 	    case 'j':
 	      print (info->stream, "%d", (int)EXTRACT_RVC_IMM (l));
+	      break;
+	    case 'e':
+	      switch (*++d)
+		{
+		case 'i':
+		  print (info->stream, "#%d	!", (int)EXTRACT_RVC_EX9IT_IMM (l) >> 2);
+		  riscv_ex9_info (pc, info, (int)EXTRACT_RVC_EX9IT_IMM (l) >> 2);
+		  break;
+		case 'c':
+		  print (info->stream, "%x",
+			 (unsigned int)((unsigned int)EXTRACT_RVC_EX9CS_IMM (l) + pc));
+		  break;
+		case 't':
+		  print (info->stream, "#%d       !", (int)EXTRACT_RVC_EX10_IMM (l));
+		  riscv_ex9_info (pc, info, (int)EXTRACT_RVC_EX10_IMM (l));
+		  break;
+		}
 	      break;
 	    case 'k':
 	      print (info->stream, "%d", (int)EXTRACT_RVC_LW_IMM (l));
@@ -217,6 +474,7 @@ print_insn_args (const char *d, insn_t l, bfd_vma pc, disassemble_info *info)
 	case ')':
 	case '[':
 	case ']':
+	case '+':
 	  print (info->stream, "%c", *d);
 	  break;
 
@@ -234,6 +492,7 @@ print_insn_args (const char *d, insn_t l, bfd_vma pc, disassemble_info *info)
 	  break;
 
 	case 't':
+	case 'e':
 	  print (info->stream, "%s",
 		 riscv_gpr_names[EXTRACT_OPERAND (RS2, l)]);
 	  break;
@@ -274,8 +533,24 @@ print_insn_args (const char *d, insn_t l, bfd_vma pc, disassemble_info *info)
 	  break;
 
 	case 'a':
-	  info->target = EXTRACT_UJTYPE_IMM (l) + pc;
-	  (*info->print_address_func) (info->target, info);
+	  if (parse_mode & RISCV_PARSE_EX9IT)
+	    {
+	      /* Check instruction in ex9 table.  */
+	      info->target = EXTRACT_UJTYPE_IMM_EX9TAB (l);
+	      info->target |= (pc & 0xffe00000);
+	      (*info->print_address_func) (info->target, info);
+	    }
+	  else if (parse_mode & RISCV_PARSE_EX9TAB)
+	    {
+	      /* Check if decode ex9 table.  */
+	      info->target = EXTRACT_UJTYPE_IMM_EX9TAB (l);
+	      print (info->stream, "PC(31,21)|#0x%lx", info->target);
+	    }
+	  else
+	    {
+	      info->target = EXTRACT_UJTYPE_IMM (l) + pc;
+	      (*info->print_address_func) (info->target, info);
+	    }
 	  break;
 
 	case 'p':
@@ -425,6 +700,97 @@ print_insn_args (const char *d, insn_t l, bfd_vma pc, disassemble_info *info)
 	    }
 	  break;
 
+	/* Handle ACE operand field */
+	case 'X':
+	  if (ace_lib_load_success)
+	    {
+	      print_ace_args (&d, l, info);
+	      break;
+	    }
+	  else
+	    {
+	      print (info->stream,
+		     _("# ACE shared library is not loaded successfully"));
+	      return;
+	    }
+
+	case 'h':
+	  print (info->stream, "%d", (int)EXTRACT_ITYPE_IMM6H (l));
+	  break;
+
+	case 'l':
+	  print (info->stream, "%d", (int)EXTRACT_ITYPE_IMM6L (l));
+	  break;
+
+	case 'i':
+	  print (info->stream, "%d", (int)EXTRACT_STYPE_IMM7 (l));
+	  break;
+
+	case 'k':
+	  print (info->stream, "%d", (int)EXTRACT_TYPE_CIMM6 (l));
+	  break;
+
+	case 'f':
+	  print (info->stream, "%d", (int)EXTRACT_TYPE_IMM8 (l));
+	  break;
+
+	case 'r':
+	  print (info->stream, "%d", (int)EXTRACT_TYPE_SIMM8 (l));
+	  break;
+
+	case 'g':
+	  info->target = EXTRACT_STYPE_IMM10 (l) + pc;
+	  (*info->print_address_func) (info->target, info);
+	  break;
+
+	case 'v':
+	  print (info->stream, "<<0x%x", (int)EXTRACT_OPERAND (SV, l));
+	  break;
+
+	case 'G':
+	  switch (*++d)
+	    {
+	    case 'b':
+	      maybe_print_address (pd, X_GP, EXTRACT_GPTYPE_LB_IMM (l));
+	      print (info->stream, "%d", (int)EXTRACT_GPTYPE_LB_IMM (l));
+	      break;
+	    case 'h':
+	      maybe_print_address (pd, X_GP, EXTRACT_GPTYPE_LH_IMM (l));
+	      print (info->stream, "%d", (int)EXTRACT_GPTYPE_LH_IMM (l));
+	      break;
+	    case 'w':
+	      maybe_print_address (pd, X_GP, EXTRACT_GPTYPE_LW_IMM (l));
+	      print (info->stream, "%d", (int)EXTRACT_GPTYPE_LW_IMM (l));
+	      break;
+	    case 'd':
+	      maybe_print_address (pd, X_GP, EXTRACT_GPTYPE_LD_IMM (l));
+	      print (info->stream, "%d", (int)EXTRACT_GPTYPE_LD_IMM (l));
+	      break;
+	    }
+	  break;
+
+	case 'H':
+	  switch (*++d)
+	    {
+	    case 'b':
+	      maybe_print_address (pd, X_GP, EXTRACT_GPTYPE_SB_IMM (l));
+	      print (info->stream, "%d", (int)EXTRACT_GPTYPE_SB_IMM (l));
+	      break;
+	    case 'h':
+	      maybe_print_address (pd, X_GP, EXTRACT_GPTYPE_SH_IMM (l));
+	      print (info->stream, "%d", (int)EXTRACT_GPTYPE_SH_IMM (l));
+	      break;
+	    case 'w':
+	      maybe_print_address (pd, X_GP, EXTRACT_GPTYPE_SW_IMM (l));
+	      print (info->stream, "%d", (int)EXTRACT_GPTYPE_SW_IMM (l));
+	      break;
+	    case 'd':
+	      maybe_print_address (pd, X_GP, EXTRACT_GPTYPE_SD_IMM (l));
+	      print (info->stream, "%d", (int)EXTRACT_GPTYPE_SD_IMM (l));
+	      break;
+	    }
+	  break;
+
 	default:
 	  /* xgettext:c-format */
 	  print (info->stream, _("# internal error, undefined modifier (%c)"),
@@ -432,6 +798,63 @@ print_insn_args (const char *d, insn_t l, bfd_vma pc, disassemble_info *info)
 	  return;
 	}
     }
+}
+
+static const struct riscv_opcode *riscv_hash[OP_MASK_OP + 1];
+
+static int
+riscv_parse_opcode (bfd_vma memaddr, insn_t word, disassemble_info *info,
+		    struct riscv_private_data *pd, uint32_t parse_mode)
+{
+  const struct riscv_opcode *op;
+
+#define OP_HASH_IDX(i) ((i) & (riscv_insn_length (i) == 2 ? 0x3 : OP_MASK_OP))
+
+  op = riscv_hash[OP_HASH_IDX (word)];
+  if (op != NULL)
+    {
+      int xlen = 0;
+
+      /* If XLEN is not known, get its value from the ELF class.  */
+      if (info->mach == bfd_mach_riscv64)
+	xlen = 64;
+      else if (info->mach == bfd_mach_riscv32)
+	xlen = 32;
+      else if (info->section != NULL)
+	{
+	  Elf_Internal_Ehdr *ehdr = elf_elfheader (info->section->owner);
+	  xlen = ehdr->e_ident[EI_CLASS] == ELFCLASS64 ? 64 : 32;
+	}
+
+      for (; op->name; op++)
+	{
+	  /* Does the opcode match?  */
+	  if (! (op->match_func) (op, word))
+	    continue;
+	  /* Is this a pseudo-instruction and may we print it as such?  */
+	  if (no_aliases && (op->pinfo & INSN_ALIAS))
+	    continue;
+	  /* Is this instruction restricted to a certain value of XLEN?  */
+	  if (isdigit (op->subset[0]) && atoi (op->subset) != xlen)
+	    continue;
+
+	  /* It's a match.  */
+	  (*info->fprintf_func) (info->stream, "%s", op->name);
+	  print_insn_args (op->args, word, memaddr, info, parse_mode);
+
+	  /* Try to disassemble multi-instruction addressing sequences.  */
+	  if (pd->print_addr != (bfd_vma)-1)
+	    {
+	      info->target = pd->print_addr;
+	      (*info->fprintf_func) (info->stream, " # ");
+	      (*info->print_address_func) (info->target, info);
+	      pd->print_addr = -1;
+	    }
+
+	  return 1;
+	}
+    }
+  return 0;
 }
 
 /* Print the RISC-V instruction at address MEMADDR in debugged memory,
@@ -444,18 +867,26 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
 {
   const struct riscv_opcode *op;
   static bfd_boolean init = 0;
-  static const struct riscv_opcode *riscv_hash[OP_MASK_OP + 1];
   struct riscv_private_data *pd;
   int insnlen;
+  int match;
 
 #define OP_HASH_IDX(i) ((i) & (riscv_insn_length (i) == 2 ? 0x3 : OP_MASK_OP))
 
   /* Build a hash table to shorten the search time.  */
-  if (! init)
+  if (!init)
     {
       for (op = riscv_opcodes; op->name; op++)
 	if (!riscv_hash[OP_HASH_IDX (op->match)])
 	  riscv_hash[OP_HASH_IDX (op->match)] = op;
+
+      /* Insert ACE opcode attributes into hash table if exist */
+      if (ace_lib_load_success && ace_opcs != NULL && ace_ops != NULL)
+	{
+	  for (op = ace_opcs; op->name; op++)
+	    if (!riscv_hash[OP_HASH_IDX (op->match)])
+	      riscv_hash[OP_HASH_IDX (op->match)] = op;
+	}
 
       init = 1;
     }
@@ -519,7 +950,7 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
 
 	  /* It's a match.  */
 	  (*info->fprintf_func) (info->stream, "%s", op->name);
-	  print_insn_args (op->args, word, memaddr, info);
+	  print_insn_args (op->args, word, memaddr, info, 0);
 
 	  /* Try to disassemble multi-instruction addressing sequences.  */
 	  if (pd->print_addr != (bfd_vma)-1)
@@ -560,9 +991,19 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
 	}
     }
 
-  /* We did not find a match, so just print the instruction bits.  */
-  info->insn_type = dis_noninsn;
-  (*info->fprintf_func) (info->stream, "0x%llx", (unsigned long long)word);
+  if (info->section
+      && strstr (info->section->name, ".ex9.itable") != NULL)
+    match = riscv_parse_opcode (memaddr, word, info, pd, RISCV_PARSE_EX9TAB);
+  else
+    match = riscv_parse_opcode (memaddr, word, info, pd, 0);
+
+  if (!match)
+    {
+      /* We did not find a match, so just print the instruction bits.  */
+      info->insn_type = dis_noninsn;
+      (*info->fprintf_func) (info->stream, "0x%llx", (unsigned long long)word);
+    }
+
   return insnlen;
 }
 
@@ -628,6 +1069,9 @@ with the -M switch (multiple options should be separated by commas):\n"));
 
   fprintf (stream, _("\n\
   numeric       Print numeric register names, rather than ABI names.\n"));
+
+  fprintf (stream, _("\n\
+  standard      Print standard reigster names.\n"));
 
   fprintf (stream, _("\n\
   no-aliases    Disassemble only into canonical instructions, rather\n\

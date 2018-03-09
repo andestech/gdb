@@ -35,10 +35,17 @@ const char * const riscv_gpr_names_numeric[NGPR] =
 };
 
 const char * const riscv_gpr_names_abi[NGPR] = {
-  "zero", "ra", "sp",  "gp",  "tp", "t0",  "t1",  "t2",
-  "s0",   "s1", "a0",  "a1",  "a2", "a3",  "a4",  "a5",
-  "a6",   "a7", "s2",  "s3",  "s4", "s5",  "s6",  "s7",
-  "s8",   "s9", "s10", "s11", "t3", "t4",  "t5",  "t6"
+  "zero", "ra",   "sp",   "gp",   "tp",   "t0",   "t1",   "t2",
+  "s0",   "s1",   "a0",   "a1",   "a2",   "a3",   "a4",   "a5",
+  "a6",   "a7",   "s2",   "s3",   "s4",   "s5",   "s6",   "s7",
+  "s8",   "s9",   "s10",  "s11",  "t3",   "t4",   "t5",   "t6"
+};
+
+const char * const riscv_gpr_names_standard[NGPR] = {
+  "r0",   "r1",   "r2",   "r3",   "r4",   "r5",   "r6",   "r7",
+  "r8",   "r9",   "r10",  "r11",  "r12",  "r13",  "r14",  "r15",
+  "r16",  "r17",  "r18",  "r19",  "r20",  "r21",  "r22",  "r23",
+  "r24",  "r25",  "r26",  "r27",  "r28",  "r29",  "r30",  "r31"
 };
 
 const char * const riscv_fpr_names_numeric[NFPR] =
@@ -50,10 +57,10 @@ const char * const riscv_fpr_names_numeric[NFPR] =
 };
 
 const char * const riscv_fpr_names_abi[NFPR] = {
-  "ft0", "ft1", "ft2",  "ft3",  "ft4", "ft5", "ft6",  "ft7",
-  "fs0", "fs1", "fa0",  "fa1",  "fa2", "fa3", "fa4",  "fa5",
-  "fa6", "fa7", "fs2",  "fs3",  "fs4", "fs5", "fs6",  "fs7",
-  "fs8", "fs9", "fs10", "fs11", "ft8", "ft9", "ft10", "ft11"
+  "ft0",  "ft1",  "ft2",  "ft3",  "ft4",  "ft5",  "ft6",  "ft7",
+  "fs0",  "fs1",  "fa0",  "fa1",  "fa2",  "fa3",  "fa4",  "fa5",
+  "fa6",  "fa7",  "fs2",  "fs3",  "fs4",  "fs5",  "fs6",  "fs7",
+  "fs8",  "fs9",  "fs10", "fs11", "ft8",  "ft9",  "ft10", "ft11"
 };
 
 const char * const riscv_vecr_names_numeric[NVECR] =
@@ -669,6 +676,42 @@ const struct riscv_opcode riscv_opcodes[] =
 {"sraw",       64, {"I", 0}, "d,s,<",   MATCH_SRAIW, MASK_SRAIW, match_opcode, INSN_ALIAS },
 {"subw",       64, {"C", 0}, "Cs,Cw,Ct",  MATCH_C_SUBW, MASK_C_SUBW, match_opcode, INSN_ALIAS },
 {"subw",       64, {"I", 0}, "d,s,t",  MATCH_SUBW, MASK_SUBW, match_opcode, 0 },
+
+/* NDS V5 Extension.  */
+/* name,     xlen, isa,   operands, match, mask, match_func, pinfo.  */
+{"la.lo32",    64, {"I", 0}, "d,A",  0, (int) M_LA_LO,  match_never, INSN_MACRO },
+{"bfoz",        0, {"I", 0}, "d,s,h,l",  MATCH_BFOZ, MASK_BFOZ, match_opcode, 0 },
+{"bfos",        0, {"I", 0}, "d,s,h,l",  MATCH_BFOS, MASK_BFOS, match_opcode, 0 },
+{"beqc",        0, {"I", 0}, "s,i,g",  MATCH_BEQC, MASK_BEQC, match_opcode, 0 },
+{"bnec",        0, {"I", 0}, "s,i,g",  MATCH_BNEC, MASK_BNEC, match_opcode, 0 },
+{"bbc",         0, {"I", 0}, "s,k,g",  MATCH_BBC, MASK_BBC, match_opcode, 0 },
+{"bbs",         0, {"I", 0}, "s,k,g",  MATCH_BBS, MASK_BBS, match_opcode, 0 },
+{"lea.h",       0, {"I", 0}, "d,s,t",  MATCH_LEA_H, MASK_LEA_H, match_opcode, 0 },
+{"lea.w",       0, {"I", 0}, "d,s,t",  MATCH_LEA_W, MASK_LEA_W, match_opcode, 0 },
+{"lea.d",       0, {"I", 0}, "d,s,t",  MATCH_LEA_D, MASK_LEA_D, match_opcode, 0 },
+{"lea.b.ze",    0, {"I", 0}, "d,s,t",  MATCH_LEA_B_ZE, MASK_LEA_B_ZE, match_opcode, 0 },
+{"lea.h.ze",    0, {"I", 0}, "d,s,t",  MATCH_LEA_H_ZE, MASK_LEA_H_ZE, match_opcode, 0 },
+{"lea.w.ze",    0, {"I", 0}, "d,s,t",  MATCH_LEA_W_ZE, MASK_LEA_W_ZE, match_opcode, 0 },
+{"lea.d.ze",    0, {"I", 0}, "d,s,t",  MATCH_LEA_D_ZE, MASK_LEA_D_ZE, match_opcode, 0 },
+{"lbugp",       0, {"I", 0}, "d,Gb", MATCH_LBUGP, MASK_LBUGP, match_opcode, 0},
+{"lbgp",        0, {"I", 0}, "d,Gb", MATCH_LBGP, MASK_LBGP, match_opcode, 0},
+{"lhugp",       0, {"I", 0}, "d,Gh", MATCH_LHUGP, MASK_LHUGP, match_opcode, 0},
+{"lhgp",        0, {"I", 0}, "d,Gh", MATCH_LHGP, MASK_LHGP, match_opcode, 0},
+{"lwugp",      64, {"I", 0}, "d,Gw", MATCH_LWUGP, MASK_LWUGP, match_opcode, 0},
+{"lwgp",        0, {"I", 0}, "d,Gw", MATCH_LWGP, MASK_LWGP, match_opcode, 0},
+{"ldgp",       64, {"I", 0}, "d,Gd", MATCH_LDGP, MASK_LDGP, match_opcode, 0},
+{"sbgp",        0, {"I", 0}, "t,Hb", MATCH_SBGP, MASK_SBGP, match_opcode, 0},
+{"shgp",        0, {"I", 0}, "t,Hh", MATCH_SHGP, MASK_SHGP, match_opcode, 0},
+{"swgp",        0, {"I", 0}, "t,Hw", MATCH_SWGP, MASK_SWGP, match_opcode, 0},
+{"sdgp",       64, {"I", 0}, "t,Hd", MATCH_SDGP, MASK_SDGP, match_opcode, 0},
+{"addigp",      0, {"I", 0}, "d,Gb", MATCH_ADDIGP, MASK_ADDIGP, match_opcode, 0},
+{"ffb",         0, {"I", 0}, "d,s,t",MATCH_FFB, MASK_FFB, match_opcode, 0 },
+{"ffzmism",     0, {"I", 0}, "d,s,t",MATCH_FFZMISM, MASK_FFZMISM, match_opcode, 0 },
+{"ffmism",      0, {"I", 0}, "d,s,t",MATCH_FFMISM, MASK_FFMISM, match_opcode, 0 },
+{"flmism",      0, {"I", 0}, "d,s,t",MATCH_FLMISM, MASK_FLMISM, match_opcode, 0 },
+{"ex9.it",      0, {"C", 0}, "Cei",  MATCH_C_EX9IT, MASK_C_EX9IT, match_opcode, 0 },
+{"ex9.cs",      0, {"C", 0}, "Cec",  MATCH_C_EX9CS, MASK_C_EX9CS, match_opcode, 0 },
+{"ex10",        0, {"C", 0}, "Cet",  MATCH_C_EX10, MASK_C_EX10, match_opcode, 0 },
 
 /* Atomic memory operation instruction subset */
 {"lr.w",         0, {"A", 0},   "d,0(s)",    MATCH_LR_W, MASK_LR_W | MASK_AQRL, match_opcode, INSN_DREF|INSN_4_BYTE },

@@ -103,3 +103,63 @@ typedef enum riscv_isa_ext_class
 
 riscv_isa_ext_class_t
 riscv_get_prefix_class (const char *);
+
+struct riscv_elf_link_hash_table
+{
+  struct elf_link_hash_table elf;
+
+  /* Short-cuts to get to dynamic linker sections.  */
+  asection *sdyntdata;
+
+  /* Small local sym to section mapping cache.  */
+  struct sym_cache sym_cache;
+
+  /* The max alignment of output sections.  */
+  bfd_vma max_alignment;
+
+  /* Target dependent options.  */
+  int target_aligned;
+  int gp_relative_insn;
+  FILE *sym_ld_script;
+  int avoid_btb_miss;
+  /* For EX9.  */
+  int target_optimize;
+  int relax_status;
+  char *ex9_export_file;
+  FILE *ex9_import_file;
+  int keep_import_ex9;
+  int update_ex9_table;
+  int ex9_limit;
+  int ex9_loop_aware;
+};
+
+/* Get the RISC-V ELF linker hash table from a link_info structure.  */
+#define riscv_elf_hash_table(p) \
+  (elf_hash_table_id ((struct elf_link_hash_table *) ((p)->hash)) \
+  == RISCV_ELF_DATA ? ((struct riscv_elf_link_hash_table *) ((p)->hash)) : NULL)
+
+/* EX9 extention .  */
+
+/* Optimization status mask.  */
+#define RISCV_RELAX_EX9_DONE	(1 << 1)
+
+/* Optimization turn on mask.  */
+#define RISCV_RELAX_EX9_ON	(1 << 1)
+
+/* Relocation flags for R_RISCV_ERLAX_ENTRY.  */
+
+/* Set if relax on this section is done or disabled.  */
+#define R_RISCV_RELAX_ENTRY_DISABLE_RELAX_FLAG	(1 << 31)
+/* EX9 must be explicitly enabled, so we won't mess up handcraft assembly code.
+   Enable EX9 optimization for this section.  */
+#define R_RISCV_RELAX_ENTRY_EX9_FLAG		(1 << 2)
+
+/* Relocation flags for R_RISCV_RELAX_REGION_BEGIN/END.  */
+
+/* Suppress EX9 optimization in the region.  */
+#define R_RISCV_RELAX_REGION_NO_EX9_FLAG	(1 << 2)
+/* A Innermost loop region.  Some optimizations is suppressed in this region
+   due to performance drop.  */
+#define R_RISCV_RELAX_REGION_LOOP_FLAG		(1 << 4)
+
+extern unsigned int number_of_howto_table;

@@ -855,6 +855,313 @@ static reloc_howto_type howto_table[] =
 	 0,				/* src_mask */
 	 MINUS_ONE,			/* dst_mask */
 	 FALSE),			/* pcrel_offset */
+
+  EMPTY_HOWTO (58), EMPTY_HOWTO (59), EMPTY_HOWTO (60), EMPTY_HOWTO (61),
+  EMPTY_HOWTO (62), EMPTY_HOWTO (63), EMPTY_HOWTO (64), EMPTY_HOWTO (65),
+  EMPTY_HOWTO (66), EMPTY_HOWTO (67), EMPTY_HOWTO (68), EMPTY_HOWTO (69),
+  EMPTY_HOWTO (70), EMPTY_HOWTO (71), EMPTY_HOWTO (72), EMPTY_HOWTO (73),
+  EMPTY_HOWTO (74), EMPTY_HOWTO (75), EMPTY_HOWTO (76), EMPTY_HOWTO (77),
+  EMPTY_HOWTO (78), EMPTY_HOWTO (79), EMPTY_HOWTO (80), EMPTY_HOWTO (81),
+  EMPTY_HOWTO (82), EMPTY_HOWTO (83), EMPTY_HOWTO (84), EMPTY_HOWTO (85),
+  EMPTY_HOWTO (86), EMPTY_HOWTO (87), EMPTY_HOWTO (88), EMPTY_HOWTO (89),
+  EMPTY_HOWTO (90), EMPTY_HOWTO (91), EMPTY_HOWTO (92), EMPTY_HOWTO (93),
+  EMPTY_HOWTO (94), EMPTY_HOWTO (95), EMPTY_HOWTO (96), EMPTY_HOWTO (97),
+  EMPTY_HOWTO (98), EMPTY_HOWTO (99), EMPTY_HOWTO (100), EMPTY_HOWTO (101),
+  EMPTY_HOWTO (102), EMPTY_HOWTO (103), EMPTY_HOWTO (104), EMPTY_HOWTO (105),
+  EMPTY_HOWTO (106), EMPTY_HOWTO (107), EMPTY_HOWTO (108), EMPTY_HOWTO (109),
+  EMPTY_HOWTO (110), EMPTY_HOWTO (111), EMPTY_HOWTO (112), EMPTY_HOWTO (113),
+  EMPTY_HOWTO (114), EMPTY_HOWTO (115), EMPTY_HOWTO (116), EMPTY_HOWTO (117),
+  EMPTY_HOWTO (118), EMPTY_HOWTO (119), EMPTY_HOWTO (120), EMPTY_HOWTO (121),
+  EMPTY_HOWTO (122), EMPTY_HOWTO (123), EMPTY_HOWTO (124), EMPTY_HOWTO (125),
+  EMPTY_HOWTO (126), EMPTY_HOWTO (127), EMPTY_HOWTO (128), EMPTY_HOWTO (129),
+  EMPTY_HOWTO (130), EMPTY_HOWTO (131), EMPTY_HOWTO (132), EMPTY_HOWTO (133),
+  EMPTY_HOWTO (134), EMPTY_HOWTO (135), EMPTY_HOWTO (136), EMPTY_HOWTO (137),
+  EMPTY_HOWTO (138), EMPTY_HOWTO (139), EMPTY_HOWTO (140), EMPTY_HOWTO (141),
+  EMPTY_HOWTO (142), EMPTY_HOWTO (143), EMPTY_HOWTO (144), EMPTY_HOWTO (145),
+  EMPTY_HOWTO (146), EMPTY_HOWTO (147), EMPTY_HOWTO (148), EMPTY_HOWTO (149),
+  EMPTY_HOWTO (150), EMPTY_HOWTO (151), EMPTY_HOWTO (152), EMPTY_HOWTO (153),
+  EMPTY_HOWTO (154), EMPTY_HOWTO (155), EMPTY_HOWTO (156), EMPTY_HOWTO (157),
+  EMPTY_HOWTO (158), EMPTY_HOWTO (159), EMPTY_HOWTO (160), EMPTY_HOWTO (161),
+  EMPTY_HOWTO (162), EMPTY_HOWTO (163), EMPTY_HOWTO (164), EMPTY_HOWTO (165),
+  EMPTY_HOWTO (166), EMPTY_HOWTO (167), EMPTY_HOWTO (168), EMPTY_HOWTO (169),
+  EMPTY_HOWTO (170), EMPTY_HOWTO (171), EMPTY_HOWTO (172), EMPTY_HOWTO (173),
+  EMPTY_HOWTO (174), EMPTY_HOWTO (175), EMPTY_HOWTO (176), EMPTY_HOWTO (177),
+  EMPTY_HOWTO (178), EMPTY_HOWTO (179), EMPTY_HOWTO (180), EMPTY_HOWTO (181),
+  EMPTY_HOWTO (182), EMPTY_HOWTO (183), EMPTY_HOWTO (184), EMPTY_HOWTO (185),
+  EMPTY_HOWTO (186), EMPTY_HOWTO (187), EMPTY_HOWTO (188), EMPTY_HOWTO (189),
+  EMPTY_HOWTO (190), EMPTY_HOWTO (191), EMPTY_HOWTO (192), EMPTY_HOWTO (193),
+  EMPTY_HOWTO (194), EMPTY_HOWTO (195), EMPTY_HOWTO (196), EMPTY_HOWTO (197),
+  EMPTY_HOWTO (198), EMPTY_HOWTO (199), EMPTY_HOWTO (200), EMPTY_HOWTO (201),
+  EMPTY_HOWTO (202), EMPTY_HOWTO (203), EMPTY_HOWTO (204), EMPTY_HOWTO (205),
+  EMPTY_HOWTO (206), EMPTY_HOWTO (207), EMPTY_HOWTO (208), EMPTY_HOWTO (209),
+  EMPTY_HOWTO (210), EMPTY_HOWTO (211), EMPTY_HOWTO (212), EMPTY_HOWTO (213),
+  EMPTY_HOWTO (214), EMPTY_HOWTO (215), EMPTY_HOWTO (216), EMPTY_HOWTO (217),
+  EMPTY_HOWTO (218), EMPTY_HOWTO (219), EMPTY_HOWTO (220), EMPTY_HOWTO (221),
+  EMPTY_HOWTO (222), EMPTY_HOWTO (223), EMPTY_HOWTO (224), EMPTY_HOWTO (225),
+  EMPTY_HOWTO (226), EMPTY_HOWTO (227), EMPTY_HOWTO (228), EMPTY_HOWTO (229),
+  EMPTY_HOWTO (230), EMPTY_HOWTO (231), EMPTY_HOWTO (232), EMPTY_HOWTO (233),
+  EMPTY_HOWTO (234), EMPTY_HOWTO (235), EMPTY_HOWTO (236), EMPTY_HOWTO (237),
+  EMPTY_HOWTO (238),
+
+  /* Relocations for NDS V5.  */
+  /* Deleting the unused insn for pc to gp relaxation.
+     This is defined to 256 (R_RISCV_max + 1) originally in the elfnn-riscv.c
+     for internal relocations used exclusively by the relaxation pass.
+     Unfortunately, the macro ELFNN_R_TYPE will get the unexpected value for
+     R_RISCV_DELETE. I redefine it here to solve the problem.  */
+  HOWTO (R_RISCV_DELETE,		/* type */
+	 0,				/* rightshift */
+	 2,				/* size */
+	 0,				/* bitsize */
+	 FALSE,				/* pc_relative */
+	 0,				/* bitpos */
+	 complain_overflow_dont,	/* complain_on_overflow */
+	 bfd_elf_generic_reloc,		/* special_function */
+	 "R_RISCV_DELETE",		/* name */
+	 FALSE,				/* partial_inplace */
+	 0,				/* src_mask */
+	 0,				/* dst_mask */
+	 TRUE),				/* pcrel_offset */
+
+  /* For handling alignment and BTB miss */
+  HOWTO (R_RISCV_ALIGN_BTB,		/* type */
+	 0,				/* rightshift */
+	 2,				/* size */
+	 0,				/* bitsize */
+	 FALSE,				/* pc_relative */
+	 0,				/* bitpos */
+	 complain_overflow_dont,	/* complain_on_overflow */
+	 bfd_elf_generic_reloc,		/* special_function */
+	 "R_RISCV_ALIGN_BTB",		/* name */
+	 FALSE,				/* partial_inplace */
+	 0,				/* src_mask */
+	 0,				/* dst_mask */
+	 TRUE),				/* pcrel_offset */
+
+  /* 10-bit PC-relative branch offset.  */
+  HOWTO (R_RISCV_10_PCREL,		/* type */
+	 0,				/* rightshift */
+	 2,				/* size */
+	 32,				/* bitsize */
+	 TRUE,				/* pc_relative */
+	 0,				/* bitpos */
+	 complain_overflow_signed,	/* complain_on_overflow */
+	 bfd_elf_generic_reloc,		/* special_function */
+	 "R_RISCV_10_PCREL",		/* name */
+	 FALSE,				/* partial_inplace */
+	 0,				/* src_mask */
+	 ENCODE_STYPE_IMM10 (-1U),	/* dst_mask */
+	 TRUE),				/* pcrel_offset */
+
+  /* Avoid linker optimizations replacing data in text.  */
+  HOWTO (R_RISCV_DATA,			/* type */
+	 0,				/* rightshift */
+	 2,				/* size */
+	 32,				/* bitsize */
+	 FALSE,				/* pc_relative */
+	 0,				/* bitpos */
+	 complain_overflow_dont,	/* complain_on_overflow */
+	 bfd_elf_generic_reloc,		/* special_function */
+	 "R_RISCV_DATA",		/* name */
+	 FALSE,				/* partial_inplace */
+	 0,				/* src_mask */
+	 MINUS_ONE,			/* dst_mask */
+	 FALSE),			/* pcrel_offset */
+
+  /* High 20 bits of low 32-bit absolute address for 64-bit symbol.  */
+  HOWTO (R_RISCV_LALO_HI20,		/* type */
+	 0,				/* rightshift */
+	 2,				/* size */
+	 32,				/* bitsize */
+	 FALSE,				/* pc_relative */
+	 0,				/* bitpos */
+	 complain_overflow_dont,	/* complain_on_overflow */
+	 bfd_elf_generic_reloc,		/* special_function */
+	 "R_RISCV_LALO_HI20",		/* name */
+	 FALSE,				/* partial_inplace */
+	 0,				/* src_mask */
+	 ENCODE_UTYPE_IMM (-1U),	/* dst_mask */
+	 FALSE),			/* pcrel_offset */
+
+  /*  Low 12 bits of low 32-bit absolute address for 64-bit symbol. */
+  HOWTO (R_RISCV_LALO_LO12_I,		/* type */
+	 0,				/* rightshift */
+	 2,				/* size */
+	 32,				/* bitsize */
+	 FALSE,				/* pc_relative */
+	 0,				/* bitpos */
+	 complain_overflow_dont,	/* complain_on_overflow */
+	 bfd_elf_generic_reloc,		/* special_function */
+	 "R_RISCV_LALO_LO12_I",		/* name */
+	 FALSE,				/* partial_inplace */
+	 0,				/* src_mask */
+	 ENCODE_ITYPE_IMM (-1U),	/* dst_mask */
+	 FALSE),			/* pcrel_offset */
+
+  /* Mark which section can do extra linker optimization (like ex9).  */
+  HOWTO (R_RISCV_RELAX_ENTRY,		/* type */
+	 0,				/* rightshift */
+	 2,				/* size */
+	 32,				/* bitsize */
+	 FALSE,				/* pc_relative */
+	 0,				/* bitpos */
+	 complain_overflow_dont,	/* complain_on_overflow */
+	 bfd_elf_generic_reloc,		/* special_function */
+	 "R_RISCV_RELAX_ENTRY",		/* name */
+	 FALSE,				/* partial_inplace */
+	 0,				/* src_mask */
+	 MINUS_ONE,			/* dst_mask */
+	 FALSE),			/* pcrel_offset */
+
+  /* 18-bit gp-relative load offset.  */
+  HOWTO (R_RISCV_LGP18S0,		/* type */
+	 0,				/* rightshift */
+	 2,				/* size */
+	 32,				/* bitsize */
+	 FALSE,				/* pc_relative */
+	 0,				/* bitpos */
+	 complain_overflow_signed,	/* complain_on_overflow */
+	 bfd_elf_generic_reloc,		/* special_function */
+	 "R_RISCV_LGP18S0",		/* name */
+	 FALSE,				/* partial_inplace */
+	 0,				/* src_mask */
+	 ENCODE_GPTYPE_LB_IMM (-1U),    /* dst_mask */
+	 FALSE),			/* pcrel_offset */
+
+  /* 17-bit and right shift 1bit gp-relative load offset.  */
+  HOWTO (R_RISCV_LGP17S1,		/* type */
+	 0,				/* rightshift */
+	 2,				/* size */
+	 32,				/* bitsize */
+	 FALSE,				/* pc_relative */
+	 0,				/* bitpos */
+	 complain_overflow_signed,	/* complain_on_overflow */
+	 bfd_elf_generic_reloc,		/* special_function */
+	 "R_RISCV_LGP17S1",		/* name */
+	 FALSE,				/* partial_inplace */
+	 0,				/* src_mask */
+	 ENCODE_GPTYPE_LH_IMM (-1U),    /* dst_mask */
+	 FALSE),			/* pcrel_offset */
+
+  /* 16-bit and right shift 2bit gp-relative load offset.  */
+  HOWTO (R_RISCV_LGP17S2,		/* type */
+	 0,				/* rightshift */
+	 2,				/* size */
+	 32,				/* bitsize */
+	 FALSE,				/* pc_relative */
+	 0,				/* bitpos */
+	 complain_overflow_signed,	/* complain_on_overflow */
+	 bfd_elf_generic_reloc,		/* special_function */
+	 "R_RISCV_LGP17S2",		/* name */
+	 FALSE,				/* partial_inplace */
+	 0,				/* src_mask */
+	 ENCODE_GPTYPE_LW_IMM (-1U),    /* dst_mask */
+	 FALSE),			/* pcrel_offset */
+
+  /* 15-bit and right shift 3bit gp-relative load offset.  */
+  HOWTO (R_RISCV_LGP17S3,		/* type */
+	 0,				/* rightshift */
+	 2,				/* size */
+	 32,				/* bitsize */
+	 FALSE,				/* pc_relative */
+	 0,				/* bitpos */
+	 complain_overflow_signed,	/* complain_on_overflow */
+	 bfd_elf_generic_reloc,		/* special_function */
+	 "R_RISCV_LGP17S3",		/* name */
+	 FALSE,				/* partial_inplace */
+	 0,				/* src_mask */
+	 ENCODE_GPTYPE_LD_IMM (-1U),    /* dst_mask */
+	 FALSE),			/* pcrel_offset */
+
+  /* 18-bit gp-relative store offset.  */
+  HOWTO (R_RISCV_SGP18S0,		/* type */
+	 0,				/* rightshift */
+	 2,				/* size */
+	 32,				/* bitsize */
+	 FALSE,				/* pc_relative */
+	 0,				/* bitpos */
+	 complain_overflow_signed,	/* complain_on_overflow */
+	 bfd_elf_generic_reloc,		/* special_function */
+	 "R_RISCV_SGP18S0",		/* name */
+	 FALSE,				/* partial_inplace */
+	 0,				/* src_mask */
+	 ENCODE_GPTYPE_SB_IMM (-1U),    /* dst_mask */
+	 FALSE),			/* pcrel_offset */
+
+  /* 17-bit and right shift 1bit gp-relative store offset.  */
+  HOWTO (R_RISCV_SGP17S1,		/* type */
+	 0,				/* rightshift */
+	 2,				/* size */
+	 32,				/* bitsize */
+	 FALSE,				/* pc_relative */
+	 0,				/* bitpos */
+	 complain_overflow_signed,	/* complain_on_overflow */
+	 bfd_elf_generic_reloc,		/* special_function */
+	 "R_RISCV_SGP17S1",		/* name */
+	 FALSE,				/* partial_inplace */
+	 0,				/* src_mask */
+	 ENCODE_GPTYPE_SH_IMM (-1U),    /* dst_mask */
+	 FALSE),			/* pcrel_offset */
+
+  /* 16-bit and right shift 2bit gp-relative store offset.  */
+  HOWTO (R_RISCV_SGP17S2,		/* type */
+	 0,				/* rightshift */
+	 2,				/* size */
+	 32,				/* bitsize */
+	 FALSE,				/* pc_relative */
+	 0,				/* bitpos */
+	 complain_overflow_signed,	/* complain_on_overflow */
+	 bfd_elf_generic_reloc,		/* special_function */
+	 "R_RISCV_SGP17S2",		/* name */
+	 FALSE,				/* partial_inplace */
+	 0,				/* src_mask */
+	 ENCODE_GPTYPE_SW_IMM (-1U),    /* dst_mask */
+	 FALSE),			/* pcrel_offset */
+
+  /* 15-bit and right shift 3bit gp-relative store offset.  */
+  HOWTO (R_RISCV_SGP17S3,		/* type */
+	 0,				/* rightshift */
+	 2,				/* size */
+	 32,				/* bitsize */
+	 FALSE,				/* pc_relative */
+	 0,				/* bitpos */
+	 complain_overflow_signed,	/* complain_on_overflow */
+	 bfd_elf_generic_reloc,		/* special_function */
+	 "R_RISCV_SGP17S3",		/* name */
+	 FALSE,				/* partial_inplace */
+	 0,				/* src_mask */
+	 ENCODE_GPTYPE_SD_IMM (-1U),    /* dst_mask */
+	 FALSE),			/* pcrel_offset */
+
+  /* Mark the begin of the region that can not do some linker relaxations.  */
+  HOWTO (R_RISCV_RELAX_REGION_BEGIN,	/* type */
+         0,				/* rightshift */
+         2,				/* size */
+         32,				/* bitsize */
+         FALSE,				/* pc_relative */
+         0,				/* bitpos */
+         complain_overflow_dont,	/* complain_on_overflow */
+         bfd_elf_generic_reloc,		/* special_function */
+         "R_RISCV_RELAX_REGION_BEGIN",	/* name */
+         FALSE,				/* partial_inplace */
+         0,				/* src_mask */
+         MINUS_ONE,			/* dst_mask */
+         FALSE),			/* pcrel_offset */
+
+  /* Mark the end of the region that can not do some linker relaxations.  */
+  HOWTO (R_RISCV_RELAX_REGION_END,	/* type */
+         0,				/* rightshift */
+         2,				/* size */
+         32,				/* bitsize */
+         FALSE,				/* pc_relative */
+         0,				/* bitpos */
+         complain_overflow_dont,	/* complain_on_overflow */
+         bfd_elf_generic_reloc,		/* special_function */
+         "R_RISCV_RELAX_REGION_END",	/* name */
+         FALSE,				/* partial_inplace */
+         0,				/* src_mask */
+         MINUS_ONE,			/* dst_mask */
+         FALSE),			/* pcrel_offset */
 };
 
 /* A mapping from BFD reloc types to RISC-V ELF reloc types.  */
@@ -917,7 +1224,26 @@ static const struct elf_reloc_map riscv_reloc_map[] =
   { BFD_RELOC_RISCV_SET16, R_RISCV_SET16 },
   { BFD_RELOC_RISCV_SET32, R_RISCV_SET32 },
   { BFD_RELOC_RISCV_32_PCREL, R_RISCV_32_PCREL },
+  { BFD_RELOC_RISCV_DELETE, R_RISCV_DELETE },
+  { BFD_RELOC_RISCV_ALIGN_BTB, R_RISCV_ALIGN_BTB },
+  { BFD_RELOC_RISCV_10_PCREL, R_RISCV_10_PCREL },
+  { BFD_RELOC_RISCV_DATA, R_RISCV_DATA },
+  { BFD_RELOC_RISCV_LALO_HI20, R_RISCV_LALO_HI20 },
+  { BFD_RELOC_RISCV_LALO_LO12_I, R_RISCV_LALO_LO12_I },
+  { BFD_RELOC_RISCV_RELAX_ENTRY, R_RISCV_RELAX_ENTRY },
+  { BFD_RELOC_RISCV_LGP18S0, R_RISCV_LGP18S0 },
+  { BFD_RELOC_RISCV_LGP17S1, R_RISCV_LGP17S1 },
+  { BFD_RELOC_RISCV_LGP17S2, R_RISCV_LGP17S2 },
+  { BFD_RELOC_RISCV_LGP17S3, R_RISCV_LGP17S3 },
+  { BFD_RELOC_RISCV_SGP18S0, R_RISCV_SGP18S0 },
+  { BFD_RELOC_RISCV_SGP17S1, R_RISCV_SGP17S1 },
+  { BFD_RELOC_RISCV_SGP17S2, R_RISCV_SGP17S2 },
+  { BFD_RELOC_RISCV_SGP17S3, R_RISCV_SGP17S3 },
+  { BFD_RELOC_RISCV_RELAX_REGION_BEGIN, R_RISCV_RELAX_REGION_BEGIN },
+  { BFD_RELOC_RISCV_RELAX_REGION_END, R_RISCV_RELAX_REGION_END },
 };
+
+unsigned int number_of_howto_table = (unsigned int) ARRAY_SIZE (howto_table);
 
 /* Given a BFD reloc type, return a howto structure.  */
 

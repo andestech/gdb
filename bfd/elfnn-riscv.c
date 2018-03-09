@@ -55,6 +55,51 @@
 #define ELF_MAXPAGESIZE			0x1000
 #define ELF_COMMONPAGESIZE		0x1000
 
+/* Helper functions.  */
+static void riscv_insertion_sort (void *, size_t, size_t,
+				  int (*) (const void *, const void *));
+static int compar_reloc (const void *, const void *);
+static int riscv_get_local_syms (bfd *, asection *ATTRIBUTE_UNUSED,
+				 Elf_Internal_Sym **);
+static int riscv_get_section_contents (bfd *, asection *,
+				       bfd_byte **, bfd_boolean);
+static void riscv_elf_get_insn_with_reg (bfd *, Elf_Internal_Rela *,
+					 uint32_t, uint32_t *);
+static bfd_vma riscv_elf_encode_relocation (bfd *, Elf_Internal_Rela *irel,
+					    bfd_vma);
+static Elf_Internal_Rela *find_relocs_at_address
+(Elf_Internal_Rela *, Elf_Internal_Rela *,
+ Elf_Internal_Rela *, enum elf_riscv_reloc_type);
+static int riscv_relocation_check (struct bfd_link_info *, Elf_Internal_Rela **,
+				   Elf_Internal_Rela *, asection *, bfd_vma *,
+				   bfd_byte *, int);
+static bfd_boolean riscv_init_global_pointer (bfd *, struct bfd_link_info *);
+
+/* Helper functions for EX9.  */
+static int riscv_elf_ex9_init (void);
+static bfd_boolean riscv_elf_ex9_build_hash_table (bfd *, asection *,
+						   struct bfd_link_info *);
+static bfd_boolean riscv_elf_ex9_itb_base (struct bfd_link_info *);
+static void riscv_elf_ex9_import_table (bfd *abfd, struct bfd_link_info *);
+static void riscv_elf_ex9_build_itable (bfd *abfd, struct bfd_link_info *link_info);
+static void riscv_elf_ex9_finish (bfd *, struct bfd_link_info *);
+static void riscv_elf_relocate_ex9_table (struct bfd_link_info *, bfd *);
+static bfd_boolean riscv_elf_ex9_replace_instruction (struct bfd_link_info *,
+						      bfd *, asection *);
+static void riscv_elf_ex9_save_local_symbol_value (void);
+
+static int is_ITB_BASE_set = 0;
+static int check_start_export_sym = 0;
+
+/* Used for riscv_relocation_check.  */
+enum
+{
+  DATA_EXIST = 1,
+  /* For checking ex9 with alignment.  */
+  ALIGN_CLEAN_PRE = 1 << 1,
+  ALIGN_PUSH_PRE = 1 << 2
+};
+
 /* RISC-V ELF linker hash entry.  */
 
 struct riscv_elf_link_hash_entry
@@ -100,26 +145,6 @@ struct _bfd_riscv_elf_obj_tdata
 
 #include "elf/common.h"
 #include "elf/internal.h"
-
-struct riscv_elf_link_hash_table
-{
-  struct elf_link_hash_table elf;
-
-  /* Short-cuts to get to dynamic linker sections.  */
-  asection *sdyntdata;
-
-  /* Small local sym to section mapping cache.  */
-  struct sym_cache sym_cache;
-
-  /* The max alignment of output sections.  */
-  bfd_vma max_alignment;
-};
-
-
-/* Get the RISC-V ELF linker hash table from a link_info structure.  */
-#define riscv_elf_hash_table(p) \
-  (elf_hash_table_id ((struct elf_link_hash_table *) ((p)->hash)) \
-  == RISCV_ELF_DATA ? ((struct riscv_elf_link_hash_table *) ((p)->hash)) : NULL)
 
 static bfd_boolean
 riscv_info_to_howto_rela (bfd *abfd,
@@ -1406,6 +1431,20 @@ riscv_global_pointer_value (struct bfd_link_info *info)
   return h->u.def.value + sec_addr (h->u.def.section);
 }
 
+/* Return the symbol '__data_start' value, or 0 if it is not in use.  */
+
+static bfd_vma
+riscv_data_start_value (struct bfd_link_info *info)
+{
+  struct bfd_link_hash_entry *h;
+
+  h = bfd_link_hash_lookup (info->hash, "__data_start", FALSE, FALSE, TRUE);
+  if (h == NULL || h->type != bfd_link_hash_defined)
+    return 0;
+
+  return h->u.def.value + sec_addr (h->u.def.section);
+}
+
 /* Emplace a static relocation.  */
 
 static bfd_reloc_status_type
@@ -1428,6 +1467,7 @@ perform_relocation (const reloc_howto_type *howto,
     case R_RISCV_GOT_HI20:
     case R_RISCV_TLS_GOT_HI20:
     case R_RISCV_TLS_GD_HI20:
+    case R_RISCV_LALO_HI20:
       if (ARCH_SIZE > 32 && !VALID_UTYPE_IMM (RISCV_CONST_HIGH_PART (value)))
 	return bfd_reloc_overflow;
       value = ENCODE_UTYPE_IMM (RISCV_CONST_HIGH_PART (value));
@@ -1438,6 +1478,7 @@ perform_relocation (const reloc_howto_type *howto,
     case R_RISCV_TPREL_LO12_I:
     case R_RISCV_TPREL_I:
     case R_RISCV_PCREL_LO12_I:
+    case R_RISCV_LALO_LO12_I:
       value = ENCODE_ITYPE_IMM (value);
       break;
 
@@ -1485,6 +1526,69 @@ perform_relocation (const reloc_howto_type *howto,
       if (!VALID_RVC_LUI_IMM (RISCV_CONST_HIGH_PART (value)))
 	return bfd_reloc_overflow;
       value = ENCODE_RVC_LUI_IMM (RISCV_CONST_HIGH_PART (value));
+      /* If value is zero, convert it to c.li.  */
+      if (value == 0)
+	{
+	  bfd_vma insn = bfd_get_16 (input_bfd, contents + rel->r_offset);
+	  int rd = (insn >> 7) & 0x1f;
+	  bfd_vma word = MATCH_C_LI | (rd << 7);
+	  bfd_put (16, input_bfd, word, contents + rel->r_offset);
+	  return bfd_reloc_ok;
+	}
+      break;
+
+    case R_RISCV_10_PCREL:
+      if (!VALID_SBTYPE_IMM (value))
+	return bfd_reloc_overflow;
+      value = ENCODE_STYPE_IMM10 (value);
+      break;
+
+    case R_RISCV_LGP18S0:
+      if (!VALID_GPTYPE_LB_IMM (value))
+	return bfd_reloc_overflow;
+      value = ENCODE_GPTYPE_LB_IMM (value);
+      break;
+
+    case R_RISCV_LGP17S1:
+      if (!VALID_GPTYPE_LH_IMM (value))
+	return bfd_reloc_overflow;
+      value = ENCODE_GPTYPE_LH_IMM (value);
+      break;
+
+    case R_RISCV_LGP17S2:
+      if (!VALID_GPTYPE_LW_IMM (value))
+	return bfd_reloc_overflow;
+      value = ENCODE_GPTYPE_LW_IMM (value);
+      break;
+
+    case R_RISCV_LGP17S3:
+      if (!VALID_GPTYPE_LD_IMM (value))
+	return bfd_reloc_overflow;
+      value = ENCODE_GPTYPE_LD_IMM (value);
+      break;
+
+    case R_RISCV_SGP18S0:
+      if (!VALID_GPTYPE_SB_IMM (value))
+	return bfd_reloc_overflow;
+      value = ENCODE_GPTYPE_SB_IMM (value);
+      break;
+
+    case R_RISCV_SGP17S1:
+      if (!VALID_GPTYPE_SH_IMM (value))
+	return bfd_reloc_overflow;
+      value = ENCODE_GPTYPE_SH_IMM (value);
+      break;
+
+    case R_RISCV_SGP17S2:
+      if (!VALID_GPTYPE_SW_IMM (value))
+	return bfd_reloc_overflow;
+      value = ENCODE_GPTYPE_SW_IMM (value);
+      break;
+
+    case R_RISCV_SGP17S3:
+      if (!VALID_GPTYPE_SD_IMM (value))
+	return bfd_reloc_overflow;
+      value = ENCODE_GPTYPE_SD_IMM (value);
       break;
 
     case R_RISCV_32:
@@ -1746,6 +1850,21 @@ riscv_elf_relocate_section (bfd *output_bfd,
   if (!riscv_init_pcrel_relocs (&pcrel_relocs))
     return FALSE;
 
+  if (is_ITB_BASE_set == 0)
+    {
+      /* Set the _ITB_BASE_.  */
+      if (!riscv_elf_ex9_itb_base (info))
+	{
+	  (*_bfd_error_handler) (_("%pB: error: Cannot set _ITB_BASE_"),
+				 output_bfd);
+	  bfd_set_error (bfd_error_bad_value);
+	}
+    }
+
+  /* Relocation for .ex9.itable.  */
+  if (htab->target_optimize & RISCV_RELAX_EX9_ON)
+    riscv_elf_relocate_ex9_table (info, input_bfd);
+
   relend = relocs + input_section->reloc_count;
   for (rel = relocs; rel < relend; rel++)
     {
@@ -1765,7 +1884,13 @@ riscv_elf_relocate_section (bfd *output_bfd,
       bfd_boolean resolved_to_zero;
 
       if (howto == NULL
-	  || r_type == R_RISCV_GNU_VTINHERIT || r_type == R_RISCV_GNU_VTENTRY)
+	  || r_type == R_RISCV_GNU_VTINHERIT
+	  || r_type == R_RISCV_GNU_VTENTRY
+	  || r_type == R_RISCV_DATA
+	  || r_type == R_RISCV_RELAX_ENTRY
+	  || r_type == R_RISCV_ALIGN
+	  || r_type == R_RISCV_RELAX_REGION_BEGIN
+	  || r_type == R_RISCV_RELAX_REGION_END)
 	continue;
 
       /* This is a final link.  */
@@ -1842,9 +1967,30 @@ riscv_elf_relocate_section (bfd *output_bfd,
 	case R_RISCV_SET16:
 	case R_RISCV_SET32:
 	case R_RISCV_32_PCREL:
+	case R_RISCV_10_PCREL:
 	case R_RISCV_DELETE:
 	  /* These require no special handling beyond perform_relocation.  */
 	  break;
+
+	case R_RISCV_LALO_HI20:
+	case R_RISCV_LALO_LO12_I:
+	  relocation &= 0xffffffff;
+	  break;
+
+	case R_RISCV_LGP18S0:
+	case R_RISCV_LGP17S1:
+	case R_RISCV_LGP17S2:
+	case R_RISCV_LGP17S3:
+	case R_RISCV_SGP18S0:
+	case R_RISCV_SGP17S1:
+	case R_RISCV_SGP17S2:
+	case R_RISCV_SGP17S3:
+	  {
+	    bfd_vma gp = riscv_global_pointer_value (info);
+	    relocation -= gp;
+	    unresolved_reloc = FALSE;
+	    break;
+	  }
 
 	case R_RISCV_GOT_HI20:
 	  if (h != NULL)
@@ -2050,6 +2196,11 @@ riscv_elf_relocate_section (bfd *output_bfd,
 						 relocation + rel->r_addend,
 						 absolute))
 	    r = bfd_reloc_overflow;
+	  /* This instruction is replaced by 16-bit c.ex9. Since we have
+	     reloacted it in riscv_elf_ex9_replace_instruction and
+	     riscv_elf_relocate_ex9_table, just record and skip it here.  */
+	  if ((*(contents + rel->r_offset) & 0x3) != 0x3)
+	    continue;
 	  break;
 
 	case R_RISCV_PCREL_LO12_I:
@@ -3161,6 +3312,9 @@ fail:
 }
 
 /* Delete some bytes from a section while relaxing.  */
+/* TODO: For v3, we only need to do once memory move when relaxing.
+   But we need to do many times of memory move here. It will increase
+   the link time when doing relaxation.  */
 
 static bfd_boolean
 riscv_relax_delete_bytes (bfd *abfd, asection *sec, bfd_vma addr, size_t count,
@@ -3191,6 +3345,15 @@ riscv_relax_delete_bytes (bfd *abfd, asection *sec, bfd_vma addr, size_t count,
       Elf_Internal_Sym *sym = (Elf_Internal_Sym *) symtab_hdr->contents + i;
       if (sym->st_shndx == sec_shndx)
 	{
+	  /* Maybe we should adjust symbol size before adjusting symbol value.  */
+	  /* If the symbol *spans* the bytes we just deleted (i.e. its
+	   *end* is in the moved bytes but its *start* isn't), then we
+	   must adjust its size.  */
+	  if (sym->st_value <= addr
+	      && sym->st_value + sym->st_size > addr
+	      && sym->st_value + sym->st_size <= toaddr)
+	    sym->st_size -= count;
+
 	  /* If the symbol is in the range of memory we just moved, we
 	     have to adjust its value.  */
 	  if (sym->st_value > addr && sym->st_value <= toaddr)
@@ -3366,6 +3529,32 @@ riscv_find_pcgp_hi_reloc(riscv_pcgp_relocs *p, bfd_vma hi_sec_off)
   return NULL;
 }
 
+static bfd_boolean
+riscv_delete_pcgp_hi_reloc(riscv_pcgp_relocs *p, bfd_vma hi_sec_off)
+{
+  bfd_boolean out = FALSE;
+  riscv_pcgp_hi_reloc *c;
+
+  for (c = p->hi; c != NULL; c = c->next)
+      if (c->hi_sec_off == hi_sec_off)
+	out = TRUE;
+
+  return out;
+}
+
+static bfd_boolean
+riscv_use_pcgp_hi_reloc(riscv_pcgp_relocs *p, bfd_vma hi_sec_off)
+{
+  bfd_boolean out = FALSE;
+  riscv_pcgp_hi_reloc *c;
+
+  for (c = p->hi; c != NULL; c = c->next)
+    if (c->hi_sec_off == hi_sec_off)
+      out = TRUE;
+
+  return out;
+}
+
 /* Record pcgp lo part reloc info in P, using HI_SEC_OFF as the lookup info.
    This is used to record relocs that can't be relaxed.  */
 
@@ -3393,6 +3582,14 @@ riscv_find_pcgp_lo_reloc (riscv_pcgp_relocs *p, bfd_vma hi_sec_off)
     if (c->hi_sec_off == hi_sec_off)
       return TRUE;
   return FALSE;
+}
+
+static bfd_boolean
+riscv_delete_pcgp_lo_reloc (riscv_pcgp_relocs *p ATTRIBUTE_UNUSED,
+			    bfd_vma lo_sec_off ATTRIBUTE_UNUSED,
+			    size_t bytes ATTRIBUTE_UNUSED)
+{
+  return TRUE;
 }
 
 typedef bfd_boolean (*relax_func_t) (bfd *, asection *, asection *,
@@ -3500,10 +3697,16 @@ _bfd_riscv_relax_lui (bfd *abfd,
 {
   bfd_byte *contents = elf_section_data (sec)->this_hdr.contents;
   bfd_vma gp = riscv_global_pointer_value (link_info);
+  bfd_vma data_start = riscv_data_start_value (link_info);
   int use_rvc = elf_elfheader (abfd)->e_flags & EF_RISCV_RVC;
+  struct riscv_elf_link_hash_table *table = riscv_elf_hash_table (link_info);
+  int gp_relative_insn = table->gp_relative_insn;
 
   /* Mergeable symbols and code might later move out of range.  */
-  if (sym_sec->flags & (SEC_MERGE | SEC_CODE))
+  /* For bug-14274, symbols defined in the .rodata (the sections
+     before .data, may also later move out of range.  */
+  if (sym_sec->flags & (SEC_MERGE | SEC_CODE)
+      || (data_start && sec_addr (sym_sec) < data_start))
     return TRUE;
 
   BFD_ASSERT (rel->r_offset + 4 <= sec->size);
@@ -3519,39 +3722,150 @@ _bfd_riscv_relax_lui (bfd *abfd,
 	max_alignment = (bfd_vma) 1 << sym_sec->output_section->alignment_power;
     }
 
-  /* Is the reference in range of x0 or gp?
-     Valid gp range conservatively because of alignment issue.  */
-  if (VALID_ITYPE_IMM (symval)
-      || (symval >= gp
-	  && VALID_ITYPE_IMM (symval - gp + max_alignment + reserve_size))
-      || (symval < gp
-	  && VALID_ITYPE_IMM (symval - gp - max_alignment - reserve_size)))
+  /* For the gp relative insns, gp must be set to 4/8 bytes aligned
+     address (Bug-14634).  */
+  int gp_align;
+  if ((ARCH_SIZE == 64))
+    gp_align = 8;
+  else
+    gp_align = 4;
+  if (gp_relative_insn
+      && ((gp % gp_align) != 0))
     {
-      unsigned sym = ELFNN_R_SYM (rel->r_info);
-      switch (ELFNN_R_TYPE (rel->r_info))
+      (*_bfd_error_handler) (_("error: Please set gp to %x-byte aligned address "
+			       "or turn off the gp relative instructions "
+			       "(--mno-gp-insn).\n"), gp_align);
+      return FALSE;
+    }
+
+  if (gp_relative_insn)
+    {
+      int do_replace = 0;
+      uint32_t insn = bfd_get_32 (abfd, contents + rel->r_offset);
+      if ((symval >= gp
+	   && (symval - gp + max_alignment + reserve_size) < 0x20000)
+	  || (symval < gp
+	      && (gp - symval + max_alignment + reserve_size) <= 0x20000))
 	{
-	case R_RISCV_LO12_I:
-	  rel->r_info = ELFNN_R_INFO (sym, R_RISCV_GPREL_I);
+	  do_replace = 1;
+	  unsigned sym = ELFNN_R_SYM (rel->r_info);
+	  if (ELFNN_R_TYPE (rel->r_info) == R_RISCV_HI20)
+	    {
+	      rel->r_info = ELFNN_R_INFO (0, R_RISCV_NONE);
+	      *again = TRUE;
+	      return riscv_relax_delete_bytes (abfd, sec, rel->r_offset, 4, link_info);
+	      return TRUE;
+	    }
+	  else if ((insn & MASK_ADDI) == MATCH_ADDI)
+	    {
+	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP18S0);
+	      insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_ADDIGP;
+	    }
+	  else if ((insn & MASK_LB) == MATCH_LB)
+	    {
+	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP18S0);
+	      insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LBGP;
+	    }
+	  else if ((insn & MASK_LBU) == MATCH_LBU)
+	    {
+	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP18S0);
+	      insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LBUGP;
+	    }
+	  else if ((insn & MASK_LH) == MATCH_LH)
+	    {
+	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S1);
+	      insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LHGP;
+	    }
+	  else if ((insn & MASK_LHU) == MATCH_LHU)
+	    {
+	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S1);
+	      insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LHUGP;
+	    }
+	  else if ((insn & MASK_LW) == MATCH_LW)
+	    {
+	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S2);
+	      insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LWGP;
+	    }
+	  else if ((insn & MASK_LWU) == MATCH_LWU)
+	    {
+	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S2);
+	      insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LWUGP;
+	    }
+	  else if ((insn & MASK_LW) == MATCH_LD)
+	    {
+	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S3);
+	      insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LDGP;
+	    }
+	  else if ((insn & MASK_SB) == MATCH_SB)
+	    {
+	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_SGP18S0);
+	      insn = (insn & (OP_MASK_RS2 << OP_SH_RS2)) | MATCH_SBGP;
+	    }
+	  else if ((insn & MASK_SH) == MATCH_SH)
+	    {
+	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_SGP17S1);
+	      insn = (insn & (OP_MASK_RS2 << OP_SH_RS2)) | MATCH_SHGP;
+	    }
+	  else if ((insn & MASK_SW) == MATCH_SW)
+	    {
+	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_SGP17S2);
+	      insn = (insn & (OP_MASK_RS2 << OP_SH_RS2)) | MATCH_SWGP;
+	    }
+	  else if ((insn & MASK_SD) == MATCH_SD)
+	    {
+	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_SGP17S3);
+	      insn = (insn & (OP_MASK_RS2 << OP_SH_RS2)) | MATCH_SDGP;
+	    }
+	}
+
+      if (do_replace)
+	{
+	  bfd_put_32 (abfd, insn, contents + rel->r_offset);
 	  return TRUE;
+	}
+    }
+  else
+    {
+      /* Is the reference in range of x0 or gp?
+	 Valid gp range conservatively because of alignment issue.  */
+      if (VALID_ITYPE_IMM (symval)
+	  || (symval >= gp
+	      && VALID_ITYPE_IMM (symval - gp + max_alignment + reserve_size))
+	  || (symval < gp
+	      && VALID_ITYPE_IMM (symval - gp - max_alignment - reserve_size)))
+	{
+	  unsigned sym = ELFNN_R_SYM (rel->r_info);
+	  switch (ELFNN_R_TYPE (rel->r_info))
+	    {
+	    case R_RISCV_LO12_I:
+	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_GPREL_I);
+	      return TRUE;
 
-	case R_RISCV_LO12_S:
-	  rel->r_info = ELFNN_R_INFO (sym, R_RISCV_GPREL_S);
-	  return TRUE;
+	    case R_RISCV_LO12_S:
+	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_GPREL_S);
+	      return TRUE;
 
-	case R_RISCV_HI20:
-	  /* We can delete the unnecessary LUI and reloc.  */
-	  rel->r_info = ELFNN_R_INFO (0, R_RISCV_NONE);
-	  *again = TRUE;
-	  return riscv_relax_delete_bytes (abfd, sec, rel->r_offset, 4,
-					   link_info);
+	    case R_RISCV_HI20:
+	      /* We can delete the unnecessary LUI and reloc.  */
+	      rel->r_info = ELFNN_R_INFO (0, R_RISCV_NONE);
+	      *again = TRUE;
+	      return riscv_relax_delete_bytes (abfd, sec, rel->r_offset, 4,
+					       link_info);
 
-	default:
-	  abort ();
+	    default:
+	      abort ();
+	    }
 	}
     }
 
   /* Can we relax LUI to C.LUI?  Alignment might move the section forward;
      account for this assuming page alignment at worst.  */
+  /* The imm of lui may be changed to zero after relaxation. Even if we
+     redefine the macro VALID_RVC_LUI_IMM(x) to limit the imm of c.lui
+     can not be zero, linker may still convert the lui to illegal c.lui here.
+     For sovling this problem, I remove the limitation of VALID_RVC_LUI_IMM,
+     and then convert the illegal c.lui to c.li in the linker relocation
+     (perform_relocation).  */
   if (use_rvc
       && ELFNN_R_TYPE (rel->r_info) == R_RISCV_HI20
       && VALID_RVC_LUI_IMM (RISCV_CONST_HIGH_PART (symval))
@@ -3618,7 +3932,588 @@ _bfd_riscv_relax_tls_le (bfd *abfd,
     }
 }
 
-/* Implement R_RISCV_ALIGN by deleting excess alignment NOPs.  */
+/* Convert a RVC instruction to RVI one.  Return 1 if done successfully,
+   otherwise, return 0.  */
+/* Just consider RV32C/RV64C. Skip RV128C instructions.  */
+
+static int
+riscv_convert_16_to_32 (uint16_t insn16, uint32_t *insn32)
+{
+  bfd_vma imm;
+  /* Stack-Pointer-Based Loads and Stores.  */
+  /* TODO: C.LQSP, C.FLWSP, C.FLDSP, C.SQSP, C.FSWSP, C.FSDSP.  */
+  if ((insn16 & MASK_C_LWSP) == MATCH_C_LWSP)
+    {
+      /* CI format to I-TYPE.  */
+      int rd = (insn16 >> 7) & 0x1f;
+      if (rd == 0)
+	return 0;
+      imm = EXTRACT_RVC_LWSP_IMM (insn16);
+      *insn32 = RISCV_ITYPE (LW, rd, X_SP, imm);  /* lw rd, imm(x2)  */
+    }
+  else if ((ARCH_SIZE == 64)
+	   && (insn16 & MASK_C_LDSP) == MATCH_C_LDSP)
+    {
+      /* CI format to I-TYPE.  */
+      int rd = (insn16 >> 7) & 0x1f;
+      if (rd == 0)
+	return 0;
+      imm = EXTRACT_RVC_LDSP_IMM (insn16);
+      *insn32 = RISCV_ITYPE (LD, rd, X_SP, imm); /* ld rd, imm(x2)  */
+    }
+  else if ((insn16 & MASK_C_SWSP) == MATCH_C_SWSP)
+    {
+      /* CSS format to S-TYPE.  */
+      int rs2 = (insn16 >> OP_SH_CRS2) & OP_MASK_CRS2;
+      imm = EXTRACT_RVC_SWSP_IMM (insn16);
+      *insn32 = RISCV_STYPE (SW, X_SP, rs2, imm); /* sw rs2, imm(x2)  */
+    }
+  else if ((ARCH_SIZE == 64)
+	   && (insn16 & MASK_C_SDSP) == MATCH_C_SDSP)
+    {
+      /* CSS format to S-TYPE.  */
+      int rs2 = (insn16 >> OP_SH_CRS2) & OP_MASK_CRS2;
+      imm = EXTRACT_RVC_SDSP_IMM (insn16);
+      *insn32 = RISCV_STYPE (SD, X_SP, rs2, imm); /* sw rs2, imm(x2)  */
+    }
+
+  /* Register-Based Loads and Stores.  */
+  /* TODO: C.LQ, C.FLW, C.FLD, C.SQ, C.FSW, C.FSD.  */
+  else if ((insn16 & MASK_C_LW) == MATCH_C_LW)
+    {
+      /* CL format to I-TYPE.  */
+      int rs1 = 8 + ((insn16 >> OP_SH_CRS1S) & OP_MASK_CRS1S);
+      int rd = 8 + ((insn16 >> OP_SH_CRS2S) & OP_MASK_CRS2S);
+      imm = EXTRACT_RVC_LW_IMM (insn16);
+      *insn32 = RISCV_ITYPE (LW, rd, rs1, imm); /* lw rd, imm(rs1)  */
+    }
+  else if ((ARCH_SIZE == 64)
+	   && (insn16 & MASK_C_LD) == MATCH_C_LD)
+    {
+      /* CL format to I-TYPE.  */
+      int rs1 = 8 + ((insn16 >> OP_SH_CRS1S) & OP_MASK_CRS1S);
+      int rd = 8 + ((insn16 >> OP_SH_CRS2S) & OP_MASK_CRS2S);
+      imm = EXTRACT_RVC_LD_IMM (insn16);
+      *insn32 = RISCV_ITYPE (LD, rd, rs1, imm); /* ld rd, imm(rs1)  */
+    }
+  else if ((insn16 & MASK_C_SW) == MATCH_C_SW)
+    {
+      /* CS format to S-TYPE.  */
+      int rs1 = 8 + ((insn16 >> OP_SH_CRS1S) & OP_MASK_CRS1S);
+      int rs2 = 8 + ((insn16 >> OP_SH_CRS2S) & OP_MASK_CRS2S);
+      imm = EXTRACT_RVC_LW_IMM (insn16);
+      *insn32 = RISCV_STYPE (SW, rs1, rs2, imm); /* sw rs2, imm(rs1)  */
+    }
+  else if ((ARCH_SIZE == 64)
+	   && (insn16 & MASK_C_SD) == MATCH_C_SD)
+    {
+      /* CS format to S-TYPE.  */
+      int rs1 = 8 + ((insn16 >> OP_SH_CRS1S) & OP_MASK_CRS1S);
+      int rs2 = 8 + ((insn16 >> OP_SH_CRS2S) & OP_MASK_CRS2S);
+      imm = EXTRACT_RVC_LD_IMM (insn16);
+      *insn32 = RISCV_STYPE (SD, rs1, rs2, imm); /* sd rs2, imm(rs1)  */
+    }
+
+  /* Control Transfer Instructions.  */
+  else if ((insn16 & MASK_C_J) == MATCH_C_J)
+    {
+      /* CJ format to UJ-TYPE.  */
+      imm = EXTRACT_RVC_J_IMM (insn16);
+      *insn32 = RISCV_UJTYPE (JAL, 0, imm);  /* jal x0, imm  */
+    }
+  else if ((ARCH_SIZE == 32)
+	   && (insn16 & MASK_C_JAL) == MATCH_C_JAL)
+    {
+      /* CJ format to UJ-TYPE.  */
+      imm = EXTRACT_RVC_J_IMM (insn16);
+      *insn32 = RISCV_UJTYPE (JAL, X_RA, imm);  /* jal x0, imm  */
+    }
+  else if ((insn16 & MASK_C_JR) == MATCH_C_JR)
+    {
+      /* CR format to I-TYPE.  */
+      int rs1 = (insn16 >> 7) & 0x1f;
+      int rs2 = (insn16 >> OP_SH_CRS2) & OP_MASK_CRS2;
+      if (rs1 == 0 || rs2 != 0)
+	return 0;
+      *insn32 = RISCV_ITYPE (JALR, 0, rs1, 0);  /* jalr x0, rs1, 0  */
+    }
+  else if ((insn16 & MASK_C_JALR) == MATCH_C_JALR)
+    {
+      /* CR format to I-TYPE.  */
+      int rs1 = (insn16 >> 7) & 0x1f;
+      int rs2 = (insn16 >> OP_SH_CRS2) & OP_MASK_CRS2;
+      if (rs1 == 0 || rs2 != 0)
+	return 0;
+      *insn32 = RISCV_ITYPE (JALR, X_RA, rs1, 0); /* jalr x1, rs1, 0  */
+    }
+  else if ((insn16 & MASK_C_BEQZ) == MATCH_C_BEQZ)
+    {
+      /* CB format to SB-TYPE.  */
+      int rs1 = 8 + ((insn16 >> OP_SH_CRS1S) & OP_MASK_CRS1S);
+      imm = EXTRACT_RVC_B_IMM (insn16);
+      *insn32 = RISCV_SBTYPE (BEQ, rs1, 0, imm);  /* beq rs1, x0, imm  */
+    }
+  else if ((insn16 & MASK_C_BNEZ) == MATCH_C_BNEZ)
+    {
+      /* CB format to SB-TYPE.  */
+      int rs1 = 8 + ((insn16 >> OP_SH_CRS1S) & OP_MASK_CRS1S);
+      imm = EXTRACT_RVC_B_IMM (insn16);
+      *insn32 = RISCV_SBTYPE (BNE, rs1, 0, imm);  /* bne rs1, x0, imm  */
+    }
+
+  /* Integer Register-Immediate Operations.  */
+  /* TODO: C.ADDIW.  */
+  else if ((insn16 & MASK_C_ADDI) == MATCH_C_ADDI)
+    {
+      /* CI format to I-TYPE.  */
+      int rd = (insn16 >> 7) & 0x1f;
+      imm = EXTRACT_RVC_IMM (insn16);
+      *insn32 = RISCV_ITYPE (ADDI, rd, rd, imm); /* addi rd, rd, nzimm  */
+    }
+  else if ((insn16 & MASK_C_ADDI16SP) == MATCH_C_ADDI16SP)
+    {
+      /* CI format to I-TYPE.  */
+      /* c.addi16sp shares the opcode with c.lui.  */
+      int rd = (insn16 >> 7) & 0x1f;
+      if (rd == 0)
+	return 0;
+      else if (rd == X_SP)
+	{
+	  imm = EXTRACT_RVC_ADDI16SP_IMM (insn16);
+	  *insn32 = RISCV_ITYPE (ADDI, X_SP, X_SP, imm); /* addi x2, x2, nzimm  */
+	}
+      else
+	{
+	  imm = EXTRACT_RVC_LUI_IMM (insn16);
+	  *insn32 = RISCV_UTYPE (LUI, rd, imm); /* lui rd, nzimm  */
+	}
+    }
+  else if ((insn16 & MASK_C_ADDI4SPN) == MATCH_C_ADDI4SPN)
+    {
+      /* CIW format to I-TYPE.  */
+      int rd = 8 + ((insn16 >> OP_SH_CRS2S) & OP_MASK_CRS2S);
+      imm = EXTRACT_RVC_ADDI4SPN_IMM (insn16);
+      *insn32 = RISCV_ITYPE (ADDI, rd, X_SP, imm); /* addi rd, x2, zimm  */
+    }
+  else if ((insn16 & MASK_C_SLLI) == MATCH_C_SLLI)
+    {
+      /* CI format to I-TYPE.  */
+      int rd = (insn16 >> 7) & 0x1f;
+      if (rd == 0)
+	return 0;
+
+      imm = RV_X(insn16, 2, 5) | (RV_X(insn16, 12, 1) << 5);
+      *insn32 = RISCV_ITYPE (SLLI, rd, rd, imm); /* slli rd, rd, imm  */
+    }
+  else if ((insn16 & MASK_C_SRLI) == MATCH_C_SRLI)
+    {
+      /* CB format to I-TYPE.  */
+      int rd = 8 + ((insn16 >> OP_SH_CRS1S) & OP_MASK_CRS1S);
+      imm = RV_X(insn16, 2, 5) | (RV_X(insn16, 12, 1) << 5);
+      *insn32 = RISCV_ITYPE (SRLI, rd, rd, imm); /* srli rd, rd, imm  */
+    }
+  else if ((insn16 & MASK_C_SRAI) == MATCH_C_SRAI)
+    {
+      /* CB format to I-TYPE.  */
+      int rd = 8 + ((insn16 >> OP_SH_CRS1S) & OP_MASK_CRS1S);
+      imm = RV_X(insn16, 2, 5) | (RV_X(insn16, 12, 1) << 5);
+      *insn32 = RISCV_ITYPE (SRAI, rd, rd, imm); /* srai rd, rd, imm  */
+    }
+  else if ((insn16 & MASK_C_ANDI) == MATCH_C_ANDI)
+    {
+      /* CB format to I-TYPE.  */
+      int rd = 8 + ((insn16 >> OP_SH_CRS1S) & OP_MASK_CRS1S);
+      imm = EXTRACT_RVC_IMM (insn16);
+      *insn32 = RISCV_ITYPE (ANDI, rd, rd, imm); /* andi rd, rd, imm  */
+    }
+
+  /* Integer Constant-Generation Instructions.  */
+  else if ((insn16 & MASK_C_LI) == MATCH_C_LI)
+    {
+      /* CI format to I-TYPE.  */
+      int rd = (insn16 >> 7) & 0x1f;
+      if (rd == 0)
+	return 0;
+      imm = EXTRACT_RVC_IMM (insn16);
+      *insn32 = RISCV_ITYPE (ADDI, rd, 0, imm); /* addi rd, x0, imm  */
+    }
+
+  /* Integer Register-Register Operations.  */
+  /* TODO: C.ADDW, C.SUBW.  */
+  else if ((insn16 & MASK_C_MV) == MATCH_C_MV)
+    {
+      /* CR format to R-TYPE.  */
+      int rd = (insn16 >> 7) & 0x1f;
+      int rs2 = (insn16 >> 2) & 0x1f;
+      if (rd == 0 || rs2 == 0)
+	return 0;
+      *insn32 = RISCV_RTYPE (ADD, rd, 0, rs2); /* add rd, x0, rs2  */
+    }
+  else if ((insn16 & MASK_C_ADD) == MATCH_C_ADD)
+    {
+      /* CR format to R-TYPE.  */
+      int rd = (insn16 >> 7) & 0x1f;
+      int rs2 = (insn16 >> 2) & 0x1f;
+      if (rd == 0 || rs2 == 0)
+	return 0;
+      *insn32 = RISCV_RTYPE (ADD, rd, rd, rs2); /* add rd, rd, rs2  */
+    }
+  else if ((insn16 & MASK_C_AND) == MATCH_C_AND)
+    {
+      /* CS format to R-TYPE.  */
+      int rd = 8 + ((insn16 >> OP_SH_CRS1S) & OP_MASK_CRS1S);
+      int rs2 = 8 + ((insn16 >> OP_SH_CRS2S) & OP_MASK_CRS2S);
+      *insn32 = RISCV_RTYPE (AND, rd, rd, rs2); /* and rd, rd, rs2  */
+    }
+  else if ((insn16 & MASK_C_OR) == MATCH_C_OR)
+    {
+      /* CS format to R-TYPE.  */
+      int rd = 8 + ((insn16 >> OP_SH_CRS1S) & OP_MASK_CRS1S);
+      int rs2 = 8 + ((insn16 >> OP_SH_CRS2S) & OP_MASK_CRS2S);
+      *insn32 = RISCV_RTYPE (OR, rd, rd, rs2); /* or rd, rd, rs2  */
+    }
+  else if ((insn16 & MASK_C_XOR) == MATCH_C_XOR)
+    {
+      /* CS format to R-TYPE.  */
+      int rd = 8 + ((insn16 >> OP_SH_CRS1S) & OP_MASK_CRS1S);
+      int rs2 = 8 + ((insn16 >> OP_SH_CRS2S) & OP_MASK_CRS2S);
+      *insn32 = RISCV_RTYPE (XOR, rd, rd, rs2); /* xor rd, rd, rs2  */
+    }
+  else if ((insn16 & MASK_C_SUB) == MATCH_C_SUB)
+    {
+      /* CS format to R-TYPE.  */
+      int rd = 8 + ((insn16 >> OP_SH_CRS1S) & OP_MASK_CRS1S);
+      int rs2 = 8 + ((insn16 >> OP_SH_CRS2S) & OP_MASK_CRS2S);
+      *insn32 = RISCV_RTYPE (SUB, rd, rd, rs2); /* sub rd, rd, rs2  */
+    }
+  else
+    {
+      /* This RVC can not be converted to RVI.  */
+      return 0;
+    }
+
+  return 1;
+}
+
+/* Check whether the ranges of 32-bit branch and jal is valid between
+   the rvc candidate and alignment point after doing target aligned.  */
+
+static bfd_boolean
+target_align_check_branch_range (bfd *abfd, asection *sec, bfd_vma insn16_off,
+				 bfd_vma nops_off, size_t count,
+				 struct bfd_link_info *link_info)
+{
+  struct elf_link_hash_entry **sym_hashes = elf_sym_hashes (abfd);
+  Elf_Internal_Shdr *symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
+  Elf_Internal_Sym *sym = (Elf_Internal_Sym *) symtab_hdr->contents;
+  struct bfd_elf_section_data *data = elf_section_data (sec);
+  bfd_byte *contents = data->this_hdr.contents;
+  Elf_Internal_Rela *irel, *irelend;
+  bfd_vma relocation = 0, pc = 0;
+  bfd_vma where = insn16_off + 2;
+
+  irel = data->relocs;
+  irelend = data->relocs + sec->reloc_count;
+  while (where < nops_off)
+    {
+      if ((*(contents + where) & 0x3) != 0x3)
+	/* 16-bits insn, skip it.  */
+	where += 2;
+      else
+	{
+	  /* Find the relocation that it's r_offset is same as where.  */
+	  while (irel != NULL && irel < irelend && irel->r_offset < where)
+	    irel++;
+
+	  /* Only check branch and jal range. If overflow, return 0.  */
+	  riscv_relocation_check (link_info, &irel, irelend, sec, &where, contents, 0);
+
+	  if (ELFNN_R_TYPE (irel->r_info) == R_RISCV_BRANCH
+	      || ELFNN_R_TYPE (irel->r_info) == R_RISCV_JAL)
+	    {
+	      unsigned long r_symndx = ELFNN_R_SYM (irel->r_info);
+	      if (r_symndx < symtab_hdr->sh_info)
+		{
+		  /* Local symbol.  */
+		  int shndx = sym[r_symndx].st_shndx;
+		  bfd_vma st_value = (sym + r_symndx)->st_value;
+		  asection *sym_sec = elf_elfsections (abfd)[shndx]->bfd_section;
+		  relocation = sym_sec->output_section->vma
+		    + sym_sec->output_offset
+		    + st_value;
+		  if ((sym + r_symndx)->st_value > insn16_off
+		      && (sym + r_symndx)->st_value <= nops_off)
+		    relocation += count;
+		}
+	      else
+		{
+		  /* External symbol.  */
+		  bfd_boolean warned ATTRIBUTE_UNUSED;
+		  bfd_boolean ignored ATTRIBUTE_UNUSED;
+		  bfd_boolean unresolved_reloc ATTRIBUTE_UNUSED;
+		  struct elf_link_hash_entry *h;
+		  asection *sym_sec;
+
+		  RELOC_FOR_GLOBAL_SYMBOL (link_info, abfd, sec, irel,
+					   r_symndx, symtab_hdr, sym_hashes,
+					   h, sym_sec, relocation,
+					   unresolved_reloc, warned, ignored);
+
+		  if (h->root.u.def.value > insn16_off
+		      && h->root.u.def.value <= nops_off)
+		    relocation += count;
+		}
+
+	      pc = sec_addr (sec) + irel->r_offset;
+	      if (irel->r_offset > insn16_off
+		  && irel->r_offset < nops_off)
+		pc += count;
+
+	      reloc_howto_type *howto;
+	      howto = riscv_elf_rtype_to_howto (abfd, ELFNN_R_TYPE (irel->r_info));
+	      if (howto->pc_relative)
+		relocation -= pc;
+	      relocation += irel->r_addend;
+
+	      if ((ELFNN_R_TYPE (irel->r_info) == R_RISCV_BRANCH
+		   && !VALID_SBTYPE_IMM (relocation))
+		  || (ELFNN_R_TYPE (irel->r_info) == R_RISCV_JAL
+		      && !VALID_UJTYPE_IMM (relocation)))
+		return FALSE;
+	    }
+	  where += 4;
+	}
+    }
+  return TRUE;
+}
+
+/* Shift a field of section content while doing target aligned.
+   Like riscv_relax_delete_bytes, we need to adjust relocations
+   and symbols in the field.  */
+
+static bfd_boolean
+riscv_relax_shift_bytes (bfd *abfd, asection *sec, bfd_vma insn16_off,
+			 bfd_vma nops_off, size_t count, uint32_t insn32)
+{
+  unsigned int i, symcount;
+  struct elf_link_hash_entry **sym_hashes = elf_sym_hashes (abfd);
+  Elf_Internal_Shdr *symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
+  unsigned int sec_shndx = _bfd_elf_section_from_bfd_section (abfd, sec);
+  struct bfd_elf_section_data *data = elf_section_data (sec);
+  bfd_byte *contents = data->this_hdr.contents;
+
+  /* Shift the code, and then convert a 16-bit instruction into 32-bit.  */
+  memmove (contents + insn16_off + 4, contents + insn16_off + 2, nops_off - insn16_off - 2);
+  bfd_put_32 (abfd, insn32, contents + insn16_off);
+
+  /* Adjust the location of all of the relocs.  */
+  for (i = 0; i < sec->reloc_count; i++)
+    if (data->relocs[i].r_offset > insn16_off
+	&& data->relocs[i].r_offset <= nops_off)
+      data->relocs[i].r_offset += count;
+
+  /* Adjust the local symbols defined in this section.  */
+  for (i = 0; i < symtab_hdr->sh_info; i++)
+    {
+      Elf_Internal_Sym *sym = (Elf_Internal_Sym *) symtab_hdr->contents + i;
+      if (sym->st_shndx == sec_shndx)
+	{
+	  /* Adjust the symbol size if needed.  */
+	  if (sym->st_value > insn16_off
+	      && sym->st_value <= nops_off
+	      && sym->st_value + sym->st_size > nops_off)
+	    sym->st_size -= count;
+	  else if (sym->st_value <= insn16_off
+		   && sym->st_value + sym->st_size > insn16_off
+		   && sym->st_value + sym->st_size <= nops_off)
+	    sym->st_size += count;
+
+	  /* If the symbol is in the range of memory we just shifted,
+	     we have to adjust it's value.  */
+	  if (sym->st_value > insn16_off && sym->st_value <= nops_off)
+	    sym->st_value += count;
+	}
+    }
+
+  /* Adjust the global symbols defined in this section.  */
+  symcount = ((symtab_hdr->sh_size / sizeof (ElfNN_External_Sym))
+	      - symtab_hdr->sh_info);
+
+  for (i = 0; i < symcount; i++)
+    {
+      struct elf_link_hash_entry *sym_hash = sym_hashes[i];
+
+      if ((sym_hash->root.type == bfd_link_hash_defined
+	   || sym_hash->root.type == bfd_link_hash_defweak)
+	  && sym_hash->root.u.def.section == sec)
+	{
+	  /* As above, adjust the size if needed.  */
+	  if (sym_hash->root.u.def.value > insn16_off
+	      && sym_hash->root.u.def.value <= nops_off
+	      && sym_hash->root.u.def.value + sym_hash->size > nops_off)
+	    sym_hash->size -= count;
+	  else if (sym_hash->root.u.def.value <= insn16_off
+		   && sym_hash->root.u.def.value + sym_hash->size > insn16_off
+		   && sym_hash->root.u.def.value + sym_hash->size <= nops_off)
+	    sym_hash->size += count;
+
+	  /* As above, adjust the value if needed.  */
+	  if (sym_hash->root.u.def.value > insn16_off
+	      && sym_hash->root.u.def.value <= nops_off)
+	    sym_hash->root.u.def.value += count;
+	}
+    }
+
+  return TRUE;
+}
+
+/* For avioding BTB miss, we need to convert a 16-bit insn to
+   32-bit one (this insn is located between JAL and branch), and
+   then adjust symbols for the insn.  */
+
+static bfd_boolean
+riscv_relax_avoid_BTB_miss (bfd *abfd, asection *sec, bfd_vma align_off,
+			    bfd_vma insn16_off, size_t count)
+{
+  unsigned int i, symcount;
+  struct elf_link_hash_entry **sym_hashes = elf_sym_hashes (abfd);
+  Elf_Internal_Shdr *symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
+  unsigned int sec_shndx = _bfd_elf_section_from_bfd_section (abfd, sec);
+  struct bfd_elf_section_data *data = elf_section_data (sec);
+  bfd_byte *contents = data->this_hdr.contents;
+
+  if ((*(contents + align_off + insn16_off) & 0x3) != 0x3)
+    {
+      uint32_t insn;
+      uint16_t insn16 = bfd_get_16 (abfd, contents + align_off + insn16_off);
+      /* Convert a 16-bit branch to 32-bit one doesn't help
+	 to solved BTB miss.  */
+      if (!(((ARCH_SIZE == 32) && ((insn16 & MASK_C_JAL) == MATCH_C_JAL))
+	    || (insn16 & MASK_C_J) == MATCH_C_J
+	    || (insn16 & MASK_C_BNEZ) == MATCH_C_BNEZ
+	    || (insn16 & MASK_C_BEQZ) == MATCH_C_BEQZ)
+	  && riscv_convert_16_to_32 (insn16, &insn))
+	{
+	  bfd_put_32 (abfd, insn, contents + align_off + insn16_off - count);
+
+	  /* Adjust the location of all of the relocs.  */
+	  for (i = 0; i < sec->reloc_count; i++)
+	    if (data->relocs[i].r_offset == align_off + insn16_off)
+	      data->relocs[i].r_offset -= count;
+
+	  for (i = 0; i < symtab_hdr->sh_info; i++)
+	    {
+	      Elf_Internal_Sym *sym = (Elf_Internal_Sym *) symtab_hdr->contents + i;
+	      if (sym->st_shndx == sec_shndx)
+		{
+		  /* Adjust the symbol size if needed.  */
+		  if (sym->st_value == align_off + insn16_off)
+		    sym->st_value -= count;
+		}
+	    }
+
+	  symcount = ((symtab_hdr->sh_size / sizeof (ElfNN_External_Sym))
+		      - symtab_hdr->sh_info);
+	  for (i = 0; i < symcount; i++)
+	    {
+	      struct elf_link_hash_entry *sym_hash = sym_hashes[i];
+
+	      if ((sym_hash->root.type == bfd_link_hash_defined
+		   || sym_hash->root.type == bfd_link_hash_defweak)
+		  && sym_hash->root.u.def.section == sec)
+		{
+		  /* As above, adjust the value if needed.  */
+		  if (sym_hash->root.u.def.value == align_off + insn16_off)
+		    sym_hash->root.u.def.value -= count;
+		}
+	    }
+	  return TRUE;
+	}
+    }
+
+  /* Can not avoid BTB miss, return FALSE.  */
+  return FALSE;
+}
+
+static bfd_boolean
+btb_miss_occur (bfd_vma return_address, bfd_vma branch_end)
+{
+  if ((int)(return_address/4) == (int)(branch_end/4))
+    return TRUE;
+  else
+    return FALSE;
+}
+
+static bfd_boolean
+riscv_relax_check_BTB_miss (bfd *abfd, asection *sec, bfd_vma align_off,
+			    bfd_vma addend, bfd_vma nop_bytes,
+			    bfd_boolean target_align)
+{
+  struct bfd_elf_section_data *data = elf_section_data (sec);
+  bfd_byte *contents = data->this_hdr.contents;
+  bfd_vma return_address, check_begin, check_limit;
+  unsigned int i;
+
+  if (target_align)
+    {
+      return_address = sec_addr (sec) + align_off + addend;
+      check_limit = 4;
+    }
+  else
+    {
+      return_address = sec_addr (sec) + align_off;
+      check_limit = 4 - nop_bytes;
+    }
+
+  /* The case ALIGN_BTB + ALIGN is hard to check BTB miss, skip it.  */
+  for (i = 0; i < sec->reloc_count; i++)
+    if (data->relocs[i].r_offset == align_off + addend
+	&& (ELFNN_R_TYPE (data->relocs[i].r_info) == R_RISCV_ALIGN
+	    || ELFNN_R_TYPE (data->relocs[i].r_info) == R_RISCV_ALIGN_BTB))
+      return FALSE;
+
+  check_begin = 0;
+  while (check_begin < check_limit)
+    {
+      if ((*(contents + align_off + addend + check_begin) & 0x3) != 0x3)
+	{
+	  /* 16-bits insn.  */
+	  uint16_t insn16 = bfd_get_16 (abfd, contents + align_off + addend + check_begin);
+	  bfd_vma branch_end = sec_addr (sec) + align_off + nop_bytes + check_begin;
+	  if ((((ARCH_SIZE == 32) && (insn16 & MASK_C_JAL) == MATCH_C_JAL)
+	       || (insn16 & MASK_C_JR) == MATCH_C_JR
+	       || (insn16 & MASK_C_JALR) == MATCH_C_JALR
+	       || (insn16 & MASK_C_J) == MATCH_C_J
+	       || (insn16 & MASK_C_BEQZ) == MATCH_C_BEQZ
+	       || (insn16 & MASK_C_BNEZ) == MATCH_C_BNEZ)
+	      && btb_miss_occur (return_address, branch_end))
+	    return TRUE;
+	  check_begin += 2;
+	}
+      else
+	{
+	  /* 32-bits insn.  */
+	  uint32_t insn = bfd_get_32 (abfd, contents + align_off + addend + check_begin);
+	  bfd_vma branch_end = sec_addr (sec) + align_off + nop_bytes + check_begin + 2;
+	  if (((insn & MASK_JAL) == MATCH_JAL
+	       || (insn & MASK_JALR) == MATCH_JALR
+	       || (insn & MASK_BEQ) == MATCH_BEQ
+	       || (insn & MASK_BNE) == MATCH_BNE
+	       || (insn & MASK_BLT) == MATCH_BLT
+	       || (insn & MASK_BGE) == MATCH_BGE
+	       || (insn & MASK_BLTU) == MATCH_BLTU
+	       || (insn & MASK_BGEU) == MATCH_BGEU)
+	      && btb_miss_occur (return_address, branch_end))
+	    return TRUE;
+	  check_begin += 4;
+	}
+    }
+  return FALSE;
+}
+
+static bfd_vma pre_align_off;
+
+/* Implement R_RISCV_ALIGN and R_RISCV_ALIGN_BTB by deleting excess alignment NOPs.  */
 
 static bfd_boolean
 _bfd_riscv_relax_align (bfd *abfd, asection *sec,
@@ -3631,17 +4526,31 @@ _bfd_riscv_relax_align (bfd *abfd, asection *sec,
 			bfd_boolean *again ATTRIBUTE_UNUSED,
 			riscv_pcgp_relocs *pcrel_relocs ATTRIBUTE_UNUSED)
 {
+  if (rel->r_addend & (1 << 31))
+    return TRUE;
+
+  struct riscv_elf_link_hash_table *table = riscv_elf_hash_table (link_info);
   bfd_byte *contents = elf_section_data (sec)->this_hdr.contents;
   bfd_vma alignment = 1, pos;
+  int align_btb = 0;
   while (alignment <= rel->r_addend)
     alignment *= 2;
+  if (ELFNN_R_TYPE (rel->r_info) == R_RISCV_ALIGN_BTB)
+    {
+      alignment = 4;
+      align_btb = 1;
+    }
 
   symval -= rel->r_addend;
   bfd_vma aligned_addr = ((symval - 1) & ~(alignment - 1)) + alignment;
   bfd_vma nop_bytes = aligned_addr - symval;
 
   /* Once we've handled an R_RISCV_ALIGN, we can't relax anything else.  */
-  sec->sec_flg0 = TRUE;
+  /* Generally, we can't relax anything after we've handled an R_RISCV_ALIGN.
+     Otherwise, we have to check alignment for each relaxation after
+     _bfd_riscv_relax_align.  */
+  if (!(table->target_optimize & RISCV_RELAX_EX9_ON))
+    sec->sec_flg0 = TRUE;
 
   /* Make sure there are enough NOPs to actually achieve the alignment.  */
   if (rel->r_addend < nop_bytes)
@@ -3656,29 +4565,140 @@ _bfd_riscv_relax_align (bfd *abfd, asection *sec,
     }
 
   /* Delete the reloc.  */
-  rel->r_info = ELFNN_R_INFO (0, R_RISCV_NONE);
+  /* Since ex9 needs the information about alignment later, we can not delete
+     R_RISCV_ALIGN here. Unfortunately, we can only assure 4-byte aligned for
+     ex9 so far. Therefore, we reserve R_RISCV_ALIGN only for 4-byte aligned. */
+  if (rel->r_addend != 2)
+    rel->r_info = ELFNN_R_INFO (0, R_RISCV_NONE);
 
-  /* If the number of NOPs is already correct, there's nothing to do.  */
-  if (nop_bytes == rel->r_addend)
-    return TRUE;
+  /* TODO: Implement n-byte aligned.  */
+  int data_flag;
+  uint32_t insn = 0xffffffff;
+  bfd_vma insn16_off = 0xffffffff;
+  Elf_Internal_Rela *irel_save = NULL;
+  bfd_vma where = pre_align_off;
+  int rvc = elf_elfheader (abfd)->e_flags & EF_RISCV_RVC;
+  if (table->target_aligned && rvc
+      && nop_bytes && alignment == 4)
+    {
+      Elf_Internal_Rela *relocs, *irelend, *irel;
+      if (elf_section_data (sec)->relocs)
+	relocs = elf_section_data (sec)->relocs;
+      else
+	relocs = _bfd_elf_link_read_relocs (abfd, sec, NULL, NULL,
+					    TRUE /* keep_memory  */);
+      irelend = relocs + sec->reloc_count;
 
-  /* Write as many RISC-V NOPs as we need.  */
-  for (pos = 0; pos < (nop_bytes & -4); pos += 4)
-    bfd_put_32 (abfd, RISCV_NOP, contents + rel->r_offset + pos);
+      irel = relocs;
+      while (where < rel->r_offset)
+	{
+	  /* Find the relocation that it's r_offset is same as where.  */
+	  while (irel != NULL && irel < irelend && irel->r_offset < where)
+	    irel++;
 
-  /* Write a final RVC NOP if need be.  */
-  if (nop_bytes % 4 != 0)
-    bfd_put_16 (abfd, RVC_NOP, contents + rel->r_offset + pos);
+	  data_flag = riscv_relocation_check (link_info, &irel, irelend,
+					      sec, &where, contents, 0);
+	  if (data_flag & DATA_EXIST)
+	    {
+	      where += (data_flag >> 24);
+	      continue;
+	    }
 
-  /* Delete the excess bytes.  */
-  return riscv_relax_delete_bytes (abfd, sec, rel->r_offset + nop_bytes,
-				   rel->r_addend - nop_bytes, link_info);
+	  if ((*(contents + where) & 0x3) != 0x3)
+	    {
+	      uint16_t insn16 = bfd_get_16 (abfd, contents + where);
+	      if (riscv_convert_16_to_32 (insn16, &insn))
+		{
+		  insn16_off = where;
+		  irel_save = irel;
+		}
+	      /* This RVC can not be converted to RVI.  */
+	      where += 2;
+	    }
+	  else
+	    where += 4;
+	}
+    }
+  pre_align_off = rel->r_offset + nop_bytes;
+
+  /* Convert it to RVI and then remove the nop16.  */
+  /* We use the highest 1 byte of R_RISCV_ALIGN addend to record
+     whether this relocation is relaxed by bfd_riscv_relax_align.  */
+  if (insn != 0xffffffff
+      && insn16_off != 0xffffffff
+      && target_align_check_branch_range (abfd, sec, insn16_off, rel->r_offset,
+					  2, link_info))
+    {
+      if (irel_save)
+	{
+	  /* The rvc branch/jal has been converted to 32-bit instruction
+	     above, therefore, we modify it's relocation, too.  */
+	  unsigned sym = ELFNN_R_SYM (irel_save->r_info);
+	  if (ELFNN_R_TYPE (irel_save->r_info) == R_RISCV_RVC_BRANCH)
+	    irel_save->r_info = ELFNN_R_INFO (sym, R_RISCV_BRANCH);
+	  else if (ELFNN_R_TYPE (irel_save->r_info) == R_RISCV_RVC_JUMP)
+	    irel_save->r_info = ELFNN_R_INFO (sym, R_RISCV_JAL);
+	}
+      riscv_relax_shift_bytes (abfd, sec, insn16_off, rel->r_offset, 2, insn);
+
+      /* Check BTB miss after target aligned.  */
+      if (align_btb)
+	{
+	  bfd_put_16 (abfd, RVC_NOP, contents + rel->r_offset);
+	  if (table->avoid_btb_miss
+	      && riscv_relax_check_BTB_miss (abfd, sec, rel->r_offset,
+					     rel->r_addend - 2, 0, 1)
+	      && riscv_relax_avoid_BTB_miss (abfd, sec, rel->r_offset, 2, 2))
+	    {
+	      /* If BTB miss occurs, convert the rvc insn between jal and branch
+		 to rvi insn in riscv_relax_avoid_BTB_miss.  */
+	    }
+	  else
+	    /* Can not avoid BTB miss, we have to delete the redundant 2 bytes
+	       for ALIGN_BTB.  */
+	    riscv_relax_delete_bytes (abfd, sec, rel->r_offset,
+				      rel->r_addend - nop_bytes, link_info);
+	}
+
+      rel->r_addend = (1 << 31);
+      return TRUE;
+    }
+  else
+    {
+      /* BTB miss occurs without target aligned.  */
+      if (align_btb && table->avoid_btb_miss
+	  && riscv_relax_check_BTB_miss (abfd, sec, rel->r_offset,
+					 rel->r_addend, nop_bytes, 0)
+	  && riscv_relax_avoid_BTB_miss (abfd, sec, rel->r_offset, 4, 2))
+	rel->r_addend -= 2;
+
+      /* If the number of NOPs is already correct, there's nothing to do.  */
+      if (nop_bytes == rel->r_addend)
+	{
+	  rel->r_addend = nop_bytes | (1 << 31);
+	  return TRUE;
+	}
+
+      /* Write as many RISC-V NOPs as we need.  */
+      for (pos = 0; pos < (nop_bytes & -4); pos += 4)
+	bfd_put_32 (abfd, RISCV_NOP, contents + rel->r_offset + pos);
+
+      /* Write a final RVC NOP if need be.  */
+      if (nop_bytes % 4 != 0)
+	bfd_put_16 (abfd, RVC_NOP, contents + rel->r_offset + pos);
+
+      /* Delete the excess bytes.  */
+      riscv_relax_delete_bytes (abfd, sec, rel->r_offset + nop_bytes,
+				rel->r_addend - nop_bytes, link_info);
+      rel->r_addend = nop_bytes | (1 << 31);
+      return TRUE;
+    }
 }
 
 /* Relax PC-relative references to GP-relative references.  */
 
 static bfd_boolean
-_bfd_riscv_relax_pc  (bfd *abfd ATTRIBUTE_UNUSED,
+_bfd_riscv_relax_pc  (bfd *abfd,
 		      asection *sec,
 		      asection *sym_sec,
 		      struct bfd_link_info *link_info,
@@ -3718,6 +4738,11 @@ _bfd_riscv_relax_pc  (bfd *abfd ATTRIBUTE_UNUSED,
 	hi_reloc = *hi;
 	symval = hi_reloc.hi_addr;
 	sym_sec = hi_reloc.sym_sec;
+	if (!riscv_use_pcgp_hi_reloc(pcgp_relocs, hi->hi_sec_off))
+	  (*_bfd_error_handler)
+	   (_("%B(%A+0x%lx): Unable to clear RISCV_PCREL_HI20 reloc"
+	      "for cooresponding RISCV_PCREL_LO12 reloc"),
+	    abfd, sec, rel->r_offset);
       }
       break;
 
@@ -3761,12 +4786,12 @@ _bfd_riscv_relax_pc  (bfd *abfd ATTRIBUTE_UNUSED,
 	case R_RISCV_PCREL_LO12_I:
 	  rel->r_info = ELFNN_R_INFO (sym, R_RISCV_GPREL_I);
 	  rel->r_addend += hi_reloc.hi_addend;
-	  return TRUE;
+	  return riscv_delete_pcgp_lo_reloc (pcgp_relocs, rel->r_offset, 4);
 
 	case R_RISCV_PCREL_LO12_S:
 	  rel->r_info = ELFNN_R_INFO (sym, R_RISCV_GPREL_S);
 	  rel->r_addend += hi_reloc.hi_addend;
-	  return TRUE;
+	  return riscv_delete_pcgp_lo_reloc (pcgp_relocs, rel->r_offset, 4);
 
 	case R_RISCV_PCREL_HI20:
 	  riscv_record_pcgp_hi_reloc (pcgp_relocs,
@@ -3778,7 +4803,7 @@ _bfd_riscv_relax_pc  (bfd *abfd ATTRIBUTE_UNUSED,
 	  /* We can delete the unnecessary AUIPC and reloc.  */
 	  rel->r_info = ELFNN_R_INFO (0, R_RISCV_DELETE);
 	  rel->r_addend = 4;
-	  return TRUE;
+	  return riscv_delete_pcgp_hi_reloc (pcgp_relocs, rel->r_offset);
 
 	default:
 	  abort ();
@@ -3809,9 +4834,11 @@ _bfd_riscv_relax_delete (bfd *abfd,
   return TRUE;
 }
 
-/* Relax a section.  Pass 0 shortens code sequences unless disabled.  Pass 1
-   deletes the bytes that pass 0 made obselete.  Pass 2, which cannot be
-   disabled, handles code alignment directives.  */
+/* Relax a section.
+   Pass 1 shortens code sequences unless disabled.
+   Pass 2 deletes the bytes that pass 1 made obselete. (for _bfd_riscv_relax_pc)
+   Pass 3, which cannot be disabled, handles code alignment directives.
+   Pass 0, 4, 5 which can only be done once, deal with EX9.  */
 
 static bfd_boolean
 _bfd_riscv_relax_section (bfd *abfd, asection *sec,
@@ -3826,18 +4853,87 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
   unsigned int i;
   bfd_vma max_alignment, reserve_size = 0;
   riscv_pcgp_relocs pcgp_relocs;
+  static int gp_init = 0;
+  static asection *final_sec = NULL;
+  /* Make sure that EX9 can only be done once.  */
+  static int ex9_init = 0;
+  static int ex9_build_finish = 0;
+  static int ex9_replace_finish = 0;
+  /* For ex9 update.  */
+  static int ex9_replace_again = 0;
+
+  /* Reset it for each input section.
+     It used to record orevious alignment offset
+     in _bfd_riscv_relax_align.  */
+  pre_align_off = 0;
 
   *again = FALSE;
 
+  /* Nothing to do for
+     relocatable link or
+     sec_flg0 section (the last relax) or
+     non-relocatable section or
+     excluded section or
+     non-code section or
+     empty content or
+     no reloc entry or
+     disable relaxation.  */
   if (bfd_link_relocatable (info)
       || sec->sec_flg0
       || (sec->flags & SEC_RELOC) == 0
+      || (sec->flags & SEC_EXCLUDE) == 1
+      || (sec->flags & SEC_CODE) == 0
+      || sec->size == 0
       || sec->reloc_count == 0
       || (info->disable_target_specific_optimizations
-	  && info->relax_pass == 0))
+	  && (info->relax_pass == 0
+	      || info->relax_pass == 1
+	      || info->relax_pass == 2
+	      || info->relax_pass == 4
+	      || info->relax_pass == 5)))
     return TRUE;
 
   riscv_init_pcgp_relocs (&pcgp_relocs);
+
+  /* Check and init '__global_pointer$'.  */
+  if (!gp_init)
+    {
+      if (!riscv_init_global_pointer (sec->output_section->owner, info))
+	{
+	  (*_bfd_error_handler)
+	    (_("\nWarning: Init __global_pointer$ failed. "
+	       "Can not find __global_pointer$ and .sdata section.\n"));
+	}
+      gp_init = 1;
+    }
+
+  /* Initialization for IFC and EX9.  */
+  if (!ex9_init)
+    {
+      if (htab->target_optimize & RISCV_RELAX_EX9_ON)
+	{
+	  /* No need to build ex9 hash table when only ex9 import is setting.  */
+	  if (htab->ex9_import_file == NULL
+	      || htab->update_ex9_table)
+	    riscv_elf_ex9_init ();
+	  /* For ex9 update, we replace ex9 candiadtes to ex9.it
+	     according to the imported table first. After that,
+	     we build the ex9 hash table for the remaining patterns
+	     to do ex9 replacement again.  */
+	  if (htab->ex9_import_file)
+	    {
+	      ex9_build_finish = 1;
+	      riscv_elf_ex9_import_table (abfd, info);
+	    }
+	}
+      else
+	{
+	  ex9_build_finish = 1;
+	  ex9_replace_finish = 1;
+	}
+
+      ex9_init = 1;
+    }
 
   /* Read this BFD's relocs if we haven't done so already.  */
   if (data->relocs)
@@ -3845,6 +4941,83 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
   else if (!(relocs = _bfd_elf_link_read_relocs (abfd, sec, NULL, NULL,
 						 info->keep_memory)))
     goto fail;
+
+  /* Sort relocation by r_offset.  */
+  riscv_insertion_sort (relocs, sec->reloc_count,
+			sizeof (Elf_Internal_Rela), compar_reloc);
+
+  /* Check relax_pass and then do the corresponding relaxation.
+     Only Pass 1 can be run many times.
+     Pass 0: Empty round (find the last section)
+     Pass 1: Normal relaxation round (relax_lui, relax_call, ...)
+     Pass 2: Delete round for Pass 1 relax_pcrel
+     Pass 3: Relax alignment round
+     Pass 4: EX9 build round
+     Pass 5: EX9 replace round  */
+  switch (info->relax_pass)
+    {
+    case 0:
+      /* TODO: Can we remove the empty round?  */
+      if (ex9_build_finish && ex9_replace_finish)
+	return TRUE;
+      final_sec = sec;
+      return TRUE;
+    case 1:
+    case 2:
+    case 3:
+      break;
+    case 4:
+      if (ex9_build_finish)
+	return TRUE;
+      /* Here is the entrance of ex9 relaxation. There are two pass of
+	 ex9 relaxation. The one is to traverse all instructions and build
+	 the hash table. The other one is to compare instructions and replace
+	 it by ex9.it.  */
+      if (!riscv_elf_ex9_build_hash_table (abfd, sec, info))
+	return FALSE;
+      if (final_sec == sec)
+	{
+	  riscv_elf_ex9_finish (abfd, info);
+	  ex9_build_finish = 1;
+	  if (htab->update_ex9_table)
+	    {
+	      info->relax_pass = 5;
+	      *again = TRUE;
+	    }
+	}
+      return TRUE;
+    case 5:
+      if (ex9_replace_finish)
+	return TRUE;
+      if (!riscv_elf_ex9_replace_instruction (info, abfd, sec))
+	return FALSE;
+      if (final_sec == sec)
+	{
+	  /* Save the local symbol value before merging section.
+	     It used to get the correct relocations in the
+	     riscv_elf_ex9_reloc_insn.  */
+	  riscv_elf_ex9_save_local_symbol_value ();
+	  ex9_replace_finish = 1;
+
+	  if (htab->update_ex9_table && !ex9_replace_again)
+	    {
+	      ex9_replace_again = 1;
+	      ex9_build_finish = 0;
+	      ex9_replace_finish = 0;
+	      info->relax_pass = 4;
+	      *again = TRUE;
+	    }
+	  else
+	    {
+	      /* Set it for the last relaxation.  */
+	      sec->sec_flg0 = TRUE;
+	    }
+	}
+      return TRUE;
+    default:
+      (*_bfd_error_handler) (_("error: Unknow relax pass."));
+      break;
+    }
 
   if (htab)
     {
@@ -3868,7 +5041,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
       bfd_vma symval;
 
       relax_func = NULL;
-      if (info->relax_pass == 0)
+      if (info->relax_pass == 1)
 	{
 	  if (type == R_RISCV_CALL || type == R_RISCV_CALL_PLT)
 	    relax_func = _bfd_riscv_relax_call;
@@ -3898,9 +5071,11 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	  /* Skip over the R_RISCV_RELAX.  */
 	  i++;
 	}
-      else if (info->relax_pass == 1 && type == R_RISCV_DELETE)
+      else if (info->relax_pass == 2 && type == R_RISCV_DELETE)
 	relax_func = _bfd_riscv_relax_delete;
-      else if (info->relax_pass == 2 && type == R_RISCV_ALIGN)
+      else if (info->relax_pass == 3
+	       && (type == R_RISCV_ALIGN
+		   || type == R_RISCV_ALIGN_BTB))
 	relax_func = _bfd_riscv_relax_align;
       else
 	continue;
@@ -3991,6 +5166,2729 @@ fail:
 
   return ret;
 }
+
+static bfd_boolean
+riscv_elf_output_symbol_hook (struct bfd_link_info *info,
+			      const char *name,
+			      Elf_Internal_Sym *elfsym ATTRIBUTE_UNUSED,
+			      asection *input_sec,
+			      struct elf_link_hash_entry *h ATTRIBUTE_UNUSED)
+{
+  const char *source;
+  FILE *sym_ld_script = NULL;
+  struct riscv_elf_link_hash_table *table;
+
+  table = riscv_elf_hash_table (info);
+  sym_ld_script = table->sym_ld_script;
+  if (!sym_ld_script)
+    return TRUE;
+
+  if (!h || !name || *name == '\0')// || strcmp (name, "_ITB_BASE_") != 0)
+    return TRUE;
+
+  if (input_sec->flags & SEC_EXCLUDE)
+    return TRUE;
+
+  if (!check_start_export_sym)
+    {
+      fprintf (sym_ld_script, "SECTIONS\n{\n");
+      check_start_export_sym = 1;
+    }
+
+  if (h->root.type == bfd_link_hash_defined
+      || h->root.type == bfd_link_hash_defweak)
+    {
+      if (!h->root.u.def.section->output_section)
+	return TRUE;
+
+      if (bfd_is_const_section (input_sec))
+	source = input_sec->name;
+      else
+	source = input_sec->owner->filename;
+
+      bfd_vma sym_value = h->root.u.def.value
+	+ h->root.u.def.section->output_section->vma
+	+ h->root.u.def.section->output_offset;
+      fprintf (sym_ld_script, "\t%s = 0x%08lx;\t /* %s  */\n",
+	       h->root.root.string, sym_value, source);
+    }
+
+  return TRUE;
+}
+
+static bfd_boolean
+riscv_elf_output_arch_syms (bfd *output_bfd ATTRIBUTE_UNUSED,
+			    struct bfd_link_info *info,
+			    void *finfo ATTRIBUTE_UNUSED,
+			    bfd_boolean (*func) (void *, const char *,
+						 Elf_Internal_Sym *,
+						 asection *,
+						 struct elf_link_hash_entry *)
+			    ATTRIBUTE_UNUSED)
+{
+  FILE *sym_ld_script = NULL;
+  struct riscv_elf_link_hash_table *table;
+
+  table = riscv_elf_hash_table (info);
+  sym_ld_script = table->sym_ld_script;
+
+  if (check_start_export_sym)
+    fprintf (sym_ld_script, "}\n");
+
+  return TRUE;
+}
+
+/* EX9 Instruction Table Relaxation.  */
+
+#define EX9_SECTION ".ex9.itable"
+#define INSN_CEX9 0x8000
+#define INSN_CEX10 0x9000
+
+/* Global hash list.  */
+struct elf_link_hash_entry_list
+{
+  struct elf_link_hash_entry *h;
+  struct elf_link_hash_entry_list *next;
+};
+
+/* Relocation list.  */
+struct elf_riscv_irel_entry
+{
+  Elf_Internal_Rela *irel;
+  struct elf_riscv_irel_entry *next;
+};
+
+/* Save all relocations and sections for each ex9 entry.
+   TODO: I thought that all m_list will need to save all relocations
+   not only one.  */
+struct elf_link_hash_entry_sec_list
+{
+  asection *sec;
+  struct elf_riscv_irel_entry *i_list;
+  struct elf_link_hash_entry_sec_list *next;
+};
+
+/* Save different destination but same insn.  */
+struct elf_link_hash_entry_mul_list
+{
+  /* Global symbol times.  */
+  int times;
+  /* Save relocation for each global symbol.  */
+  Elf_Internal_Rela *irel;
+  /* For lui, two lui may have the same high-part
+     but different low-parts.  */
+  Elf_Internal_Rela rel_backup;
+  struct elf_link_hash_entry_list *h_list;
+  struct elf_link_hash_entry_sec_list *s_list;
+  struct elf_link_hash_entry_mul_list *next;
+};
+
+/* Instruction hash table.  */
+struct elf_riscv_code_hash_entry
+{
+  struct bfd_hash_entry root;
+  int times;
+  /* For insn that can use relocation or constant ex: lui.  */
+  int const_insn;
+  asection *sec;
+  struct elf_link_hash_entry_mul_list *m_list;
+  /* Using r_addend.  */
+  Elf_Internal_Rela *irel;
+  /* Using r_info.  */
+  Elf_Internal_Rela rel_backup;
+};
+
+/* Instruction count list.  */
+struct elf_riscv_insn_times_entry
+{
+  const char *string;
+  int times;
+  int order;
+  int ex_reserve;
+  asection *sec;
+  bfd_vma local_sym_value;
+  struct elf_link_hash_entry_mul_list *m_list;
+  Elf_Internal_Rela *irel;
+  Elf_Internal_Rela rel_backup;
+  struct elf_riscv_insn_times_entry *next;
+};
+
+/* Fix c.ex9 for lui.  */
+struct elf_riscv_ex9_refix
+{
+  Elf_Internal_Rela *irel;
+  asection *sec;
+  struct elf_link_hash_entry *h;
+  int order;
+  struct elf_riscv_ex9_refix *next;
+  /* Do not fix the entries if disable is 1.  */
+  int disable;
+};
+
+/* It used to record the blank information for ex9 replacement.  */
+struct elf_riscv_blank
+{
+  /* Where the blank begins.  */
+  bfd_vma offset;
+  /* The size of the blank.  */
+  bfd_vma size;
+  struct elf_riscv_blank *next;
+  struct elf_riscv_blank *prev;
+};
+
+/* ex9 hash table, used to store all patterns of code.  */
+static struct bfd_hash_table ex9_code_table;
+/* ex9 candiadtes, chosen from ex9 hash table.  */
+static struct elf_riscv_insn_times_entry *ex9_insn_head = NULL;
+/* After ex9 relaxation, the high 20 bits of symbol may be
+   changed, we may reserve more than one ex9 entries at
+   riscv_elf_ex9_replace_instruction, and then fixed the
+   id of ex9.it insns at riscv_elf_relocate_ex9_table.  */
+static struct elf_riscv_ex9_refix *ex9_refix_head = NULL;
+/* Used to record the spaces deleted by ex9.  */
+static struct elf_riscv_blank *blank_list_head = NULL;
+/* Used to record the recently used blank.  */
+static struct elf_riscv_blank *blank_list_current = NULL;
+/* Save ex9 predicted reducing size.  */
+static size_t ex9_relax_size = 0;
+static asection *ex9_section = NULL;
+/* Use to store the number of imported entries.  */
+static int ex9_import_number = 0;
+
+/* riscv_create_elf_blank, riscv_search_elf_blank and riscv_insert_elf_blank
+   are used to record the spaces deleted by ex9.  */
+
+static struct elf_riscv_blank *
+riscv_create_elf_blank (bfd_vma offset_p, bfd_vma size_p)
+{
+  struct elf_riscv_blank *blank_t;
+  blank_t = bfd_malloc (sizeof (struct elf_riscv_blank));
+  blank_t->offset = offset_p;
+  blank_t->size = size_p;
+  blank_t->next = NULL;
+  blank_t->prev = NULL;
+  return blank_t;
+}
+
+static struct elf_riscv_blank *
+riscv_search_elf_blank (bfd_vma addr)
+{
+  /* Searching from the recently used blank. This can reduce
+     the link time of ex9.  */
+  struct elf_riscv_blank *blank_t = blank_list_current;
+
+  while (blank_t && addr < blank_t->offset)
+    blank_t = blank_t->prev;
+  while (blank_t && blank_t->next && addr >= blank_t->next->offset)
+    blank_t = blank_t->next;
+
+  return blank_t;
+}
+
+static bfd_boolean
+riscv_insert_elf_blank (bfd_vma addr, bfd_vma len)
+{
+  struct elf_riscv_blank *blank_t, *blank_t2;
+
+  if (!blank_list_head)
+    {
+      blank_list_head = riscv_create_elf_blank (addr, len);
+      blank_list_current = blank_list_head;
+      return TRUE;
+    }
+
+  blank_t = riscv_search_elf_blank (addr);
+
+  if (blank_t == NULL)
+    {
+      blank_t = riscv_create_elf_blank (addr, len);
+      blank_list_head->prev = blank_t;
+      blank_t->next = blank_list_head;
+      blank_list_head = blank_t;
+      blank_list_current = blank_t;
+      return TRUE;
+    }
+
+  if (addr < blank_t->offset + blank_t->size)
+    {
+      /* Extend the origin blank.  */
+      if (addr + len > blank_t->offset + blank_t->size)
+	blank_t->size = addr + len - blank_t->offset;
+      blank_list_current = blank_t;
+    }
+  else
+    {
+      blank_t2 = riscv_create_elf_blank (addr, len);
+      if (blank_t->next)
+	{
+	  blank_t->next->prev = blank_t2;
+	  blank_t2->next = blank_t->next;
+	}
+      blank_t2->prev = blank_t;
+      blank_t->next = blank_t2;
+      blank_list_current = blank_t2;
+    }
+
+  return TRUE;
+}
+
+/* EX9 hash function.  */
+
+static struct bfd_hash_entry *
+riscv_elf_code_hash_newfunc (struct bfd_hash_entry *entry,
+			     struct bfd_hash_table *table,
+			     const char *string)
+{
+  struct elf_riscv_code_hash_entry *ret;
+
+  /* Allocate the structure if it has not already been
+     allocated by a subclass.  */
+  if (entry == NULL)
+    {
+      entry = (struct bfd_hash_entry *)
+	bfd_hash_allocate (table, sizeof (*ret));
+      if (entry == NULL)
+	return entry;
+    }
+
+  /* Call the allocation method of the superclass.  */
+  entry = bfd_hash_newfunc (entry, table, string);
+  if (entry == NULL)
+    return entry;
+
+  ret = (struct elf_riscv_code_hash_entry*) entry;
+  ret->times = 0;
+  ret->const_insn = 0;
+  ret->m_list = NULL;
+  ret->sec = NULL;
+  ret->irel = NULL;
+  return &ret->root;
+}
+
+/* Insert ex9 entry. This insert must be stable sorted by times.  */
+
+static void
+riscv_elf_ex9_insert_entry (struct elf_riscv_insn_times_entry *ptr)
+{
+  struct elf_riscv_insn_times_entry *temp;
+  struct elf_riscv_insn_times_entry *temp2;
+
+  if (ex9_insn_head == NULL)
+    {
+      ex9_insn_head = ptr;
+      ptr->next = NULL;
+    }
+  else
+    {
+      temp = ex9_insn_head;
+      temp2 = ex9_insn_head;
+      while (temp->next &&
+	     (temp->next->times >= ptr->times
+	      || temp->times == -1))
+	{
+	  if (temp->times == -1)
+	    temp2 = temp;
+	  temp = temp->next;
+	}
+      if (ptr->times > temp->times && temp->times != -1)
+	{
+	  ptr->next = temp;
+	  if (temp2->times == -1)
+	    temp2->next = ptr;
+	  else
+	    ex9_insn_head = ptr;
+	}
+      else if (temp->next == NULL)
+	{
+	  temp->next = ptr;
+	  ptr->next = NULL;
+	}
+      else
+	{
+	  ptr->next = temp->next;
+	  temp->next = ptr;
+	}
+    }
+}
+
+/* Examine each insn times in hash table.
+   Handle multi-link hash entry.
+
+   TODO: This function doesn't assign so much info since it is fake.  */
+
+static int
+riscv_elf_examine_insn_times (struct elf_riscv_code_hash_entry *h)
+{
+  struct elf_riscv_insn_times_entry *ptr;
+  int times;
+
+  if (h->m_list == NULL)
+    {
+      /* Local symbol insn or insn without relocation.  */
+      if (h->times < 3)
+	return TRUE;
+
+      ptr = (struct elf_riscv_insn_times_entry *)
+	bfd_malloc (sizeof (struct elf_riscv_insn_times_entry));
+      ptr->times = h->times;
+      ptr->string = h->root.string;
+      ptr->m_list = NULL;
+      ptr->ex_reserve = 0;
+      ptr->sec = h->sec;
+      ptr->local_sym_value = 0;
+      ptr->irel = h->irel;
+      ptr->rel_backup = h->rel_backup;
+      riscv_elf_ex9_insert_entry (ptr);
+    }
+  else
+    {
+      /* Global symbol insn.  */
+      /* Only lui insn has multiple m_list.  */
+      struct elf_link_hash_entry_mul_list *m_list = h->m_list;
+
+      times = 0;
+      while (m_list)
+	{
+	  times += m_list->times;
+	  m_list = m_list->next;
+	}
+      if (times >= 3)
+	{
+	  m_list = h->m_list;
+	  ptr = (struct elf_riscv_insn_times_entry *)
+	    bfd_malloc (sizeof (struct elf_riscv_insn_times_entry));
+	  ptr->times = times; /* Use the total times.  */
+	  ptr->string = h->root.string;
+	  ptr->m_list = m_list;
+	  ptr->sec = h->sec;
+	  ptr->local_sym_value = 0;
+	  ptr->irel = m_list->irel;
+	  ptr->ex_reserve = 0;
+	  ptr->rel_backup = m_list->rel_backup;
+	  riscv_elf_ex9_insert_entry (ptr);
+	}
+      if (h->const_insn == 1)
+	{
+	  /* lui with constant value.  */
+	  if (h->times < 3)
+	    return TRUE;
+
+	  ptr = (struct elf_riscv_insn_times_entry *)
+	    bfd_malloc (sizeof (struct elf_riscv_insn_times_entry));
+	  ptr->times = h->times;
+	  ptr->string = h->root.string;
+	  ptr->m_list = NULL;
+	  ptr->sec = NULL;
+	  ptr->local_sym_value = 0;
+	  ptr->irel = NULL;
+	  ptr->ex_reserve = 0;
+	  ptr->rel_backup = h->rel_backup;
+	  riscv_elf_ex9_insert_entry (ptr);
+	}
+    }
+  return TRUE;
+}
+
+/* Count each insn times in hash table. Handle multi-link hash entry.  */
+
+static int
+riscv_elf_count_insn_times (struct elf_riscv_code_hash_entry *h)
+{
+  int reservation, max_reservation, times;
+  unsigned long relocation, min_relocation;
+  struct elf_riscv_insn_times_entry *ptr;
+
+  if (h->m_list == NULL)
+    {
+      /* Local symbol insn or insn without relocation.  */
+      if (h->times < 3)
+	return TRUE;
+      ptr = (struct elf_riscv_insn_times_entry *)
+	bfd_malloc (sizeof (struct elf_riscv_insn_times_entry));
+      ptr->times = h->times;
+      ptr->string = h->root.string;
+      ptr->m_list = NULL;
+      ptr->ex_reserve = 0;
+      ptr->sec = h->sec;
+      ptr->local_sym_value = 0;
+      ptr->irel = h->irel;
+      ptr->rel_backup = h->rel_backup;
+      riscv_elf_ex9_insert_entry (ptr);
+    }
+  else
+    {
+      /* Global symbol insn.  */
+      /* Only lui/auipc insn has multiple m_list.  */
+      struct elf_link_hash_entry_mul_list *m_list = h->m_list;
+
+      if (ELFNN_R_TYPE (m_list->rel_backup.r_info) == R_RISCV_HI20
+	  && m_list->next != NULL)
+	{
+	  /* lui insn has different symbol or addend but has same hi part.  */
+	  times = 0;
+	  reservation = 1;
+	  relocation = 0;
+	  min_relocation = 0xffffffff;
+	  while (m_list)
+	    {
+	      /* Get the minimum lui address and calculate how many entry
+		 the lui-list have to use.  */
+	      if ((m_list->h_list->h->root.type == bfd_link_hash_defined
+		   || m_list->h_list->h->root.type == bfd_link_hash_defweak)
+		  && (m_list->h_list->h->root.u.def.section != NULL
+		      && m_list->h_list->h->root.u.def.section->output_section != NULL))
+		{
+		  relocation = (m_list->h_list->h->root.u.def.value +
+				m_list->h_list->h->root.u.def.section->output_section->vma +
+				m_list->h_list->h->root.u.def.section->output_offset);
+		  relocation += m_list->irel->r_addend;
+		}
+	      else
+		relocation = 0;
+	      if (relocation < min_relocation)
+		min_relocation = relocation;
+	      times += m_list->times;
+	      m_list = m_list->next;
+	    }
+	  if (min_relocation < ex9_relax_size)
+	    reservation = (RISCV_CONST_HIGH_PART (min_relocation) >> 12) + 1;
+	  else
+	    reservation = (RISCV_CONST_HIGH_PART (min_relocation) >> 12)
+	      - (RISCV_CONST_HIGH_PART(min_relocation - ex9_relax_size) >> 12) + 1;
+	  if ((reservation * 3) <= times)
+	    {
+	      /* Efficient enough to use ex9.  */
+	      int i;
+	      for (i = reservation ; i > 0; i--)
+		{
+		  /* Allocate number of reservation ex9 entry.  */
+		  ptr = (struct elf_riscv_insn_times_entry *)
+		    bfd_malloc (sizeof (struct elf_riscv_insn_times_entry));
+		  ptr->times = times / reservation;
+		  ptr->string = h->root.string;
+		  ptr->m_list = h->m_list;
+		  ptr->sec = h->sec;
+		  ptr->local_sym_value = 0;
+		  ptr->ex_reserve = i - 1;;
+		  ptr->irel = h->m_list->irel;
+		  ptr->rel_backup = h->m_list->rel_backup;
+		  riscv_elf_ex9_insert_entry (ptr);
+		}
+	    }
+	}
+      else if (ELFNN_R_TYPE (m_list->rel_backup.r_info) == R_RISCV_PCREL_HI20)
+	{
+	  /* auipc insn has different symbol or addend but has same hi part.  */
+	  times = 0;
+	  reservation = 1;
+	  relocation = 0;
+	  max_reservation = 0;
+	  while (m_list)
+	    {
+	      struct elf_link_hash_entry_sec_list *s_list = m_list->s_list;
+	      while (s_list)
+		{
+		  struct elf_riscv_irel_entry *i_list = s_list->i_list;
+		  while (i_list)
+		    {
+		      struct elf_link_hash_entry **sym_hashes =
+			elf_sym_hashes (s_list->sec->owner);
+		      Elf_Internal_Shdr *symtab_hdr =
+			&elf_tdata (s_list->sec->owner)->symtab_hdr;
+		      unsigned long r_symndx = ELFNN_R_SYM (i_list->irel->r_info);
+		      struct elf_link_hash_entry *h_tmp =
+			sym_hashes[r_symndx - symtab_hdr->sh_info];
+
+		      /* Get the maximum reservation.  */
+		      if ((h_tmp->root.type == bfd_link_hash_defined
+			   || h_tmp->root.type == bfd_link_hash_defweak)
+			  && (h_tmp->root.u.def.section != NULL
+			      && h_tmp->root.u.def.section->output_section != NULL))
+			{
+			  relocation = sec_addr (h_tmp->root.u.def.section) +
+			    h_tmp->root.u.def.value;
+			  relocation += i_list->irel->r_addend;
+			  relocation -= ((sec_addr(s_list->sec) +
+					  i_list->irel->r_offset));
+			}
+		      else
+			relocation = 0;
+
+		      if (relocation < ex9_relax_size)
+			reservation = (RISCV_CONST_HIGH_PART (relocation) >> 12) + 1;
+		      else
+			reservation = (RISCV_CONST_HIGH_PART (relocation) >> 12)
+			  - (RISCV_CONST_HIGH_PART(relocation - ex9_relax_size) >> 12) + 1;
+		      if (reservation > max_reservation)
+			max_reservation = reservation;
+		      i_list = i_list->next;
+		    }
+		  s_list = s_list->next;
+		}
+	      times += m_list->times;
+	      m_list = m_list->next;
+	    }
+
+	  if ((max_reservation * 3) <= times)
+	    {
+	      /* Efficient enough to use ex9.  */
+	      int i;
+	      for (i = max_reservation ; i > 0; i--)
+		{
+		  /* Allocate number of reservation ex9 entry.  */
+		  ptr = (struct elf_riscv_insn_times_entry *)
+		    bfd_malloc (sizeof (struct elf_riscv_insn_times_entry));
+		  ptr->times = times / max_reservation;
+		  ptr->string = h->root.string;
+		  ptr->m_list = h->m_list;
+		  ptr->sec = h->sec;
+		  ptr->local_sym_value = 0;
+		  ptr->ex_reserve = i - 1;;
+		  ptr->irel = h->m_list->irel;
+		  ptr->rel_backup = h->m_list->rel_backup;
+		  riscv_elf_ex9_insert_entry (ptr);
+		}
+	    }
+	}
+      else
+	{
+	  /* Normal global symbol that means no different address symbol
+	     using same ex9 entry.  */
+	  if (m_list->times >= 3)
+	    {
+	      ptr = (struct elf_riscv_insn_times_entry *)
+		bfd_malloc (sizeof (struct elf_riscv_insn_times_entry));
+	      ptr->times = m_list->times;
+	      ptr->string = h->root.string;
+	      ptr->m_list = h->m_list;
+	      ptr->sec = h->sec;
+	      ptr->local_sym_value = 0;
+	      ptr->ex_reserve = 0;
+	      ptr->irel = h->m_list->irel;
+	      ptr->rel_backup = h->m_list->rel_backup;
+	      riscv_elf_ex9_insert_entry (ptr);
+	    }
+	}
+
+      if (h->const_insn == 1)
+	{
+	  /* lui with constant value.  */
+	  if (h->times < 3)
+	    return TRUE;
+
+	  ptr = (struct elf_riscv_insn_times_entry *)
+	    bfd_malloc (sizeof (struct elf_riscv_insn_times_entry));
+	  ptr->times = h->times;
+	  ptr->string = h->root.string;
+	  ptr->m_list = NULL;
+	  ptr->sec = NULL;
+	  ptr->local_sym_value = 0;
+	  ptr->irel = NULL;
+	  ptr->ex_reserve = 0;
+	  ptr->rel_backup = h->rel_backup;
+	  riscv_elf_ex9_insert_entry (ptr);
+	}
+    }
+
+  return TRUE;
+}
+
+/* Hash table traverse function.  */
+
+static void
+riscv_elf_code_hash_traverse (int (*func) (struct elf_riscv_code_hash_entry*))
+{
+  unsigned int i;
+
+  ex9_code_table.frozen = 1;
+  for (i = 0; i < ex9_code_table.size; i++)
+    {
+      struct bfd_hash_entry *p;
+
+      for (p = ex9_code_table.table[i]; p != NULL; p = p->next)
+	if (!func ((struct elf_riscv_code_hash_entry *) p))
+	  goto out;
+    }
+out:
+  ex9_code_table.frozen = 0;
+}
+
+/* Give order number to insn list.  */
+
+static void
+riscv_elf_order_insn_times (struct bfd_link_info *info)
+{
+  struct elf_riscv_insn_times_entry *ex9_insn;
+  struct elf_riscv_insn_times_entry *temp = NULL;
+  struct riscv_elf_link_hash_table *table;
+  int total_ex9_limit;
+  int number = 0;
+
+  if (ex9_insn_head == NULL)
+    return;
+
+  /* Default maximum number of entries is 512.  */
+  table = riscv_elf_hash_table (info);
+  if (table->ex9_limit == -1)
+    table->ex9_limit = 512;
+  total_ex9_limit = table->ex9_limit + ex9_import_number;
+  if (total_ex9_limit > 512)
+    total_ex9_limit = 512;
+
+  ex9_insn = ex9_insn_head;
+
+  while (ex9_insn != NULL && number + ex9_insn->ex_reserve < total_ex9_limit)
+    {
+      ex9_insn->order = number;
+      number++;
+      temp = ex9_insn;
+      ex9_insn = ex9_insn->next;
+    }
+
+  if (ex9_insn && temp)
+    temp->next = NULL;
+  else if (temp == NULL)
+    ex9_insn_head = NULL; /* Discard all ex9 candidates.  */
+
+  /* TODO: Only free the pointer, which point to the structure
+     elf_riscv_insn_times_entry, is not enough. This may cause
+     memory leakage.  */
+  while (ex9_insn != NULL)
+    {
+      /* Free useless entries.  */
+      temp = ex9_insn;
+      ex9_insn = ex9_insn->next;
+      free (temp);
+    }
+}
+
+/* Get section .ex9.itable.  */
+
+static asection*
+riscv_elf_ex9_get_section (bfd *input_bfds)
+{
+  asection *sec = NULL;
+  bfd *abfd;
+
+  if (ex9_section != NULL)
+    return ex9_section;
+
+  for (abfd = input_bfds; abfd != NULL; abfd = abfd->link.next)
+    {
+      sec = bfd_get_section_by_name (abfd, EX9_SECTION);
+      if (sec != NULL)
+	break;
+    }
+
+  ex9_section = sec;
+  return sec;
+}
+
+/* Build .ex9.itable section.  */
+
+static void
+riscv_elf_ex9_build_itable (bfd *abfd, struct bfd_link_info *link_info)
+{
+  asection *table_sec;
+  struct elf_riscv_insn_times_entry *ptr;
+  int number = 0;
+  bfd_byte *contents = NULL;
+  struct riscv_elf_link_hash_table *table;
+
+  table = riscv_elf_hash_table (link_info);
+
+  /* Find the section .ex9.itable, and put all entries into it.  */
+  table_sec = riscv_elf_ex9_get_section (link_info->input_bfds);
+
+  if (table_sec != NULL)
+    {
+      if (!riscv_get_section_contents (table_sec->owner, table_sec,
+				       &contents, TRUE))
+	return;
+
+      for (ptr = ex9_insn_head; ptr != NULL; ptr = ptr->next)
+	number++;
+
+      table_sec->size = number * 4;
+
+      if (number == 0)
+	return;
+
+      /* Check $itb register if set.  */
+      if (!table->ex9_import_file
+	  && !bfd_link_hash_lookup (link_info->hash, "_ITB_BASE_",
+				    FALSE, FALSE, TRUE))
+	{
+	  (*_bfd_error_handler)
+	    (_("\nError: Instruction Table(IT) is used, but Instruction "
+	       "Table Base($ITB) isn't set.\nPlease add the following "
+	       "instructions in _start of the startup code"
+	       "(crt0.S or start.S):\n"
+	       "\"la a0, _ITB_BASE_; csrrw x0, uitb, a0\""));
+	  exit (1);
+	}
+
+      /* TODO: change the e_flag for ex9.  */
+
+      number = 0;
+      /* Write ex9 candidates into ex9 table. We will
+	 relocate the patterns with relocations later
+	 into the riscv_elf_relocate_ex9_table.  */
+      for (ptr = ex9_insn_head; ptr != NULL ; ptr = ptr->next)
+	{
+	  long val;
+	  val = strtoll (ptr->string, NULL, 16);
+	  bfd_put_32 (abfd, (bfd_vma) val, (char *) contents + (number * 4));
+	  number++;
+	}
+    }
+}
+
+static void
+riscv_elf_insert_irel_entry (struct elf_riscv_irel_entry **irel_list,
+			     struct elf_riscv_irel_entry *irel_ptr)
+{
+  if (*irel_list == NULL)
+    {
+      *irel_list = irel_ptr;
+      irel_ptr->next = NULL;
+    }
+  else
+    {
+      irel_ptr->next = *irel_list;
+      *irel_list = irel_ptr;
+    }
+}
+
+static void
+riscv_elf_ex9_insert_fix (asection * sec, Elf_Internal_Rela * irel,
+			  struct elf_link_hash_entry *h, int order)
+{
+  struct elf_riscv_ex9_refix *ptr;
+
+  ptr = bfd_malloc (sizeof (struct elf_riscv_ex9_refix));
+  ptr->sec = sec;
+  ptr->irel = irel;
+  ptr->h = h;
+  ptr->order = order;
+  ptr->next = NULL;
+  ptr->disable = 0;
+
+  if (ex9_refix_head == NULL)
+    ex9_refix_head = ptr;
+  else
+    {
+      struct elf_riscv_ex9_refix *temp = ex9_refix_head;
+
+      while (temp->next != NULL)
+	temp = temp->next;
+      temp->next = ptr;
+    }
+}
+
+/* Replace with ex9 instruction.  */
+
+static bfd_boolean
+riscv_elf_ex9_push_insn (bfd *abfd, uint16_t insn16,
+			 bfd_byte *contents, bfd_vma pre_off,
+			 struct elf_riscv_irel_entry *pre_irel_ptr,
+			 struct elf_riscv_irel_entry **irel_list,
+			 struct bfd_link_info *link_info)
+{
+  if (insn16 != 0)
+    {
+      /* Implement the ex9 relaxation.  */
+      bfd_put_16 (abfd, insn16, contents + pre_off);
+      if (!riscv_insert_elf_blank (pre_off + 2, 2))
+	return FALSE;
+      if (pre_irel_ptr != NULL
+	  && ELFNN_R_TYPE (pre_irel_ptr->irel->r_info) != R_RISCV_PCREL_HI20)
+	riscv_elf_insert_irel_entry (irel_list, pre_irel_ptr);
+    }
+  return TRUE;
+}
+
+/* Check whether the high 11 bits of pc may be different from
+   the high 11 bits of relocation after ex9 relaxation.
+   Return True if the jal can be replaced with ex9.it safely.  */
+
+static bfd_boolean
+ex9_check_pchi_for_jal (bfd_vma relocation, bfd_vma insn_pc)
+{
+  bfd_vma min;
+
+  /* Different high 11 bits.  */
+  if ((relocation & 0xffe00000) != (insn_pc & 0xffe00000))
+    return FALSE;
+  /* High 11 bits are zero.  */
+  else if (relocation < 0x200000)
+    return TRUE;
+
+  if (relocation < insn_pc)
+    min = relocation;
+  else
+    min = insn_pc;
+
+  if (min > ex9_relax_size
+      && ((min - ex9_relax_size) & 0xffe00000) == (min & 0xffe00000))
+    return TRUE;
+  else
+    return FALSE;
+}
+
+/* Replace input file instruction which is in ex9 itable.  */
+
+static bfd_boolean
+riscv_elf_ex9_replace_instruction (struct bfd_link_info *link_info, bfd *abfd, asection *sec)
+{
+  struct elf_riscv_insn_times_entry *ex9_insn = ex9_insn_head;
+  bfd_byte *contents = NULL;
+  bfd_vma off;
+  uint16_t insn16, insn_ex9;
+  /* "pre_*" are used to track previous instruction that can use ex9.it.  */
+  bfd_vma pre_off = -1;
+  uint16_t pre_insn16 = 0;
+  struct elf_riscv_irel_entry *pre_irel_ptr = NULL;
+  Elf_Internal_Rela *internal_relocs;
+  Elf_Internal_Rela *irel;
+  Elf_Internal_Rela *irelend;
+  Elf_Internal_Shdr *symtab_hdr;
+  Elf_Internal_Sym *isym = NULL;
+  uint32_t insn = 0;
+  uint32_t insn_with_reg = 0;
+  uint32_t it_insn;
+  uint32_t it_insn_with_reg;
+  unsigned long r_symndx;
+  asection *isec;
+  struct elf_riscv_irel_entry *irel_list = NULL;
+  struct elf_link_hash_entry **sym_hashes = elf_sym_hashes (abfd);
+  int data_flag, do_replace, save_irel;
+  struct elf_link_hash_entry_list *h_list;
+  struct riscv_elf_link_hash_table *table;
+
+  table = riscv_elf_hash_table (link_info);
+
+  /* Load section instructions, relocations, and symbol table.  */
+  if (!riscv_get_section_contents (abfd, sec, &contents, TRUE)
+      || !riscv_get_local_syms (abfd, sec, &isym))
+    return FALSE;
+  internal_relocs =
+    _bfd_elf_link_read_relocs (abfd, sec, NULL, NULL, TRUE /* keep_memory  */);
+  irelend = internal_relocs + sec->reloc_count;
+  symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
+
+  off = 0;
+
+  /* Check the section enable ex9?  */
+  irel = find_relocs_at_address (internal_relocs, internal_relocs, irelend,
+				 R_RISCV_RELAX_ENTRY);
+
+  /* Check this section trigger ex9 relaxation.  */
+  if (irel == NULL
+      || irel >= irelend
+      || ELFNN_R_TYPE (irel->r_info) != R_RISCV_RELAX_ENTRY
+      || (ELFNN_R_TYPE (irel->r_info) == R_RISCV_RELAX_ENTRY
+	  && !(irel->r_addend & R_RISCV_RELAX_ENTRY_EX9_FLAG)))
+    return TRUE;
+
+  irel = internal_relocs;
+  /* Check alignment and fetch proper relocation.  */
+  while (off < sec->size)
+    {
+      do_replace = 0;
+      struct elf_link_hash_entry *h = NULL;
+      struct elf_riscv_irel_entry *irel_ptr = NULL;
+
+      /* Find the relocation that it's r_offset is same as off.  */
+      while (irel != NULL && irel < irelend && irel->r_offset < off)
+	irel++;
+
+      data_flag = riscv_relocation_check (link_info, &irel, irelend,
+					  sec, &off, contents, 1);
+
+      if (data_flag & ALIGN_PUSH_PRE)
+	if (!riscv_elf_ex9_push_insn (abfd, pre_insn16, contents, pre_off,
+				      pre_irel_ptr, &irel_list, link_info))
+	  return FALSE;
+
+      if (data_flag & ALIGN_CLEAN_PRE)
+	{
+	  pre_off = 0;
+	  pre_insn16 = 0;
+
+	  if (pre_irel_ptr != NULL
+	      && !(data_flag & ALIGN_PUSH_PRE)
+	      && (ELFNN_R_TYPE (pre_irel_ptr->irel->r_info) == R_RISCV_HI20
+		  || ELFNN_R_TYPE (pre_irel_ptr->irel->r_info) == R_RISCV_PCREL_HI20))
+	    {
+	      /* Disable the lui/auipc refix entry since this lui/auipc can not be
+		 converted to c.ex9 (alignment issue).  */
+	      struct elf_riscv_ex9_refix *temp = ex9_refix_head;
+	      while (temp)
+		{
+		  if (temp->irel
+		      && temp->sec == sec
+		      && temp->irel == pre_irel_ptr->irel)
+		    {
+		      temp->disable = 1;
+		      break;
+		    }
+		  temp = temp->next;
+		}
+	    }
+	  pre_irel_ptr = NULL;
+	}
+
+      if (data_flag & DATA_EXIST)
+	{
+	  /* We save the move offset in the highest byte.  */
+	  off += (data_flag >> 24);
+	  continue;
+	}
+
+      if ((*(contents + off) & 0x3) != 0x3)
+	{
+	  /* 16-bit instruction.  */
+	  off += 2;
+	  continue;
+	}
+
+      /* Load the instruction and its opcode with register for comparing.  */
+      ex9_insn = ex9_insn_head;
+      insn = bfd_get_32 (abfd, contents + off);
+      insn_with_reg = 0;
+      /* Insn with relocation.  Mask instruction.  */
+      if (irel != NULL && irel < irelend && irel->r_offset == off)
+	riscv_elf_get_insn_with_reg (abfd, irel, insn, &insn_with_reg);
+
+      while (ex9_insn)
+	{
+	  it_insn = strtoll (ex9_insn->string, NULL, 16);
+	  it_insn_with_reg = 0;
+	  do_replace = 0;
+	  save_irel = 0;
+
+	  if (irel != NULL && irel < irelend && irel->r_offset == off
+	      && ex9_insn->irel != NULL)
+	    riscv_elf_get_insn_with_reg (abfd, &ex9_insn->rel_backup,
+					 it_insn, &it_insn_with_reg);
+
+	  /* Instruction and ex9 both have relocation.  */
+	  if (insn_with_reg != 0 && it_insn_with_reg != 0
+	      && (ELFNN_R_TYPE (irel->r_info) ==
+		  ELFNN_R_TYPE (ex9_insn->rel_backup.r_info))
+	      && (insn_with_reg == it_insn_with_reg))
+	    {
+	      /* Insn relocation and format is the same as table entry.  */
+	      if (ELFNN_R_TYPE (irel->r_info) == R_RISCV_LO12_I
+		  || ELFNN_R_TYPE (irel->r_info) == R_RISCV_LO12_S
+		  || ELFNN_R_TYPE (irel->r_info) == R_RISCV_GPREL_I
+		  || ELFNN_R_TYPE (irel->r_info) == R_RISCV_GPREL_S
+		  || (ELFNN_R_TYPE (irel->r_info) >= R_RISCV_LGP18S0
+		      && ELFNN_R_TYPE (irel->r_info) <= R_RISCV_SGP17S3))
+		{
+		  r_symndx = ELFNN_R_SYM (irel->r_info);
+		  if (r_symndx < symtab_hdr->sh_info)
+		    {
+		      /* Local symbol.  */
+		      int shndx = isym[r_symndx].st_shndx;
+
+		      isec = elf_elfsections (abfd)[shndx]->bfd_section;
+		      if (ex9_insn->sec == isec
+			  && ex9_insn->irel->r_addend == irel->r_addend
+			  && ex9_insn->irel->r_info == irel->r_info)
+			{
+			  do_replace = 1;
+			  save_irel = 1;
+			}
+		    }
+		  else if (ex9_insn->m_list)
+		    {
+		      /* External symbol.  */
+		      h = sym_hashes[r_symndx - symtab_hdr->sh_info];
+		      h_list = ex9_insn->m_list->h_list;
+		      while (h_list)
+			{
+			  if (ex9_insn->m_list->irel->r_addend == irel->r_addend
+			      && h == h_list->h)
+			    {
+			      do_replace = 1;
+			      save_irel = 1;
+			      break;
+			    }
+			  h_list = h_list->next;
+			}
+		    }
+		}
+	      if (ELFNN_R_TYPE (irel->r_info) == R_RISCV_JAL)
+		{
+		  bfd_vma insn_pc, relocation;
+		  r_symndx = ELFNN_R_SYM (irel->r_info);
+		  if (r_symndx < symtab_hdr->sh_info)
+		    {
+		      /* Local symbol.  */
+		      int shndx = isym[r_symndx].st_shndx;
+		      bfd_vma st_value = (isym + r_symndx)->st_value;
+
+		      isec = elf_elfsections (abfd)[shndx]->bfd_section;
+		      if (ex9_insn->sec == isec
+			  && ex9_insn->irel->r_addend == irel->r_addend
+			  && ex9_insn->irel->r_info == irel->r_info)
+			{
+			  insn_pc = sec_addr (sec) + off;
+			  relocation = isec->output_section->vma + isec->output_offset
+			    + st_value + irel->r_addend;
+			  if (ex9_check_pchi_for_jal (relocation, insn_pc))
+			    {
+			      do_replace = 1;
+			      save_irel = 1;
+			    }
+			}
+		    }
+		  else if (ex9_insn->m_list)
+		    {
+		      /* External symbol.  */
+		      h = sym_hashes[r_symndx - symtab_hdr->sh_info];
+		      h_list = ex9_insn->m_list->h_list;
+		      while (h_list)
+			{
+			  if (ex9_insn->m_list->irel->r_addend == irel->r_addend
+			      && h == h_list->h)
+			    {
+			      /* We should skip bfd_link_hash_defined
+				 and bfd_link_hash_defweak symbol
+				 in riscv_elf_ex9_build_hash_table.  */
+			      insn_pc = sec_addr (sec) + off;
+			      relocation = h->root.u.def.value +
+				h->root.u.def.section->output_section->vma +
+				h->root.u.def.section->output_offset
+				+ irel->r_addend;
+			      if (ex9_check_pchi_for_jal (relocation, insn_pc))
+				{
+				  do_replace = 1;
+				  save_irel = 1;
+				}
+			      break;
+			    }
+			  h_list = h_list->next;
+			}
+		    }
+		}
+	      else if (ELFNN_R_TYPE (irel->r_info) == R_RISCV_HI20)
+		{
+		  r_symndx = ELFNN_R_SYM (irel->r_info);
+		  if (r_symndx < symtab_hdr->sh_info)
+		    {
+		      /* Local symbols.  Compare its base symbol
+			 and offset.  */
+		      int shndx = isym[r_symndx].st_shndx;
+
+		      isec = elf_elfsections (abfd)[shndx]->bfd_section;
+		      if (ex9_insn->sec == isec
+			  && ex9_insn->irel->r_addend == irel->r_addend
+			  && ex9_insn->irel->r_info == irel->r_info)
+			{
+			  do_replace = 1;
+			  save_irel = 1;
+			}
+		    }
+		  else
+		    {
+		      /* External symbol.  */
+		      struct elf_link_hash_entry_mul_list *m_list;
+
+		      h = sym_hashes[r_symndx - symtab_hdr->sh_info];
+		      m_list = ex9_insn->m_list;
+
+		      while (m_list && !do_replace)
+			{
+			  h_list = m_list->h_list;
+			  while (h_list)
+			    {
+			      if (h == h_list->h
+				  && m_list->irel->r_addend == irel->r_addend)
+				{
+				  do_replace = 1;
+				  save_irel = 1;
+				  /* lui multiple entry must be fixed.  */
+				  if (ex9_insn->next && ex9_insn->m_list
+				      && ex9_insn->m_list == ex9_insn->next->m_list)
+				    {
+				      riscv_elf_ex9_insert_fix (sec, irel, h,
+								ex9_insn->order);
+				      break;
+				    }
+				}
+			      h_list = h_list->next;
+			    }
+			  m_list = m_list->next;
+			}
+		    }
+		}
+	      else if (ELFNN_R_TYPE (irel->r_info) == R_RISCV_PCREL_HI20)
+		{
+		  r_symndx = ELFNN_R_SYM (irel->r_info);
+		  if (r_symndx < symtab_hdr->sh_info)
+		    {
+		      /* Local symbols.  Compare its base symbol
+			 and offset.  */
+		      int shndx = isym[r_symndx].st_shndx;
+
+		      isec = elf_elfsections (abfd)[shndx]->bfd_section;
+		      if (ex9_insn->sec == isec
+			  && ex9_insn->irel->r_addend == irel->r_addend
+			  && ex9_insn->irel->r_info == irel->r_info)
+			{
+			  do_replace = 1;
+			  save_irel = 1;
+			}
+		    }
+		  else
+		    {
+		      /* External symbol.  */
+		      struct elf_link_hash_entry_mul_list *m_list;
+		      struct elf_link_hash_entry_sec_list *s_list;
+
+		      h = sym_hashes[r_symndx - symtab_hdr->sh_info];
+		      m_list = ex9_insn->m_list;
+
+		      while (m_list && !do_replace)
+			{
+			  s_list = m_list->s_list;
+			  while (s_list && !do_replace)
+			    {
+			      if (s_list->sec == sec)
+				{
+				  struct elf_riscv_irel_entry *i_list = s_list->i_list;
+				  while (i_list)
+				    {
+				      struct elf_link_hash_entry **sym_hashes_new =
+					elf_sym_hashes (s_list->sec->owner);
+				      Elf_Internal_Shdr *symtab_hdr_new =
+					&elf_tdata (s_list->sec->owner)->symtab_hdr;
+				      unsigned long r_symndx_new = ELFNN_R_SYM (i_list->irel->r_info);
+				      struct elf_link_hash_entry *h_new =
+					sym_hashes_new[r_symndx_new - symtab_hdr_new->sh_info];
+
+				      if (h == h_new
+					  && irel == i_list->irel)
+					{
+					  do_replace = 1;
+					  save_irel = 1;
+					  /* lui multiple entry must be fixed.  */
+					  if (ex9_insn->next && ex9_insn->m_list
+					      && ex9_insn->m_list == ex9_insn->next->m_list)
+					    riscv_elf_ex9_insert_fix (sec, irel, h,
+								      ex9_insn->order);
+					  break;
+					}
+				      i_list = i_list->next;
+				    }
+				}
+			      s_list = s_list->next;
+			    }
+			  m_list = m_list->next;
+			}
+		    }
+		}
+	    }
+	  else if ((irel == NULL || irel >= irelend || irel->r_offset != off)
+		   && insn == it_insn && ex9_insn->irel == NULL)
+	    {
+	      /* Instruction without relocation, we only
+		 have to compare their byte code.  */
+	      do_replace = 1;
+	    }
+
+	  /* Instruction match so replacing the code here.  */
+	  if (do_replace == 1)
+	    {
+	      if (table->ex9_limit <= 512)
+		insn_ex9 = INSN_CEX9;
+	      else
+		insn_ex9 = INSN_CEX10;
+	      insn16 = insn_ex9 | ENCODE_RVC_EX9IT_IMM (ex9_insn->order << 2);
+
+	      /* Insert ex9 instruction.  */
+	      riscv_elf_ex9_push_insn (abfd, pre_insn16, contents, pre_off,
+				       pre_irel_ptr, &irel_list, link_info);
+	      pre_off = off;
+	      pre_insn16 = insn16;
+
+	      if (save_irel)
+		{
+		  /* For instuction with relocation do relax.  */
+		  irel_ptr = (struct elf_riscv_irel_entry *)
+		    bfd_malloc (sizeof (struct elf_riscv_irel_entry));
+		  irel_ptr->irel = irel;
+		  irel_ptr->next = NULL;
+		  pre_irel_ptr = irel_ptr;
+		}
+	      else
+		pre_irel_ptr = NULL;
+	      break;
+	    }
+	  ex9_insn = ex9_insn->next;
+	}
+      off += 4;
+    }
+
+  /* Insert ex9 instruction.  */
+  riscv_elf_ex9_push_insn (abfd, pre_insn16, contents, pre_off,
+			   pre_irel_ptr, &irel_list, link_info);
+
+  /* Delete blanks according to blank_list.  */
+  struct elf_riscv_blank *blank_t;
+  bfd_vma total_relax_size = 0;
+  while (blank_list_head)
+    {
+      blank_t = blank_list_head;
+      blank_t->offset = blank_t->offset - total_relax_size;
+      riscv_relax_delete_bytes (abfd, sec, blank_t->offset,
+				blank_t->size, link_info);
+      total_relax_size += blank_t->size;
+      /* free unused blank information.  */
+      blank_list_head->prev = NULL;
+      blank_list_head = blank_list_head->next;
+      free (blank_t);
+    }
+  blank_list_current = NULL;
+
+  /* Clear the relocations that are replaced by ex9.  */
+  while (irel_list)
+    {
+      struct elf_riscv_irel_entry *irel_ptr;
+
+      irel_ptr = irel_list;
+      irel_list = irel_ptr->next;
+      irel_ptr->irel->r_info =
+	ELFNN_R_INFO (ELFNN_R_SYM (irel_ptr->irel->r_info), R_RISCV_NONE);
+      free (irel_ptr);
+    }
+  return TRUE;
+}
+
+/* Initialize ex9 hash table.  */
+
+static int
+riscv_elf_ex9_init (void)
+{
+  if (!bfd_hash_table_init_n (&ex9_code_table, riscv_elf_code_hash_newfunc,
+			      sizeof (struct elf_riscv_code_hash_entry),
+			      1023))
+    {
+      (*_bfd_error_handler) (_("Linker: cannot init ex9 hash table error \n"));
+      return FALSE;
+    }
+  return TRUE;
+}
+
+/* Predict how many bytes will be relaxed with ex9.  */
+
+static void
+riscv_elf_ex9_total_relax (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
+{
+  struct elf_riscv_insn_times_entry *ex9_insn;
+  struct elf_riscv_insn_times_entry *last_imported_entry = NULL;
+  int target_optimize ATTRIBUTE_UNUSED;
+  struct riscv_elf_link_hash_table *table;
+  int number = 0;
+
+  if (ex9_insn_head == NULL)
+    return;
+
+  table = riscv_elf_hash_table (info);
+  target_optimize  = table->target_optimize;
+  ex9_insn = ex9_insn_head;
+
+  /* If ex9 update option is set, we have to keep
+     the ex9 candidates, which are imported through
+     the option "--mimport-ex9", in the ex9 table.  */
+  if (table->update_ex9_table)
+    while (ex9_insn && ex9_insn->times == -1)
+      {
+	last_imported_entry = ex9_insn;
+	ex9_insn = ex9_insn->next;
+      }
+  if (last_imported_entry)
+    last_imported_entry->next = NULL;
+
+  struct elf_riscv_insn_times_entry *temp;
+  /* TODO: Same as riscv_elf_order_insn_times, this may cause
+     memory leakage.  */
+  while (ex9_insn)
+    {
+      number++;
+      ex9_relax_size = ex9_insn->times * 2 + ex9_relax_size;
+      temp = ex9_insn;
+      ex9_insn = ex9_insn->next;
+      /* Free the ex9 candidates for this time.  */
+      free (temp);
+    }
+
+  /* Keep the imported ex9 candidates.  */
+  if (!table->update_ex9_table
+      || last_imported_entry == NULL)
+    ex9_insn_head = NULL;
+
+  /* TODO: maybe we should consider the data segment alignment
+     size defined in linker script.  */
+  ex9_relax_size += (table->ex9_limit - number) * 4;
+  /* TODO: consider other relax size after ex9.  */
+}
+
+/* Finish ex9 table.  */
+
+void
+riscv_elf_ex9_finish (bfd *abfd, struct bfd_link_info *link_info)
+{
+  /* Choose ex9 candidates, and then order them by times.  */
+  riscv_elf_code_hash_traverse (riscv_elf_examine_insn_times);
+  riscv_elf_order_insn_times (link_info);
+  /* We may need to reserve more than one ex9 entries for lui and auipc
+     since their relocations may be differnet after relaxing code.
+     Therefore, we have to predict relaxed size with ex9, and then
+     estimate how many entries we will need.  */
+  riscv_elf_ex9_total_relax (abfd, link_info);
+  /* Choose ex9 candidates again.  */
+  riscv_elf_code_hash_traverse (riscv_elf_count_insn_times);
+  riscv_elf_order_insn_times (link_info);
+  /* Build .ex9.itable section.  */
+  riscv_elf_ex9_build_itable (abfd, link_info);
+}
+
+/* Relocate the entries in ex9 table.  */
+
+static bfd_vma
+riscv_elf_ex9_reloc_insn (struct elf_riscv_insn_times_entry *ptr,
+			  struct bfd_link_info *link_info)
+{
+  Elf_Internal_Sym *isym = NULL;
+  bfd_vma relocation = -1;
+  struct elf_link_hash_entry *h;
+
+  if (ptr->m_list != NULL)
+    {
+      /* Global symbol.  */
+      h = ptr->m_list->h_list->h;
+      if ((h->root.type == bfd_link_hash_defined
+	   || h->root.type == bfd_link_hash_defweak)
+	  && h->root.u.def.section != NULL
+	  && h->root.u.def.section->output_section != NULL)
+	{
+
+	  relocation = h->root.u.def.value +
+	    h->root.u.def.section->output_section->vma +
+	    h->root.u.def.section->output_offset;
+	  relocation += ptr->m_list->irel->r_addend;
+	}
+      else
+	relocation = 0;
+    }
+  else if (ptr->sec !=NULL)
+    {
+      /* Local symbol.  */
+      bfd *abfd = ptr->sec->owner;
+      Elf_Internal_Rela irel_backup = *(ptr->irel);
+      asection *sec_backup = ptr->sec;
+
+      if (!riscv_get_local_syms (abfd, ptr->sec, &isym))
+	return FALSE;
+      isym = isym + ELFNN_R_SYM (ptr->irel->r_info);
+      bfd_vma value_backup = isym->st_value;
+
+      /* According to elf_link_input_bfd, linker had called
+	 _bfd_merged_section_offset to adjust the address of
+	 symbols in the SEC_MERGE sections, and get the merged
+	 sections. Since ptr->sec is the section before merging
+	 (linker hasn't found the correct merge section in relax
+	 time), we must call _bfd_merged_section_offset to find
+	 the correct symbol address here, too.  */
+      /* Note that we have to store the local symbol value for the
+	 last relaxation before, since the symbol value here had
+	 been modified in elf_link_input_bfd.  */
+      if (ptr->sec->sec_info_type == SEC_INFO_TYPE_MERGE
+	  && ELF_ST_TYPE (isym->st_info) != STT_SECTION)
+	isym->st_value =
+	  _bfd_merged_section_offset (link_info->output_bfd, &ptr->sec,
+				      elf_section_data (ptr->sec)->sec_info,
+				      ptr->local_sym_value);
+      relocation = _bfd_elf_rela_local_sym (link_info->output_bfd, isym,
+					    &ptr->sec,
+					    ptr->irel);
+      relocation += ptr->irel->r_addend;
+
+      /* Restore origin value.  */
+      *(ptr->irel) = irel_backup;
+      ptr->sec = sec_backup;
+      isym->st_value = value_backup;
+    }
+
+  return relocation;
+}
+
+/* Import ex9 table and build list.  */
+
+static void
+riscv_elf_ex9_import_table (bfd *abfd, struct bfd_link_info *info)
+{
+  int num = 0;
+  bfd_byte *contents;
+  unsigned long insn;
+  FILE *ex9_import_file;
+  struct riscv_elf_link_hash_table *table;
+
+  table = riscv_elf_hash_table (info);
+  ex9_import_file = table->ex9_import_file;
+  rewind (table->ex9_import_file);
+
+  contents = bfd_malloc (sizeof (bfd_byte) * 4);
+
+  /* Read instructions from the input file and build the list.  */
+  while (!feof (ex9_import_file))
+    {
+      char *code;
+      struct elf_riscv_insn_times_entry *ptr;
+      size_t nread;
+
+      nread = fread (contents, sizeof (bfd_byte) * 4, 1, ex9_import_file);
+      /* Ignore the final byte 0x0a.  */
+      if (nread < 1)
+	break;
+      insn = (*(contents + 3) << 24) | (*(contents + 2) << 16)
+	| (*(contents + 1) << 8) | (*(contents));
+      code = bfd_malloc (sizeof (char) * 9);
+      snprintf (code, 9, "%08lx", insn);
+      ptr = bfd_malloc (sizeof (struct elf_riscv_insn_times_entry));
+      ptr->string = code;
+      ptr->order = num;
+      ptr->times = -1;
+      ptr->sec = NULL;
+      ptr->local_sym_value = 0;
+      ptr->m_list = NULL;
+      ptr->ex_reserve = 0;
+      ptr->rel_backup.r_offset = 0;
+      ptr->rel_backup.r_info = 0;
+      ptr->rel_backup.r_addend = 0;
+      ptr->irel = NULL;
+      ptr->next = NULL;
+      riscv_elf_ex9_insert_entry (ptr);
+      num++;
+    }
+  fclose (ex9_import_file);
+
+  /* Default set the maximun number of the ex9 entries to 512.
+     There are still 512 entries in ex9 table even though the
+     ex9 limit setting exceeds the remaining entries.  */
+  ex9_import_number = num;
+  if (table->update_ex9_table
+      && table->ex9_limit != -1
+      && (ex9_import_number + table->ex9_limit) > 512)
+    (*_bfd_error_handler)
+      (_("Warning: There are only %d ex9 entries left for this time."),
+       (512 - ex9_import_number));
+
+  /* We will run riscv_elf_ex9_build_itable for ex9 update
+     in the riscv_elf_ex9_finish.  */
+  if (!table->update_ex9_table && table->keep_import_ex9)
+    riscv_elf_ex9_build_itable (abfd, info);
+}
+
+/* Adjust relocations in the ex9.itable, and then
+   export ex9 table if needed.  */
+
+static void
+riscv_elf_relocate_ex9_table (struct bfd_link_info *link_info, bfd *abfd)
+{
+  asection *table_sec = NULL;
+  struct elf_riscv_insn_times_entry *ex9_insn = ex9_insn_head;
+  struct elf_riscv_insn_times_entry *temp_ptr, *temp_ptr2;
+  uint32_t insn, insn_with_reg, source_insn;
+  bfd_byte *contents = NULL, *source_contents = NULL;
+  int size = 0, offset = 0;
+  Elf_Internal_Rela rel_backup;
+  unsigned short insn_ex9;
+  struct riscv_elf_link_hash_table *table;
+  static bfd_boolean done = FALSE;
+  bfd_vma gp;
+
+  /* Only need to be done once.  */
+  if (done)
+    return;
+  done = TRUE;
+
+  table = riscv_elf_hash_table (link_info);
+  if (table)
+    table->relax_status |= RISCV_RELAX_EX9_DONE;
+
+  FILE *export_file = NULL;
+  if (table->ex9_export_file != NULL)
+    {
+      export_file = fopen (table->ex9_export_file, "wb");
+      if (export_file == NULL)
+	{
+	  (*_bfd_error_handler)
+	    (_("Warning: cannot open ex9 export file %s."),
+	     table->ex9_export_file);
+	}
+    }
+
+  /* TODO: Maybe we should close the export file here, too.  */
+  if (table->ex9_import_file && !table->update_ex9_table)
+    return;
+
+  table_sec = riscv_elf_ex9_get_section (link_info->input_bfds);
+  if (table_sec == NULL)
+    {
+      (*_bfd_error_handler) (_("ld: error cannot find ex9 section.\n"));
+      return;
+    }
+
+  gp = riscv_global_pointer_value (link_info);
+  if (table_sec->size == 0)
+    return;
+  if (!riscv_get_section_contents (table_sec->owner, table_sec,
+				   &contents, TRUE))
+    return;
+
+  /* Relocate instruction.  */
+  while (ex9_insn)
+    {
+      bfd_vma relocation, min_relocation = 0xffffffff;
+
+      insn = strtoll (ex9_insn->string, NULL, 16);
+      insn_with_reg = 0;
+      /* (m_list != NULL): global symbol.
+	 (ex9_insn->sec != NULL): local sumbol.  */
+      if (ex9_insn->m_list != NULL || ex9_insn->sec != NULL)
+      {
+	if (ex9_insn->m_list)
+	  rel_backup = ex9_insn->m_list->rel_backup;
+	else
+	  rel_backup = ex9_insn->rel_backup;
+
+	riscv_elf_get_insn_with_reg (abfd, &rel_backup, insn, &insn_with_reg);
+	if (ELFNN_R_TYPE (rel_backup.r_info) == R_RISCV_JAL
+	    || ELFNN_R_TYPE (rel_backup.r_info) == R_RISCV_LO12_I
+	    || ELFNN_R_TYPE (rel_backup.r_info) == R_RISCV_LO12_S)
+	  {
+	    relocation = riscv_elf_ex9_reloc_insn (ex9_insn, link_info);
+	    insn = insn_with_reg
+	      | riscv_elf_encode_relocation (abfd, &rel_backup, relocation);
+	    bfd_put_32 (abfd, insn, contents + (ex9_insn->order) * 4);
+	  }
+	else if (ELFNN_R_TYPE (rel_backup.r_info) == R_RISCV_GPREL_I
+		 || ELFNN_R_TYPE (rel_backup.r_info) == R_RISCV_GPREL_S)
+	  {
+	    relocation = riscv_elf_ex9_reloc_insn (ex9_insn, link_info) - gp;
+	    insn = insn_with_reg & ~(OP_MASK_RS1 << OP_SH_RS1);
+	    insn |= X_GP << OP_SH_RS1;
+	    insn |= riscv_elf_encode_relocation (abfd, &rel_backup, relocation);
+	    bfd_put_32 (abfd, insn, contents + (ex9_insn->order) * 4);
+	  }
+	else if (ELFNN_R_TYPE (rel_backup.r_info) >= R_RISCV_LGP18S0
+		 && ELFNN_R_TYPE (rel_backup.r_info) <= R_RISCV_SGP17S3)
+	  {
+	    relocation = riscv_elf_ex9_reloc_insn (ex9_insn, link_info) - gp;
+	    insn = insn_with_reg
+	      | riscv_elf_encode_relocation (abfd, &rel_backup, relocation);
+	    bfd_put_32 (abfd, insn, contents + (ex9_insn->order) * 4);
+	  }
+	else if (ELFNN_R_TYPE (rel_backup.r_info) == R_RISCV_HI20
+		 || ELFNN_R_TYPE (rel_backup.r_info) == R_RISCV_PCREL_HI20)
+	  {
+	    /* lui may have multiple entries for one insn.  */
+	    if (ex9_insn->next && ex9_insn->m_list
+		&& ex9_insn->m_list == ex9_insn->next->m_list)
+	      {
+		struct elf_link_hash_entry_mul_list *m_list;
+		struct elf_riscv_ex9_refix *fix_ptr;
+		struct elf_link_hash_entry *h;
+
+		temp_ptr = ex9_insn;
+		temp_ptr2 = ex9_insn;
+		m_list = ex9_insn->m_list;
+
+		while (m_list)
+		  {
+		    struct elf_link_hash_entry_sec_list *s_list = m_list->s_list;
+		    while (s_list)
+		      {
+			struct elf_riscv_irel_entry *i_list = s_list->i_list;
+			while (i_list)
+			  {
+			    struct elf_link_hash_entry **sym_hashes =
+			      elf_sym_hashes (s_list->sec->owner);
+			    Elf_Internal_Shdr *symtab_hdr =
+			      &elf_tdata (s_list->sec->owner)->symtab_hdr;
+			    unsigned long r_symndx = ELFNN_R_SYM (i_list->irel->r_info);
+			    h = sym_hashes[r_symndx - symtab_hdr->sh_info];
+
+			    relocation = h->root.u.def.value +
+			      h->root.u.def.section->output_section->vma +
+			      h->root.u.def.section->output_offset;
+			    relocation += i_list->irel->r_addend;
+			    if (ELFNN_R_TYPE (rel_backup.r_info) == R_RISCV_PCREL_HI20)
+			      relocation -= (sec_addr(s_list->sec) +
+					     i_list->irel->r_offset);
+			    if (relocation < min_relocation)
+			      min_relocation = relocation;
+			    i_list = i_list->next;
+			  }
+			s_list = s_list -> next;
+		      }
+		    m_list = m_list->next;
+		  }
+		relocation = min_relocation;
+
+		/* Put instruction into ex9 table.  */
+		insn = insn_with_reg
+		  | riscv_elf_encode_relocation (abfd, &rel_backup, relocation);
+		bfd_put_32 (abfd, insn, contents + (ex9_insn->order) * 4);
+		relocation = relocation + 0x1000;	/* hi20  */
+
+		while (ex9_insn->next && ex9_insn->m_list
+		       && ex9_insn->m_list == ex9_insn->next->m_list)
+		  {
+		    /* Multiple lui/auipc.  */
+		    ex9_insn = ex9_insn->next;
+		    size += 4;
+		    insn = insn_with_reg
+		      | riscv_elf_encode_relocation (abfd, &rel_backup, relocation);
+		    bfd_put_32 (abfd, insn, contents + (ex9_insn->order) * 4);
+		    relocation = relocation + 0x1000;	/* hi20  */
+		  }
+
+		fix_ptr = ex9_refix_head;
+		while (fix_ptr)
+		  {
+		    /* Fix ex9 insn.  */
+		    /* temp_ptr2 points to the head of multiple lui.  */
+		    temp_ptr = temp_ptr2;
+		    while ((fix_ptr->order != temp_ptr->order
+			    || fix_ptr->disable)
+			   && fix_ptr->next)
+		      {
+			fix_ptr = fix_ptr->next;
+		      }
+		    if (fix_ptr->order != temp_ptr->order
+			|| fix_ptr->disable)
+		      break;
+
+		    /* Set source insn.  */
+		    relocation =
+		      fix_ptr->h->root.u.def.value +
+		      fix_ptr->h->root.u.def.section->output_section->vma +
+		      fix_ptr->h->root.u.def.section->output_offset;
+		    relocation += fix_ptr->irel->r_addend;
+
+		    if (ELFNN_R_TYPE (rel_backup.r_info) == R_RISCV_PCREL_HI20)
+		      relocation -= (sec_addr(fix_ptr->sec) +
+				     fix_ptr->irel->r_offset);
+
+		    /* lui/auipc imm is imm20s.  */
+		    source_insn = insn_with_reg
+		      | riscv_elf_encode_relocation (abfd, &rel_backup, relocation);
+
+		    while (temp_ptr)
+		      {
+			/* Match entry and source code.  */
+			insn = bfd_get_32 (abfd, contents + (temp_ptr->order) * 4 + offset);
+			if (insn == source_insn)
+			  {
+			    /* Fix the ex9 insn.  */
+			    if (temp_ptr->order != fix_ptr->order)
+			      {
+				if (!riscv_get_section_contents
+				    (fix_ptr->sec->owner, fix_ptr->sec,
+				     &source_contents, TRUE))
+				  (*_bfd_error_handler)
+				    (_("Linker: error cannot fixed ex9 relocation \n"));
+				if (table->ex9_limit <= 512)
+				  insn_ex9 = INSN_CEX9;
+				else
+				  insn_ex9 = INSN_CEX10;
+				insn_ex9 = insn_ex9 | ENCODE_RVC_EX9IT_IMM (temp_ptr->order << 2);
+				bfd_put_16 (abfd, insn_ex9, source_contents + fix_ptr->irel->r_offset);
+			      }
+			    break;
+			  }
+			else
+			  {
+			    if (!temp_ptr->next || temp_ptr->m_list != temp_ptr->next->m_list)
+			      (*_bfd_error_handler)
+				(_("Linker: error cannot fixed ex9 relocation \n"));
+			    else
+			      temp_ptr = temp_ptr->next;
+			  }
+		      }
+		    fix_ptr = fix_ptr->next;
+		  }
+	      }
+	    else
+	      {
+		/* lui/auipc with local symbol or single entry global symbol.  */
+		relocation = riscv_elf_ex9_reloc_insn (ex9_insn, link_info);
+		if (ELFNN_R_TYPE (rel_backup.r_info) == R_RISCV_PCREL_HI20)
+		  relocation -= (sec_addr(ex9_insn->m_list->s_list->sec) +
+				 ex9_insn->m_list->s_list->i_list->irel->r_offset);
+		insn = insn_with_reg
+		  | riscv_elf_encode_relocation (abfd, &rel_backup, relocation);
+		bfd_put_32 (abfd, insn, contents + (ex9_insn->order) * 4);
+	      }
+	  }
+      }
+      else
+	{
+	  /* No need to do relocation for insn without relocation.*/
+	}
+      ex9_insn = ex9_insn->next;
+      size += 4;
+    }
+  if (!table->update_ex9_table)
+    size = table_sec->size;
+
+  if (export_file != NULL)
+    {
+      fwrite (contents, sizeof (bfd_byte), size, export_file);
+      fclose (export_file);
+    }
+}
+
+/* Generate ex9 hash table.  */
+
+static bfd_boolean
+riscv_elf_ex9_build_hash_table (bfd *abfd, asection *sec,
+				struct bfd_link_info *link_info)
+{
+  Elf_Internal_Rela *internal_relocs;
+  Elf_Internal_Rela *irelend;
+  Elf_Internal_Rela *irel;
+  Elf_Internal_Rela *jrel;
+  Elf_Internal_Rela rel_backup;
+  Elf_Internal_Shdr *symtab_hdr;
+  Elf_Internal_Sym *isym = NULL;
+  asection *isec;
+  struct elf_link_hash_entry **sym_hashes;
+  bfd_byte *contents = NULL;
+  bfd_vma off = 0;
+  unsigned long r_symndx;
+  uint32_t insn, insn_with_reg;
+  struct elf_link_hash_entry *h;
+  int data_flag;
+  bfd_vma relocation;
+
+  sym_hashes = elf_sym_hashes (abfd);
+  /* Load the input section instructions, relocations, and symbol table.  */
+  if (!riscv_get_section_contents (abfd, sec, &contents, TRUE))
+    return FALSE;
+
+  internal_relocs = _bfd_elf_link_read_relocs (abfd, sec, NULL, NULL,
+					       TRUE /* keep_memory  */);
+  irelend = internal_relocs + sec->reloc_count;
+  symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
+  if (!riscv_get_local_syms (abfd, sec, &isym))
+    return FALSE;
+
+  /* Check the input section enable ex9?  */
+  irel = find_relocs_at_address (internal_relocs, internal_relocs, irelend,
+				 R_RISCV_RELAX_ENTRY);
+
+  /* Check this input section trigger ex9 relaxation.  */
+  if (irel == NULL
+      || irel >= irelend
+      || ELFNN_R_TYPE (irel->r_info) != R_RISCV_RELAX_ENTRY
+      || (ELFNN_R_TYPE (irel->r_info) == R_RISCV_RELAX_ENTRY
+	  && !(irel->r_addend & R_RISCV_RELAX_ENTRY_EX9_FLAG)))
+    return TRUE;
+
+  irel = internal_relocs;
+
+  /* Push each insn into hash table.  */
+  while (off < sec->size)
+    {
+      char code[10];
+      struct elf_riscv_code_hash_entry *entry;
+
+      while (irel != NULL && irel < irelend && irel->r_offset < off)
+	irel++;
+
+      data_flag = riscv_relocation_check (link_info, &irel, irelend,
+					  sec, &off, contents, 1);
+      if (data_flag & DATA_EXIST)
+	{
+	  /* We save the move offset in the highest byte.  */
+	  off += (data_flag >> 24);
+	  continue;
+	}
+
+      /* Ignore 16-bit instruction.  */
+      if ((*(contents + off) & 0x3) != 0x3)
+	{
+	  off += 2;
+	  continue;
+	}
+
+      insn = bfd_get_32 (abfd, contents + off);
+
+      /* For bug-11621, system call should not be replaced by ex9.it.  */
+      /* According to spec, SCALL and SBREAK have been renamed to
+	 ECALL and EBREAK. Their encoding and functionality are unchanged.  */
+      if ((insn & MASK_ECALL) == MATCH_ECALL
+	  || (insn & MASK_EBREAK) == MATCH_EBREAK)
+	{
+	  off += 4;
+	  continue;
+	}
+
+      h = NULL;
+      isec = NULL;
+      jrel = NULL;
+      rel_backup.r_info = 0;
+      rel_backup.r_offset = 0;
+      rel_backup.r_addend = 0;
+      /* Load the instruction and its opcode with register for comparing.  */
+      insn_with_reg = 0;
+      if (irel != NULL && irel < irelend && irel->r_offset == off)
+	{
+	  riscv_elf_get_insn_with_reg (abfd, irel, insn, &insn_with_reg);
+	  if (ELFNN_R_TYPE (irel->r_info) == R_RISCV_JAL
+	      || ELFNN_R_TYPE (irel->r_info) == R_RISCV_HI20
+	      || ELFNN_R_TYPE (irel->r_info) == R_RISCV_LO12_I
+	      || ELFNN_R_TYPE (irel->r_info) == R_RISCV_LO12_S
+	      || ELFNN_R_TYPE (irel->r_info) == R_RISCV_GPREL_I
+	      || ELFNN_R_TYPE (irel->r_info) == R_RISCV_GPREL_S
+	      || ELFNN_R_TYPE (irel->r_info) == R_RISCV_PCREL_HI20
+	      || (ELFNN_R_TYPE (irel->r_info) >= R_RISCV_LGP18S0
+		  && ELFNN_R_TYPE (irel->r_info) <= R_RISCV_SGP17S3))
+	    {
+	      r_symndx = ELFNN_R_SYM (irel->r_info);
+	      jrel = irel;
+	      rel_backup = *irel;
+	      if (r_symndx < symtab_hdr->sh_info)
+		{
+		  /* Local symbol.  */
+		  int shndx = isym[r_symndx].st_shndx;
+
+		  bfd_vma st_value = (isym + r_symndx)->st_value;
+		  isec = elf_elfsections (abfd)[shndx]->bfd_section;
+		  relocation = (isec->output_section->vma + isec->output_offset
+				+ st_value + irel->r_addend);
+
+		  /* TODO: local symbol for auipc.  */
+		  if (ELFNN_R_TYPE (irel->r_info) == R_RISCV_PCREL_HI20)
+		    {
+		      off += 4;
+		      continue;
+		    }
+		}
+	      else
+		{
+		  /* External symbol.  */
+		  bfd_boolean warned ATTRIBUTE_UNUSED;
+		  bfd_boolean ignored ATTRIBUTE_UNUSED;
+		  bfd_boolean unresolved_reloc ATTRIBUTE_UNUSED;
+		  asection *sym_sec;
+
+		  /* Maybe there is a better way to get h and relocation.  */
+		  RELOC_FOR_GLOBAL_SYMBOL (link_info, abfd, sec, irel,
+					   r_symndx, symtab_hdr, sym_hashes,
+					   h, sym_sec, relocation,
+					   unresolved_reloc, warned, ignored);
+		  relocation += irel->r_addend;
+
+		  /* TODO: the global symbol _FP_BASE_ should be skipped, too.  */
+		  if (h->root.u.def.section->output_section == NULL
+		      || (h->root.type != bfd_link_hash_defined
+			  && h->root.type != bfd_link_hash_defweak))
+		    {
+		      off += 4;
+		      continue;
+		    }
+
+		}
+
+	      if (ELFNN_R_TYPE (irel->r_info) == R_RISCV_GPREL_I
+		  || ELFNN_R_TYPE (irel->r_info) == R_RISCV_GPREL_S
+		  || (ELFNN_R_TYPE (irel->r_info) >= R_RISCV_LGP18S0
+		      && ELFNN_R_TYPE (irel->r_info) <= R_RISCV_SGP17S3))
+		{
+		  bfd_vma gp = riscv_global_pointer_value (link_info);
+		  relocation -= gp;
+		}
+
+	      if (ELFNN_R_TYPE (irel->r_info) == R_RISCV_PCREL_HI20)
+		{
+		  bfd_vma insn_pc;
+		  insn_pc = sec_addr(sec) + off;
+		  relocation -= insn_pc;
+		}
+
+	      /* Check the absolute address is fitable in ex9 table.  */
+	      if (ELFNN_R_TYPE (irel->r_info) == R_RISCV_JAL)
+		{
+		  bfd_vma insn_pc;
+
+		  insn_pc = sec_addr(sec) + off;
+		  if ((relocation & 0xffe00000) != (insn_pc & 0xffe00000))
+		    /* For R_RISCV_JAL, since the high 11 bits of target symbol
+		       and pc may be defferent after ex9 relaxation, we will not
+		       replace these error cases with ex9.it in the
+		       riscv_elf_ex9_replace_instruction and ex9_check_pchi_for_jal.  */
+		    {
+		      off += 4;
+		      continue;
+		    }
+		}
+
+	      insn = insn_with_reg
+		| riscv_elf_encode_relocation (abfd, irel, relocation);
+	    }
+	  else
+	    {
+	      off += 4;
+	      continue;
+	    }
+	}
+
+      snprintf (code, sizeof (code), "%08x", insn);
+      /* Copy "code".  */
+      entry = (struct elf_riscv_code_hash_entry*)
+	bfd_hash_lookup (&ex9_code_table, code, TRUE, TRUE);
+      if (entry == NULL)
+	{
+	  (*_bfd_error_handler)
+	    (_("%P%F: failed creating ex9.it %s hash table: %E\n"), code);
+	  return FALSE;
+	}
+      if (h)
+	{
+	  if (h->root.type == bfd_link_hash_undefined)
+	    return TRUE;
+
+	  /* Global symbol.  */
+	  /* In order to do lui with different symbol but same value.  */
+	  /* In order to support PCREL_HI20 for ex9, we have to store
+	     lots of information, including each auipc instruction's
+	     sections and relocations, for counting PC.  */
+	  if (entry->m_list == NULL)
+	    {
+	      struct elf_link_hash_entry_mul_list *m_list_new;
+	      struct elf_link_hash_entry_list *h_list_new;
+	      struct elf_link_hash_entry_sec_list *s_list_new;
+	      struct elf_riscv_irel_entry *i_list_new;
+
+	      m_list_new = (struct elf_link_hash_entry_mul_list *)
+		bfd_malloc (sizeof (struct elf_link_hash_entry_mul_list));
+	      h_list_new = (struct elf_link_hash_entry_list *)
+		bfd_malloc (sizeof (struct elf_link_hash_entry_list));
+	      s_list_new = (struct elf_link_hash_entry_sec_list *)
+		bfd_malloc (sizeof (struct elf_link_hash_entry_sec_list));
+	      i_list_new = (struct elf_riscv_irel_entry *)
+		bfd_malloc (sizeof (struct elf_riscv_irel_entry));
+	      entry->m_list = m_list_new;
+	      m_list_new->h_list = h_list_new;
+	      m_list_new->s_list = s_list_new;
+	      m_list_new->rel_backup = rel_backup;
+	      m_list_new->times = 1;
+	      m_list_new->irel = jrel;
+	      m_list_new->next = NULL;
+	      h_list_new->h = h;
+	      h_list_new->next = NULL;
+	      s_list_new->sec = sec;
+	      s_list_new->i_list = i_list_new;
+	      s_list_new->next = NULL;
+	      i_list_new->irel = jrel;
+	      i_list_new->next = NULL;
+	    }
+	  else
+	    {
+	      struct elf_link_hash_entry_mul_list *m_list = entry->m_list;
+	      struct elf_link_hash_entry_list *h_list;
+	      struct elf_link_hash_entry_sec_list *s_list;
+
+	      while (m_list)
+		{
+		  /* Build the different symbols that point to the same address.  */
+		  h_list = m_list->h_list;
+		  s_list = m_list->s_list;
+		  if (h_list->h->root.u.def.value == h->root.u.def.value
+		      && h_list->h->root.u.def.section->output_section->vma
+		      == h->root.u.def.section->output_section->vma
+		      && h_list->h->root.u.def.section->output_offset
+		      == h->root.u.def.section->output_offset
+		      && m_list->rel_backup.r_addend == rel_backup.r_addend)
+		    {
+		      m_list->times++;
+		      m_list->irel = jrel;
+		      while (h_list->h != h && h_list->next)
+			h_list = h_list->next;
+		      if (h_list->h != h)
+			{
+			  struct elf_link_hash_entry_list *h_list_new;
+
+			  h_list_new = (struct elf_link_hash_entry_list *)
+			    bfd_malloc (sizeof (struct elf_link_hash_entry_list));
+			  h_list->next = h_list_new;
+			  h_list_new->h = h;
+			  h_list_new->next = NULL;
+			}
+
+		      while (s_list->sec != sec && s_list->next)
+			s_list = s_list->next;
+		      if (s_list->sec != sec)
+			{
+			  struct elf_link_hash_entry_sec_list *s_list_new;
+			  struct elf_riscv_irel_entry *i_list_new;
+
+			  s_list_new = (struct elf_link_hash_entry_sec_list *)
+			    bfd_malloc (sizeof (struct elf_link_hash_entry_sec_list));
+			  i_list_new = (struct elf_riscv_irel_entry *)
+			    bfd_malloc (sizeof (struct elf_riscv_irel_entry));
+			  s_list->next = s_list_new;
+			  s_list_new->sec = sec;
+			  s_list_new->i_list = i_list_new;
+			  s_list_new->next = NULL;
+			  i_list_new->irel = jrel;
+			  i_list_new->next = NULL;
+			}
+		      else
+			{
+			  struct elf_riscv_irel_entry *i_list;
+			  i_list = s_list->i_list;
+			  while (i_list->irel != jrel && i_list->next)
+			    i_list = i_list->next;
+			  if (i_list->irel != jrel)
+			    {
+			      struct elf_riscv_irel_entry *i_list_new;
+
+			      i_list_new = (struct elf_riscv_irel_entry *)
+				bfd_malloc (sizeof (struct elf_riscv_irel_entry));
+			      i_list->next = i_list_new;
+			      i_list_new->irel = jrel;
+			      i_list_new->next = NULL;
+			    }
+			}
+		      break;
+		    }
+		  /* The lui/auipc case may have different address but
+		     the high part is the same.  */
+		  else if ((ELFNN_R_TYPE (jrel->r_info) == R_RISCV_HI20
+			    || ELFNN_R_TYPE (jrel->r_info) == R_RISCV_PCREL_HI20)
+			   && m_list->next == NULL)
+		    {
+		      struct elf_link_hash_entry_mul_list *m_list_new;
+		      struct elf_link_hash_entry_list *h_list_new;
+		      struct elf_link_hash_entry_sec_list *s_list_new;
+		      struct elf_riscv_irel_entry *i_list_new;
+
+		      m_list_new = (struct elf_link_hash_entry_mul_list *)
+			bfd_malloc (sizeof (struct elf_link_hash_entry_mul_list));
+		      h_list_new = (struct elf_link_hash_entry_list *)
+			bfd_malloc (sizeof (struct elf_link_hash_entry_list));
+		      s_list_new = (struct elf_link_hash_entry_sec_list *)
+			bfd_malloc (sizeof (struct elf_link_hash_entry_sec_list));
+		      i_list_new = (struct elf_riscv_irel_entry *)
+			bfd_malloc (sizeof (struct elf_riscv_irel_entry));
+		      m_list->next = m_list_new;
+		      m_list_new->h_list = h_list_new;
+		      m_list_new->s_list = s_list_new;
+		      m_list_new->rel_backup = rel_backup;
+		      m_list_new->times = 1;
+		      m_list_new->irel = jrel;
+		      m_list_new->next = NULL;
+		      h_list_new->h = h;
+		      h_list_new->next = NULL;
+		      s_list_new->sec = sec;
+		      s_list_new->i_list = i_list_new;
+		      s_list_new->next = NULL;
+		      i_list_new->irel = jrel;
+		      i_list_new->next = NULL;
+		      break;
+		    }
+		  m_list = m_list->next;
+		}
+	      if (!m_list)
+		{
+		  off += 4;
+		  continue;
+		}
+	    }
+	}
+      else
+	{
+	  /* Local symbol and insn without relocation.  */
+	  entry->times++;
+	  entry->rel_backup = rel_backup;
+	}
+
+      /* Use in lui insn with constant and global symbol in same format.  */
+      if (!jrel)
+	entry->const_insn = 1;
+      else
+	entry->irel = jrel;
+      entry->sec = isec;
+      off += 4;
+    }
+  return TRUE;
+}
+
+/* Set the _ITB_BASE_, and point it to ex9 table.  */
+
+bfd_boolean
+riscv_elf_ex9_itb_base (struct bfd_link_info *link_info)
+{
+  asection *sec;
+  bfd *output_bfd = NULL;
+  struct bfd_link_hash_entry *bh = NULL;
+
+  if (is_ITB_BASE_set == 1)
+    return TRUE;
+
+  is_ITB_BASE_set = 1;
+
+  sec = riscv_elf_ex9_get_section (link_info->input_bfds);
+  if (sec != NULL)
+    output_bfd = sec->output_section->owner;
+
+  if (output_bfd == NULL)
+    {
+      output_bfd = link_info->output_bfd;
+      if (output_bfd->sections == NULL)
+	return TRUE;
+      else
+	sec = bfd_abs_section_ptr;
+    }
+
+  /* Do not define _ITB_BASE_ if it is not used.
+     And remain user to set it if needed.  */
+
+  bh = bfd_link_hash_lookup (link_info->hash, "_ITB_BASE_",
+			     FALSE, FALSE, TRUE);
+  if (!bh)
+    return TRUE;
+
+  return (_bfd_generic_link_add_one_symbol
+	  (link_info, output_bfd, "_ITB_BASE_", BSF_GLOBAL | BSF_WEAK,
+	   sec, 0, (const char *) NULL, FALSE,
+	   get_elf_backend_data (output_bfd)->collect, &bh));
+}
+
+static void
+riscv_elf_ex9_save_local_symbol_value (void)
+{
+  struct elf_riscv_insn_times_entry *ex9_insn = ex9_insn_head;
+  while (ex9_insn)
+    {
+      if (ex9_insn->sec != NULL)
+	{
+	  Elf_Internal_Sym *isym = NULL;
+	  if (riscv_get_local_syms (ex9_insn->sec->owner, ex9_insn->sec, &isym))
+	    {
+	      isym = isym + ELFNN_R_SYM (ex9_insn->irel->r_info);
+	      ex9_insn->local_sym_value = isym->st_value;
+	    }
+	}
+      ex9_insn = ex9_insn->next;
+    }
+}
+
+/* End of EX9 Instruction Table Relaxation.  */
+
+/* Helper functions.  */
+
+/* Sort relocation by r_offset.
+   We didn't use qsort () in stdlib, because quick-sort is not a stable sorting
+   algorithm.  Relocations at the same r_offset must keep their order.
+
+   Currently, this function implements insertion-sort.
+
+FIXME: If we already sort them in assembler, why bother sort them
+here again?  */
+
+static void
+riscv_insertion_sort (void *base, size_t nmemb, size_t size,
+		      int (*compar) (const void *lhs, const void *rhs))
+{
+  char *ptr = (char *) base;
+  int i, j;
+  char *tmp = malloc (size);
+
+  /* If i is less than j, i is inserted before j.
+
+     |---- j ----- i --------------|
+     \	      / \		  /
+     sorted		unsorted
+  */
+
+  for (i = 1; i < (int) nmemb; i++)
+    {
+      for (j = (i - 1); j >= 0; j--)
+	if (compar (ptr + i * size, ptr + j * size) >= 0)
+	  break;
+      j++;
+
+      if (i == j)
+	continue; /* i is in order.  */
+
+      memcpy (tmp, ptr + i * size, size);
+      memmove (ptr + (j + 1) * size, ptr + j * size, (i - j) * size);
+      memcpy (ptr + j * size, tmp, size);
+    }
+}
+
+static int
+compar_reloc (const void *lhs, const void *rhs)
+{
+  const Elf_Internal_Rela *l = (const Elf_Internal_Rela *) lhs;
+  const Elf_Internal_Rela *r = (const Elf_Internal_Rela *) rhs;
+
+  if (l->r_offset > r->r_offset)
+    return 1;
+  else if (l->r_offset == r->r_offset)
+    return 0;
+  else
+    return -1;
+}
+
+/* Get the contents of the internal symbol of abfd.  */
+
+static int
+riscv_get_local_syms (bfd *abfd, asection *sec ATTRIBUTE_UNUSED,
+		      Elf_Internal_Sym **isymbuf_p)
+{
+  Elf_Internal_Shdr *symtab_hdr;
+  symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
+
+  /* Read this BFD's local symbols if we haven't done so already.  */
+  if (*isymbuf_p == NULL && symtab_hdr->sh_info != 0)
+    {
+      *isymbuf_p = (Elf_Internal_Sym *) symtab_hdr->contents;
+      if (*isymbuf_p == NULL)
+	{
+	  *isymbuf_p = bfd_elf_get_elf_syms (abfd, symtab_hdr,
+					     symtab_hdr->sh_info, 0,
+					     NULL, NULL, NULL);
+	  if (*isymbuf_p == NULL)
+	    return FALSE;
+	}
+    }
+  symtab_hdr->contents = (bfd_byte *) (*isymbuf_p);
+
+  return TRUE;
+}
+
+/* Get the contents of a section.  */
+
+static int
+riscv_get_section_contents (bfd *abfd, asection *sec,
+			    bfd_byte **contents_p, bfd_boolean cache)
+{
+  /* Get the section contents.  */
+  if (elf_section_data (sec)->this_hdr.contents != NULL)
+    *contents_p = elf_section_data (sec)->this_hdr.contents;
+  else
+    {
+      if (!bfd_malloc_and_get_section (abfd, sec, contents_p))
+	return FALSE;
+      if (cache)
+	elf_section_data (sec)->this_hdr.contents = *contents_p;
+    }
+
+  return TRUE;
+}
+
+/* Get insn with registers according to relocation type.  */
+
+static void
+riscv_elf_get_insn_with_reg (bfd* abfd, Elf_Internal_Rela *irel,
+			     uint32_t insn, uint32_t *insn_with_reg)
+{
+  reloc_howto_type *howto = NULL;
+
+  if (irel == NULL
+      || (ELFNN_R_TYPE (irel->r_info) >= number_of_howto_table))
+    {
+      *insn_with_reg = insn;
+      return;
+    }
+
+  howto = riscv_elf_rtype_to_howto (abfd, ELFNN_R_TYPE (irel->r_info));
+  *insn_with_reg = insn & (~howto->dst_mask);
+}
+
+/* Encode relocation into Imm field.  */
+
+static bfd_vma
+riscv_elf_encode_relocation (bfd *abfd,
+			     Elf_Internal_Rela *irel, bfd_vma relocation)
+{
+  reloc_howto_type *howto = NULL;
+
+  if (irel == NULL
+      || (ELFNN_R_TYPE (irel->r_info) >= number_of_howto_table))
+    return 0;
+
+  howto = riscv_elf_rtype_to_howto (abfd, ELFNN_R_TYPE (irel->r_info));
+  switch (ELFNN_R_TYPE (irel->r_info))
+    {
+    case R_RISCV_HI20:
+    case R_RISCV_PCREL_HI20:
+      if (ARCH_SIZE > 32 && !VALID_UTYPE_IMM (RISCV_CONST_HIGH_PART (relocation)))
+	return 0;
+      relocation = ENCODE_UTYPE_IMM (RISCV_CONST_HIGH_PART (relocation));
+      break;
+    case R_RISCV_LO12_I:
+    case R_RISCV_PCREL_LO12_I:
+    case R_RISCV_GPREL_I:
+      relocation = ENCODE_ITYPE_IMM (relocation);
+      break;
+    case R_RISCV_LO12_S:
+    case R_RISCV_PCREL_LO12_S:
+    case R_RISCV_GPREL_S:
+      relocation = ENCODE_STYPE_IMM (relocation);
+      break;
+    case R_RISCV_JAL:
+      relocation = ENCODE_UJTYPE_IMM (relocation);
+      break;
+    case R_RISCV_LGP18S0:
+      relocation = ENCODE_GPTYPE_LB_IMM (relocation);
+      break;
+    case R_RISCV_LGP17S1:
+      relocation = ENCODE_GPTYPE_LH_IMM (relocation);
+      break;
+    case R_RISCV_LGP17S2:
+      relocation = ENCODE_GPTYPE_LW_IMM (relocation);
+      break;
+    case R_RISCV_LGP17S3:
+      relocation= ENCODE_GPTYPE_LD_IMM (relocation);
+      break;
+    case R_RISCV_SGP18S0:
+      relocation = ENCODE_GPTYPE_SB_IMM (relocation);
+      break;
+    case R_RISCV_SGP17S1:
+      relocation = ENCODE_GPTYPE_SH_IMM (relocation);
+      break;
+    case R_RISCV_SGP17S2:
+      relocation = ENCODE_GPTYPE_SW_IMM (relocation);
+      break;
+    case R_RISCV_SGP17S3:
+      relocation = ENCODE_GPTYPE_SD_IMM (relocation);
+      break;
+    default:
+      return 0;
+    }
+
+  return (relocation & howto->dst_mask);
+}
+
+/* Find a relocation of type specified by reloc_type
+   of the same r_offset with reloc. If not found, return irelend.
+
+   Note that relocations must be sorted by r_offset,
+   we find the relocation from "reloc" backward untill relocs,
+   or find it from "reloc" forward untill irelend.  */
+
+static Elf_Internal_Rela *
+find_relocs_at_address (Elf_Internal_Rela *reloc,
+			Elf_Internal_Rela *relocs,
+			Elf_Internal_Rela *irelend,
+			enum elf_riscv_reloc_type reloc_type)
+{
+  Elf_Internal_Rela *rel_t;
+
+  /* Find backward.  */
+  for (rel_t = reloc;
+       rel_t >= relocs && rel_t->r_offset == reloc->r_offset;
+       rel_t--)
+    if (ELFNN_R_TYPE (rel_t->r_info) == reloc_type)
+      return rel_t;
+
+  /* We didn't find it backward.  Try find it forward.  */
+  for (rel_t = reloc;
+       rel_t < irelend && rel_t->r_offset == reloc->r_offset;
+       rel_t++)
+    if (ELFNN_R_TYPE (rel_t->r_info) == reloc_type)
+      return rel_t;
+
+  return irelend;
+}
+
+/* For target aligned, optimize is zero.
+   For ex9, optimize is one.  */
+
+static int
+riscv_relocation_check (struct bfd_link_info *info,
+			Elf_Internal_Rela **irel,
+			Elf_Internal_Rela *irelend,
+			asection *sec, bfd_vma *off,
+			bfd_byte *contents, int optimize)
+{
+  /* We use the highest 1 byte of result to record
+     how many bytes location counter has to move.  */
+  int result = 0;
+  Elf_Internal_Rela *irel_save = NULL;
+  bfd_boolean nested_ex9, nested_loop;
+  bfd_boolean ex9_loop_aware;
+
+  struct riscv_elf_link_hash_table *table;
+
+  table = riscv_elf_hash_table (info);
+  ex9_loop_aware = table->ex9_loop_aware;
+
+  while ((*irel) != NULL && (*irel) < irelend && (*off) == (*irel)->r_offset)
+    {
+      switch (ELFNN_R_TYPE ((*irel)->r_info))
+	{
+	case R_RISCV_RELAX_REGION_BEGIN:
+	  /* Ignore code block.  */
+	  nested_ex9 = FALSE;
+	  nested_loop = FALSE;
+	  if (optimize
+	      && (((*irel)->r_addend & R_RISCV_RELAX_REGION_NO_EX9_FLAG)
+		  || (ex9_loop_aware
+		      && ((*irel)->r_addend & R_RISCV_RELAX_REGION_LOOP_FLAG))))
+	    {
+	      /* Check the region if loop or not.  If it is true and
+		 ex9-loop-aware is true, ignore the region till region end.  */
+	      /* To save the status for in .no_relax ex9 region and
+		 loop region to conform the block can do ex9 relaxation.  */
+	      nested_ex9 = ((*irel)->r_addend & R_RISCV_RELAX_REGION_NO_EX9_FLAG);
+	      nested_loop = (ex9_loop_aware
+			     && ((*irel)->r_addend & R_RISCV_RELAX_REGION_LOOP_FLAG));
+	      while ((*irel) && (*irel) < irelend && (nested_ex9 || nested_loop))
+		{
+		  (*irel)++;
+		  if (ELFNN_R_TYPE ((*irel)->r_info) == R_RISCV_RELAX_REGION_BEGIN)
+		    {
+		      /* There may be nested region.  */
+		      if (((*irel)->r_addend & R_RISCV_RELAX_REGION_NO_EX9_FLAG) != 0)
+			nested_ex9 = TRUE;
+		      else if (ex9_loop_aware
+			       && ((*irel)->r_addend & R_RISCV_RELAX_REGION_LOOP_FLAG))
+			nested_loop = TRUE;
+		    }
+		  else if (ELFNN_R_TYPE ((*irel)->r_info) == R_RISCV_RELAX_REGION_END)
+		    {
+		      /* The end of region.  */
+		      if (((*irel)->r_addend & R_RISCV_RELAX_REGION_NO_EX9_FLAG) != 0)
+			nested_ex9 = FALSE;
+		      else if (ex9_loop_aware
+			       && ((*irel)->r_addend & R_RISCV_RELAX_REGION_LOOP_FLAG))
+			nested_loop = FALSE;
+		    }
+		  else if (ELFNN_R_TYPE ((*irel)->r_info) == R_RISCV_ALIGN
+			   && ((*irel)->r_addend & (1 << 31)))
+		    {
+		      /* Estimate the total ex9 relax size before this point.  */
+		      struct elf_riscv_blank *blank_t = blank_list_head;
+		      int relax_size = 0;
+		      while (blank_t && blank_t->offset < (*off))
+			{
+			  relax_size += blank_t->size;
+			  blank_t = blank_t->next;
+			}
+		      /* Check whether this point is align or not.  */
+		      result |= ALIGN_CLEAN_PRE;
+		      if (((*irel)->r_offset
+			   + ((*irel)->r_addend & 0x1f)
+			   - relax_size)
+			  & 0x02)
+			result |= ALIGN_PUSH_PRE;
+		    }
+		}
+	      if ((*irel) >= irelend)
+		*off = sec->size;
+	      else
+		*off = (*irel)->r_offset;
+
+	      /* The final instruction in the region, regard this one as data to ignore it.  */
+	      result |= DATA_EXIST;
+	      return result;
+	    }
+	  break;
+	case R_RISCV_ALIGN:
+	  /* Just consider 4-byte aligned with ex9.  */
+	  if (optimize && ((*irel)->r_addend & (1 << 31)))
+	    {
+	      /* Estimate the total ex9 relax size before this point.  */
+	      struct elf_riscv_blank *blank_t = blank_list_head;
+	      int relax_size = 0;
+	      while (blank_t && blank_t->offset < (*off))
+		{
+		  relax_size += blank_t->size;
+		  blank_t = blank_t->next;
+		}
+	      /* Check whether this point is align or not.  */
+	      result |= ALIGN_CLEAN_PRE;
+	      if (((*irel)->r_offset
+		   + ((*irel)->r_addend & 0x1f)
+		   - relax_size)
+		  & 0x02)
+		result |= ALIGN_PUSH_PRE;
+	    }
+	  break;
+	case R_RISCV_DATA:
+	  /* Data in text section.  */
+	  result |= ((*irel)->r_addend << 24);
+	  result |= DATA_EXIST;
+	  break;
+	  /* Here we regard unsupported relocations as data relocations
+	     and then skip them.   */
+	  /* Since a pair of R_RISCV_ADD (R_RISCV_SET) and R_RISCV_SUB point
+	     to the same address, we only need to skip them once.  */
+	case R_RISCV_SUB6:
+	case R_RISCV_SUB8:
+	  result |= (1 << 24);
+	  result |= DATA_EXIST;
+	  break;
+	case R_RISCV_SUB16:
+	case R_RISCV_RVC_LUI:
+	  result |= (2 << 24);
+	  result |= DATA_EXIST;
+	  break;
+	case R_RISCV_RVC_JUMP:
+	case R_RISCV_RVC_BRANCH:
+	  if (!optimize)
+	    irel_save = *irel;
+	  else
+	    {
+	      result |= (2 << 24);
+	      result |= DATA_EXIST;
+	    }
+	  break;
+	case R_RISCV_32:
+	case R_RISCV_SUB32:
+	case R_RISCV_PCREL_HI20:
+	case R_RISCV_PCREL_LO12_I:
+	case R_RISCV_PCREL_LO12_S:
+	  result |= (4 << 24);
+	  result |= DATA_EXIST;
+	  break;
+	case R_RISCV_BRANCH:
+	  if (!optimize)
+	    /* Used for target_align_check_branch_range.  */
+	    irel_save = *irel;
+	  result |= (4 << 24);
+	  result |= DATA_EXIST;
+	  break;
+	  /* These relocation is supported ex9 relaxation currently.  */
+	  /* We have to save the relocation for using later, since we have
+	     to check there is any alignment in the same address.  */
+	case R_RISCV_JAL:
+	  irel_save = *irel;
+	  if (!optimize)
+	    {
+	      result |= (4 << 24);
+	      result |= DATA_EXIST;
+	    }
+	  break;
+	case R_RISCV_HI20:
+	case R_RISCV_LO12_I:
+	case R_RISCV_LO12_S:
+	case R_RISCV_GPREL_I:
+	case R_RISCV_GPREL_S:
+	case R_RISCV_LGP18S0:
+	case R_RISCV_LGP17S1:
+	case R_RISCV_LGP17S2:
+	case R_RISCV_LGP17S3:
+	case R_RISCV_SGP18S0:
+	case R_RISCV_SGP17S1:
+	case R_RISCV_SGP17S2:
+	case R_RISCV_SGP17S3:
+	  if (optimize)
+	    irel_save = *irel;
+	  else
+	    {
+	      result |= (4 << 24);
+	      result |= DATA_EXIST;
+	    }
+	  break;
+	case R_RISCV_64:
+	case R_RISCV_SUB64:
+	case R_RISCV_CALL:
+	  result |= (8 << 24);
+	  result |= DATA_EXIST;
+	  break;
+	case R_RISCV_RELATIVE:
+	case R_RISCV_COPY:
+	case R_RISCV_JUMP_SLOT:
+	case R_RISCV_TLS_DTPMOD32:
+	case R_RISCV_TLS_DTPMOD64:
+	case R_RISCV_TLS_DTPREL32:
+	case R_RISCV_TLS_DTPREL64:
+	case R_RISCV_TLS_TPREL32:
+	case R_RISCV_TLS_TPREL64:
+	  /* These relocations are used by dynamic linker. In general, we
+	     should not see them here.  */
+	  (*_bfd_error_handler)
+	    (_("Linker: find dynamic relocation when doing relaxation\n"));
+	  break;
+	default:
+	  /* Relocation not supported.  */
+	  if (ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_RELAX
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_NONE
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_RELAX_ENTRY
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_ADD8
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_ADD16
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_ADD32
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_ADD64
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_SET6
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_SET8
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_SET16
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_SET32)
+	    {
+	      /* Since we already consider all relocations above, this won't
+		 happen unless supporting new relocations. */
+	      /* TODO: Maybe we should show warning message here.  */
+	      result |= DATA_EXIST;
+	      if ((*(contents + (*off)) & 0x3) != 0x3)
+		/* 16-bit instruction.  */
+		result |= (2 << 24);
+	      else
+		/* 32-bit instruction.  */
+		result |= (4 << 24);
+	      break;
+	    }
+	}
+      (*irel)++;
+    }
+  if (irel_save)
+    *irel = irel_save;
+  return result;
+}
+
+/* Find the symbol '__global_pointer$' in the output bfd.
+   If we can't find it, set it's value to (sdata + 0x800)
+   by default.  */
+/* TODO: figure out the best SDA_BASE value.  */
+
+static bfd_boolean
+riscv_init_global_pointer (bfd *output_bfd, struct bfd_link_info *info)
+{
+  asection *sdata_sec;
+  struct bfd_link_hash_entry *h;
+  bfd_vma gp_value = 0;
+
+  h = bfd_link_hash_lookup (info->hash, RISCV_GP_SYMBOL,
+			    FALSE, FALSE, TRUE);
+  if (!h || h->type != bfd_link_hash_defined)
+    {
+      sdata_sec = bfd_get_section_by_name (output_bfd, ".sdata");
+      if (!sdata_sec)
+	return FALSE;
+      gp_value = 0x800;
+
+      if (!_bfd_generic_link_add_one_symbol
+	  (info, output_bfd, RISCV_GP_SYMBOL, BSF_GLOBAL, sdata_sec,
+	   (bfd_vma) gp_value, (const char *) NULL, FALSE,
+	   get_elf_backend_data (output_bfd)->collect, &h))
+	return FALSE;
+    }
+  return TRUE;
+}
+
+/* End of helper functions.  */
 
 #if ARCH_SIZE == 32
 # define PRSTATUS_SIZE			0 /* FIXME */
@@ -4127,6 +8025,8 @@ riscv_elf_obj_attrs_arg_type (int tag)
 #define elf_info_to_howto_rel		     NULL
 #define elf_info_to_howto		     riscv_info_to_howto_rela
 #define bfd_elfNN_bfd_relax_section	     _bfd_riscv_relax_section
+#define elf_backend_link_output_symbol_hook  riscv_elf_output_symbol_hook
+#define elf_backend_output_arch_syms	     riscv_elf_output_arch_syms
 
 #define elf_backend_init_index_section	     _bfd_elf_init_1_index_section
 
