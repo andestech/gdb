@@ -57,6 +57,7 @@
 #define	A_OUTNAME	"a.out"		/* default core filename */
 #define	GMONNAME	"gmon.out"	/* default profile filename */
 #define	GMONSUM		"gmon.sum"	/* profile summary filename */
+#define	PROFNAME	"prof.out"	/* extended profile filename */
 
 #ifdef HAVE_LOCALE_H
 # include <locale.h>
@@ -76,6 +77,8 @@
 #define STYLE_GMON_INFO		(1<<5)
 #define STYLE_FUNCTION_ORDER	(1<<6)
 #define STYLE_FILE_ORDER	(1<<7)
+#define STYLE_BRANCH_PREDICT    (1<<8)
+#define STYLE_CACHE_USAGE       (1<<9)
 
 #define	ANYDEBUG	(1<<0)	/*    1 */
 #define	DFNDEBUG	(1<<1)	/*    2 */
@@ -117,8 +120,10 @@ extern long hz;			/* ticks per second */
 extern int debug_level;			/* debug level */
 extern int output_style;
 extern int output_width;		/* controls column width in index */
+extern bfd_boolean do_timeline;		/* timeline-based profiling data */
 extern bfd_boolean bsd_style_output;	/* as opposed to FSF style output */
 extern bfd_boolean demangle;		/* demangle symbol names? */
+extern bfd_boolean discard_underscores;	/* discard leading underscores? */
 extern bfd_boolean ignore_direct_calls;	/* don't count direct calls */
 extern bfd_boolean ignore_static_funcs;	/* suppress static functions */
 extern bfd_boolean ignore_zeros;	/* ignore unused symbols/files */

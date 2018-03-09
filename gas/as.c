@@ -95,6 +95,17 @@ int debug_memory = 0;
 /* Enable verbose mode.  */
 int verbose = 0;
 
+/* Which version of DWARF CIE to produce.  This default value of -1
+   indicates that this value has not been set yet, a default value is
+   provided in dwarf2_init.  A different value can also be supplied by the
+   command line flag --gdwarf-cie-version, or by a target in
+   MD_AFTER_PARSE_ARGS.  */
+int flag_dwarf_cie_version = -1;
+
+/* The maximum level of DWARF DEBUG information we should manufacture.
+   This defaults to 3 unless overridden by a command line option.  */
+unsigned int dwarf_level = 3;
+
 #if defined OBJ_ELF || defined OBJ_MAYBE_ELF
 int flag_use_elf_stt_common = DEFAULT_GENERATE_ELF_STT_COMMON;
 bfd_boolean flag_generate_build_notes = DEFAULT_GENERATE_BUILD_NOTES;

@@ -8,6 +8,9 @@ Disassembly of section .text:
 
 0+000 <.text>:
 [ 	]+0:[ 	]+00002573[ 	]+csrr[ 	]+a0,ustatus
+.*R_RISCV_RELAX_ENTRY.*
+.*R_RISCV_NO_RVC_REGION_BEGIN.*
+.*R_RISCV_RELAX_REGION_BEGIN.*
 [ 	]+4:[ 	]+00402573[ 	]+csrr[ 	]+a0,uie
 [ 	]+8:[ 	]+00502573[ 	]+csrr[ 	]+a0,utvec
 [ 	]+c:[ 	]+04002573[ 	]+csrr[ 	]+a0,uscratch

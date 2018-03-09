@@ -1,3 +1,36 @@
+2019-09-20  Nelson Chu <nelson.chu@sifive.com>
+
+	* elfnn-riscv.c (riscv_pcgp_hi_reloc): Add new field undefined_weak.
+	(riscv_record_pcgp_hi_reloc): New parameter undefined_weak.
+	Set undefined_weak field from it.
+	(relax_func_t): New parameter undefined_weak.
+	(_bfd_riscv_relax_call): New ignored parameter undefined_weak.
+	(_bfd_riscv_relax_tls_le): Likewise.
+	(_bfd_riscv_relax_align): Likewise.
+	(_bfd_riscv_relax_delete): Likewise.
+	(_bfd_riscv_relax_lui): New parameter undefined_weak.  If true,
+	allow relaxing.  For LO12* relocs, set rs1 to x0 when undefined_weak.
+	(_bfd_riscv_relax_pc): New parameter undefined_weak.  For LO12* relocs,
+	set undefined_weak from hi_reloc.  If true, allow relaxing.  For LO12*
+	relocs, set rs1 to x0 when undefined_weak and change to non-pcrel
+	reloc.
+	(_bfd_riscv_relax_section): New local undefined_weak.  Set for
+	undef weak relocs that can be relaxed.  Pass to relax_func call.
+
+2019-08-01  Ilia Diachkov  <ilia.diachkov@optimitech.com>
+
+	* elfnn-riscv.c (_bfd_riscv_relax_lui): Set lui relax safety area to
+	two pages in relro presence.
+
+2019-06-24  Ilia Diachkov  <ilia.diachkov@optimitech.com>
+
+	* elfnn-riscv.c (_bfd_riscv_relax_lui): Delete early exit when
+	SEC_MERGE or SEC_CODE flags are set.
+	(_bfd_riscv_relax_section): New local symtype.  Set sym_sec and
+	symtype consistently.  Don't include sec_addr (sym_sec) in symval.
+	Add check for SEC_INFO_TYPE_MERGE and call _bfd_merged_section_offset.
+	Add sec_addr (sym_sec) after handling merge sections.
+
 2019-04-18  Tamar Christina  <tamar.christina@arm.com>
 
 	Backport from mainline.

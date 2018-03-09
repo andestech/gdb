@@ -3218,7 +3218,12 @@ find_pc_sect_line (CORE_ADDR pc, struct obj_section *section, int notcurrent)
       struct linetable_entry *last = item + len;
       item = std::upper_bound (first, last, pc, pc_compare);
       if (item != first)
-	prev = item - 1;		/* Found a matching item.  */
+	{
+	  /* Found a matching item.  Skip backwards over any end of
+	     sequence markers.  */
+	  for (prev = item - 1; prev->line == 0 && prev != first; prev--)
+	    /* Nothing.  */;
+	}
 
       /* At this point, prev points at the line whose start addr is <= pc, and
          item points at the next line.  If we ran off the end of the linetable
@@ -3234,6 +3239,23 @@ find_pc_sect_line (CORE_ADDR pc, struct obj_section *section, int notcurrent)
 	{
 	  best = prev;
 	  best_symtab = iter_s;
+
+	  /* If during the binary search we land on a non-statement entry,
+	     scan backward through entries at the same address to see if
+	     there is an entry marked as is-statement.  In theory this
+	     duplication should have been removed from the line table
+	     during construction, this is just a double check.  If the line
+	     table has had the duplication removed then this should be
+	     pretty cheap.  */
+	  if (!best->is_stmt)
+	    {
+	      struct linetable_entry *tmp = best;
+	      while (tmp > first && (tmp - 1)->pc == tmp->pc
+		     && (tmp - 1)->line != 0 && !tmp->is_stmt)
+		--tmp;
+	      if (tmp->is_stmt)
+		best = tmp;
+	    }
 
 	  /* Discard BEST_END if it's before the PC of the current BEST.  */
 	  if (best_end <= best->pc)
@@ -3265,6 +3287,7 @@ find_pc_sect_line (CORE_ADDR pc, struct obj_section *section, int notcurrent)
     }
   else
     {
+      val.is_stmt = best->is_stmt;
       val.symtab = best_symtab;
       val.line = best->line;
       val.pc = best->pc;
@@ -3433,7 +3456,8 @@ find_pcs_for_symtab_line (struct symtab *symtab, int line,
 	{
 	  struct linetable_entry *item = &SYMTAB_LINETABLE (symtab)->item[idx];
 
-	  if (*best_item == NULL || item->line < (*best_item)->line)
+	  if (*best_item == NULL
+	      || (item->line < (*best_item)->line && item->is_stmt))
 	    *best_item = item;
 
 	  break;
@@ -3543,6 +3567,10 @@ find_line_common (struct linetable *l, int lineno,
   for (i = start; i < len; i++)
     {
       struct linetable_entry *item = &(l->item[i]);
+
+      /* Ignore non-statements.  */
+      if (!item->is_stmt)
+	continue;
 
       if (item->line == lineno)
 	{
@@ -3686,8 +3714,10 @@ skip_prologue_using_lineinfo (CORE_ADDR func_addr, struct symtab *symtab)
 
 /* Adjust SAL to the first instruction past the function prologue.
    If the PC was explicitly specified, the SAL is not changed.
-   If the line number was explicitly specified, at most the SAL's PC
-   is updated.  If SAL is already past the prologue, then do nothing.  */
+   If the line number was explicitly specified then the SAL can still be
+   updated, unless the language for SAL is assembler, in which case the SAL
+   will be left unchanged.
+   If SAL is already past the prologue, then do nothing.  */
 
 void
 skip_prologue_sal (struct symtab_and_line *sal)
@@ -3704,6 +3734,15 @@ skip_prologue_sal (struct symtab_and_line *sal)
 
   /* Do not change the SAL if PC was specified explicitly.  */
   if (sal->explicit_pc)
+    return;
+
+  /* In assembly code, if the user asks for a specific line then we should
+     not adjust the SAL.  The user already has instruction level
+     visibility in this case, so selecting a line other than one requested
+     is likely to be the wrong choice.  */
+  if (sal->symtab != nullptr
+      && sal->explicit_line
+      && SYMTAB_LANGUAGE (sal->symtab) == language_asm)
     return;
 
   scoped_restore_current_pspace_and_thread restore_pspace_thread;
@@ -3825,12 +3864,6 @@ skip_prologue_sal (struct symtab_and_line *sal)
 
   sal->pc = pc;
   sal->section = section;
-
-  /* Unless the explicit_line flag was set, update the SAL line
-     and symtab to correspond to the modified PC location.  */
-  if (sal->explicit_line)
-    return;
-
   sal->symtab = start_sal.symtab;
   sal->line = start_sal.line;
   sal->end = start_sal.end;

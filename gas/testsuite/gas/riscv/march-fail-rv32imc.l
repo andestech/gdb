@@ -1,2 +1,2 @@
 Assembler messages:
-Fatal error: -march=rv32iamfd: ISA string is not in canonical order. `m'
+Error: -march=rv32iamfd: standard ISA extension `m' is not in canonical order

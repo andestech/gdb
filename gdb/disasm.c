@@ -373,6 +373,12 @@ do_mixed_source_and_assembly_deprecated
       if (le[i].line == le[i + 1].line && le[i].pc == le[i + 1].pc)
 	continue;		/* Ignore duplicates.  */
 
+      /* Ignore non-statement line table entries.  This means we print the
+	 source line at the place where GDB would insert a breakpoint for
+	 that line, which seems more intuitive.  */
+      if (le[i].is_stmt == 0)
+	continue;
+
       /* Skip any end-of-function markers.  */
       if (le[i].line == 0)
 	continue;
@@ -806,19 +812,36 @@ gdb_disassembly (struct gdbarch *gdbarch, struct ui_out *uiout,
 		 CORE_ADDR low, CORE_ADDR high)
 {
   struct symtab *symtab;
-  int nlines = -1;
+  CORE_ADDR pc;
 
-  /* Assume symtab is valid for whole PC range.  */
-  symtab = find_pc_line_symtab (low);
+  if (!(flags & (DISASSEMBLY_SOURCE_DEPRECATED | DISASSEMBLY_SOURCE)))
+    {
+      do_assembly_only (gdbarch, uiout, low, high, how_many, flags);
+      goto disassembly_done;
+    }
 
-  if (symtab != NULL && SYMTAB_LINETABLE (symtab) != NULL)
-    nlines = SYMTAB_LINETABLE (symtab)->nitems;
+  /* Between the given range, find the first address with valid line info.  */
+  pc = low;
+  while (pc < high)
+    {
+      symtab = find_pc_line_symtab (pc);
+      if (symtab != NULL
+	  && SYMTAB_LINETABLE (symtab) != NULL
+	  && SYMTAB_LINETABLE (symtab)->nitems > 0)
+	break;
+      else
+	pc += gdb_insn_length (gdbarch, pc);
+    }
 
-  if (!(flags & (DISASSEMBLY_SOURCE_DEPRECATED | DISASSEMBLY_SOURCE))
-      || nlines <= 0)
-    do_assembly_only (gdbarch, uiout, low, high, how_many, flags);
+  if (pc > low)
+    do_assembly_only (gdbarch, uiout, low, pc, how_many, flags);
 
-  else if (flags & DISASSEMBLY_SOURCE)
+  if (pc >= high)
+    goto disassembly_done;
+
+  low = pc;
+
+  if (flags & DISASSEMBLY_SOURCE)
     do_mixed_source_and_assembly (gdbarch, uiout, symtab, low, high,
 				  how_many, flags);
 
@@ -826,6 +849,7 @@ gdb_disassembly (struct gdbarch *gdbarch, struct ui_out *uiout,
     do_mixed_source_and_assembly_deprecated (gdbarch, uiout, symtab,
 					     low, high, how_many, flags);
 
+disassembly_done:
   gdb_flush (gdb_stdout);
 }
 

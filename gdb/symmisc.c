@@ -306,6 +306,8 @@ dump_symtab_1 (struct symtab *symtab, struct ui_file *outfile)
 	{
 	  fprintf_filtered (outfile, " line %d at ", l->item[i].line);
 	  fputs_filtered (paddress (gdbarch, l->item[i].pc), outfile);
+	  if (l->item[i].is_stmt)
+	    fprintf_filtered (outfile, "\t(stmt)");
 	  fprintf_filtered (outfile, "\n");
 	}
     }
@@ -997,20 +999,31 @@ maintenance_print_one_line_table (struct symtab *symtab, void *data)
     printf_filtered (_("Line table has no lines.\n"));
   else
     {
-      int i;
-
       /* Leave space for 6 digits of index and line number.  After that the
 	 tables will just not format as well.  */
-      printf_filtered (_("%-6s %6s %s\n"),
-		       _("INDEX"), _("LINE"), _("ADDRESS"));
+      struct ui_out *uiout = current_uiout;
+      ui_out_emit_table table_emitter (uiout, 4, -1, "line-table");
+      uiout->table_header (6, ui_left, "index", _("INDEX"));
+      uiout->table_header (6, ui_left, "line", _("LINE"));
+      uiout->table_header (18, ui_left, "address", _("ADDRESS"));
+      uiout->table_header (1, ui_left, "is-stmt", _("IS-STMT"));
+      uiout->table_body ();
 
-      for (i = 0; i < linetable->nitems; ++i)
+      for (int i = 0; i < linetable->nitems; ++i)
 	{
 	  struct linetable_entry *item;
 
 	  item = &linetable->item [i];
-	  printf_filtered (_("%-6d %6d %s\n"), i, item->line,
-			   core_addr_to_string (item->pc));
+	  ui_out_emit_tuple tuple_emitter (uiout, nullptr);
+	  uiout->field_int ("index", i);
+	  if (item->line > 0)
+	    uiout->field_int ("line", item->line);
+	  else
+	    uiout->field_string ("line", _("END"));
+	  uiout->field_core_addr ("address", get_objfile_arch (objfile),
+				  item->pc);
+	  uiout->field_string ("is-stmt", item->is_stmt ? "Y" : "");
+	  uiout->text ("\n");
 	}
     }
 

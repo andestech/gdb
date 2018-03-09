@@ -58,6 +58,7 @@ static bfd_size_type common_size;
 static bfd_size_type total_bsssize;
 static bfd_size_type total_datasize;
 static bfd_size_type total_textsize;
+static bfd_size_type total_rodata_size;
 
 /* Program exit status.  */
 static int return_code = 0;
@@ -245,9 +246,13 @@ main (int argc, char **argv)
       bfd_size_type total = total_textsize + total_datasize + total_bsssize;
 
       rprint_number (7, total_textsize);
-      putchar('\t');
+      putchar ('\t');
+      rprint_number (7, total_textsize - total_rodata_size);
+      putchar ('\t');
+      rprint_number (7, total_rodata_size);
+      putchar ('\t');
       rprint_number (7, total_datasize);
-      putchar('\t');
+      putchar ('\t');
       rprint_number (7, total_bsssize);
       printf (((radix == octal) ? "\t%7lo\t%7lx\t" : "\t%7lu\t%7lx\t"),
 	      (unsigned long) total, (unsigned long) total);
@@ -443,6 +448,7 @@ rprint_number (int width, bfd_size_type num)
 static bfd_size_type bsssize;
 static bfd_size_type datasize;
 static bfd_size_type textsize;
+static bfd_size_type rodata_size;
 
 static void
 berkeley_sum (bfd *abfd ATTRIBUTE_UNUSED, sec_ptr sec,
@@ -456,6 +462,12 @@ berkeley_sum (bfd *abfd ATTRIBUTE_UNUSED, sec_ptr sec,
     return;
 
   size = bfd_get_section_size (sec);
+
+  if ((flags & SEC_DATA) != 0
+      && (flags & SEC_READONLY) != 0
+      && (flags & SEC_CODE) == 0)
+    rodata_size = rodata_size + size;
+
   if ((flags & SEC_CODE) != 0 || (flags & SEC_READONLY) != 0)
     textsize += size;
   else if ((flags & SEC_HAS_CONTENTS) != 0)
@@ -473,24 +485,31 @@ print_berkeley_format (bfd *abfd)
   bsssize = 0;
   datasize = 0;
   textsize = 0;
+  rodata_size = 0;
 
   bfd_map_over_sections (abfd, berkeley_sum, NULL);
 
   bsssize += common_size;
   if (files_seen++ == 0)
-    puts ((radix == octal) ? "   text\t   data\t    bss\t    oct\t    hex\tfilename" :
-	  "   text\t   data\t    bss\t    dec\t    hex\tfilename");
+    puts ((radix == octal) ?
+	  "   text\t   code\t rodata\t   data\t    bss\t    oct\t    hex\tfilename" :
+	  "   text\t   code\t rodata\t   data\t    bss\t    dec\t    hex\tfilename");
 
   total = textsize + datasize + bsssize;
 
   if (show_totals)
     {
       total_textsize += textsize;
+      total_rodata_size += rodata_size;
       total_datasize += datasize;
       total_bsssize  += bsssize;
     }
 
   rprint_number (7, textsize);
+  putchar ('\t');
+  rprint_number (7, textsize - rodata_size);
+  putchar ('\t');
+  rprint_number (7, rodata_size);
   putchar ('\t');
   rprint_number (7, datasize);
   putchar ('\t');

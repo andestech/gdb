@@ -222,7 +222,7 @@ do_children_tests (void)
 
   /* Avoid pointing into NULL, as that is editable on some
      systems.  */
-  int dummy;
+  int dummy = 0;
   int *dummy_ptr = &dummy;
 
   struct _struct_decl struct_declarations = { 0, 0, NULL, 0, &dummy_ptr };

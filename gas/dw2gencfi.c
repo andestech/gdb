@@ -1588,53 +1588,27 @@ output_cfi_insn (struct cfi_insn_data *insn)
 
   switch (insn->insn)
     {
+    /* For Bug-14183, frame debug info is incorrect after linking.  */
     case DW_CFA_advance_loc:
       {
 	symbolS *from = insn->u.ll.lab1;
 	symbolS *to = insn->u.ll.lab2;
 
-	if (symbol_get_frag (to) == symbol_get_frag (from))
-	  {
-	    addressT delta = S_GET_VALUE (to) - S_GET_VALUE (from);
-	    addressT scaled = delta / DWARF2_LINE_MIN_INSN_LENGTH;
+	expressionS exp;
+	exp.X_op = O_subtract;
+	exp.X_add_symbol = to;
+	exp.X_op_symbol = from;
+	exp.X_add_number = 0;
 
-	    if (scaled <= 0x3F)
-	      out_one (DW_CFA_advance_loc + scaled);
-	    else if (scaled <= 0xFF)
-	      {
-		out_one (DW_CFA_advance_loc1);
-		out_one (scaled);
-	      }
-	    else if (scaled <= 0xFFFF)
-	      {
-		out_one (DW_CFA_advance_loc2);
-		out_two (scaled);
-	      }
-	    else
-	      {
-		out_one (DW_CFA_advance_loc4);
-		out_four (scaled);
-	      }
-	  }
-	else
-	  {
-	    expressionS exp;
+	/* The code in ehopt.c expects that one byte of the encoding
+	   is already allocated to the frag.  This comes from the way
+	   that it scans the .eh_frame section looking first for the
+	   .byte DW_CFA_advance_loc4.  */
+	*frag_more (1) = DW_CFA_advance_loc4;
 
-	    exp.X_op = O_subtract;
-	    exp.X_add_symbol = to;
-	    exp.X_op_symbol = from;
-	    exp.X_add_number = 0;
-
-	    /* The code in ehopt.c expects that one byte of the encoding
-	       is already allocated to the frag.  This comes from the way
-	       that it scans the .eh_frame section looking first for the
-	       .byte DW_CFA_advance_loc4.  */
-	    *frag_more (1) = DW_CFA_advance_loc4;
-
-	    frag_var (rs_cfa, 4, 0, DWARF2_LINE_MIN_INSN_LENGTH << 3,
-		      make_expr_symbol (&exp), frag_now_fix () - 1,
-		      (char *) frag_now);
-	  }
+	frag_var (rs_cfa, 4, 0, DWARF2_LINE_MIN_INSN_LENGTH << 3,
+		  make_expr_symbol (&exp), frag_now_fix () - 1,
+		  (char *) frag_now);
       }
       break;
 
@@ -1946,6 +1920,7 @@ output_fde (struct fde_entry *fde, struct cie_entry *cie,
   exp.X_add_symbol = end_address;
   exp.X_op_symbol = after_size_address;
   exp.X_add_number = 0;
+  exp.X_md = 0;
   if (eh_frame || fmt == dwarf2_format_32bit)
     offset_size = 4;
   else

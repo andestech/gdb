@@ -82,7 +82,7 @@ ia64*-*-*)
 	;;
 
 riscv*-*-*)
-	cpu_obs="riscv-tdep.o arch/riscv.o";;
+	cpu_obs="riscv-tdep.o arch/riscv.o nds-remote.o";;
 
 x86_64-*-*)
 	cpu_obs="${i386_tobjs} ${amd64_tobjs}";;
@@ -555,6 +555,7 @@ riscv*-*-linux*)
 riscv*-*-*)
 	# Target: RISC-V architecture
 	gdb_target_obs=""
+	gdb_sim="../sim/riscv/libsim.a ../sim/riscv/libsoftfloat.a"
 	;;
 
 rl78-*-elf)

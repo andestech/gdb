@@ -62,10 +62,13 @@ proc verify_testval {name value} {
 # make looking at the source line unreliable.
 
 # A simple test of next over a throw.
+set oldtimeout $timeout
+set timeout [expr "$timeout + 100"]
 tbreak_and_cont "Start: first test"
 gdb_test "next" ".*" "next over a throw 1"
 tbreak_and_cont "End: first test"
 verify_testval "pre-check - next over a throw 1" -1
+set timeout $oldtimeout
 
 tbreak_and_cont "Start: nested throw"
 verify_testval "post-check - next over a throw 1" 0
