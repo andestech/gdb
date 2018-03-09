@@ -1863,6 +1863,25 @@ elf_plt_unwind_list_options (FILE *file)
 }
 
 static void
+nds_ld_list_options (FILE *file)
+{
+  fprintf (file, _("\
+\nNDS specific command line options:\n\
+  --mno-target-aligned        Disable target aligned\n\
+  --m[no-]gp-insn             Support gp relative instructions\n\
+  --mexport-symbols=FILE      Exporting global symbols into linker script\n\
+  --m[no-]avoid-btb-miss      Avoid btb miss \n\
+  --m[no-]ex9                 Disable/enable link-time EX9 relaxation\n\
+  --mexport-ex9=FILE          Export EX9 table after linking\n\
+  --mimport-ex9=FILE          Import Ex9 table for EX9 relaxation\n\
+  --mkeep-import-ex9          Keep import Ex9 table\n\
+  --mupdate-ex9               Update existing EX9 table\n\
+  --mex9-limit=NUM            Set maximum number of entries in ex9 table\n\
+  --mex9-loop-aware           Avoid generate EX9 instruction inside loop\n\
+  "));
+}
+
+static void
 ld_list_options (FILE *file, bfd_boolean elf, bfd_boolean shlib,
 		 bfd_boolean plt_unwind)
 {
@@ -1990,7 +2009,9 @@ help (void)
   printf (_("%s: emulation specific options:\n"), program_name);
   ld_list_options (stdout, ELF_LIST_OPTIONS, ELF_SHLIB_LIST_OPTIONS,
 		   ELF_PLT_UNWIND_LIST_OPTIONS);
-  ldemul_list_emulation_options (stdout);
+  /* TODO: This method is temporarily. We should use
+     ldemul_list_emulation_options (stdout).  */
+  nds_ld_list_options (stdout);
   printf ("\n");
 
   if (REPORT_BUGS_TO[0])

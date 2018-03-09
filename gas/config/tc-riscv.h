@@ -126,4 +126,23 @@ extern void riscv_elf_final_processing (void);
 extern void riscv_md_end (void);
 extern int riscv_convert_symbolic_attribute (const char *);
 
+#define md_post_relax_hook riscv_post_relax_hook ()
+extern void riscv_post_relax_hook (void);
+
+/* Relocation flags for R_RISCV_ERLAX_ENTRY.  */
+
+/* Set if relax on this section is done or disabled.  */
+#define R_RISCV_RELAX_ENTRY_DISABLE_RELAX_FLAG		(1 << 31)
+/* EX9 must be explicitly enabled, so we won't mess up handcraft assembly code.
+   Enable EX9 optimization for this section.  */
+#define R_RISCV_RELAX_ENTRY_EX9_FLAG			(1 << 2)
+
+/* Relocation flags for R_RISCV_RELAX_REGION_BEGIN/END.  */
+
+/* Suppress EX9 optimization in the region.  */
+#define R_RISCV_RELAX_REGION_NO_EX9_FLAG		(1 << 2)
+/* A Innermost loop region.  Some optimizations is suppressed in this region
+   due to performance drop.  */
+#define R_RISCV_RELAX_REGION_INNERMOST_LOOP_FLAG	(1 << 4)
+
 #endif /* TC_RISCV */
