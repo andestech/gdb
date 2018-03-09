@@ -49,7 +49,6 @@ struct pending_block
     struct block *block;
   };
 
-static int compare_line_numbers (const void *ln1p, const void *ln2p);
 
 /* Initial sizes of data structures.  These are realloc'd larger if
    needed, and realloc'd down to the size actually used, when
@@ -668,7 +667,7 @@ buildsym_compunit::pop_subfile ()
 
 void
 buildsym_compunit::record_line (struct subfile *subfile, int line,
-				CORE_ADDR pc)
+				CORE_ADDR pc, bool is_stmt)
 {
   struct linetable_entry *e;
 
@@ -689,7 +688,21 @@ buildsym_compunit::record_line (struct subfile *subfile, int line,
       m_have_line_numbers = true;
     }
 
-  if (subfile->line_vector->nitems + 1 >= subfile->line_vector_length)
+  if (subfile->line_vector->nitems > 0)
+    {
+      /* If we have a duplicate for the previous entry then ignore the new
+	 entry, except, if the new entry is setting the is_stmt flag, then
+	 ensure the previous entry respects the new setting.  */
+      e = subfile->line_vector->item + subfile->line_vector->nitems - 1;
+      if (e->line == line && e->pc == pc)
+	{
+	  if (is_stmt && !e->is_stmt)
+	    e->is_stmt = 1;
+	  return;
+	}
+    }
+
+  if (subfile->line_vector->nitems >= subfile->line_vector_length)
     {
       subfile->line_vector_length *= 2;
       subfile->line_vector = (struct linetable *)
@@ -724,29 +737,10 @@ buildsym_compunit::record_line (struct subfile *subfile, int line,
 
   e = subfile->line_vector->item + subfile->line_vector->nitems++;
   e->line = line;
+  e->is_stmt = is_stmt ? 1 : 0;
   e->pc = pc;
 }
 
-/* Needed in order to sort line tables from IBM xcoff files.  Sigh!  */
-
-static int
-compare_line_numbers (const void *ln1p, const void *ln2p)
-{
-  struct linetable_entry *ln1 = (struct linetable_entry *) ln1p;
-  struct linetable_entry *ln2 = (struct linetable_entry *) ln2p;
-
-  /* Note: this code does not assume that CORE_ADDRs can fit in ints.
-     Please keep it that way.  */
-  if (ln1->pc < ln2->pc)
-    return -1;
-
-  if (ln1->pc > ln2->pc)
-    return 1;
-
-  /* If pc equal, sort by line.  I'm not sure whether this is optimum
-     behavior (see comment at struct linetable in symtab.h).  */
-  return ln1->line - ln2->line;
-}
 
 /* Subroutine of end_symtab to simplify it.  Look for a subfile that
    matches the main source file's basename.  If there is only one, and
@@ -964,13 +958,23 @@ buildsym_compunit::end_symtab_with_blockvector (struct block *static_block,
 	  linetablesize = sizeof (struct linetable) +
 	    subfile->line_vector->nitems * sizeof (struct linetable_entry);
 
-	  /* Like the pending blocks, the line table may be
-	     scrambled in reordered executables.  Sort it if
-	     OBJF_REORDERED is true.  */
+	  const auto lte_is_less_than
+	    = [] (const linetable_entry &ln1,
+		  const linetable_entry &ln2) -> bool
+	      {
+		return (ln1.pc < ln2.pc);
+	      };
+
+	  /* Like the pending blocks, the line table may be scrambled in
+	     reordered executables.  Sort it if OBJF_REORDERED is true.  It
+	     is important to preserve the order of lines at the same
+	     address, as this maintains the inline function caller/callee
+	     relationships, this is why std::stable_sort is used.  */
 	  if (m_objfile->flags & OBJF_REORDERED)
-	    qsort (subfile->line_vector->item,
-		   subfile->line_vector->nitems,
-		   sizeof (struct linetable_entry), compare_line_numbers);
+	    std::stable_sort (subfile->line_vector->item,
+			      subfile->line_vector->item
+			      + subfile->line_vector->nitems,
+			      lte_is_less_than);
 	}
 
       /* Allocate a symbol table if necessary.  */

@@ -20647,6 +20647,15 @@ private:
   /* The last file a line number was recorded for.  */
   struct subfile *m_last_subfile = NULL;
 
+  /* The address of the last line entry.  */
+  CORE_ADDR m_last_address;
+
+  /* Set to true when a previous line at the same address (using
+     m_last_address) had m_is_stmt true.  This is reset to false when a
+     line entry at a new address (m_address different to m_last_address) is
+     processed.  */
+  bool m_stmt_at_address = false;
+
   /* When true, record the lines we decode.  */
   bool m_currently_recording_lines = false;
 
@@ -20774,7 +20783,7 @@ dwarf_record_line_p (struct dwarf2_cu *cu,
 
 static void
 dwarf_record_line_1 (struct gdbarch *gdbarch, struct subfile *subfile,
-		     unsigned int line, CORE_ADDR address,
+		     unsigned int line, CORE_ADDR address, bool is_stmt,
 		     struct dwarf2_cu *cu)
 {
   CORE_ADDR addr = gdbarch_addr_bits_remove (gdbarch, address);
@@ -20788,7 +20797,7 @@ dwarf_record_line_1 (struct gdbarch *gdbarch, struct subfile *subfile,
     }
 
   if (cu != nullptr)
-    cu->get_builder ()->record_line (subfile, line, addr);
+    cu->get_builder ()->record_line (subfile, line, addr, is_stmt);
 }
 
 /* Subroutine of dwarf_decode_lines_1 to simplify it.
@@ -20811,7 +20820,7 @@ dwarf_finish_line (struct gdbarch *gdbarch, struct subfile *subfile,
 			  paddress (gdbarch, address));
     }
 
-  dwarf_record_line_1 (gdbarch, subfile, 0, address, cu);
+  dwarf_record_line_1 (gdbarch, subfile, 0, address, true, cu);
 }
 
 void
@@ -20821,10 +20830,11 @@ lnp_state_machine::record_line (bool end_sequence)
     {
       fprintf_unfiltered (gdb_stdlog,
 			  "Processing actual line %u: file %u,"
-			  " address %s, is_stmt %u, discrim %u\n",
+			  " address %s, is_stmt %u, discrim %u%s\n",
 			  m_line, to_underlying (m_file),
 			  paddress (m_gdbarch, m_address),
-			  m_is_stmt, m_discriminator);
+			  m_is_stmt, m_discriminator,
+			  (end_sequence ? "\t(end sequence)" : ""));
     }
 
   file_entry *fe = current_file ();
@@ -20837,17 +20847,39 @@ lnp_state_machine::record_line (bool end_sequence)
   else if (m_op_index == 0 || end_sequence)
     {
       fe->included_p = 1;
-      if (m_record_lines_p && (producer_is_codewarrior (m_cu) || m_is_stmt))
+      if (m_record_lines_p)
 	{
-	  if (m_last_subfile != m_cu->get_builder ()->get_current_subfile ()
-	      || end_sequence)
+		 /* When we switch files we insert an end maker in the first file,
+	     switch to the second file and add a new line entry.  The
+	     problem is that the end marker inserted in the first file will
+	     discard any previous line entries at the same address.  If the
+	     line entries in the first file are marked as is-stmt, while
+	     the new line in the second file is non-stmt, then this means
+	     the end marker will discard is-stmt lines so we can have a
+	     non-stmt line.  This means that there are less addresses at
+	     which the user can insert a breakpoint.
+
+	     To improve this we track the last address in m_last_address,
+	     and whether we have seen an is-stmt at this address.  Then
+	     when switching files, if we have seen a stmt at the current
+	     address, and we are switching to create a non-stmt line, then
+	     discard the new line.  */
+	  bool file_changed
+	    = m_last_subfile != m_cu->get_builder ()->get_current_subfile ();
+	  bool ignore_this_line
+	    = (file_changed && !end_sequence && m_last_address == m_address
+	       && !m_is_stmt && m_stmt_at_address);
+
+	  if ((file_changed && !ignore_this_line) || end_sequence)
 	    {
 	      dwarf_finish_line (m_gdbarch, m_last_subfile, m_address,
 				 m_currently_recording_lines ? m_cu : nullptr);
 	    }
 
-	  if (!end_sequence)
+	  if (!end_sequence && !ignore_this_line)
 	    {
+	    	bool is_stmt = producer_is_codewarrior (m_cu) || m_is_stmt;
+
 	      if (dwarf_record_line_p (m_cu, m_line, m_last_line,
 				       m_line_has_non_zero_discriminator,
 				       m_last_subfile))
@@ -20855,7 +20887,7 @@ lnp_state_machine::record_line (bool end_sequence)
 		  buildsym_compunit *builder = m_cu->get_builder ();
 		  dwarf_record_line_1 (m_gdbarch,
 				       builder->get_current_subfile (),
-				       m_line, m_address,
+				       m_line, m_address, is_stmt,
 				       m_currently_recording_lines ? m_cu : nullptr);
 		}
 	      m_last_subfile = m_cu->get_builder ()->get_current_subfile ();
@@ -20863,6 +20895,14 @@ lnp_state_machine::record_line (bool end_sequence)
 	    }
 	}
     }
+  /* Track whether we have seen any m_is_stmt true at m_address in case we
+     have multiple line table entries all at m_address.  */
+  if (m_last_address != m_address)
+    {
+      m_stmt_at_address = false;
+      m_last_address = m_address;
+    }
+  m_stmt_at_address |= m_is_stmt;
 }
 
 lnp_state_machine::lnp_state_machine (struct dwarf2_cu *cu, gdbarch *arch,

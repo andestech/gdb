@@ -37,6 +37,8 @@ static inline unsigned int riscv_insn_length (insn_t insn)
     return 6;
   if ((insn & 0x7f) == 0x3f) /* 64-bit extensions.  */
     return 8;
+  if ((insn & 0x7f) == 0x7f) /* 32-bit NDS V5 DSP extensions.  */
+    return 4;
   /* Longer instructions not supported at the moment.  */
   return 2;
 }
@@ -133,8 +135,59 @@ static const char * const riscv_vma[2] =
   (RV_X(x, 15, 5))
 #define EXTRACT_RVV_OFFSET(x) \
   (RV_X(x, 29, 3))
+#define EXTRACT_RVV_VB_IMM(x) \
+  (RV_X(x, 20, 10))
 #define EXTRACT_RVV_VC_IMM(x) \
   (RV_X(x, 20, 11))
+
+/* NDS V5 Extension.  */
+#define EXTRACT_UJTYPE_IMM_EXECIT_TAB(x) \
+  ((RV_X(x, 21, 10) << 1) | (RV_X(x, 20, 1) << 11) | (RV_X(x, 12, 8) << 12) | (RV_X(x, 31, 1) << 20))
+#define EXTRACT_RVC_EX9IT_IMM(x) \
+  ((RV_X(x, 4, 1) << 2) | (RV_X(x, 10, 2) << 3) | (RV_X(x, 2, 1) << 5) | (RV_X(x, 5, 2) << 6) | (RV_X(x, 9, 1) << 8) | (RV_X(x, 3, 1) << 9) | (RV_X(x, 12, 1) << 10))
+#define EXTRACT_RVC_EXECIT_IMM(x) \
+  ((RV_X(x, 4, 1) << 2) | (RV_X(x, 10, 2) << 3) | (RV_X(x, 2, 1) << 5) | (RV_X(x, 5, 2) << 6) | (RV_X(x, 9, 1) << 8) | (RV_X(x, 3, 1) << 9) | (RV_X(x, 12, 1) << 10) | (RV_X(x, 8, 1) << 11))
+#define EXTRACT_ITYPE_IMM6H(x) \
+  (RV_X(x, 26, 6))
+#define EXTRACT_ITYPE_IMM6L(x) \
+  (RV_X(x, 20, 6))
+#define EXTRACT_STYPE_IMM7(x) \
+  ((RV_X(x, 20, 5)) | (RV_X(x, 7, 1)) << 5 | RV_X(x, 30, 1) << 6)
+#define EXTRACT_TYPE_CIMM6(x) \
+  ((RV_X(x, 20, 5)) | (RV_X(x, 7, 1)) << 5)
+#define EXTRACT_TYPE_IMM8(x) \
+  ((RV_X(x, 20, 7)) | (RV_IMM_SIGN(x)) << 7)
+#define EXTRACT_TYPE_SIMM8(x) \
+  ((RV_X(x, 7, 5)) | (RV_X(x, 25, 2) << 5) | (RV_IMM_SIGN(x)) << 7)
+#define EXTRACT_STYPE_IMM10(x) \
+  (RV_X(x, 8, 4) << 1 | (RV_X(x, 25, 5) << 5) | (RV_IMM_SIGN(x) << 10))
+#define EXTRACT_GPTYPE_LB_IMM(x) \
+  ((RV_X(x, 14, 1)) | (RV_X(x, 21, 10) << 1) | (RV_X(x, 20, 1) << 11) | (RV_X(x, 17, 3) << 12) | (RV_X(x, 15, 2) << 15) | (RV_IMM_SIGN(x) << 17))
+#define EXTRACT_GPTYPE_LH_IMM(x) \
+  ((RV_X(x, 21, 10) << 1) | (RV_X(x, 20, 1) << 11) | (RV_X(x, 17, 3) << 12) | (RV_X(x, 15, 2) << 15) | (RV_IMM_SIGN(x) << 17))
+#define EXTRACT_GPTYPE_LW_IMM(x) \
+  ((RV_X(x, 22, 9) << 2) | (RV_X(x, 20, 1) << 11) | (RV_X(x, 17, 3) << 12) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 21, 1) << 17) | (RV_IMM_SIGN(x) << 18))
+#define EXTRACT_GPTYPE_LD_IMM(x) \
+  ((RV_X(x, 23, 8) << 3) | (RV_X(x, 20, 1) << 11) | (RV_X(x, 17, 3) << 12) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 21, 2) << 17) | (RV_IMM_SIGN(x) << 19))
+#define EXTRACT_GPTYPE_SB_IMM(x) \
+  ((RV_X(x, 14, 1)) | (RV_X(x, 8, 4) << 1) | (RV_X(x, 25, 6) << 5) | (RV_X(x, 7, 1) << 11) | (RV_X(x, 17, 3) << 12) | (RV_X(x, 15, 2) << 15) | (RV_IMM_SIGN(x) << 17))
+#define EXTRACT_GPTYPE_SH_IMM(x) \
+  ((RV_X(x, 8, 4) << 1) | (RV_X(x, 25, 6) << 5) | (RV_X(x, 7, 1) << 11) | (RV_X(x, 17, 3) << 12) | (RV_X(x, 15, 2) << 15) | (RV_IMM_SIGN(x) << 17))
+#define EXTRACT_GPTYPE_SW_IMM(x) \
+  ((RV_X(x, 9, 3) << 2) | (RV_X(x, 25, 6) << 5) | (RV_X(x, 7, 1) << 11) | (RV_X(x, 17, 3) << 12) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 8, 1) << 17) | (RV_IMM_SIGN(x) << 18))
+#define EXTRACT_GPTYPE_SD_IMM(x) \
+  ((RV_X(x, 10, 2) << 3) | (RV_X(x, 25, 6) << 5) | (RV_X(x, 7, 1) << 11) | (RV_X(x, 17, 3) << 12) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 8, 2) << 17) | (RV_IMM_SIGN(x) << 19))
+/* NDS V5 DSP Extension.  */
+#define EXTRACT_PTYPE_IMM3U(x) \
+  (RV_X(x, 20, 3))
+#define EXTRACT_PTYPE_IMM4U(x) \
+  (RV_X(x, 20, 4))
+#define EXTRACT_PTYPE_IMM5U(x) \
+  (RV_X(x, 20, 5))
+#define EXTRACT_PTYPE_IMM6U(x) \
+  (RV_X(x, 20, 6))
+#define EXTRACT_PTYPE_IMM15S(x) \
+  ((-RV_X(x, 24, 1) << 15) | (RV_X(x, 7, 5) << 0) | RV_X(x, 15, 9) << 5)
 
 #define ENCODE_ITYPE_IMM(x) \
   (RV_X(x, 0, 12) << 20)
@@ -174,8 +227,57 @@ static const char * const riscv_vma[2] =
   ((RV_X(x, 1, 2) << 3) | (RV_X(x, 3, 2) << 10) | (RV_X(x, 5, 1) << 2) | (RV_X(x, 6, 2) << 5) | (RV_X(x, 8, 1) << 12))
 #define ENCODE_RVC_J_IMM(x) \
   ((RV_X(x, 1, 3) << 3) | (RV_X(x, 4, 1) << 11) | (RV_X(x, 5, 1) << 2) | (RV_X(x, 6, 1) << 7) | (RV_X(x, 7, 1) << 6) | (RV_X(x, 8, 2) << 9) | (RV_X(x, 10, 1) << 8) | (RV_X(x, 11, 1) << 12))
+#define ENCODE_RVV_VB_IMM(x) \
+  (RV_X(x, 0, 10) << 20)
 #define ENCODE_RVV_VC_IMM(x) \
   (RV_X(x, 0, 11) << 20)
+
+/* NDS V5 Extension.  */
+#define ENCODE_SBTYPE_IMM6H(x) \
+  (RV_X(x, 0, 6) << 26)
+#define ENCODE_SBTYPE_IMM6L(x) \
+  (RV_X(x, 0, 6) << 20)
+#define ENCODE_STYPE_IMM7(x) \
+  ((RV_X(x, 0, 5) << 20) | (RV_X(x, 5, 1) << 7) | (RV_X(x, 6, 1) << 30))
+#define ENCODE_STYPE_IMM10(x) \
+  ((RV_X(x, 1, 4) << 8) | (RV_X(x, 5, 5) <<25) | (RV_X(x, 10, 1) << 31))
+#define ENCODE_TYPE_CIMM6(x) \
+  ((RV_X(x, 0, 5) << 20) | (RV_X(x, 5, 1) << 7))
+#define ENCODE_TYPE_IMM8(x) \
+  ((RV_X(x, 0, 7) << 20) | (RV_X(x, 7, 1) << 31))
+#define ENCODE_TYPE_SIMM8(x) \
+  ((RV_X(x, 0, 5) << 7) | (RV_X(x, 5, 2) << 25) | (RV_X(x, 7, 1) << 31))
+#define ENCODE_GPTYPE_LB_IMM(x) \
+  ((RV_X(x, 0, 1) << 14) | (RV_X(x, 1, 10) << 21) | (RV_X(x, 11, 1) << 20) | (RV_X(x, 12, 3) << 17) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 17, 1) << 31))
+#define ENCODE_GPTYPE_LH_IMM(x) \
+  ((RV_X(x, 1, 10) << 21) | (RV_X(x, 11, 1) << 20) | (RV_X(x, 12, 3) << 17) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 17, 1) << 31))
+#define ENCODE_GPTYPE_LW_IMM(x) \
+  ((RV_X(x, 2, 9) << 22) | (RV_X(x, 11, 1) << 20) | (RV_X(x, 12, 3) << 17) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 17, 1) << 21) | (RV_X(x, 18, 1) << 31))
+#define ENCODE_GPTYPE_LD_IMM(x) \
+  ((RV_X(x, 3, 8) << 23) | (RV_X(x, 11, 1) << 20) | (RV_X(x, 12, 3) << 17) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 17, 2) << 21) | (RV_X(x, 19, 1) << 31))
+#define ENCODE_GPTYPE_SB_IMM(x) \
+  ((RV_X(x, 0, 1) << 14) | (RV_X(x, 1, 4) << 8) | (RV_X(x, 5, 6) << 25) | (RV_X(x, 11, 1) << 7) | (RV_X(x, 12, 3) << 17) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 17, 1) << 31))
+#define ENCODE_GPTYPE_SH_IMM(x) \
+  ((RV_X(x, 1, 4) << 8) | (RV_X(x, 5, 6) << 25) | (RV_X(x, 11, 1) << 7) | (RV_X(x, 12, 3) << 17) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 17, 1) << 31))
+#define ENCODE_GPTYPE_SW_IMM(x) \
+  ((RV_X(x, 2, 3) << 9) | (RV_X(x, 5, 6) << 25) | (RV_X(x, 11, 1) << 7) | (RV_X(x, 12, 3) << 17) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 17, 1) << 8) | (RV_X(x, 18, 1) << 31))
+#define ENCODE_GPTYPE_SD_IMM(x) \
+  ((RV_X(x, 3, 2) << 10) | (RV_X(x, 5, 6) << 25) | (RV_X(x, 11, 1) << 7) | (RV_X(x, 12, 3) << 17) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 17, 2) << 8) | (RV_X(x, 19, 1) << 31))
+#define ENCODE_RVC_EX9IT_IMM(x) \
+  ((RV_X(x, 2, 1) << 4) | (RV_X(x, 3, 2) << 10) | (RV_X(x, 5, 1) << 2) | (RV_X(x, 6, 2) << 5) | (RV_X(x, 8, 1) << 9) | (RV_X(x, 9, 1) << 3) | (RV_X(x, 10, 1) << 12))
+#define ENCODE_RVC_EXECIT_IMM(x) \
+  ((RV_X(x, 2, 1) << 4) | (RV_X(x, 3, 2) << 10) | (RV_X(x, 5, 1) << 2) | (RV_X(x, 6, 2) << 5) | (RV_X(x, 8, 1) << 9) | (RV_X(x, 9, 1) << 3) | (RV_X(x, 10, 1) << 12) | (RV_X(x, 11, 1) << 8))
+/* NDS V5 DSP Extension.  */
+#define ENCODE_PTYPE_IMM3U(x) \
+  (RV_X(x, 0, 3) << 20)
+#define ENCODE_PTYPE_IMM4U(x) \
+  (RV_X(x, 0, 4) << 20)
+#define ENCODE_PTYPE_IMM5U(x) \
+  (RV_X(x, 0, 5) << 20)
+#define ENCODE_PTYPE_IMM6U(x) \
+  (RV_X(x, 0, 6) << 20)
+#define ENCODE_PTYPE_IMM15S(x) \
+  ((RV_X(x, 0, 5) << 7) | RV_X(x, 5, 10) << 15)
 
 #define VALID_ITYPE_IMM(x) (EXTRACT_ITYPE_IMM(ENCODE_ITYPE_IMM(x)) == (x))
 #define VALID_STYPE_IMM(x) (EXTRACT_STYPE_IMM(ENCODE_STYPE_IMM(x)) == (x))
@@ -183,7 +285,6 @@ static const char * const riscv_vma[2] =
 #define VALID_UTYPE_IMM(x) (EXTRACT_UTYPE_IMM(ENCODE_UTYPE_IMM(x)) == (x))
 #define VALID_UJTYPE_IMM(x) (EXTRACT_UJTYPE_IMM(ENCODE_UJTYPE_IMM(x)) == (x))
 #define VALID_RVC_IMM(x) (EXTRACT_RVC_IMM(ENCODE_RVC_IMM(x)) == (x))
-#define VALID_RVC_LUI_IMM(x) (ENCODE_RVC_LUI_IMM(x) != 0 && EXTRACT_RVC_LUI_IMM(ENCODE_RVC_LUI_IMM(x)) == (x))
 #define VALID_RVC_SIMM3(x) (EXTRACT_RVC_SIMM3(ENCODE_RVC_SIMM3(x)) == (x))
 #define VALID_RVC_UIMM8(x) (EXTRACT_RVC_UIMM8(ENCODE_RVC_UIMM8(x)) == (x))
 #define VALID_RVC_ADDI4SPN_IMM(x) (EXTRACT_RVC_ADDI4SPN_IMM(ENCODE_RVC_ADDI4SPN_IMM(x)) == (x))
@@ -196,7 +297,28 @@ static const char * const riscv_vma[2] =
 #define VALID_RVC_SDSP_IMM(x) (EXTRACT_RVC_SDSP_IMM(ENCODE_RVC_SDSP_IMM(x)) == (x))
 #define VALID_RVC_B_IMM(x) (EXTRACT_RVC_B_IMM(ENCODE_RVC_B_IMM(x)) == (x))
 #define VALID_RVC_J_IMM(x) (EXTRACT_RVC_J_IMM(ENCODE_RVC_J_IMM(x)) == (x))
+#define VALID_RVV_VB_IMM(x) (EXTRACT_RVV_VB_IMM(ENCODE_RVV_VB_IMM(x)) == (x))
 #define VALID_RVV_VC_IMM(x) (EXTRACT_RVV_VC_IMM(ENCODE_RVV_VC_IMM(x)) == (x))
+
+/* NDS V5 Extension.  */
+#define VALID_STYPE_IMM10(x) (EXTRACT_STYPE_IMM10(ENCODE_STYPE_IMM10(x)) == (x))
+#define VALID_RVC_LUI_IMM(x) (EXTRACT_RVC_LUI_IMM(ENCODE_RVC_LUI_IMM(x)) == (x))
+#define VALID_GPTYPE_LB_IMM(x) (EXTRACT_GPTYPE_LB_IMM(ENCODE_GPTYPE_LB_IMM(x)) == (x))
+#define VALID_GPTYPE_LH_IMM(x) (EXTRACT_GPTYPE_LH_IMM(ENCODE_GPTYPE_LH_IMM(x)) == (x))
+#define VALID_GPTYPE_LW_IMM(x) (EXTRACT_GPTYPE_LW_IMM(ENCODE_GPTYPE_LW_IMM(x)) == (x))
+#define VALID_GPTYPE_LD_IMM(x) (EXTRACT_GPTYPE_LD_IMM(ENCODE_GPTYPE_LD_IMM(x)) == (x))
+#define VALID_GPTYPE_SB_IMM(x) (EXTRACT_GPTYPE_SB_IMM(ENCODE_GPTYPE_SB_IMM(x)) == (x))
+#define VALID_GPTYPE_SH_IMM(x) (EXTRACT_GPTYPE_SH_IMM(ENCODE_GPTYPE_SH_IMM(x)) == (x))
+#define VALID_GPTYPE_SW_IMM(x) (EXTRACT_GPTYPE_SW_IMM(ENCODE_GPTYPE_SW_IMM(x)) == (x))
+#define VALID_GPTYPE_SD_IMM(x) (EXTRACT_GPTYPE_SD_IMM(ENCODE_GPTYPE_SD_IMM(x)) == (x))
+#define VALID_RVC_EX9IT_IMM(x) (EXTRACT_RVC_EX9IT_IMM(ENCODE_RVC_EX9IT_IMM(x)) == (x))
+#define VALID_RVC_EXECIT_IMM(x) (EXTRACT_RVC_EXECIT_IMM(ENCODE_RVC_EXECIT_IMM(x)) == (x))
+/* NDS V5 DSP Extension.  */
+#define VALID_PTYPE_IMM3U(x) (EXTRACT_PTYPE_IMM3U(ENCODE_PTYPE_IMM3U(x)) == (x))
+#define VALID_PTYPE_IMM4U(x) (EXTRACT_PTYPE_IMM4U(ENCODE_PTYPE_IMM4U(x)) == (x))
+#define VALID_PTYPE_IMM5U(x) (EXTRACT_PTYPE_IMM5U(ENCODE_PTYPE_IMM5U(x)) == (x))
+#define VALID_PTYPE_IMM6U(x) (EXTRACT_PTYPE_IMM6U(ENCODE_PTYPE_IMM6U(x)) == (x))
+#define VALID_PTYPE_IMM15S(x) (EXTRACT_PTYPE_IMM15S(ENCODE_PTYPE_IMM15S(x)) == (x))
 
 #define RISCV_RTYPE(insn, rd, rs1, rs2) \
   ((MATCH_ ## insn) | ((rd) << OP_SH_RD) | ((rs1) << OP_SH_RS1) | ((rs2) << OP_SH_RS2))
@@ -235,6 +357,21 @@ static const char * const riscv_vma[2] =
 #define RISCV_BRANCH_ALIGN (1 << RISCV_BRANCH_ALIGN_BITS)
 #define RISCV_BRANCH_REACH (RISCV_IMM_REACH * RISCV_BRANCH_ALIGN)
 
+/* NDS V5 Extension.  */
+#define RISCV_IMM10_BITS 10
+#define RISCV_IMM10_REACH (1LL << RISCV_IMM10_BITS)
+#define RISCV_10_PCREL_REACH (RISCV_IMM10_REACH * RISCV_BRANCH_ALIGN)
+#define RISCV_IMM18_BITS 18
+#define RISCV_IMM18_REACH (1LL << RISCV_IMM18_BITS)
+#define RISCV_IMM19_BITS 19
+#define RISCV_IMM19_REACH (1LL << RISCV_IMM19_BITS)
+#define RISCV_IMM20_BITS 20
+#define RISCV_IMM20_REACH (1LL << RISCV_IMM20_BITS)
+#define RISCV_IMM7_BITS 7
+#define RISCV_IMM7_REACH (1LL << RISCV_IMM7_BITS)
+#define RISCV_IMM8_BITS 8
+#define RISCV_IMM8_REACH (1LL << RISCV_IMM8_BITS)
+
 /* RV fields.  */
 
 #define OP_MASK_OP		0x7f
@@ -261,6 +398,11 @@ static const char * const riscv_vma[2] =
 #define OP_SH_AQ		26
 #define OP_MASK_RL		0x1
 #define OP_SH_RL		25
+/* NDS V5 Extension.  */
+#define OP_MASK_SV		0x3
+#define OP_SH_SV		25
+#define OP_MASK_RC		0x1f
+#define OP_SH_RC		25
 
 #define OP_MASK_CUSTOM_IMM	0x7f
 #define OP_SH_CUSTOM_IMM	25
@@ -310,10 +452,10 @@ static const char * const riscv_vma[2] =
 #define OP_MASK_VFUNCT6		0x3f
 #define OP_SH_VFUNCT6		26
 
-#define OP_MASK_VLMUL		0x23
+#define OP_MASK_VLMUL		0x7
 #define OP_SH_VLMUL		0
 #define OP_MASK_VSEW		0x7
-#define OP_SH_VSEW		2
+#define OP_SH_VSEW		3
 #define OP_MASK_VEDIV		0x3
 #define OP_SH_VEDIV		8
 #define OP_MASK_VTYPE_RES	0x1
@@ -367,11 +509,6 @@ static const char * const riscv_vma[2] =
 #define EXTRACT_OPERAND(FIELD, INSN) \
   EXTRACT_BITS ((INSN), OP_MASK_##FIELD, OP_SH_##FIELD)
 
-/* Extract the vlmul value from vsetvli instrucion.  */
-#define EXTRACT_VLMUL(INSN) \
-  (((EXTRACT_OPERAND (VLMUL, INSN) >> 5) << 2) \
-   | (EXTRACT_OPERAND (VLMUL, INSN) & 0x3))
-
 /* The maximal number of subset can be required. */
 #define MAX_SUBSET_NUM 4
 
@@ -403,11 +540,83 @@ struct riscv_opcode
      checking is disable, then most of the function should check only the
      basic encoding for the instruction.  */
   int (*match_func) (const struct riscv_opcode *op, insn_t word,
-		     int constraints);
+		     int constraints, const char **error);
   /* For a macro, this is INSN_MACRO.  Otherwise, it is a collection
      of bits describing the instruction, notably any relevant hazard
      information.  */
   unsigned long pinfo;
+};
+
+/* The current supported ISA spec versions.  */
+
+enum riscv_isa_spec_class
+{
+  ISA_SPEC_CLASS_NONE,
+
+  ISA_SPEC_CLASS_2P2,
+  ISA_SPEC_CLASS_20190608,
+  ISA_SPEC_CLASS_20191213,
+  ISA_SPEC_CLASS_ANDES,
+  ISA_SPEC_CLASS_DRAFT
+};
+
+#define RISCV_UNKNOWN_VERSION -1
+
+/* This structure holds version information for specific ISA.  */
+
+struct riscv_ext_version
+{
+  const char *name;
+  enum riscv_isa_spec_class isa_spec_class;
+  unsigned int major_version;
+  unsigned int minor_version;
+};
+
+/* All RISC-V CSR belong to one of these classes.  */
+
+enum riscv_csr_class
+{
+  CSR_CLASS_NONE,
+
+  CSR_CLASS_I,
+  CSR_CLASS_I_32,      /* rv32 only */
+  CSR_CLASS_F,         /* f-ext only */
+  CSR_CLASS_V,         /* v-ext only */
+  CSR_CLASS_DEBUG      /* debug CSR */
+};
+
+/* The current supported privilege spec versions.  */
+
+enum riscv_priv_spec_class
+{
+  PRIV_SPEC_CLASS_NONE,
+
+  PRIV_SPEC_CLASS_1P9P1,
+  PRIV_SPEC_CLASS_1P10,
+  PRIV_SPEC_CLASS_1P11,
+  PRIV_SPEC_CLASS_DRAFT
+};
+
+/* This structure holds all restricted conditions for a CSR.  */
+
+struct riscv_csr_extra
+{
+  /* Class to which this CSR belongs.  Used to decide whether or
+     not this CSR is legal in the current -march context.  */
+  enum riscv_csr_class csr_class;
+
+  /* CSR may have differnet numbers in the previous priv spec.  */
+  unsigned address;
+
+  /* Record the CSR is defined/valid in which versions.  */
+  enum riscv_priv_spec_class define_version;
+
+  /* Record the CSR is aborted/invalid from which versions.  If it isn't
+     aborted in the current version, then it should be CSR_CLASS_VDRAFT.  */
+  enum riscv_priv_spec_class abort_version;
+
+  /* The CSR may have more than one setting.  */
+  struct riscv_csr_extra *next;
 };
 
 /* Instruction is a simple alias (e.g. "mv" for "addi").  */
@@ -467,23 +676,33 @@ enum
   M_SH,
   M_SW,
   M_SD,
+  M_FLH,
   M_FLW,
   M_FLD,
   M_FLQ,
+  M_FSH,
   M_FSW,
   M_FSD,
   M_FSQ,
   M_CALL,
   M_J,
   M_LI,
+  M_ZEXTH,
+  M_ZEXTW,
+  M_SEXTB,
+  M_SEXTH,
+  /* RVV  */
   M_VMSGE,
   M_VMSGEU,
+  /* Andes  */
+  M_LA_LO,
   M_NUM_MACROS
 };
 
 
 extern const char * const riscv_gpr_names_numeric[NGPR];
 extern const char * const riscv_gpr_names_abi[NGPR];
+extern const char * const riscv_gpr_names_standard[NGPR];
 extern const char * const riscv_fpr_names_numeric[NFPR];
 extern const char * const riscv_fpr_names_abi[NFPR];
 extern const char * const riscv_vecr_names_numeric[NVECR];
@@ -491,5 +710,9 @@ extern const char * const riscv_vecm_names_numeric[NVECM];
 
 extern const struct riscv_opcode riscv_opcodes[];
 extern const struct riscv_opcode riscv_insn_types[];
+extern const struct riscv_ext_version riscv_ext_version_table[];
+
+extern int
+riscv_get_isa_spec_class (const char *, enum riscv_isa_spec_class *);
 
 #endif /* _RISCV_H_ */

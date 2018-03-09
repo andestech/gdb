@@ -77,6 +77,10 @@ const struct floatformat *floatformats_ieee_double[BFD_ENDIAN_UNKNOWN] = {
   &floatformat_ieee_double_big,
   &floatformat_ieee_double_little
 };
+const struct floatformat *floatformats_bfloat16[BFD_ENDIAN_UNKNOWN] = {
+  &floatformat_bfloat16_big,
+  &floatformat_bfloat16_little
+};
 const struct floatformat *floatformats_ieee_double_littlebyte_bigword[BFD_ENDIAN_UNKNOWN] = {
   &floatformat_ieee_double_big,
   &floatformat_ieee_double_littlebyte_bigword

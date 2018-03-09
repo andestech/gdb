@@ -46,10 +46,14 @@ struct riscv_gdbarch_features
      that there are no f-registers.  No other value is valid.  */
   int flen = 0;
 
+  /* Only reduced (16) gprs are used or supported.  */
+  bool reduced_gpr = false;
+
   /* Equality operator.  */
   bool operator== (const struct riscv_gdbarch_features &rhs) const
   {
-    return (xlen == rhs.xlen && flen == rhs.flen);
+    return (xlen == rhs.xlen && flen == rhs.flen
+	    && reduced_gpr == rhs.reduced_gpr);
   }
 
   /* Inequality operator.  */

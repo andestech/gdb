@@ -30,6 +30,10 @@ static int cmp_addr (const PTR, const PTR);
 
 Sym_Table symtab;
 
+Sym_HTEntry *Sym_HT[SYM_HTSIZE];
+int Sym_HTCount;
+
+int current_unmapped=1;
 
 /* Initialize a symbol (so it's empty).  */
 
@@ -74,6 +78,26 @@ cmp_addr (const PTR lp, const PTR rp)
   return left->is_static - right->is_static;
 }
 
+static int
+cmp_addr2 (const PTR lp, const PTR rp)
+{
+  const Sym *left = (const Sym *) lp;
+  const Sym *right = (const Sym *) rp;
+
+  if (left->is_unmapped != right->is_unmapped)
+    return left->is_unmapped - right->is_unmapped;
+
+  if (left->addr > right->addr)
+    return 1;
+  else if (left->addr < right->addr)
+    return -1;
+
+  if (left->is_func != right->is_func)
+    return right->is_func - left->is_func;
+
+  return left->is_static - right->is_static;
+}
+
 
 void
 symtab_finalize (Sym_Table *tab)
@@ -85,7 +109,10 @@ symtab_finalize (Sym_Table *tab)
     return;
 
   /* Sort symbol table in order of increasing function addresses.  */
-  qsort (tab->base, tab->len, sizeof (Sym), cmp_addr);
+  if (do_timeline)
+    qsort (tab->base, tab->len, sizeof (Sym), cmp_addr2);
+  else
+    qsort (tab->base, tab->len, sizeof (Sym), cmp_addr);
 
   /* Remove duplicate entries to speed-up later processing and
      set end_addr if its not set yet.  */
@@ -272,3 +299,56 @@ sym_lookup (Sym_Table *sym_tab, bfd_vma address)
 
   return 0;
 }
+
+// ============================================================================
+// symht_init
+//
+// This function initializes the unresolved symbol hash table.
+// ============================================================================
+void
+symht_init (void)
+{
+  memset (Sym_HT, 0, sizeof(Sym_HTEntry*)*SYM_HTSIZE);
+  Sym_HTCount=0;
+}   // symht_init
+
+// ============================================================================
+// symht_lookup
+//
+// This function searches address from the unresolved symbol hash table.
+// ============================================================================
+Sym *
+symht_lookup(bfd_vma address)
+{   Sym_HTEntry *htnode;
+
+    for (htnode=Sym_HT[SYM_HTFUNC(address)];htnode!=NULL;htnode=htnode->next)
+    {   Sym *sym=htnode->sym;
+
+        if (sym->addr==address&&sym->is_unmapped==current_unmapped)
+            return sym;
+    }
+
+    return NULL;
+}   // symht_lookup
+
+// ============================================================================
+// symht_add
+//
+// This function inserts address into the unresolved symbol hash table.
+// ============================================================================
+int
+symht_add(Sym *func)
+{   Sym_HTEntry *htnode=(Sym_HTEntry*)malloc(sizeof(Sym_HTEntry));
+
+    if (htnode==NULL)
+        return 1;
+    else
+    {   int slot=SYM_HTFUNC(func->addr);
+
+        htnode->sym=func;
+        htnode->next=Sym_HT[slot];
+        Sym_HT[slot]=htnode;
+        Sym_HTCount++;
+        return 0;
+    }
+}   // symht_add

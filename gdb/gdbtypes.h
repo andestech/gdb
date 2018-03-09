@@ -1704,6 +1704,7 @@ extern const struct objfile_type *objfile_type (struct objfile *objfile);
 extern const struct floatformat *floatformats_ieee_half[BFD_ENDIAN_UNKNOWN];
 extern const struct floatformat *floatformats_ieee_single[BFD_ENDIAN_UNKNOWN];
 extern const struct floatformat *floatformats_ieee_double[BFD_ENDIAN_UNKNOWN];
+extern const struct floatformat *floatformats_bfloat16[BFD_ENDIAN_UNKNOWN];
 extern const struct floatformat *floatformats_ieee_double_littlebyte_bigword[BFD_ENDIAN_UNKNOWN];
 extern const struct floatformat *floatformats_i387_ext[BFD_ENDIAN_UNKNOWN];
 extern const struct floatformat *floatformats_m68881_ext[BFD_ENDIAN_UNKNOWN];

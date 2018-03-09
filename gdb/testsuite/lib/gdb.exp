@@ -717,10 +717,24 @@ proc gdb_internal_error_resync {} {
 #
 # gdb_test_multiple "print foo" "test foo" {
 #    -re "expected output 1" {
-#        pass "print foo"
+#        pass "test foo"
 #    }
 #    -re "expected output 2" {
-#        fail "print foo"
+#        fail "test foo"
+#    }
+# }
+#
+# Within action elements you can also make use of the variable
+# gdb_test_name.  This variable is setup automatically by
+# gdb_test_multiple, and contains the value of MESSAGE.  You can then
+# write this, which is equivalent to the above:
+#
+# gdb_test_multiple "print foo" "test foo" {
+#    -re "expected output 1" {
+#        pass $gdb_test_name
+#    }
+#    -re "expected output 2" {
+#        fail $gdb_test_name
 #    }
 # }
 #
@@ -744,7 +758,18 @@ proc gdb_internal_error_resync {} {
 # expected from $gdb_spawn_id.  IOW, callers do not need to worry
 # about resetting "-i" back to $gdb_spawn_id explicitly.
 #
-proc gdb_test_multiple { command message user_code } {
+# In EXPECT_ARGUMENTS we can use a -wrap pattern flag, that wraps the regexp
+# pattern as gdb_test wraps its message argument.
+# This allows us to rewrite:
+#   gdb_test <command> <pattern> <message>
+# into:
+#   gdb_test_multiple <command> <message> {
+#       -re -wrap <pattern> {
+#           pass $gdb_test_name
+#       }
+#   }
+#
+proc gdb_test_multiple { command message user_code { prompt_regexp "" } } {
     global verbose use_gdb_stub
     global gdb_prompt pagination_prompt
     global GDB
@@ -801,6 +826,7 @@ proc gdb_test_multiple { command message user_code } {
     set patterns ""
     set expecting_action 0
     set expecting_arg 0
+    set wrap_pattern 0
     foreach item $user_code subst_item $subst_code {
 	if { $item == "-n" || $item == "-notransfer" || $item == "-nocase" } {
 	    lappend processed_code $item
@@ -813,6 +839,10 @@ proc gdb_test_multiple { command message user_code } {
 	if { $item == "-timeout" || $item == "-i" } {
 	    set expecting_arg 1
 	    lappend processed_code $item
+	    continue
+	}
+	if { $item == "-wrap" } {
+	    set wrap_pattern 1
 	    continue
 	}
 	if { $expecting_arg } {
@@ -828,7 +858,14 @@ proc gdb_test_multiple { command message user_code } {
 	    continue
 	}
 	set expecting_action 1
-	lappend processed_code $subst_item
+	if { $wrap_pattern } {
+	    # Wrap subst_item as is done for the gdb_test PATTERN argument.
+	    lappend processed_code \
+		"\[\r\n\]*(?:$subst_item)\[\r\n\]+$gdb_prompt $"
+	    set wrap_pattern 0
+	} else {
+	    lappend processed_code $subst_item
+	}
 	if {$patterns != ""} {
 	    append patterns "; "
 	}
@@ -1013,8 +1050,42 @@ proc gdb_test_multiple { command message user_code } {
 	}
     }
 
+    # remote_expect calls the eof section if there is an error on the
+    # expect call.  We already have eof sections above, and we don't
+    # want them to get called in that situation.  Since the last eof
+    # section becomes the error section, here we define another eof
+    # section, but with an empty spawn_id list, so that it won't ever
+    # match.
+    append code {
+	-i "" eof {
+	    # This comment is here because the eof section must not be
+	    # the empty string, otherwise remote_expect won't realize
+	    # it exists.
+	}
+    }
+
+    # Create gdb_test_name in the parent scope.  If this variable
+    # already exists, which it might if we have nested calls to
+    # gdb_test_multiple, then preserve the old value, otherwise,
+    # create a new variable in the parent scope.
+    upvar gdb_test_name gdb_test_name
+    if { [info exists gdb_test_name] } {
+	set gdb_test_name_old "$gdb_test_name"
+    }
+    set gdb_test_name "$message"
+
     set result 0
     set code [catch {gdb_expect $code} string]
+
+    # Clean up the gdb_test_name variable.  If we had a
+    # previous value then restore it, otherwise, delete the variable
+    # from the parent scope.
+    if { [info exists gdb_test_name_old] } {
+	set gdb_test_name "$gdb_test_name_old"
+    } else {
+	unset gdb_test_name
+    }
+
     if {$code == 1} {
 	global errorInfo errorCode
 	return -code error -errorinfo $errorInfo -errorcode $errorCode $string
@@ -3081,7 +3152,7 @@ proc skip_compile_feature_tests {} {
 
     set result 0
     gdb_test_multiple "compile code -- ;" "check for working compile command" {
-	"Could not load libcc1.*\r\n$gdb_prompt $" {
+	-re "Could not load libcc1.*\r\n$gdb_prompt $" {
 	    set result 1
 	}
 	-re "Command not supported on this host\\..*\r\n$gdb_prompt $" {
@@ -6270,6 +6341,49 @@ proc gdb_define_cmd {command command_list} {
 	    }
 	}
     }
+}
+
+# Return the addresses in the line table for FILE for which is_stmt is true.
+
+proc is_stmt_addresses { file } {
+    global decimal
+    global hex
+
+    set is_stmt [list]
+
+    gdb_test_multiple "maint info line-table $file" "" {
+	-re "\r\n$decimal\[ \t\]+$decimal\[ \t\]+($hex)\[ \t\]+Y\[^\r\n\]*" {
+	    lappend is_stmt $expect_out(1,string)
+	    exp_continue
+	}
+	-re -wrap "" {
+	}
+    }
+
+    return $is_stmt
+}
+
+# Return 1 if hex number VAL is an element of HEXLIST.
+
+proc hex_in_list { val hexlist } {
+    # Normalize val by removing 0x prefix, and leading zeros.
+    set val [regsub ^0x $val ""]
+    set val [regsub ^0+ $val "0"]
+
+    set re 0x0*$val
+    set index [lsearch -regexp $hexlist $re]
+    return [expr $index != -1]
+}
+
+# Return 1 if compiler supports -gstatement-frontiers.  Otherwise,
+# return 0.
+
+gdb_caching_proc supports_statement_frontiers {
+    return [gdb_can_simple_compile supports_statement_frontiers {
+	int main () {
+	    return 0;
+	}
+    } executable "additional_flags=-gstatement-frontiers"]
 }
 
 # Always load compatibility stuff.

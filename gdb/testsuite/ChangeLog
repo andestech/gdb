@@ -1,3 +1,152 @@
+2020-11-10  Gary Benson <gbenson@redhat.com>
+
+	* gdb.cp/step-and-next-inline.exp: Only require
+	-gstatement-frontiers when building with GCC.
+	Only setup KFAIL's for GCC issues when using
+	a GCC-built executable.
+
+2020-07-16  Tom de Vries  <tdevries@suse.de>
+
+	* lib/dwarf.exp (program): Initialize _line.
+	(DW_LNE_end_sequence): Reinitialize _line.
+	(DW_LNS_advance_line): Update _line.
+	(line): New proc.
+	* gdb.dwarf2/dw2-inline-many-frames.exp: Use line.
+	* gdb.dwarf2/dw2-inline-small-func.exp: Same.
+	* gdb.dwarf2/dw2-inline-stepping.exp: Same.
+	* gdb.dwarf2/dw2-is-stmt-2.exp: Same.
+	* gdb.dwarf2/dw2-is-stmt.exp: Same.
+	* gdb.dwarf2/dw2-ranges-func.exp: Same.
+
+2020-06-01  Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* gdb.cp/step-and-next-inline.exp (do_test): Skip all tests in the
+	use_header case.
+	* gdb.dwarf2/dw2-inline-header-1.exp: New file.
+	* gdb.dwarf2/dw2-inline-header-2.exp: New file.
+	* gdb.dwarf2/dw2-inline-header-3.exp: New file.
+	* gdb.dwarf2/dw2-inline-header-lbls.c: New file.
+	* gdb.dwarf2/dw2-inline-header.c: New file.
+	* gdb.dwarf2/dw2-inline-header.h: New file.
+
+2020-04-14  Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* gdb.dwarf2/dw2-inline-many-frames.exp (get_func_info): Delete.
+	* gdb.dwarf2/dw2-inline-small-func.exp: Pass options to
+	get_func_info.
+	(get_func_info): Delete.
+	* gdb.dwarf2/dw2-is-stmt-2.exp (get_func_info): Delete.
+	* gdb.dwarf2/dw2-is-stmt.exp (get_func_info): Delete.
+	* lib/dwarf.exp (get_func_info): New function.
+
+2020-04-02  Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* lib/dwarf.exp (Dwarf::lines::program::DW_LNS_set_file): New
+	function.
+
+2020-04-02  Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* lib/dwarf.exp (function_range): Allow compiler options to be
+	specified.
+
+2020-04-02  Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* gdb.dwarf2/dw2-inline-small-func-lbls.c: New file.
+	* gdb.dwarf2/dw2-inline-small-func.c: New file.
+	* gdb.dwarf2/dw2-inline-small-func.exp: New file.
+	* gdb.dwarf2/dw2-inline-small-func.h: New file.
+	* gdb.opt/inline-small-func.c: New file.
+	* gdb.opt/inline-small-func.exp: New file.
+	* gdb.opt/inline-small-func.h: New file.
+
+2020-01-24  Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* gdb.dwarf2/dw2-inline-many-frames.c: New file.
+	* gdb.dwarf2/dw2-inline-many-frames.exp: New file.
+
+2020-01-24  Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* gdb.dwarf2/dw2-inline-stepping.c: New file.
+	* gdb.dwarf2/dw2-inline-stepping.exp: New file.
+
+2020-03-14  Tom de Vries  <tdevries@suse.de>
+
+	* lib/gdb.exp (supports_statement_frontiers): New proc.
+	* gdb.cp/step-and-next-inline.exp: Use supports_statement_frontiers.
+
+2020-03-10  Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* lib/dwarf.exp (Dwarf::lines) Add support for modifying the
+	is-stmt flag in the line table.
+
+2020-03-20  Tom Tromey  <tromey@adacore.com>
+
+	* gdb.dwarf2/dw2-ranges-base.exp: Update regular expressions.
+
+2020-01-13  Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* lib/dwarf.exp (Dwarf::lines): Reset _line_saw_program and
+	_line_saw_file.
+
+2020-01-09  Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* gdb.base/skip.exp: Fix race condition in test.
+
+2019-12-17  Bernd Edlinger  <bernd.edlinger@hotmail.de>
+
+	* gdb.base/skip.exp: Fix test failure observed with gcc-9.2.0.
+
+2020-05-06  Tom de Vries  <tdevries@suse.de>
+
+	* gdb.base/watchpoint-reuse-slot.exp (stepi): Print $pc to get current
+	address.
+
+2020-05-06  Tom de Vries  <tdevries@suse.de>
+
+	* gdb.base/watchpoint-reuse-slot.exp: Fix incorrect assignment.
+
+2020-05-06  Tom de Vries  <tdevries@suse.de>
+
+	* lib/gdb.exp (is_stmt_addresses, hex_in_list): New proc, factored out
+	of ...
+	* gdb.base/async.exp: ... here.
+	* gdb.base/consecutive.exp: Handle if 2nd breakpoint is at a
+	"recommended breakpoint location".
+
+2020-05-04  Tom de Vries  <tdevries@suse.de>
+
+	* gdb.base/async.exp: Check whether instruction addresses are a
+	"recommended breakpoint location".
+
+2020-03-10  Andrew Burgess  <andrew.burgess@embecosm.com>
+	    Bernd Edlinger  <bernd.edlinger@hotmail.de>
+
+	* gdb.cp/step-and-next-inline.cc: New file.
+	* gdb.cp/step-and-next-inline.exp: New file.
+	* gdb.cp/step-and-next-inline.h: New file.
+	* gdb.dwarf2/dw2-is-stmt.c: New file.
+	* gdb.dwarf2/dw2-is-stmt.exp: New file.
+	* gdb.dwarf2/dw2-is-stmt-2.c: New file.
+	* gdb.dwarf2/dw2-is-stmt-2.exp: New file.
+	* gdb.dwarf2/dw2-ranges-base.exp: Update line table pattern.
+
+2020-01-24  Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* gdb.base/maint.exp: Update line table parsing test.
+	* gdb.dwarf2/dw2-ranges-base.exp: Add new line table parsing test.
+
+2019-10-24  Tom de Vries  <tdevries@suse.de>
+
+	* lib/gdb.exp (gdb_test_multiple): Add -wrap pattern flag.
+	* gdb.reverse/step-precsave.exp: Rewrite gdb_test_multiple containing
+	kfail using -wrap pattern flag and convenience variable
+	gdb_test_name.
+
+2019-10-07  Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* lib/gdb.exp (gdb_test_multiple): Add gdb_test_name mechanism.
+	* gdb.base/annota1.exp: Update to use gdb_test_name.
+
 2019-01-16  Keith Seitz  <keiths@redhat.com>
 
 	PR gdb/23773

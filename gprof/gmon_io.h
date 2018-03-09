@@ -25,6 +25,15 @@
 #define INPUT_HISTOGRAM		(1 << 0)
 #define INPUT_CALL_GRAPH	(1 << 1)
 #define INPUT_BB_COUNTS		(1 << 2)
+#define INPUT_TIMELINE1		(1 << 3) // function level
+#define INPUT_TIMELINE2		(1 << 4) // branch level
+#define INPUT_TIMELINE3		(1 << 5) // instruction level
+#define INPUT_TIMELINE4		(1 << 6) // pipeline level
+#define INPUT_TIMELINE5		(1 << 7) // process/thread level
+#define INPUT_TIMELINE6		(1 << 8) // function level + branch summary
+#define INPUT_TIMELINE7		(1 << 9) // function level + cache summary
+#define INPUT_TIMELINE8		(1 << 10) // function level + branch & cache summary
+#define INPUT_TIMELINE9		(1 << 11) // branch level + cache summary
 
 extern int gmon_input;		/* What input did we see?  */
 extern int gmon_file_version;	/* File version are we dealing with.  */
@@ -39,5 +48,7 @@ extern int gmon_io_write (FILE *ifp, char *buf, size_t n);
 
 extern void gmon_out_read   (const char *);
 extern void gmon_out_write  (const char *);
+
+extern int prof_out_read      (const char *);
 
 #endif /* gmon_io_h */

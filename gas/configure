@@ -12985,7 +12985,27 @@ $as_echo "#define NDS32_DEFAULT_ZOL_EXT 1" >>confdefs.h
 $as_echo "$enable_zol_ext" >&6; }
 	;;
 
-      aarch64 | i386 | riscv | s390 | sparc)
+	riscv)
+	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for default configuration of --with-arch" >&5
+$as_echo_n "checking for default configuration of --with-arch... " >&6; }
+	if test "x${with_arch}" != x; then
+
+cat >>confdefs.h <<_ACEOF
+#define DEFAULT_ARCH "$with_arch"
+_ACEOF
+
+	else
+
+cat >>confdefs.h <<_ACEOF
+#define DEFAULT_ARCH "${arch}"
+_ACEOF
+
+	fi
+	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $with_arch" >&5
+$as_echo "$with_arch" >&6; }
+	;;
+
+      aarch64 | i386 | s390 | sparc)
 	if test $this_target = $target ; then
 
 cat >>confdefs.h <<_ACEOF
