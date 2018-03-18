@@ -2333,6 +2333,14 @@ void step_once (SIM_CPU *cpu)
     }
   ++cpu->csr.instret;
 
+  /* Halt if jump to 0, it's almost always some thing wrong here.  */
+  if (pc == 0)
+    {
+      fprintf (stderr, "pc == 0\n");
+      sim_engine_halt (sd, cpu, NULL, cpu->pc,
+		       sim_signalled, SIM_SIGILL);
+    }
+
   cpu->pc = pc;
 }
 
