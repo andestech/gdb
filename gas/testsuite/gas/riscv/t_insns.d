@@ -1,4 +1,4 @@
-#as:
+#as: -mno-16-bit
 #objdump: -dr
 
 .*:[ 	]+file format .*
