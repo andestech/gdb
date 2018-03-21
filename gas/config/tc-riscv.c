@@ -75,6 +75,9 @@ static bfd_boolean rve_abi = FALSE;
 #define LOAD_ADDRESS_INSN (abi_xlen == 64 ? "ld" : "lw")
 #define ADD32_INSN (xlen == 64 ? "addiw" : "addi")
 
+/* Record this attribute is set explicitly by .attribute directive.  */
+static int attributes_set_explicitly[NUM_KNOWN_OBJ_ATTRIBUTES];
+
 static unsigned elf_flags = 0;
 /* Save option -O1 for perfomance.  */
 static int optimize = 0;
@@ -4832,6 +4835,56 @@ riscv_innermost_loop (int mode)
     }
 }
 
+int
+andes_riscv_convert_symbolic_attribute (const char *name)
+{
+  static const struct
+  {
+    const char * name;
+    const int    tag;
+  }
+  attribute_table[] =
+    {
+      /* When you modify this table you should
+         also modify the list in doc/c-riscv.texi.  */
+#define T(tag) {#tag, Tag_##tag},  {"Tag_" #tag, Tag_##tag}
+      T(arch),
+      T(priv_spec),
+      T(strict_align),
+      T(stack_align),
+      T(A_ext),
+      T(C_ext),
+      T(D_ext),
+      T(E_ext),
+      T(F_ext),
+      T(I_ext),
+      T(X_ext),
+#undef T
+    };
+
+  unsigned int i;
+
+  if (name == NULL)
+    return -1;
+
+  for (i = 0; i < ARRAY_SIZE (attribute_table); i++)
+    if (strcmp (name, attribute_table[i].name) == 0)
+      return attribute_table[i].tag;
+
+  return -1;
+}
+
+/* Parse a .eabi_attribute directive.  */
+
+static void
+riscv_attribute (int ignored ATTRIBUTE_UNUSED)
+{
+  int tag = obj_elf_vendor_attribute (OBJ_ATTR_PROC);
+
+  if (tag < NUM_KNOWN_OBJ_ATTRIBUTES)
+    attributes_set_explicitly[tag] = 1;
+}
+
 /* Pseudo-op table.  */
 
 static const pseudo_typeS riscv_pseudo_table[] =
@@ -4860,6 +4913,7 @@ static const pseudo_typeS riscv_pseudo_table[] =
   {"no_ex9_end", riscv_no_ex9, 0},
   {"innermost_loop_begin", riscv_innermost_loop, 1},
   {"innermost_loop_end", riscv_innermost_loop, 0},
+  {"attribute", riscv_attribute, 0,},
 
   { NULL, NULL, 0 },
 };

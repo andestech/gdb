@@ -90,6 +90,7 @@ static void riscv_elf_ex9_save_local_symbol_value (void);
 
 static int is_ITB_BASE_set = 0;
 static int check_start_export_sym = 0;
+static int nds_backward_compatible = 0;
 
 /* Used for riscv_relocation_check.  */
 enum
@@ -3154,6 +3155,9 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
   if (ibfd->flags & BFD_LINKER_CREATED)
     return TRUE;
 
+  in_attr = elf_known_obj_attributes_proc (ibfd);
+  out_attr = elf_known_obj_attributes_proc (obfd);
+
   /* Skip any input that doesn't have an attribute section.
      This enables to link object files without attribute section with
      any others.  */
@@ -3171,7 +3175,7 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
 	 initialized.  */
       out_attr[0].i = 1;
 
-      return TRUE;
+      return result;
     }
 
   in_attr = elf_known_obj_attributes_proc (ibfd);
@@ -3228,6 +3232,11 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
 	       ibfd, in_attr[i].i, out_attr[i].i);
 	    result = FALSE;
 	  }
+	break;
+      case Tag_arch + Tag_shfit:
+	if (strcmp (in_attr[Tag_arch].s,
+		    out_attr[Tag_arch].s) != 0)
+	  result = FALSE;
 	break;
       default:
 	result &= _bfd_elf_merge_unknown_attribute_low (ibfd, obfd, i);
@@ -3304,7 +3313,7 @@ _bfd_riscv_elf_merge_private_bfd_data (bfd *ibfd, struct bfd_link_info *info)
   /* Allow linking RVC and non-RVC, and keep the RVC flag.  */
   elf_elfheader (obfd)->e_flags |= new_flags & EF_RISCV_RVC;
 
-  return TRUE;
+  return riscv_merge_attributes (ibfd, info);
 
 fail:
   bfd_set_error (bfd_error_bad_value);
@@ -8101,7 +8110,29 @@ riscv_elf_object_p (bfd *abfd)
 static int
 riscv_elf_obj_attrs_arg_type (int tag)
 {
-  return (tag & 1) != 0 ? ATTR_TYPE_FLAG_STR_VAL : ATTR_TYPE_FLAG_INT_VAL;
+  if (!nds_backward_compatible)
+    {
+      return (tag & 1) != 0 ? ATTR_TYPE_FLAG_STR_VAL : ATTR_TYPE_FLAG_INT_VAL;
+    }
+  else
+    {
+      if (tag >= 'A' && tag < 'X')
+	return ATTR_TYPE_FLAG_INT_VAL
+	     | ATTR_TYPE_FLAG_STR_VAL;
+
+      switch (tag)
+	{
+	case Tag_priv_spec:
+	case Tag_strict_align:
+	case Tag_stack_align:
+	  return ATTR_TYPE_FLAG_INT_VAL;
+	case Tag_arch:
+	case Tag_X_ext:
+	  return ATTR_TYPE_FLAG_STR_VAL;
+	default:
+	  return ATTR_TYPE_FLAG_INT_VAL;
+	}
+    }
 }
 
 #define TARGET_LITTLE_SYM		riscv_elfNN_vec

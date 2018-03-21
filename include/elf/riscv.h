@@ -151,4 +151,26 @@ enum
   Tag_RISCV_priv_spec_revision = 12
 };
 
+/* Additional section types.  */
+#define SHT_RISCV_ATTRIBUTES   0x70000003  /* Section holds attributes.  */
+
+/* Object attributes.  */
+
+enum
+{
+  /* 0-3 are generic.  */
+  Tag_arch = 4,
+  Tag_priv_spec,
+  Tag_strict_align,
+  Tag_stack_align,
+  Tag_A_ext = 65,
+  Tag_C_ext = 67,
+  Tag_D_ext = 68,
+  Tag_E_ext = 69,
+  Tag_F_ext = 70,
+  Tag_I_ext = 73,
+  Tag_X_ext = 88,
+  Tag_shfit = 0x100,
+};
+
 #endif /* _ELF_RISCV_H */
