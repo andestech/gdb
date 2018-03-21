@@ -253,6 +253,7 @@ static bfd_boolean do_notes = FALSE;
 static bfd_boolean do_archive_index = FALSE;
 static bfd_boolean is_32bit_elf = FALSE;
 static bfd_boolean decompress_dumps = FALSE;
+static nds_backward_compatible = 0;
 
 struct group_list
 {
@@ -15390,6 +15391,20 @@ static struct riscv_attr_tag_t riscv_attr_tag[] =
   T(unaligned_access),
   T(stack_align),
 #undef T
+
+#define T(tag) {"Tag_" #tag, Tag_##tag}
+  T(arch),
+  T(priv_spec),
+  T(strict_align),
+  T(stack_align),
+  T(A_ext),
+  T(C_ext),
+  T(D_ext),
+  T(E_ext),
+  T(F_ext),
+  T(I_ext),
+  T(X_ext),
+#undef T
 };
 
 static unsigned char *
@@ -15450,10 +15465,94 @@ display_riscv_attribute (unsigned char *p,
     case Tag_RISCV_arch:
       p = display_tag_value (-1, p, end);
       break;
+
+    case Tag_priv_spec + Tag_shfit:
+      val = read_uleb128 (p, &len, end);
+      p += len;
+
+      printf (_("\n    Privileged spec version : %d.%d.%d\n"),
+	      val / 10000, (val % 10000) / 100, val % 100 , p);
+      break;
+    case Tag_strict_align + Tag_shfit:
+      val = read_uleb128 (p, &len, end);
+      p += len;
+      switch (val)
+	{
+	case 0:
+	  printf (_("Non-strict align\n"));
+	  break;
+	case 1:
+	  printf (_("Strict align\n"));
+	  break;
+	}
+      break;
+    case Tag_stack_align + Tag_shfit:
+      val = read_uleb128 (p, &len, end);
+      p += len;
+
+      printf (_("Stack alignment: %d-bytes\n"), val);
+      break;
+    case Tag_arch + Tag_shfit:
+      printf (_("%s\n"), p);
+      p += strlen (p) + 1;
+      break;
+    case Tag_A_ext + Tag_shfit:
+    case Tag_C_ext + Tag_shfit:
+    case Tag_D_ext + Tag_shfit:
+    case Tag_E_ext + Tag_shfit:
+    case Tag_F_ext + Tag_shfit:
+    case Tag_I_ext + Tag_shfit:
+      val = read_uleb128 (p, &len, end);
+      p += len;
+      printf (_("\n"
+		"     Standard extension `%c`\n"
+		"       version : %d.%d.%d\n"
+		"       subarch : %s\n"),
+	      tag, val / 10000, (val % 10000) / 100, val % 100 , p);
+      p += strlen (p) + 1;
+      break;
+    case Tag_X_ext + Tag_shfit:
+      printf (_("\n"
+		"    Non-standard extension : `%s\n"),
+	      p);
+      p += strlen (p) + 1;
+
     default:
-      return display_tag_value (tag, p, end);
+      if (!nds_backward_compatible)
+	{
+	  return display_tag_value (tag, p, end);
+	}
+      else
+	{
+	  printf (_("  <unknown tag %d>: "), tag);
+
+	  if (tag & 1)
+	    {
+	      putchar ('"');
+		if (p < end - 1)
+		  {
+		    size_t maxlen = (end - p) - 1;
+		    print_symbol ((int) maxlen, (const char *) p);
+		    p += strnlen ((char *) p, maxlen) + 1;
+		  }
+		else
+		  {
+		    printf (_("<corrupt>"));
+		    p = (unsigned char *) end;
+		  }
+		printf ("\"\n");
+	    }
+	  else
+	    {
+	      val = read_uleb128 (p, &len, end);
+	      p += len;
+	      printf ("%d (0x%x)\n", val, val);
+	    }
+	}
+      break;
     }
 
+  assert (p <= end);
   return p;
 }
 
@@ -15661,6 +15760,13 @@ process_attributes (Filedata * filedata,
     }
 
   return res;
+}
+
+static int
+process_riscv_specific (FILE * file)
+{
+  return process_attributes (file, "riscv", SHT_RISCV_ATTRIBUTES,
+			     display_riscv_attribute, NULL);
 }
 
 /* DATA points to the contents of a MIPS GOT that starts at VMA PLTGOT.
