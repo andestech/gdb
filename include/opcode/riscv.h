@@ -37,6 +37,8 @@ static inline unsigned int riscv_insn_length (insn_t insn)
     return 6;
   if ((insn & 0x7f) == 0x3f) /* 64-bit extensions.  */
     return 8;
+  if ((insn & 0x7f) == 0x7f) /* 32-bit NDS V5 DSP extensions.  */
+    return 4;
   /* Longer instructions not supported at the moment.  */
   return 2;
 }
@@ -165,6 +167,15 @@ static const char * const riscv_vediv[4] =
   ((RV_X(x, 9, 3) << 2) | (RV_X(x, 25, 6) << 5) | (RV_X(x, 7, 1) << 11) | (RV_X(x, 17, 3) << 12) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 8, 1) << 17) | (RV_IMM_SIGN(x) << 18))
 #define EXTRACT_GPTYPE_SD_IMM(x) \
   ((RV_X(x, 10, 2) << 3) | (RV_X(x, 25, 6) << 5) | (RV_X(x, 7, 1) << 11) | (RV_X(x, 17, 3) << 12) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 8, 2) << 17) | (RV_IMM_SIGN(x) << 19))
+/* NDS V5 DSP Extension.  */
+#define EXTRACT_PTYPE_IMM3U(x) \
+  (RV_X(x, 20, 3))
+#define EXTRACT_PTYPE_IMM4U(x) \
+  (RV_X(x, 20, 4))
+#define EXTRACT_PTYPE_IMM5U(x) \
+  (RV_X(x, 20, 5))
+#define EXTRACT_PTYPE_IMM15S(x) \
+  ((-RV_X(x, 24, 1) << 15) | (RV_X(x, 7, 5) << 0) | RV_X(x, 15, 9) << 5)
 
 #define ENCODE_ITYPE_IMM(x) \
   (RV_X(x, 0, 12) << 20)
@@ -244,6 +255,15 @@ static const char * const riscv_vediv[4] =
   ((RV_X(x, 1, 2) << 3) | (RV_X(x, 3, 2) << 10) | (RV_X(x, 5, 1) << 2) | (RV_X(x, 6, 2) << 5) | (RV_X(x, 8, 1) << 9) | (RV_X(x, 9, 1) << 12))
 #define ENCODE_RVC_EX10_IMM(x) \
   ((RV_X(x, 0, 10) << 2))
+/* NDS V5 DSP Extension.  */
+#define ENCODE_PTYPE_IMM3U(x) \
+  (RV_X(x, 0, 3) << 20)
+#define ENCODE_PTYPE_IMM4U(x) \
+  (RV_X(x, 0, 4) << 20)
+#define ENCODE_PTYPE_IMM5U(x) \
+  (RV_X(x, 0, 5) << 20)
+#define ENCODE_PTYPE_IMM15S(x) \
+  ((RV_X(x, 0, 5) << 7) | RV_X(x, 5, 10) << 15)
 
 #define VALID_ITYPE_IMM(x) (EXTRACT_ITYPE_IMM(ENCODE_ITYPE_IMM(x)) == (x))
 #define VALID_STYPE_IMM(x) (EXTRACT_STYPE_IMM(ENCODE_STYPE_IMM(x)) == (x))
@@ -279,6 +299,11 @@ static const char * const riscv_vediv[4] =
 #define VALID_RVC_EX9IT_IMM(x) (EXTRACT_RVC_EX9IT_IMM(ENCODE_RVC_EX9IT_IMM(x)) == (x))
 #define VALID_RVC_EX9CS_IMM(x) (EXTRACT_RVC_EX9CS_IMM(ENCODE_RVC_EX9CS_IMM(x)) == (x))
 #define VALID_RVC_EX10_IMM(x) (EXTRACT_RVC_EX10_IMM(ENCODE_RVC_EX10_IMM(x)) == (x))
+/* NDS V5 DSP Extension.  */
+#define VALID_PTYPE_IMM3U(x) (EXTRACT_PTYPE_IMM3U(ENCODE_PTYPE_IMM3U(x)) == (x))
+#define VALID_PTYPE_IMM4U(x) (EXTRACT_PTYPE_IMM4U(ENCODE_PTYPE_IMM4U(x)) == (x))
+#define VALID_PTYPE_IMM5U(x) (EXTRACT_PTYPE_IMM5U(ENCODE_PTYPE_IMM5U(x)) == (x))
+#define VALID_PTYPE_IMM15S(x) (EXTRACT_PTYPE_IMM15S(ENCODE_PTYPE_IMM15S(x)) == (x))
 
 #define RISCV_RTYPE(insn, rd, rs1, rs2) \
   ((MATCH_ ## insn) | ((rd) << OP_SH_RD) | ((rs1) << OP_SH_RS1) | ((rs2) << OP_SH_RS2))
@@ -361,6 +386,8 @@ static const char * const riscv_vediv[4] =
 /* NDS V5 Extension.  */
 #define OP_MASK_SV		0x3
 #define OP_SH_SV		25
+#define OP_MASK_RC		0x1f
+#define OP_SH_RC		25
 
 #define OP_MASK_CUSTOM_IMM	0x7f
 #define OP_SH_CUSTOM_IMM	25

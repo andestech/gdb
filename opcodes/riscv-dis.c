@@ -351,6 +351,31 @@ print_ace_args (const char **args, insn_t l, disassemble_info * info)
     }
 }
 
+#define MAX_KEYWORD_LEN 32
+
+/* Parse the field defined for nds v5 extension.  */
+
+static bfd_boolean
+parse_nds_v5_field (const char **str, char name[MAX_KEYWORD_LEN])
+{
+  char *p = name;
+  const char *str_t;
+
+  str_t = *str;
+  str_t--;
+  while (isalnum (*str_t) || *str_t == '.' || *str_t == '_')
+    *p++ = *str_t++;
+  *p = '\0';
+
+  if (strncmp (name, "nds_", 4) == 0)
+    {
+      *str = str_t;
+      return TRUE;
+    }
+  else
+    return FALSE;
+}
+
 /* Print insn arguments for 32/64-bit code.  */
 
 static void
@@ -784,6 +809,32 @@ print_insn_args (const char *d, insn_t l, bfd_vma pc,
 	      print (info->stream, "%d", (int)EXTRACT_GPTYPE_SD_IMM (l));
 	      break;
 	    }
+	  break;
+
+	/* Handle operand fields of V5 extension.  */
+	case 'n':
+	  {
+	    d++;
+	    char field_name[MAX_KEYWORD_LEN];
+	    if (parse_nds_v5_field (&d, field_name))
+	      {
+		if (strcmp (field_name, "nds_rc") == 0)
+		  print (info->stream, "%s", riscv_gpr_names[rd]);
+		else if (strcmp (field_name, "nds_i3u") == 0)
+		  print (info->stream, "%d", (int)EXTRACT_PTYPE_IMM3U (l));
+		else if (strcmp (field_name, "nds_i4u") == 0)
+		  print (info->stream, "%d", (int)EXTRACT_PTYPE_IMM4U (l));
+		else if (strcmp (field_name, "nds_i5u") == 0)
+		  print (info->stream, "%d", (int)EXTRACT_PTYPE_IMM5U (l));
+		else if (strcmp (field_name, "nds_i15s") == 0)
+		  print (info->stream, "%d", (int)EXTRACT_PTYPE_IMM15S (l));
+		else
+		  print (info->stream,
+			 _("# internal error, undefined nds v5 field (%s)"),
+			 field_name);
+	      }
+	    d--;
+	  }
 	  break;
 
 	default:
