@@ -30,6 +30,80 @@ typedef uint64_t unsigned64;
 typedef int32_t signed32;
 typedef uint32_t unsigned32;
 
+#if (WITH_TARGET_WORD_BITSIZE == 64)
+typedef union {
+  uint64_t u;
+  int64_t s;
+
+  struct
+    {
+      int16_t h0;
+      int16_t h1;
+      int16_t h2;
+      int16_t h3;
+    } b16;
+  struct
+    {
+      int8_t b0;
+      int8_t b1;
+      int8_t b2;
+      int8_t b3;
+      int8_t b4;
+      int8_t b5;
+      int8_t b6;
+      int8_t b7;
+    } b8;
+  struct
+    {
+      uint16_t h0;
+      uint16_t h1;
+      uint16_t h2;
+      uint16_t h3;
+    } ub16;
+  struct
+    {
+      uint8_t b0;
+      uint8_t b1;
+      uint8_t b2;
+      uint8_t b3;
+      uint8_t b4;
+      uint8_t b5;
+      uint8_t b6;
+      uint8_t b7;
+    } ub8;
+} reg_t;
+#else
+typedef union {
+  uint32_t u;
+  int32_t s;
+
+  struct
+    {
+      int16_t h0;
+      int16_t h1;
+    } b16;
+  struct
+    {
+      int8_t b0;
+      int8_t b1;
+      int8_t b2;
+      int8_t b3;
+    } b8;
+  struct
+    {
+      uint16_t h0;
+      uint16_t h1;
+    } ub16;
+  struct
+    {
+      uint8_t b0;
+      uint8_t b1;
+      uint8_t b2;
+      uint8_t b3;
+    } ub8;
+} reg_t;
+#endif
+
 typedef union FRegisterValue
 {
   uint64_t     v[2];
@@ -45,15 +119,15 @@ typedef union FRegisterValue
 
 struct _sim_cpu {
   union {
-    unsigned_word regs[32];
+    reg_t regs[32];
     struct {
       /* These are the ABI names.  */
-      unsigned_word zero, ra, sp, gp, tp;
-      unsigned_word t0, t1, t2;
-      unsigned_word s0, s1;
-      unsigned_word a0, a1, a2, a3, a4, a5, a6, a7;
-      unsigned_word s2, s3, s4, s5, s6, s7, s8, s9, s10, s11;
-      unsigned_word t3, t4, t5, t6;
+      reg_t zero, ra, sp, gp, tp;
+      reg_t t0, t1, t2;
+      reg_t s0, s1;
+      reg_t a0, a1, a2, a3, a4, a5, a6, a7;
+      reg_t s2, s3, s4, s5, s6, s7, s8, s9, s10, s11;
+      reg_t t3, t4, t5, t6;
     };
   };
   union {
