@@ -3086,6 +3086,18 @@ funct6 VM  VS2  VS1/RS1/IMM funct3 VD   opcode
 #define CSR_MRANDSEQH 0x7fd
 #define CSR_MRANDSTATE 0x7fe
 #define CSR_MRANDSTATEH 0x7ff
+#define CSR_MCOUNTERWEN 0x7ce
+#define CSR_MCOUNTERINTEN 0x7cf
+#define CSR_MCOUNTERMASK_M 0x7d1
+#define CSR_MCOUNTERMASK_S 0x7d2
+#define CSR_MCOUNTERMASK_U 0x7d3
+#define CSR_MCOUNTEROVF 0x7d4
+#define CSR_MCCTLBEGINADDR 0x7cb
+#define CSR_MCCTLCOMMAND 0x7cc
+#define CSR_MCCTLDATA 0x7cd
+#define CSR_UCCTLBEGINADDR 0x80b
+#define CSR_UCCTLCOMMAND 0x80c
+#define CSR_SCCTLDATA 0x9cd
 
 /* These registers are present in priv spec 1.9.1, dropped in 1.10.  */
 #define CSR_HSTATUS 0x200
@@ -3936,6 +3948,18 @@ DECLARE_CSR(mrandseq, CSR_MRANDSEQ)
 DECLARE_CSR(mrandseqh, CSR_MRANDSEQH)
 DECLARE_CSR(mrandstate, CSR_MRANDSTATE)
 DECLARE_CSR(mrandstateh, CSR_MRANDSTATEH)
+DECLARE_CSR(mcounterwen, CSR_MCOUNTERWEN)
+DECLARE_CSR(mcounterinten, CSR_MCOUNTERINTEN)
+DECLARE_CSR(mcountermask_m, CSR_MCOUNTERMASK_M)
+DECLARE_CSR(mcountermask_s, CSR_MCOUNTERMASK_S)
+DECLARE_CSR(mcountermask_u, CSR_MCOUNTERMASK_U)
+DECLARE_CSR(mcounterovf, CSR_MCOUNTEROVF)
+DECLARE_CSR(mcctlbeginaddr, CSR_MCCTLBEGINADDR)
+DECLARE_CSR(mcctlcommand, CSR_MCCTLCOMMAND)
+DECLARE_CSR(mcctldata, CSR_MCCTLDATA)
+DECLARE_CSR(ucctlbeginaddr, CSR_UCCTLBEGINADDR)
+DECLARE_CSR(ucctlcommand, CSR_UCCTLCOMMAND)
+DECLARE_CSR(scctldata, CSR_SCCTLDATA)
 #endif
 #ifdef DECLARE_CSR_ALIAS
 /* Ubadaddr is 0x043 in 1.9.1, but 0x043 is utval in 1.10.  */
