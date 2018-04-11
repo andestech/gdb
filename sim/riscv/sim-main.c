@@ -165,6 +165,111 @@ ashiftrt64 (unsigned_word val, unsigned_word shift)
   return (val >> shift) | sign;
 }
 
+static int64_t
+get_double (sim_cpu *cpu, int regnum)
+{
+  if (CCPU_SR_TEST (PSW, PSW_BE))
+    return ((int64_t) cpu->regs[regnum].s << 32)
+	    | ((int64_t) cpu->regs[regnum + 1].s & 0xFFFFFFFF);
+  else
+    return ((int64_t) cpu->regs[regnum + 1].s << 32)
+	    | ((int64_t) cpu->regs[regnum].s & 0xFFFFFFFF);
+}
+
+static uint64_t
+get_udouble (sim_cpu *cpu, int regnum)
+{
+  if (CCPU_SR_TEST (PSW, PSW_BE))
+    return ((uint64_t) cpu->regs[regnum].u << 32)
+	    | ((uint64_t) cpu->regs[regnum + 1].u & 0xFFFFFFFF);
+  else
+    return ((uint64_t) cpu->regs[regnum + 1].u << 32)
+	    | ((uint64_t) cpu->regs[regnum].u & 0xFFFFFFFF);
+}
+
+static void
+set_double (sim_cpu *cpu, int regnum, int64_t val)
+{
+  if (CCPU_SR_TEST (PSW, PSW_BE))
+    {
+      cpu->regs[regnum + 1].s = val & 0xFFFFFFFF;
+      cpu->regs[regnum].s = (val >> 32) & 0xFFFFFFFF;
+    }
+  else
+    {
+      cpu->regs[regnum].s = val & 0xFFFFFFFF;
+      cpu->regs[regnum + 1].s = (val >> 32) & 0xFFFFFFFF;
+    }
+}
+
+static void
+set_udouble (sim_cpu *cpu, int regnum, uint64_t val)
+{
+  if (CCPU_SR_TEST (PSW, PSW_BE))
+    {
+      cpu->regs[regnum + 1].u = val & 0xFFFFFFFF;
+      cpu->regs[regnum].u = (val >> 32) & 0xFFFFFFFF;
+    }
+  else
+    {
+      cpu->regs[regnum].u = val & 0xFFFFFFFF;
+      cpu->regs[regnum + 1].u = (val >> 32) & 0xFFFFFFFF;
+    }
+}
+
+static int32_t
+insn_usat_helper (sim_cpu *cpu, int64_t res, const short range)
+{
+  const uint32_t max = (1 << range) - 1;
+
+  if (res > max)
+    {
+      res = max;
+      CCPU_SR_SET (PSW, PSW_OV);
+    }
+  else if (res < 0)
+    {
+      res = 0;
+      CCPU_SR_SET (PSW, PSW_OV);
+    }
+
+  return res;
+}
+
+static int32_t
+insn_sat_helper (sim_cpu *cpu, int64_t res, const short range)
+{
+  const int max = (1 << range) - 1;
+  const int min = -(1 << range);
+
+  if (res > max)
+    {
+      res = max;
+      CCPU_SR_SET (PSW, PSW_OV);
+    }
+  else if (res < min)
+    {
+      res = min;
+      CCPU_SR_SET (PSW, PSW_OV);
+    }
+
+  return res;
+}
+
+static int16_t
+insn_sat_khm_helper (sim_cpu *cpu, int16_t aop, int16_t bop)
+{
+  int16_t res;
+  if (((int16_t) 0x8000 != aop) || ((int16_t) 0x8000 != bop))
+    res = (int16_t) (((int32_t) aop * bop) >> 15);
+  else
+    {
+      res = 0x7fff;
+      CCPU_SR_SET (PSW, PSW_OV);
+    }
+  return res;
+}
+
 static sim_cia
 execute_d (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex9)
 {
@@ -1300,6 +1405,2123 @@ execute_c (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 }
 
 static sim_cia
+execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex9)
+{
+  SIM_DESC sd = CPU_STATE (cpu);
+  int rd = (iw >> OP_SH_RD) & OP_MASK_RD;
+  int ra = (iw >> OP_SH_RS1) & OP_MASK_RS1;
+  int rb = (iw >> OP_SH_RS2) & OP_MASK_RS2;
+  int rc = (iw >> 25) & 0x1f;
+  const char *rd_name = riscv_gpr_names_abi[rd];
+  const char *ra_name = riscv_gpr_names_abi[ra];
+  const char *rb_name = riscv_gpr_names_abi[rb];
+  const int imm5u = rb;
+  const int imm4u = rb & 0xf;
+  const int imm3u = rb & 0x7;
+  const int imm2u = (iw >> 20) & 0x3;
+
+  sim_cia pc = cpu->pc + 4;
+
+  switch (op->match)
+    {
+    case MATCH_ADD16:
+      cpu->regs[rd].b16.h1 = cpu->regs[ra].b16.h1 + cpu->regs[rb].b16.h1;
+      cpu->regs[rd].b16.h0 = cpu->regs[ra].b16.h0 + cpu->regs[rb].b16.h0;
+      break;
+    case MATCH_RADD16:
+      cpu->regs[rd].b16.h1 = (int16_t) (((int32_t) cpu->regs[ra].b16.h1
+					+ cpu->regs[rb].b16.h1) >> 1);
+      cpu->regs[rd].b16.h0 = (int16_t) (((int32_t) cpu->regs[ra].b16.h0
+					+ cpu->regs[rb].b16.h0) >> 1);
+      break;
+    case MATCH_URADD16:
+      cpu->regs[rd].ub16.h1 = (uint16_t) (((uint32_t) cpu->regs[ra].ub16.h1
+					   + cpu->regs[rb].ub16.h1) >> 1);
+      cpu->regs[rd].ub16.h0 = (uint16_t) (((uint32_t) cpu->regs[ra].ub16.h0
+					   + cpu->regs[rb].ub16.h0) >> 1);
+      break;
+    case MATCH_KADD16:
+      {
+	/* Rt[31:16] = Ra[31:16] + Rb[31:16]
+	   Rt[15:0] = Ra[15:0] + Rb[15:0] */
+	reg_t result;
+	int32_t res, i;
+	int16_t *ptr, *ptr_a, *ptr_b;
+	ptr = (int16_t *) & result.b16;
+	ptr_a = (int16_t *) & cpu->regs[ra].b16;
+	ptr_b = (int16_t *) & cpu->regs[rb].b16;
+	for (i = 0; i < 2; i++)
+	  {
+	    res = *(ptr_a + i) + *(ptr_b + i);
+	    if (res > 0x7fff)
+	      {
+		res = 0x7fff;
+		CCPU_SR_SET (PSW, PSW_OV);
+	      }
+	    else if (res < -0x8000)
+	      {
+		res = -0x8000;
+		CCPU_SR_SET (PSW, PSW_OV);
+	      }
+	    *(ptr + i) = res;
+	  }
+	cpu->regs[rd].u = result.u;
+      }
+      break;
+    case MATCH_UKADD16:
+      {
+	/* Rt[31:16] = Ra[31:16] + Rb[31:16]
+	   Rt[15:0] = Ra[15:0] + Rb[15:0] */
+	int32_t res1 = cpu->regs[ra].ub16.h1 + cpu->regs[rb].ub16.h1;
+	int32_t res2 = cpu->regs[ra].ub16.h0 + cpu->regs[rb].ub16.h0;
+	res1 = insn_usat_helper (cpu, res1, 16);
+	res2 = insn_usat_helper (cpu, res2, 16);
+	cpu->regs[rd].ub16.h1 = res1;
+	cpu->regs[rd].ub16.h0 = res2;
+      }
+      break;
+    case MATCH_SUB16:
+      {
+	/* Rt[31:16] = Ra[31:16] - Rb[31:16]
+	   Rt[15:0] = Ra[15:0] - Rb[15:0] */
+	reg_t result;
+	result.b16.h1 = cpu->regs[ra].b16.h1 - cpu->regs[rb].b16.h1;
+	result.b16.h0 = cpu->regs[ra].b16.h0 - cpu->regs[rb].b16.h0;
+	cpu->regs[rd].s = result.s;
+      }
+      break;
+    case MATCH_RSUB16:
+      {
+	/* Rt[31:16] = (Ra[31:16] - Rb[31:16]) >> 1
+	   Rt[15:0] = (Ra[15:0] - Rb[15:0]) >> 1 */
+	reg_t result;
+	result.b16.h1 = (int16_t) (((int32_t) cpu->regs[ra].b16.h1
+				     - cpu->regs[rb].b16.h1) >> 1);
+	result.b16.h0 = (int16_t) (((int32_t) cpu->regs[ra].b16.h0
+				     - cpu->regs[rb].b16.h0) >> 1);
+	cpu->regs[rd].s = result.s;
+      }
+      break;
+    case MATCH_URSUB16:
+      {
+	/* Rt[31:16] = Ra[31:16] - Rb[31:16]
+	   Rt[15:0] = Ra[15:0] - Rb[15:0] */
+	reg_t result;
+	result.ub16.h1 = (uint16_t) (((uint32_t) cpu->regs[ra].ub16.h1
+				       - cpu->regs[rb].ub16.h1) >> 1);
+	result.ub16.h0 = (uint16_t) (((uint32_t) cpu->regs[ra].ub16.h0
+				       - cpu->regs[rb].ub16.h0) >> 1);
+	cpu->regs[rd].u = result.u;
+      }
+      break;
+    case MATCH_KSUB16:
+      {
+	/* Rt[31:16] = Ra[31:16] - Rb[31:16]
+	   Rt[15:0] = Ra[15:0] - Rb[15:0] */
+	int32_t res1 = cpu->regs[ra].b16.h1 - cpu->regs[rb].b16.h1;
+	int32_t res2 = cpu->regs[ra].b16.h0 - cpu->regs[rb].b16.h0;
+	cpu->regs[rd].b16.h1 = insn_sat_helper (cpu, res1, 15);
+	cpu->regs[rd].b16.h0 = insn_sat_helper (cpu, res2, 15);
+      }
+      break;
+    case MATCH_UKSUB16:
+      {
+	/* Rt[31:16] = Ra[31:16] - Rb[31:16]
+	   Rt[15:0] = Ra[15:0] - Rb[15:0] */
+	int32_t res1 = cpu->regs[ra].ub16.h1 - cpu->regs[rb].ub16.h1;
+	int32_t res2 = cpu->regs[ra].ub16.h0 - cpu->regs[rb].ub16.h0;
+	res1 = insn_usat_helper (cpu, res1, 16);
+	res2 = insn_usat_helper (cpu, res2, 16);
+	cpu->regs[rd].ub16.h1 = res1;
+	cpu->regs[rd].ub16.h0 = res2;
+      }
+      break;
+    case MATCH_CRAS16:
+      {
+	/* Rt[31:16] = Ra[31:16] + Rb[15:0]
+	   Rt[15:0] = Ra[15:0] - Rb[31:16] */
+	reg_t result;
+	result.b16.h1 = cpu->regs[ra].b16.h1 + cpu->regs[rb].b16.h0;
+	result.b16.h0 = cpu->regs[ra].b16.h0 - cpu->regs[rb].b16.h1;
+	cpu->regs[rd].s = result.s;
+      }
+      break;
+    case MATCH_RCRAS16:
+      {
+	/* Rt[31:16] = (Ra[31:16] + Rb[15:0]) >>1
+	   Rt[15:0] = (Ra[15:0] - Rb[31:16]) >> 1 */
+	reg_t result;
+	result.b16.h1 = (int16_t) (((int32_t) cpu->regs[ra].b16.h1
+				     + cpu->regs[rb].b16.h0) >> 1);
+	result.b16.h0 = (int16_t) (((int32_t) cpu->regs[ra].b16.h0
+				     - cpu->regs[rb].b16.h1) >> 1);
+	cpu->regs[rd].s = result.s;
+      }
+      break;
+    case MATCH_URCRAS16:
+      {
+	/* Rt[31:16] = (Ra[31:16] + Rb[15:0]) >>1
+	   Rt[15:0] = (Ra[15:0] - Rb[31:16]) >> 1 */
+	reg_t result;
+	result.ub16.h1 = (uint16_t) (((uint32_t) cpu->regs[ra].ub16.h1
+				       + cpu->regs[rb].ub16.h0) >> 1);
+	result.ub16.h0 = (uint16_t) (((uint32_t) cpu->regs[ra].ub16.h0
+				       - cpu->regs[rb].ub16.h1) >> 1);
+	cpu->regs[rd].u = result.u;
+      }
+      break;
+    case MATCH_KCRAS16:
+      {
+	/* Rt[31:16] = Ra[31:16] + Rb[15:0]
+	   Rt[15:0] = Ra[15:0] - Rb[31:16] */
+	int32_t res1 = cpu->regs[ra].b16.h1 + cpu->regs[rb].b16.h0;
+	int32_t res2 = cpu->regs[ra].b16.h0 - cpu->regs[rb].b16.h1;
+	cpu->regs[rd].b16.h1 = insn_sat_helper (cpu, res1, 15);
+	cpu->regs[rd].b16.h0 = insn_sat_helper (cpu, res2, 15);
+      }
+      break;
+    case MATCH_UKCRAS16:
+      {
+	/* Rt[31:16] = Ra[31:16] + Rb[15:0]
+	   Rt[15:0] = Ra[15:0] - Rb[31:16] */
+	int32_t res1 = cpu->regs[ra].ub16.h1 + cpu->regs[rb].ub16.h0;
+	int32_t res2 = cpu->regs[ra].ub16.h0 - cpu->regs[rb].ub16.h1;
+	res1 = insn_usat_helper (cpu, res1, 16);
+	res2 = insn_usat_helper (cpu, res2, 16);
+	cpu->regs[rd].ub16.h1 = res1;
+	cpu->regs[rd].ub16.h0 = res2;
+      }
+      break;
+    case MATCH_CRSA16:
+      {
+	/* Rt[31:16] = Ra[31:16] - Rb[15:0]
+	   Rt[15:0] = Ra[15:0] + Rb[31:16] */
+	reg_t result;
+	result.b16.h1 = cpu->regs[ra].b16.h1 - cpu->regs[rb].b16.h0;
+	result.b16.h0 = cpu->regs[ra].b16.h0 + cpu->regs[rb].b16.h1;
+	cpu->regs[rd].s = result.s;
+      }
+      break;
+    case MATCH_RCRSA16:
+      {
+	/* Rt[31:16] = (Ra[31:16] - Rb[15:0]) >> 1
+	   Rt[15:0] = (Ra[15:0] + Rb[31:16]) >> 1 */
+	reg_t result;
+	result.b16.h1 = (int16_t) (((int32_t) cpu->regs[ra].b16.h1
+				     - cpu->regs[rb].b16.h0) >> 1);
+	result.b16.h0 = (int16_t) (((int32_t) cpu->regs[ra].b16.h0
+				     + cpu->regs[rb].b16.h1) >> 1);
+	cpu->regs[rd].s = result.s;
+      }
+      break;
+    case MATCH_URCRSA16:
+      {
+	/* Rt[31:16] = (Ra[31:16] - Rb[15:0]) >> 1
+	   Rt[15:0] = (Ra[15:0] + Rb[31:16]) >> 1 */
+	reg_t result;
+	result.ub16.h1 = (uint16_t) (((uint32_t) cpu->regs[ra].ub16.h1
+				       - cpu->regs[rb].ub16.h0) >> 1);
+	result.ub16.h0 = (uint16_t) (((uint32_t) cpu->regs[ra].ub16.h0
+				       + cpu->regs[rb].ub16.h1) >> 1);
+	cpu->regs[rd].u = result.u;
+      }
+      break;
+    case MATCH_KCRSA16:
+      {
+	/* Rt[31:16] = Ra[31:16] - Rb[15:0]
+	   Rt[15:0] = Ra[15:0] + Rb[31:16] */
+	int32_t res1 = cpu->regs[ra].b16.h1 - cpu->regs[rb].b16.h0;
+	int32_t res2 = cpu->regs[ra].b16.h0 + cpu->regs[rb].b16.h1;
+	cpu->regs[rd].b16.h1 = insn_sat_helper (cpu, res1, 15);
+	cpu->regs[rd].b16.h0 = insn_sat_helper (cpu, res2, 15);
+      }
+      break;
+    case MATCH_UKCRSA16:
+      {
+	/* Rt[31:16] = Ra[31:16] - Rb[15:0]
+	   Rt[15:0] = Ra[15:0] + Rb[31:16] */
+	int32_t res1 = cpu->regs[ra].ub16.h1 - cpu->regs[rb].ub16.h0;
+	int32_t res2 = cpu->regs[ra].ub16.h0 + cpu->regs[rb].ub16.h1;
+	res1 = insn_usat_helper (cpu, res1, 16);
+	res2 = insn_usat_helper (cpu, res2, 16);
+	cpu->regs[rd].ub16.h1 = res1;
+	cpu->regs[rd].ub16.h0 = res2;
+      }
+      break;
+    case MATCH_ADD8:
+      {
+	/* Rt[31:24] = Ra[31:24] + Rb[31:24]
+	   Rt[23:16] = Ra[23:16] + Rb[23:16]
+	   Rt[15:8] = Ra[8:0] + Rb[8:0]
+	   Rt[7:0] = Ra[7:0] + Rb[7:0] */
+	reg_t result;
+	result.b8.b3 = cpu->regs[ra].b8.b3 + cpu->regs[rb].b8.b3;
+	result.b8.b2 = cpu->regs[ra].b8.b2 + cpu->regs[rb].b8.b2;
+	result.b8.b1 = cpu->regs[ra].b8.b1 + cpu->regs[rb].b8.b1;
+	result.b8.b0 = cpu->regs[ra].b8.b0 + cpu->regs[rb].b8.b0;
+	cpu->regs[rd].s = result.s;
+      }
+      break;
+    case MATCH_RADD8:
+      {
+	/* Rt[31:24] = (Ra[31:24] + Rb[31:24]) >> 1
+	   Rt[23:16] = (Ra[23:16] + Rb[23:16]) >> 1
+	   Rt[15:8] = (Ra[8:0] + Rb[8:0]) >> 1
+	   Rt[7:0] = (Ra[7:0] + Rb[7:0]) >> 1 */
+	reg_t result;
+	result.b8.b3 = (int8_t) (((int16_t) cpu->regs[ra].b8.b3
+				   + cpu->regs[rb].b8.b3) >> 1);
+	result.b8.b2 = (int8_t) (((int16_t) cpu->regs[ra].b8.b2
+				   + cpu->regs[rb].b8.b2) >> 1);
+	result.b8.b1 = (int8_t) (((int16_t) cpu->regs[ra].b8.b1
+				   + cpu->regs[rb].b8.b1) >> 1);
+	result.b8.b0 = (int8_t) (((int16_t) cpu->regs[ra].b8.b0
+				   + cpu->regs[rb].b8.b0) >> 1);
+	cpu->regs[rd].s = result.s;
+      }
+      break;
+    case MATCH_URADD8:
+      {
+	/* Rt[31:24] = (Ra[31:24] + Rb[31:24]) >> 1
+	   Rt[23:16] = (Ra[23:16] + Rb[23:16]) >> 1
+	   Rt[15:8] = (Ra[8:0] + Rb[8:0]) >> 1
+	   Rt[7:0] = (Ra[7:0] + Rb[7:0]) >> 1 */
+	reg_t result;
+	result.ub8.b3 = (uint8_t) (((uint16_t) cpu->regs[ra].ub8.b3
+				     + cpu->regs[rb].ub8.b3) >> 1);
+	result.ub8.b2 = (uint8_t) (((uint16_t) cpu->regs[ra].ub8.b2
+				     + cpu->regs[rb].ub8.b2) >> 1);
+	result.ub8.b1 = (uint8_t) (((uint16_t) cpu->regs[ra].ub8.b1
+				     + cpu->regs[rb].ub8.b1) >> 1);
+	result.ub8.b0 = (uint8_t) (((uint16_t) cpu->regs[ra].ub8.b0
+				     + cpu->regs[rb].ub8.b0) >> 1);
+	cpu->regs[rd].u = result.u;
+      }
+      break;
+    case MATCH_KADD8:
+      {
+	/* Rt[31:24] = Ra[31:24] + Rb[31:24]
+	   Rt[23:16] = Ra[23:16] + Rb[23:16]
+	   Rt[15:8] = Ra[8:0] + Rb[8:0]
+	   Rt[7:0] = Ra[7:0] + Rb[7:0] */
+	int32_t res1 = cpu->regs[ra].b8.b0 + cpu->regs[rb].b8.b0;
+	int32_t res2 = cpu->regs[ra].b8.b1 + cpu->regs[rb].b8.b1;
+	int32_t res3 = cpu->regs[ra].b8.b2 + cpu->regs[rb].b8.b2;
+	int32_t res4 = cpu->regs[ra].b8.b3 + cpu->regs[rb].b8.b3;
+	cpu->regs[rd].b8.b0 = insn_sat_helper (cpu, res1, 7);
+	cpu->regs[rd].b8.b1 = insn_sat_helper (cpu, res2, 7);
+	cpu->regs[rd].b8.b2 = insn_sat_helper (cpu, res3, 7);
+	cpu->regs[rd].b8.b3 = insn_sat_helper (cpu, res4, 7);
+      }
+      break;
+    case MATCH_UKADD8:
+      {
+	/* Rt[31:24] = Ra[31:24] + Rb[31:24]
+	   Rt[23:16] = Ra[23:16] + Rb[23:16]
+	   Rt[15:8] = Ra[8:0] + Rb[8:0]
+	   Rt[7:0] = Ra[7:0] + Rb[7:0] */
+	int32_t res1 = cpu->regs[ra].ub8.b0 + cpu->regs[rb].ub8.b0;
+	int32_t res2 = cpu->regs[ra].ub8.b1 + cpu->regs[rb].ub8.b1;
+	int32_t res3 = cpu->regs[ra].ub8.b2 + cpu->regs[rb].ub8.b2;
+	int32_t res4 = cpu->regs[ra].ub8.b3 + cpu->regs[rb].ub8.b3;
+	res1 = insn_usat_helper (cpu, res1, 8);
+	res2 = insn_usat_helper (cpu, res2, 8);
+	res3 = insn_usat_helper (cpu, res3, 8);
+	res4 = insn_usat_helper (cpu, res4, 8);
+	cpu->regs[rd].ub8.b0 = res1;
+	cpu->regs[rd].ub8.b1 = res2;
+	cpu->regs[rd].ub8.b2 = res3;
+	cpu->regs[rd].ub8.b3 = res4;
+      }
+      break;
+    case MATCH_SUB8:
+      {
+	/* Rt[31:24] = Ra[31:24] - Rb[31:24]
+	   Rt[23:16] = Ra[23:16] - Rb[23:16]
+	   Rt[15:8] = Ra[8:0] - Rb[8:0]
+	   Rt[7:0] = Ra[7:0] - Rb[7:0] */
+	reg_t result;
+	result.b8.b3 = cpu->regs[ra].b8.b3 - cpu->regs[rb].b8.b3;
+	result.b8.b2 = cpu->regs[ra].b8.b2 - cpu->regs[rb].b8.b2;
+	result.b8.b1 = cpu->regs[ra].b8.b1 - cpu->regs[rb].b8.b1;
+	result.b8.b0 = cpu->regs[ra].b8.b0 - cpu->regs[rb].b8.b0;
+	cpu->regs[rd].s = result.s;
+      }
+      break;
+    case MATCH_RSUB8:
+      {
+	/* Rt[31:24] = (Ra[31:24] - Rb[31:24]) >> 1
+	   Rt[23:16] = (Ra[23:16] - Rb[23:16]) >> 1
+	   Rt[15:8] = (Ra[8:0] - Rb[8:0]) >> 1
+	   Rt[7:0] = (Ra[7:0] - Rb[7:0]) >> 1 */
+	reg_t result;
+	result.b8.b3 = (int8_t) (((int16_t) cpu->regs[ra].b8.b3
+				   - cpu->regs[rb].b8.b3) >> 1);
+	result.b8.b2 = (int8_t) (((int16_t) cpu->regs[ra].b8.b2
+				   - cpu->regs[rb].b8.b2) >> 1);
+	result.b8.b1 = (int8_t) (((int16_t) cpu->regs[ra].b8.b1
+				   - cpu->regs[rb].b8.b1) >> 1);
+	result.b8.b0 = (int8_t) (((int16_t) cpu->regs[ra].b8.b0
+				   - cpu->regs[rb].b8.b0) >> 1);
+	cpu->regs[rd].s = result.s;
+      }
+      break;
+    case MATCH_URSUB8:
+      {
+	/* Rt[31:24] = (Ra[31:24] - Rb[31:24]) >> 1
+	   Rt[23:16] = (Ra[23:16] - Rb[23:16]) >> 1
+	   Rt[15:8] = (Ra[8:0] - Rb[8:0]) >> 1
+	   Rt[7:0] = (Ra[7:0] - Rb[7:0]) >> 1 */
+	reg_t result;
+	result.ub8.b3 = (uint8_t) (((uint16_t) cpu->regs[ra].ub8.b3
+				     - cpu->regs[rb].ub8.b3) >> 1);
+	result.ub8.b2 = (uint8_t) (((uint16_t) cpu->regs[ra].ub8.b2
+				     - cpu->regs[rb].ub8.b2) >> 1);
+	result.ub8.b1 = (uint8_t) (((uint16_t) cpu->regs[ra].ub8.b1
+				     - cpu->regs[rb].ub8.b1) >> 1);
+	result.ub8.b0 = (uint8_t) (((uint16_t) cpu->regs[ra].ub8.b0
+				     - cpu->regs[rb].ub8.b0) >> 1);
+	cpu->regs[rd].u = result.u;
+      }
+      break;
+    case MATCH_KSUB8:
+      {
+	/* Rt[31:24] = Ra[31:24] - Rb[31:24]
+	   Rt[23:16] = Ra[23:16] - Rb[23:16]
+	   Rt[15:8] = Ra[8:0] - Rb[8:0]
+	   Rt[7:0] = Ra[7:0] - Rb[7:0] */
+	int32_t res1 = cpu->regs[ra].b8.b0 - cpu->regs[rb].b8.b0;
+	int32_t res2 = cpu->regs[ra].b8.b1 - cpu->regs[rb].b8.b1;
+	int32_t res3 = cpu->regs[ra].b8.b2 - cpu->regs[rb].b8.b2;
+	int32_t res4 = cpu->regs[ra].b8.b3 - cpu->regs[rb].b8.b3;
+	cpu->regs[rd].b8.b0 = insn_sat_helper (cpu, res1, 7);
+	cpu->regs[rd].b8.b1 = insn_sat_helper (cpu, res2, 7);
+	cpu->regs[rd].b8.b2 = insn_sat_helper (cpu, res3, 7);
+	cpu->regs[rd].b8.b3 = insn_sat_helper (cpu, res4, 7);
+      }
+      break;
+    case MATCH_UKSUB8:
+      {
+	/* Rt[31:24] = Ra[31:24] - Rb[31:24]
+	   Rt[23:16] = Ra[23:16] - Rb[23:16]
+	   Rt[15:8] = Ra[8:0] - Rb[8:0]
+	   Rt[7:0] = Ra[7:0] - Rb[7:0] */
+	int32_t res1 = cpu->regs[ra].ub8.b0 - cpu->regs[rb].ub8.b0;
+	int32_t res2 = cpu->regs[ra].ub8.b1 - cpu->regs[rb].ub8.b1;
+	int32_t res3 = cpu->regs[ra].ub8.b2 - cpu->regs[rb].ub8.b2;
+	int32_t res4 = cpu->regs[ra].ub8.b3 - cpu->regs[rb].ub8.b3;
+	res1 = insn_usat_helper (cpu, res1, 8);
+	res2 = insn_usat_helper (cpu, res2, 8);
+	res3 = insn_usat_helper (cpu, res3, 8);
+	res4 = insn_usat_helper (cpu, res4, 8);
+	cpu->regs[rd].ub8.b0 = res1;
+	cpu->regs[rd].ub8.b1 = res2;
+	cpu->regs[rd].ub8.b2 = res3;
+	cpu->regs[rd].ub8.b3 = res4;
+      }
+      break;
+    case MATCH_SRA16:
+      {
+	reg_t result;
+	result.b16.h1 = cpu->regs[ra].b16.h1 >> (cpu->regs[rb].u & 0xf);
+	result.b16.h0 = cpu->regs[ra].b16.h0 >> (cpu->regs[rb].u & 0xf);
+	cpu->regs[rd].s = result.s;
+      }
+      break;
+    case MATCH_SRAI16:
+      {
+	reg_t result;
+	result.b16.h1 = cpu->regs[ra].b16.h1 >> imm4u;
+	result.b16.h0 = cpu->regs[ra].b16.h0 >> imm4u;
+	cpu->regs[rd].s = result.s;
+      }
+      break;
+    case MATCH_SRA16_U:
+      {
+	reg_t result;
+	uint32_t rnd_mask = (1UL << (cpu->regs[rb].u - 1));
+	int16_t rnd_val;
+
+	rnd_val = (cpu->regs[ra].b16.h1 & rnd_mask) ? 1 : 0;
+	result.b16.h1 = (cpu->regs[ra].b16.h1 >> (cpu->regs[rb].u & 0xf))
+			+ rnd_val;
+
+	rnd_val = (cpu->regs[ra].b16.h0 & rnd_mask) ? 1 : 0;
+	result.b16.h0 = (cpu->regs[ra].b16.h0 >> (cpu->regs[rb].u & 0xf))
+			+ rnd_val;
+
+	cpu->regs[rd].s = result.s;
+      }
+      break;
+    case MATCH_SRAI16_U:
+      {
+	reg_t result;
+	uint32_t rnd_mask = (1UL << (imm4u - 1));
+	int16_t rnd_val;
+
+	rnd_val = (cpu->regs[ra].b16.h1 & rnd_mask) ? 1 : 0;
+	result.b16.h1 = (cpu->regs[ra].b16.h1 >> imm4u) + rnd_val;
+
+	rnd_val = (cpu->regs[ra].b16.h0 & rnd_mask) ? 1 : 0;
+	result.b16.h0 = (cpu->regs[ra].b16.h0 >> imm4u) + rnd_val;
+
+	cpu->regs[rd].s = result.s;
+      }
+      break;
+    case MATCH_SRL16:
+      {
+	reg_t result;
+	result.ub16.h1 = cpu->regs[ra].ub16.h1 >> (cpu->regs[rb].u & 0xf);
+	result.ub16.h0 = cpu->regs[ra].ub16.h0 >> (cpu->regs[rb].u & 0xf);
+	cpu->regs[rd].s = result.s;
+      }
+      break;
+    case MATCH_SRLI16:
+      {
+	reg_t result;
+	result.ub16.h1 = cpu->regs[ra].ub16.h1 >> imm4u;
+	result.ub16.h0 = cpu->regs[ra].ub16.h0 >> imm4u;
+	cpu->regs[rd].s = result.s;
+      }
+      break;
+    case MATCH_SRL16_U:
+      {
+	reg_t result;
+	uint32_t rnd_mask = (1UL << (cpu->regs[rb].u - 1));
+	int32_t rnd_val;
+
+	rnd_val = (cpu->regs[ra].ub16.h1 & rnd_mask) ? 1 : 0;
+	result.ub16.h1 = (cpu->regs[ra].ub16.h1 >> (cpu->regs[rb].u & 0xf))
+			 + rnd_val;
+
+	rnd_val = (cpu->regs[ra].ub16.h0 & rnd_mask) ? 1 : 0;
+	result.ub16.h0 = (cpu->regs[ra].ub16.h0 >> (cpu->regs[rb].u & 0xf))
+			 + rnd_val;
+
+	cpu->regs[rd].s = result.s;
+      }
+      break;
+    case MATCH_SRLI16_U:
+      {
+	reg_t result;
+	uint32_t rnd_mask = (1UL << (imm4u - 1));
+	int32_t rnd_val;
+
+	rnd_val = (cpu->regs[ra].ub16.h1 & rnd_mask) ? 1 : 0;
+	result.ub16.h1 = (cpu->regs[ra].ub16.h1 >> imm4u) + rnd_val;
+
+	rnd_val = (cpu->regs[ra].ub16.h0 & rnd_mask) ? 1 : 0;
+	result.ub16.h0 = (cpu->regs[ra].ub16.h0 >> imm4u) + rnd_val;
+
+	cpu->regs[rd].s = result.s;
+      }
+      break;
+    case MATCH_SLL16:
+      {
+	reg_t result;
+	result.b16.h1 = cpu->regs[ra].b16.h1 << (cpu->regs[rb].u & 0xf);
+	result.b16.h0 = cpu->regs[ra].b16.h0 << (cpu->regs[rb].u & 0xf);
+	cpu->regs[rd].s = result.s;
+      }
+      break;
+    case MATCH_SLLI16:
+      {
+	reg_t result;
+	result.b16.h1 = cpu->regs[ra].b16.h1 << imm4u;
+	result.b16.h0 = cpu->regs[ra].b16.h0 << imm4u;
+	cpu->regs[rd].s = result.s;
+      }
+      break;
+    case MATCH_KSLL16:
+      {
+	int32_t res1, res2;
+	int32_t sa = cpu->regs[rb].u & 0xf;
+	if (sa != 0)
+	  {
+	    res1 = (int32_t) cpu->regs[ra].b16.h1 << sa;
+	    res2 = (int32_t) cpu->regs[ra].b16.h0 << sa;
+	    res1 = insn_sat_helper (cpu, res1, 15);
+	    res2 = insn_sat_helper (cpu, res2, 15);
+	    cpu->regs[rd].b16.h1 = res1;
+	    cpu->regs[rd].b16.h0 = res2;
+	  }
+	else
+	  cpu->regs[rd].s = cpu->regs[ra].s;
+      }
+      break;
+    case MATCH_KSLLI16:
+      {
+	int32_t res1, res2;
+
+	if (imm3u != 0)
+	  {
+	    res1 = (int32_t) cpu->regs[ra].b16.h1 << imm3u;
+	    res2 = (int32_t) cpu->regs[ra].b16.h0 << imm3u;
+	    res1 = insn_sat_helper (cpu, res1, 15);
+	    res2 = insn_sat_helper (cpu, res2, 15);
+	    cpu->regs[rd].b16.h1 = res1;
+	    cpu->regs[rd].b16.h0 = res2;
+	  }
+	else
+	  cpu->regs[rd].s = cpu->regs[ra].s;
+      }
+      break;
+    case MATCH_KSLRA16:
+      {
+	if (cpu->regs[rb].b8.b0 < 0)
+	  {
+	    cpu->regs[rd].b16.h1 = cpu->regs[ra].b16.h1 >> (-cpu->regs[rb].b8.b0);
+	    cpu->regs[rd].b16.h0 = cpu->regs[ra].b16.h0 >> (-cpu->regs[rb].b8.b0);
+	  }
+	else
+	  {
+	    int32_t res1, res2;
+	    if (cpu->regs[rb].b8.b0 != 0)
+	      {
+		res1 = (int32_t) cpu->regs[ra].b16.h1 << cpu->regs[rb].b8.b0;
+		res2 = (int32_t) cpu->regs[ra].b16.h0 << cpu->regs[rb].b8.b0;
+		res1 = insn_sat_helper (cpu, res1, 15);
+		res2 = insn_sat_helper (cpu, res2, 15);
+		cpu->regs[rd].b16.h1 = res1;
+		cpu->regs[rd].b16.h0 = res2;
+	      }
+	    else
+	      cpu->regs[rd].s = cpu->regs[ra].s;
+	  }
+      }
+      break;
+    case MATCH_KSLRA16_U:
+      {
+	if (cpu->regs[rb].b8.b0 < 0)
+	  {
+	    int rnd;
+	    uint32_t mask_sh;
+	    int sh = -cpu->regs[rb].b8.b0;
+	    sh = (sh == 16) ? 15: sh;
+	    mask_sh = 1UL << (sh - 1);
+
+	    rnd = (cpu->regs[ra].b16.h1 & mask_sh) ? 1 : 0;
+	    cpu->regs[rd].b16.h1 = cpu->regs[ra].b16.h1 >> sh;
+	    cpu->regs[rd].b16.h1 += rnd;
+	    rnd = (cpu->regs[ra].b16.h0 & mask_sh) ? 1 : 0;
+	    cpu->regs[rd].b16.h0 = cpu->regs[ra].b16.h0 >> sh;
+	    cpu->regs[rd].b16.h0 += rnd;
+	  }
+	else
+	  {
+	    int32_t res1, res2;
+	    if (cpu->regs[rb].b8.b0 != 0)
+	      {
+		res1 = (int32_t) cpu->regs[ra].b16.h1 << cpu->regs[rb].b8.b0;
+		res2 = (int32_t) cpu->regs[ra].b16.h0 << cpu->regs[rb].b8.b0;
+		res1 = insn_sat_helper (cpu, res1, 15);
+		res2 = insn_sat_helper (cpu, res2, 15);
+		cpu->regs[rd].b16.h1 = res1;
+		cpu->regs[rd].b16.h0 = res2;
+	      }
+	    else
+	      cpu->regs[rd].s = cpu->regs[ra].s;
+	  }
+      }
+      break;
+    case MATCH_CMPEQ16:
+      {
+	reg_t result;
+
+	result.u = 0;
+	if (cpu->regs[ra].b16.h1 == cpu->regs[rb].b16.h1)
+	  result.ub16.h1 = 0xffff;
+	if (cpu->regs[ra].b16.h0 == cpu->regs[rb].b16.h0)
+	  result.ub16.h0 = 0xffff;
+
+	cpu->regs[rd].s = result.u;
+      }
+      break;
+    case MATCH_SCMPLT16:
+      {
+	reg_t result;
+
+	result.u = 0;
+	if (cpu->regs[ra].b16.h1 < cpu->regs[rb].b16.h1)
+	  result.ub16.h1 = 0xffff;
+	if (cpu->regs[ra].b16.h0 < cpu->regs[rb].b16.h0)
+	  result.ub16.h0 = 0xffff;
+
+	cpu->regs[rd].s = result.u;
+      }
+      break;
+    case MATCH_SCMPLE16:
+      {
+	reg_t result;
+
+	result.u = 0;
+	if (cpu->regs[ra].b16.h1 <= cpu->regs[rb].b16.h1)
+	  result.ub16.h1 = 0xffff;
+	if (cpu->regs[ra].b16.h0 <= cpu->regs[rb].b16.h0)
+	  result.ub16.h0 = 0xffff;
+
+	cpu->regs[rd].s = result.u;
+      }
+      break;
+    case MATCH_SMIN16:
+      {
+	reg_t result;
+	result.b16.h1 = (cpu->regs[ra].b16.h1 < cpu->regs[rb].b16.h1)
+			 ? cpu->regs[ra].b16.h1 : cpu->regs[rb].b16.h1;
+	result.b16.h0 = (cpu->regs[ra].b16.h0 < cpu->regs[rb].b16.h0)
+			 ? cpu->regs[ra].b16.h0 : cpu->regs[rb].b16.h0;
+	cpu->regs[rd].s = result.s;
+      }
+      break;
+    case MATCH_CMPEQ8:
+      {
+	reg_t result;
+
+	result.u = 0;
+	if (cpu->regs[ra].b8.b3 == cpu->regs[rb].b8.b3)
+	  result.ub8.b3 = 0xff;
+	if (cpu->regs[ra].b8.b2 == cpu->regs[rb].b8.b2)
+	  result.ub8.b2 = 0xff;
+	if (cpu->regs[ra].b8.b1 == cpu->regs[rb].b8.b1)
+	  result.ub8.b1 = 0xff;
+	if (cpu->regs[ra].b8.b0 == cpu->regs[rb].b8.b0)
+	  result.ub8.b0 = 0xff;
+
+	cpu->regs[rd].s = result.u;
+      }
+      break;
+    case MATCH_SCMPLT8:
+      {
+	reg_t result;
+
+	result.u = 0;
+	if (cpu->regs[ra].b8.b3 < cpu->regs[rb].b8.b3)
+	  result.ub8.b3 = 0xff;
+	if (cpu->regs[ra].b8.b2 < cpu->regs[rb].b8.b2)
+	  result.ub8.b2 = 0xff;
+	if (cpu->regs[ra].b8.b1 < cpu->regs[rb].b8.b1)
+	  result.ub8.b1 = 0xff;
+	if (cpu->regs[ra].b8.b0 < cpu->regs[rb].b8.b0)
+	  result.ub8.b0 = 0xff;
+
+	cpu->regs[rd].s = result.u;
+      }
+      break;
+    case MATCH_SCMPLE8:
+      {
+	reg_t result;
+
+	result.u = 0;
+	if (cpu->regs[ra].b8.b3 <= cpu->regs[rb].b8.b3)
+	  result.ub8.b3 = 0xff;
+	if (cpu->regs[ra].b8.b2 <= cpu->regs[rb].b8.b2)
+	  result.ub8.b2 = 0xff;
+	if (cpu->regs[ra].b8.b1 <= cpu->regs[rb].b8.b1)
+	  result.ub8.b1 = 0xff;
+	if (cpu->regs[ra].b8.b0 <= cpu->regs[rb].b8.b0)
+	  result.ub8.b0 = 0xff;
+
+	cpu->regs[rd].s = result.u;
+      }
+      break;
+    case MATCH_SMIN8:
+      {
+	reg_t result;
+	result.b8.b3 = (cpu->regs[ra].b8.b3 < cpu->regs[rb].b8.b3)
+			? cpu->regs[ra].b8.b3 : cpu->regs[rb].b8.b3;
+	result.b8.b2 = (cpu->regs[ra].b8.b2 < cpu->regs[rb].b8.b2)
+			? cpu->regs[ra].b8.b2 : cpu->regs[rb].b8.b2;
+	result.b8.b1 = (cpu->regs[ra].b8.b1 < cpu->regs[rb].b8.b1)
+			? cpu->regs[ra].b8.b1 : cpu->regs[rb].b8.b1;
+	result.b8.b0 = (cpu->regs[ra].b8.b0 < cpu->regs[rb].b8.b0)
+			? cpu->regs[ra].b8.b0 : cpu->regs[rb].b8.b0;
+	cpu->regs[rd].s = result.s;
+      }
+      break;
+    case MATCH_UCMPLT16:
+      {
+	reg_t result;
+
+	result.u = 0;
+	if (cpu->regs[ra].ub16.h1 < cpu->regs[rb].ub16.h1)
+	  result.ub16.h1 = 0xffff;
+	if (cpu->regs[ra].ub16.h0 < cpu->regs[rb].ub16.h0)
+	  result.ub16.h0 = 0xffff;
+
+	cpu->regs[rd].u = result.u;
+      }
+      break;
+    case MATCH_UCMPLE16:
+      {
+	reg_t result;
+
+	result.u = 0;
+	if (cpu->regs[ra].ub16.h1 < cpu->regs[rb].ub16.h1)
+	  result.ub16.h1 = 0xffff;
+	if (cpu->regs[ra].ub16.h0 < cpu->regs[rb].ub16.h0)
+	  result.ub16.h0 = 0xffff;
+
+	cpu->regs[rd].u = result.u;
+      }
+      break;
+    case MATCH_UMIN16:
+      {
+	reg_t result;
+	result.ub16.h1 = (cpu->regs[ra].ub16.h1 < cpu->regs[rb].ub16.h1)
+			  ? cpu->regs[ra].ub16.h1 : cpu->regs[rb].ub16.h1;
+	result.ub16.h0 = (cpu->regs[ra].ub16.h0 < cpu->regs[rb].ub16.h0)
+			  ? cpu->regs[ra].ub16.h0 : cpu->regs[rb].ub16.h0;
+	cpu->regs[rd].u = result.u;
+      }
+      break;
+    case MATCH_UCMPLT8:
+      {
+	reg_t result;
+
+	result.u = 0;
+	if (cpu->regs[ra].ub8.b3 < cpu->regs[rb].ub8.b3)
+	  result.ub8.b3 = 0xff;
+	if (cpu->regs[ra].ub8.b2 < cpu->regs[rb].ub8.b2)
+	  result.ub8.b2 = 0xff;
+	if (cpu->regs[ra].ub8.b1 < cpu->regs[rb].ub8.b1)
+	  result.ub8.b1 = 0xff;
+	if (cpu->regs[ra].ub8.b0 < cpu->regs[rb].ub8.b0)
+	  result.ub8.b0 = 0xff;
+
+	cpu->regs[rd].u = result.u;
+      }
+      break;
+    case MATCH_UCMPLE8:
+      {
+	reg_t result;
+
+	result.u = 0;
+	if (cpu->regs[ra].ub8.b3 <= cpu->regs[rb].ub8.b3)
+	  result.ub8.b3 = 0xff;
+	if (cpu->regs[ra].ub8.b2 <= cpu->regs[rb].ub8.b2)
+	  result.ub8.b2 = 0xff;
+	if (cpu->regs[ra].ub8.b1 <= cpu->regs[rb].ub8.b1)
+	  result.ub8.b1 = 0xff;
+	if (cpu->regs[ra].ub8.b0 <= cpu->regs[rb].ub8.b0)
+	  result.ub8.b0 = 0xff;
+
+	cpu->regs[rd].u = result.u;
+      }
+      break;
+    case MATCH_UMIN8:
+      {
+	reg_t result;
+	result.ub8.b3 = (cpu->regs[ra].ub8.b3 < cpu->regs[rb].ub8.b3)
+			 ? cpu->regs[ra].ub8.b3 : cpu->regs[rb].ub8.b3;
+	result.ub8.b2 = (cpu->regs[ra].ub8.b2 < cpu->regs[rb].ub8.b2)
+			 ? cpu->regs[ra].ub8.b2 : cpu->regs[rb].ub8.b2;
+	result.ub8.b1 = (cpu->regs[ra].ub8.b1 < cpu->regs[rb].ub8.b1)
+			 ? cpu->regs[ra].ub8.b1 : cpu->regs[rb].ub8.b1;
+	result.ub8.b0 = (cpu->regs[ra].ub8.b0 < cpu->regs[rb].ub8.b0)
+			 ? cpu->regs[ra].ub8.b0 : cpu->regs[rb].ub8.b0;
+	cpu->regs[rd].u = result.u;
+      }
+      break;
+    case MATCH_SCLIP16:
+      cpu->regs[rd].b16.h1 = insn_sat_helper (cpu, cpu->regs[ra].b16.h1, imm4u);
+      cpu->regs[rd].b16.h0 = insn_sat_helper (cpu, cpu->regs[ra].b16.h0, imm4u);
+      break;
+    case MATCH_SMAX16:
+      {
+	/* Rt[31:16] = (Ra[31:16] > Rb[31:16])? Ra[31:16] : Rb[31:16]
+	   Rt[15:0] = (Ra[15:0] > Rb[15:0]) ? Ra[15:0] : Rb[15:0] */
+	reg_t result;
+	result.b16.h1 = (cpu->regs[ra].b16.h1 > cpu->regs[rb].b16.h1)
+			 ? cpu->regs[ra].b16.h1 : cpu->regs[rb].b16.h1;
+	result.b16.h0 = (cpu->regs[ra].b16.h0 > cpu->regs[rb].b16.h0)
+			 ? cpu->regs[ra].b16.h0 : cpu->regs[rb].b16.h0;
+	cpu->regs[rd].s = result.s;
+      }
+      break;
+    case MATCH_SMAX8:
+      {
+	/* Rt[31:24] = (Ra[31:24] > Rb[31:24])? Ra[31:24] : Rb[31:24]
+	   Rt[23:16] = (Ra[23:16] > Rb[23:16])? Ra[23:16] : Rb[23:16]
+	   Rt[15:8]  = (Ra[15:8]  > Rb[15:8]) ? Ra[15:8]  : Rb[15:8]
+	   Rt[7:0]   = (Ra[7:0]   > Rb[7:0])  ? Ra[7:0]   : Rb[7:0]  */
+	reg_t result;
+	result.b8.b3 = (cpu->regs[ra].b8.b3 > cpu->regs[rb].b8.b3)
+			? cpu->regs[ra].b8.b3 : cpu->regs[rb].b8.b3;
+	result.b8.b2 = (cpu->regs[ra].b8.b2 > cpu->regs[rb].b8.b2)
+			? cpu->regs[ra].b8.b2 : cpu->regs[rb].b8.b2;
+	result.b8.b1 = (cpu->regs[ra].b8.b1 > cpu->regs[rb].b8.b1)
+			? cpu->regs[ra].b8.b1 : cpu->regs[rb].b8.b1;
+	result.b8.b0 = (cpu->regs[ra].b8.b0 > cpu->regs[rb].b8.b0)
+			? cpu->regs[ra].b8.b0 : cpu->regs[rb].b8.b0;
+	cpu->regs[rd].s = result.s;
+      }
+      break;
+    case MATCH_UCLIP16:
+      cpu->regs[rd].b16.h1 = insn_usat_helper (cpu, cpu->regs[ra].b16.h1, imm4u);
+      cpu->regs[rd].b16.h0 = insn_usat_helper (cpu, cpu->regs[ra].b16.h0, imm4u);
+      break;
+    case MATCH_UMAX16:
+      {
+	/* Rt[31:16] = (Ra[31:16] > Rb[31:16])? Ra[31:16] : Rb[31:16]
+	   Rt[15:0] = (Ra[15:0] > Rb[15:0]) ? Ra[15:0] : Rb[15:0] */
+	reg_t result;
+	result.ub16.h1 = (cpu->regs[ra].ub16.h1 > cpu->regs[rb].ub16.h1)
+			  ? cpu->regs[ra].ub16.h1 : cpu->regs[rb].ub16.h1;
+	result.ub16.h0 = (cpu->regs[ra].ub16.h0 > cpu->regs[rb].ub16.h0)
+			  ? cpu->regs[ra].ub16.h0 : cpu->regs[rb].ub16.h0;
+	cpu->regs[rd].u = result.u;
+      }
+      break;
+    case MATCH_UMAX8:
+      {
+	/* Rt[31:24] = (Ra[31:24] > Rb[31:24])? Ra[31:24] : Rb[31:24]
+	   Rt[23:16] = (Ra[23:16] > Rb[23:16])? Ra[23:16] : Rb[23:16]
+	   Rt[15:8]  = (Ra[15:8]  > Rb[15:8]) ? Ra[15:8]  : Rb[15:8]
+	   Rt[7:0]   = (Ra[7:0]   > Rb[7:0])  ? Ra[7:0]   : Rb[7:0]  */
+	reg_t result;
+	result.ub8.b3 = (cpu->regs[ra].ub8.b3 > cpu->regs[rb].ub8.b3)
+			 ? cpu->regs[ra].ub8.b3 : cpu->regs[rb].ub8.b3;
+	result.ub8.b2 = (cpu->regs[ra].ub8.b2 > cpu->regs[rb].ub8.b2)
+			 ? cpu->regs[ra].ub8.b2 : cpu->regs[rb].ub8.b2;
+	result.ub8.b1 = (cpu->regs[ra].ub8.b1 > cpu->regs[rb].ub8.b1)
+			 ? cpu->regs[ra].ub8.b1 : cpu->regs[rb].ub8.b1;
+	result.ub8.b0 = (cpu->regs[ra].ub8.b0 > cpu->regs[rb].ub8.b0)
+			 ? cpu->regs[ra].ub8.b0 : cpu->regs[rb].ub8.b0;
+	cpu->regs[rd].u = result.u;
+      }
+      break;
+    case MATCH_KHM16:
+      {
+	int16_t aop1 = cpu->regs[ra].b16.h0;
+	int16_t bop1 = cpu->regs[rb].b16.h0;
+	int16_t aop2 = cpu->regs[ra].b16.h1;
+	int16_t bop2 = cpu->regs[rb].b16.h1;
+	cpu->regs[rd].b16.h0 = insn_sat_khm_helper (cpu, aop1, bop1);
+	cpu->regs[rd].b16.h1 = insn_sat_khm_helper (cpu, aop2, bop2);
+      }
+      break;
+    case MATCH_KHMX16:
+      {
+	int16_t aop1 = cpu->regs[ra].b16.h1;
+	int16_t bop1 = cpu->regs[rb].b16.h0;
+	int16_t aop2 = cpu->regs[ra].b16.h0;
+	int16_t bop2 = cpu->regs[rb].b16.h1;
+	cpu->regs[rd].b16.h0 = insn_sat_khm_helper (cpu, aop1, bop1);
+	cpu->regs[rd].b16.h1 = insn_sat_khm_helper (cpu, aop2, bop2);
+      }
+      break;
+    case MATCH_KABS16:
+      {
+	reg_t result;
+	int16_t *ptr, i;
+	result.u = cpu->regs[ra].u;
+	for (i = 0; i < 2; i++)
+	  {
+	    ptr = (int16_t *) &result.b16 + i;
+	    if ((*ptr) == -0x8000)
+	      {
+		*ptr = 0x7fff;
+		CCPU_SR_SET (PSW, PSW_OV);
+	      }
+	    else if (*ptr & 0x8000)
+	      *ptr = -(*ptr);
+	  }
+	cpu->regs[rd].u = result.u;
+      }
+      break;
+    case MATCH_SUNPKD810:
+      {
+	reg_t result;
+	result.b16.h1 = (int16_t) cpu->regs[ra].b8.b1;
+	result.b16.h0 = (int16_t) cpu->regs[ra].b8.b0;
+	cpu->regs[rd].s = result.s;
+      }
+      break;
+    case MATCH_SUNPKD820:
+      {
+	reg_t result;
+	result.b16.h1 = (int16_t) cpu->regs[ra].b8.b2;
+	result.b16.h0 = (int16_t) cpu->regs[ra].b8.b0;
+	cpu->regs[rd].s = result.s;
+      }
+      break;
+    case MATCH_SUNPKD830:
+      {
+	reg_t result;
+	result.b16.h1 = (int16_t) cpu->regs[ra].b8.b3;
+	result.b16.h0 = (int16_t) cpu->regs[ra].b8.b0;
+	cpu->regs[rd].s = result.s;
+      }
+      break;
+    case MATCH_SUNPKD831:
+      {
+	reg_t result;
+	result.b16.h1 = (int16_t) cpu->regs[ra].b8.b3;
+	result.b16.h0 = (int16_t) cpu->regs[ra].b8.b1;
+	cpu->regs[rd].s = result.s;
+      }
+      break;
+    case MATCH_ZUNPKD810:
+      {
+	reg_t result;
+	result.ub16.h1 = (uint16_t) cpu->regs[ra].ub8.b1;
+	result.ub16.h0 = (uint16_t) cpu->regs[ra].ub8.b0;
+	cpu->regs[rd].u = result.u;
+      }
+      break;
+    case MATCH_ZUNPKD820:
+      {
+	reg_t result;
+	result.ub16.h1 = (uint16_t) cpu->regs[ra].ub8.b2;
+	result.ub16.h0 = (uint16_t) cpu->regs[ra].ub8.b0;
+	cpu->regs[rd].u = result.u;
+      }
+      break;
+    case MATCH_ZUNPKD830:
+      {
+	reg_t result;
+	result.ub16.h1 = (uint16_t) cpu->regs[ra].ub8.b3;
+	result.ub16.h0 = (uint16_t) cpu->regs[ra].ub8.b0;
+	cpu->regs[rd].u = result.u;
+      }
+      break;
+    case MATCH_ZUNPKD831:
+      {
+	reg_t result;
+	result.ub16.h1 = (uint16_t) cpu->regs[ra].ub8.b3;
+	result.ub16.h0 = (uint16_t) cpu->regs[ra].ub8.b1;
+	cpu->regs[rd].u = result.u;
+      }
+      break;
+    case MATCH_RADDW:
+      {
+	cpu->regs[rd].s = (int32_t) (((int64_t) cpu->regs[ra].s
+				     + (int64_t) cpu->regs[rb].s) >> 1);
+      }
+      break;
+    case MATCH_RSUBW:
+      {
+	cpu->regs[rd].s = (int32_t) (((int64_t) cpu->regs[ra].s
+				     - (int64_t) cpu->regs[rb].s) >> 1);
+      }
+      break;
+    case MATCH_URADDW:
+      {
+	cpu->regs[rd].u =
+	  (uint32_t) (((uint64_t)cpu->regs[ra].u + cpu->regs[rb].u) >> 1);
+      }
+      break;
+    case MATCH_URSUBW:
+      {
+	cpu->regs[rd].u =
+	  (uint32_t) (((uint64_t)cpu->regs[ra].u - cpu->regs[rb].u) >> 1);
+      }
+      break;
+    case MATCH_SRA_U:
+      {
+	uint32_t rnd_mask = (1UL << (cpu->regs[rb].u - 1));
+	int32_t rnd_val = (cpu->regs[ra].s & rnd_mask) ? 1 : 0;
+	cpu->regs[rd].s = (cpu->regs[ra].s >> (cpu->regs[rb].u & 0x1f)) + rnd_val ;
+      }
+      break;
+    case MATCH_SRAI_U:
+      {
+	uint32_t rnd_mask = (1UL << (imm5u - 1));
+	int32_t rnd_val = (cpu->regs[ra].s & rnd_mask) ? 1 : 0;
+	cpu->regs[rd].s = (cpu->regs[ra].s >> imm5u) + rnd_val ;
+      }
+      break;
+    case MATCH_KSLLW:
+      {
+	int64_t res;
+	int sa = cpu->regs[rb].u & 0xf;
+
+	if (sa != 0)
+	  {
+	    res = (int64_t) cpu->regs[ra].s << sa;
+	    res = insn_sat_helper (cpu, res, 31);
+	    cpu->regs[rd].s = res;
+	  }
+	else
+	  cpu->regs[rd].s = cpu->regs[ra].s;
+      }
+      break;
+
+    case MATCH_KSLLIW:
+      {
+	int64_t res;
+
+	if (imm5u != 0)
+	  {
+	    res = (int64_t) cpu->regs[ra].s << imm5u;
+	    res = insn_sat_helper (cpu, res, 31);
+	    cpu->regs[rd].s = res;
+	  }
+	else
+	  cpu->regs[rd].s = cpu->regs[ra].s;
+      }
+      break;
+    case MATCH_KSLRAW_U:
+      {
+	int32_t ret;
+	int sh = cpu->regs[rb].b8.b0;
+
+	if (cpu->regs[rb].b8.b0 < 0)
+	  {
+	    int rnd;
+	    uint32_t mask_sh;
+	    sh = -cpu->regs[rb].b8.b0;
+	    sh = sh > 31 ? 31 : sh;
+	    mask_sh = (1UL << (sh - 1));
+	    rnd = (cpu->regs[ra].s & mask_sh) ? 1 : 0;
+	    ret = cpu->regs[ra].s >> sh;
+	    ret += rnd;
+	  }
+	else
+	  {
+	    int64_t tmp;
+            sh = cpu->regs[rb].b8.b0 > 31 ? 31 : sh;
+	    tmp = (int64_t) cpu->regs[ra].s << sh;
+	    ret = insn_sat_helper (cpu, tmp, 31);
+	  }
+	cpu->regs[rd].s = ret;
+      }
+      break;
+    case MATCH_PKTT16:
+      {
+	/* Rt[31:0] = CONCAT(Ra[31:16], Rb[31:16]) */
+	cpu->regs[rd].s = (cpu->regs[ra].b16.h1 << 16) | cpu->regs[rb].ub16.h1;
+      }
+      break;
+    case MATCH_PKTB16:
+      {
+	/* Rt[31:0] = CONCAT(Ra[31:16], Rb[15:0]) */
+	cpu->regs[rd].s = (cpu->regs[ra].b16.h1 << 16) | cpu->regs[rb].ub16.h0;
+      }
+      break;
+     case MATCH_PKBT16:
+      {
+	/* Rt[31:0] = CONCAT(Ra[15:0], Rb[31:16]) */
+	cpu->regs[rd].s = (cpu->regs[ra].b16.h0 << 16) | cpu->regs[rb].ub16.h1;
+      }
+      break;
+    case MATCH_PKBB16:
+      {
+	/* Rt[31:0] = CONCAT(Ra[15:0], Rb[15:0]) */
+	cpu->regs[rd].s = (cpu->regs[ra].b16.h0 << 16) | cpu->regs[rb].ub16.h0;
+      }
+      break;
+    case MATCH_SMMUL:
+      {
+	cpu->regs[rd].s =
+	  ((int64_t) cpu->regs[ra].s * (int64_t) cpu->regs[rb].s) >> 32;
+      }
+      break;
+   case MATCH_SMMUL_U:
+      {
+	int64_t result = (int64_t) cpu->regs[ra].s * (int64_t) cpu->regs[rb].s;
+	int32_t round_up = (result >> 31) & 0x1;
+
+	/* Round up */
+        if (round_up != 0)
+	  cpu->regs[rd].s = (result >> 32) + 1;
+	else
+	  cpu->regs[rd].s = result >> 32;
+      }
+      break;
+    case MATCH_KMMAC:
+      {
+	union64_t temp, res;
+	temp.d0 = (int64_t) cpu->regs[ra].s * cpu->regs[rb].s;
+	res.d0 = (int64_t) cpu->regs[rd].s + temp.b32.w1;
+	res.d0 = insn_sat_helper (cpu, res.d0, 31);
+	cpu->regs[rd].s = res.d0;
+      }
+      break;
+    case MATCH_KMMAC_U:
+      {
+	union64_t temp, res;
+	temp.d0 = (int64_t) cpu->regs[ra].s * cpu->regs[rb].s;
+
+	if ((temp.b32.w0 >> 31) != 0)
+	  temp.b32.w1 += 1;
+
+	res.d0 = (int64_t) cpu->regs[rd].s + temp.b32.w1;
+	res.d0 = insn_sat_helper (cpu, res.d0, 31);
+	cpu->regs[rd].s = res.d0;
+      }
+      break;
+    case MATCH_KWMMUL:
+      {
+	union64_t temp;
+
+	if ((cpu->regs[ra].s != 0x80000000) || (cpu->regs[rb].s != 0x80000000))
+	  {
+	    temp.d0 = ((int64_t) cpu->regs[ra].s * cpu->regs[rb].s) << 1;
+	    cpu->regs[rd].s = temp.b32.w1;
+	  }
+	else
+	  {
+	    cpu->regs[rd].s = 0x7fffffff;
+	    CCPU_SR_SET (PSW, PSW_OV);
+	  }
+      }
+      break;
+    case MATCH_KWMMUL_U:
+      {
+	union64_t temp;
+
+	if ((cpu->regs[ra].s != 0x80000000) || (cpu->regs[rb].s != 0x80000000))
+	  {
+	    temp.d0 = (int64_t) cpu->regs[ra].s * cpu->regs[rb].s;
+	    /* Let 30bit add 1 and left sh1ft 1.  */
+	    temp.d0 = (temp.d0 + (int32_t) (1 << 30)) << 1;
+	    cpu->regs[rd].s = temp.b32.w1;
+	  }
+	else
+	  {
+	    cpu->regs[rd].s = 0x7fffffff;
+	    CCPU_SR_SET (PSW, PSW_OV);
+	  }
+      }
+      break;
+    case MATCH_SMMWB:
+      {
+	cpu->regs[rd].s =
+	  ((int64_t) cpu->regs[ra].s * (int64_t) cpu->regs[rb].b16.h0) >> 16;
+      }
+      break;
+    case MATCH_SMMWB_U:
+      {
+	int64_t result =
+	  (int64_t) cpu->regs[ra].s * (int64_t) cpu->regs[rb].b16.h0;
+	int32_t round_up = (result >> 15) & 0x1;
+
+	/* Round up */
+        if (round_up != 0)
+	  cpu->regs[rd].s = (result >> 16) + 1;
+	else
+	  cpu->regs[rd].s = result >> 16;
+      }
+      break;
+    case MATCH_KMMSB:
+      {
+	union64_t temp, res;
+	temp.d0 = (int64_t) cpu->regs[ra].s * cpu->regs[rb].s;
+	res.d0 = (int64_t) cpu->regs[rd].s - temp.b32.w1;
+	res.d0 = insn_sat_helper (cpu, res.d0, 31);
+	cpu->regs[rd].s = res.d0;
+      }
+      break;
+    case MATCH_KMMSB_U:
+      {
+	union64_t temp, res;
+	temp.d0 = (int64_t) cpu->regs[ra].s * cpu->regs[rb].s;
+
+	if ((temp.b32.w0 >> 31) != 0)
+	  temp.b32.w1 += 1;
+
+	res.d0 = (int64_t) cpu->regs[rd].s - temp.b32.w1;
+	res.d0 = insn_sat_helper (cpu, res.d0, 31);
+	cpu->regs[rd].s = res.d0;
+      }
+      break;
+    case MATCH_SMMWT:
+      {
+	cpu->regs[rd].s =
+	  ((int64_t) cpu->regs[ra].s * (int64_t) cpu->regs[rb].b16.h1) >> 16;
+      }
+      break;
+    case MATCH_SMMWT_U:
+      {
+	int64_t result =
+	  (int64_t) cpu->regs[ra].s * (int64_t) cpu->regs[rb].b16.h1;
+	int32_t round_up = (result >> 15) & 0x1;
+
+	/* Round up */
+        if (round_up != 0)
+	  cpu->regs[rd].s = (result >> 16) + 1;
+	else
+	  cpu->regs[rd].s = result >> 16;
+      }
+      break;
+    case MATCH_KMMAWB:
+      {
+	union64_t temp;
+	int64_t res;
+
+	temp.d0 = (int64_t) cpu->regs[ra].s * cpu->regs[rb].b16.h0;
+	res = (int64_t) cpu->regs[rd].s + (int32_t) (temp.d0 >> 16);
+	res = insn_sat_helper (cpu, res, 31);
+	cpu->regs[rd].s = res;
+      }
+      break;
+    case MATCH_KMMAWB_U:
+      {
+	union64_t temp;
+	int64_t res;
+	int32_t rnd_val;
+
+	temp.d0 = (int64_t) cpu->regs[ra].s * cpu->regs[rb].b16.h0;
+	rnd_val = (temp.b32.w0 & (1UL << 15)) ? (1L << 16) : 0;
+	temp.d0 += rnd_val;
+	res = (int64_t) cpu->regs[rd].s + (int32_t) (temp.d0 >> 16);
+	res = insn_sat_helper (cpu, res, 31);
+	cpu->regs[rd].s = res;
+      }
+      break;
+    case MATCH_KMMAWT:
+      {
+	union64_t temp;
+	int64_t res;
+
+	temp.d0 = (int64_t) cpu->regs[ra].s * cpu->regs[rb].b16.h1;
+	res = (int64_t) cpu->regs[rd].s + (int32_t) (temp.d0 >> 16);
+	res = insn_sat_helper (cpu, res, 31);
+	cpu->regs[rd].s = res;
+      }
+      break;
+    case MATCH_KMMAWT_U:
+      {
+	union64_t temp;
+	int64_t res;
+	int32_t rnd_val;
+
+	temp.d0 = (int64_t) cpu->regs[ra].s * cpu->regs[rb].b16.h1;
+	rnd_val = (temp.b32.w0 & (1UL << 15)) ? (1L << 16) : 0;
+	temp.d0 += rnd_val;
+	res = (int64_t) cpu->regs[rd].s + (int32_t) (temp.d0 >> 16);
+	res = insn_sat_helper (cpu, res, 31);
+	cpu->regs[rd].s = res;
+      }
+      break;
+    case MATCH_SMBB16:
+      {
+	/* Rt = Ra[15:0] * Rb[15:0] */
+	cpu->regs[rd].s = cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h0;
+      }
+      break;
+    case MATCH_SMBT16:
+      {
+	/* Rt = Ra[15:0] * Rb[31:16] */
+	cpu->regs[rd].s = cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h1;
+      }
+      break;
+    case MATCH_SMTT16:
+      {
+	/* Rt = Ra[31:16] * Rb[31:16] */
+	cpu->regs[rd].s = cpu->regs[ra].b16.h1 * cpu->regs[rb].b16.h1;
+      }
+      break;
+    case MATCH_KMABB:
+      {
+	int32_t mul = (int32_t) cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h0;
+	int64_t res = (int64_t) cpu->regs[rd].s + mul;
+	cpu->regs[rd].s = insn_sat_helper (cpu, res, 31);
+      }
+      break;
+    case MATCH_KMABT:
+      {
+	int32_t mul = (int32_t) cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h1;
+	int64_t res = (int64_t) cpu->regs[rd].s + mul;
+	cpu->regs[rd].s = insn_sat_helper (cpu, res, 31);
+      }
+      break;
+    case MATCH_KMATT:
+      {
+	int32_t mul = (int32_t) cpu->regs[ra].b16.h1 * cpu->regs[rb].b16.h1;
+	int64_t res = (int64_t) cpu->regs[rd].s + mul;
+	cpu->regs[rd].s = insn_sat_helper (cpu, res, 31);
+      }
+      break;
+    case MATCH_KMDA:
+      {
+	int32_t res;
+	if ((cpu->regs[ra].s != 0x80008000) || (cpu->regs[rb].s != 0x80008000))
+	  {
+	    res = ((int32_t) cpu->regs[ra].b16.h1 * cpu->regs[rb].b16.h1)
+		   + ((int32_t) cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h0);
+	  }
+	else
+	  {
+	    res = 0x7fffffff;
+	    CCPU_SR_SET (PSW, PSW_OV);
+	  }
+	cpu->regs[rd].s = res;
+      }
+      break;
+    case MATCH_KMXDA:
+      {
+	int32_t res;
+	if ((cpu->regs[ra].s != 0x80008000) || (cpu->regs[rb].s != 0x80008000))
+	  {
+	    res = ((int32_t) cpu->regs[ra].b16.h1 * cpu->regs[rb].b16.h0)
+		   + ((int32_t) cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h1);
+	  }
+	else
+	  {
+	    res = 0x7fffffff;
+	    CCPU_SR_SET (PSW, PSW_OV);
+	  }
+	cpu->regs[rd].s = res;
+      }
+      break;
+    case MATCH_KMADA:
+      {
+	int64_t res = (int64_t) cpu->regs[rd].s
+		      + ((int32_t) cpu->regs[ra].b16.h1 * cpu->regs[rb].b16.h1)
+		      + ((int32_t) cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h0);
+	cpu->regs[rd].s = insn_sat_helper (cpu, res, 31);
+      }
+      break;
+    case MATCH_KMAXDA:
+      {
+	int64_t res = (int64_t) cpu->regs[rd].s
+		      + ((int32_t) cpu->regs[ra].b16.h1 * cpu->regs[rb].b16.h0)
+		      + ((int32_t) cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h1);
+	cpu->regs[rd].s = insn_sat_helper (cpu, res, 31);
+      }
+      break;
+    case MATCH_KMSDA:
+      {
+	int32_t mul_h1 = (int32_t) cpu->regs[ra].b16.h1 * cpu->regs[rb].b16.h1;
+	int32_t mul_h0 = (int32_t) cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h0;
+	int64_t res = (int64_t) cpu->regs[rd].s - (mul_h1 + mul_h0);
+	cpu->regs[rd].s = insn_sat_helper (cpu, res, 31);
+      }
+      break;
+    case MATCH_KMSXDA:
+      {
+	int32_t mul_h1_h0 = (int32_t) cpu->regs[ra].b16.h1 * cpu->regs[rb].b16.h0;
+	int32_t mul_h0_h1 = (int32_t) cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h1;
+	int64_t res = (int64_t) cpu->regs[rd].s - (mul_h1_h0 + mul_h0_h1);
+	cpu->regs[rd].s = insn_sat_helper (cpu, res, 31);
+      }
+      break;
+    case MATCH_SMDS:
+      {
+	/* Rt = (Ra[31:16] * Rb[31:16]) - (Ra[15:0] * Rb[15:0]) */
+	int32_t mul_h1 = cpu->regs[ra].b16.h1 * cpu->regs[rb].b16.h1;
+	int32_t mul_h0 = cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h0;
+	cpu->regs[rd].s = mul_h1 - mul_h0;
+      }
+      break;
+    case MATCH_SMXDS:
+      {
+	/* Rt = (Ra[31:16] * Rb[15:0]) - (Ra[15:0] * Rb[31:16]) */
+	int32_t mul_h1_h0 = cpu->regs[ra].b16.h1 * cpu->regs[rb].b16.h0;
+	int32_t mul_h0_h1 = cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h1;
+	cpu->regs[rd].s = mul_h1_h0 - mul_h0_h1;
+      }
+      break;
+    case MATCH_SMDRS:
+      {
+	/* Rt = (Ra[15:0] * Rb[15:0]) - (Ra[31:16] * Rb[31:16]) */
+	int32_t mul_h1 = cpu->regs[ra].b16.h1 * cpu->regs[rb].b16.h1;
+	int32_t mul_h0 = cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h0;
+	cpu->regs[rd].s = mul_h0 - mul_h1;
+      }
+      break;
+    case MATCH_KMADRS:
+      {
+	int32_t mul_h1 = (int32_t) cpu->regs[ra].b16.h1 * cpu->regs[rb].b16.h1;
+	int32_t mul_h0 = (int32_t) cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h0;
+	int64_t res = (int64_t) cpu->regs[rd].s + (mul_h0 - mul_h1);
+	cpu->regs[rd].s = insn_sat_helper (cpu, res, 31);
+      }
+      break;
+    case MATCH_KMADS:
+      {
+	int32_t mul_h1 = (int32_t) cpu->regs[ra].b16.h1 * cpu->regs[rb].b16.h1;
+	int32_t mul_h0 = (int32_t) cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h0;
+	int64_t res = (int64_t) cpu->regs[rd].s + (mul_h1 - mul_h0);
+	cpu->regs[rd].s = insn_sat_helper (cpu, res, 31);
+      }
+      break;
+    case MATCH_KMAXDS:
+      {
+	int32_t mul_h1_h0 = (int32_t) cpu->regs[ra].b16.h1 * cpu->regs[rb].b16.h0;
+	int32_t mul_h0_h1 = (int32_t) cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h1;
+	int64_t res = (int64_t) cpu->regs[rd].s + (mul_h1_h0 - mul_h0_h1);
+	cpu->regs[rd].s = insn_sat_helper (cpu, res, 31);
+      }
+      break;
+    case MATCH_SMAL:
+      {
+	/* Rt[63:0] = Ra[63:0] + Rb[31:16] * Rb[15:0] */
+	int64_t mul_rb = cpu->regs[rb].b16.h1 * cpu->regs[rb].b16.h0;
+	int64_t result = get_double (cpu, ra) + mul_rb;
+	set_double (cpu, rd, result);
+      }
+      break;
+    case MATCH_BITREV:
+      {
+	uint32_t bits = cpu->regs[ra].u;
+	bits = (((bits & 0xaaaaaaaa) >> 1) | ((bits & 0x55555555) << 1));
+	bits = (((bits & 0xcccccccc) >> 2) | ((bits & 0x33333333) << 2));
+	bits = (((bits & 0xf0f0f0f0) >> 4) | ((bits & 0x0f0f0f0f) << 4));
+	bits = (((bits & 0xff00ff00) >> 8) | ((bits & 0x00ff00ff) << 8));
+	bits = ((bits >> 16) | (bits << 16));
+
+	cpu->regs[rd].u = bits >> (32 - (cpu->regs[rb].u + 1));
+      }
+      break;
+    case MATCH_BITREVI:
+      {
+	uint32_t bits = cpu->regs[ra].u;
+	bits = (((bits & 0xaaaaaaaa) >> 1) | ((bits & 0x55555555) << 1));
+	bits = (((bits & 0xcccccccc) >> 2) | ((bits & 0x33333333) << 2));
+	bits = (((bits & 0xf0f0f0f0) >> 4) | ((bits & 0x0f0f0f0f) << 4));
+	bits = (((bits & 0xff00ff00) >> 8) | ((bits & 0x00ff00ff) << 8));
+	bits = ((bits >> 16) | (bits << 16));
+
+	cpu->regs[rd].u = bits >> (32 - (imm5u + 1));
+      }
+      break;
+    case MATCH_WEXT:
+      cpu->regs[rd].s = (int32_t) (get_udouble (cpu, ra) >> (cpu->regs[rb].u & 0x1f));
+      break;
+    case MATCH_WEXTI:
+      cpu->regs[rd].s = (int32_t) (get_udouble (cpu, ra) >> imm5u);
+      break;
+    case MATCH_BPICK:
+      {
+	uint32_t temp_ctl = ~cpu->regs[rc].u;
+	cpu->regs[rd].u = (uint32_t) ((cpu->regs[ra].u & ~temp_ctl)
+				     | (cpu->regs[rb].u & temp_ctl));
+      }
+      break;
+    case MATCH_INSB:
+      {
+	int temp = cpu->regs[ra].s;
+
+	/* default is byte 0 */
+	int32_t mask = 0xFFFFFF00;
+
+	if (imm2u == 1)
+	  {
+	    mask = 0xFFFF00FF;
+	    temp <<= 8;
+	  }
+	else if (imm2u == 2)
+	  {
+	    mask = 0xFF00FFFF;
+	    temp <<= 16;
+	  }
+	else if (imm2u == 3)
+	  {
+	    mask = 0x00FFFFFF;
+	    temp <<= 24;
+	  }
+
+	cpu->regs[rd].s = (cpu->regs[rd].s & mask) | (temp & (~mask));
+      }
+      break;
+    case MATCH_ADD64:
+      {
+	int64_t result = get_double (cpu, ra) + get_double (cpu, rb);
+	set_double (cpu, rd, result);
+      }
+      break;
+    case MATCH_RADD64:
+      {
+	/* 64 = (64 + 64) >> 1 */
+	int64_t result;
+	int64_t lsb_eq_1 = 1L;
+	lsb_eq_1 &= (int64_t) cpu->regs[ra].s;
+	lsb_eq_1 &= (int64_t) cpu->regs[rb].s;
+	result = (get_double (cpu, ra) >> 1)
+		 + (get_double (cpu, rb) >> 1)
+		 + lsb_eq_1;
+
+	set_double (cpu, rd, result);
+      }
+      break;
+    case MATCH_URADD64:
+      {
+	/* 64 = (U64 + U64) >> 1 */
+	uint64_t result;
+	uint64_t lsb_eq_1 = 1UL;
+	lsb_eq_1 &= (uint64_t) cpu->regs[ra].u;
+	lsb_eq_1 &= (uint64_t) cpu->regs[rb].u;
+	result = (get_udouble (cpu, ra) >> 1)
+		 + (get_udouble (cpu, rb) >> 1)
+		 + lsb_eq_1;
+
+	set_udouble (cpu, rd, result);
+      }
+      break;
+    case MATCH_KADD64:
+      {
+	int64_t x = get_double (cpu, ra);
+	int64_t y = get_double (cpu, rb);
+	int64_t res = x + y;
+	if ((x > 0) && (y > 0))
+	  {
+	    if (res <= 0)
+	      {
+		res = 0x7fffffffffffffffLL;
+		CCPU_SR_SET (PSW, PSW_OV);
+	      }
+	  }
+	else if ((x < 0) && (y < 0))
+	  {
+	    if (res >= 0)
+	      {
+		res = 0x8000000000000000LL;
+		CCPU_SR_SET (PSW, PSW_OV);
+	      }
+	  }
+	set_double (cpu, rd, res);
+      }
+      break;
+    case MATCH_UKADD64:
+      {
+	uint64_t x = get_udouble (cpu, ra);
+	uint64_t y = get_udouble (cpu, rb);
+	uint64_t res = x + y;
+	if (res < x)
+	  {
+	    res = 0xffffffffffffffffULL;
+	    CCPU_SR_SET (PSW, PSW_OV);
+	  }
+	set_double (cpu, rd, res);
+      }
+      break;
+    case MATCH_SUB64:
+      {
+	int64_t result = get_double (cpu, ra) - get_double (cpu, rb);
+	set_double (cpu, rd, result);
+      }
+      break;
+    case MATCH_RSUB64:
+      {
+	/* 64 = (64 - 64) >> 1 */
+	int64_t result;
+	int64_t lsb_ra, lsb_rb, signed_ra, signed_rb, sum_lsb;
+
+	if (CCPU_SR_TEST (PSW, PSW_BE))
+	  {
+	    lsb_ra = cpu->regs[ra + 1].s & 0x1;
+	    lsb_rb = cpu->regs[rb + 1].s & 0x1;
+	    signed_ra = (cpu->regs[ra].s >> 31) & 0x1;
+	    signed_rb = (cpu->regs[ra].s >> 31) & 0x1;
+	  }
+	else
+	  {
+	    lsb_ra = cpu->regs[ra].s & 0x1;
+	    lsb_rb = cpu->regs[rb].s & 0x1;
+	    signed_ra = (cpu->regs[ra + 1].s >> 31) & 0x1;
+	    signed_rb = (cpu->regs[ra + 1].s >> 31) & 0x1;
+	  }
+
+	if (lsb_ra == 1 && signed_ra)
+	  lsb_ra = -1L;
+	if (lsb_rb == 1 && signed_rb)
+	  lsb_rb = -1L;
+
+	if (lsb_ra == -1L && lsb_rb == 0)
+	  sum_lsb = 0;
+	else
+	  sum_lsb = (lsb_ra - lsb_rb) >> 1;
+
+	result = (get_double (cpu, ra) >> 1)
+		  - (get_double (cpu, rb) >> 1) + sum_lsb;
+	set_double (cpu, rd, result);
+      }
+      break;
+    case MATCH_URSUB64:
+      {
+	/* 64 = (U64 - U64) >> 1 */
+	uint64_t result;
+	uint64_t lsb_ra, lsb_rb, sum_lsb;
+
+	if (CCPU_SR_TEST (PSW, PSW_BE))
+	  {
+	    lsb_ra = cpu->regs[ra + 1].u & 0x1;
+	    lsb_rb = cpu->regs[rb + 1].u & 0x1;
+	  }
+	else
+	  {
+	    lsb_ra = cpu->regs[ra].u & 0x1;
+	    lsb_rb = cpu->regs[rb].u & 0x1;
+	  }
+
+	sum_lsb = (lsb_ra < lsb_rb) ? -1ULL : 0;
+	result = (get_udouble (cpu, ra) >> 1)
+		  - (get_udouble (cpu, rb) >> 1) + sum_lsb;
+	set_udouble (cpu, rd, result);
+      }
+      break;
+    case MATCH_KSUB64:
+      {
+	int64_t x = get_double (cpu, ra);
+	int64_t y = get_double (cpu, rb);
+	int64_t res = x - y;
+	if ((x > 0) && (y < 0))
+	  {
+	    if (res <= 0)
+	      {
+		res = 0x7fffffffffffffffLL;
+		CCPU_SR_SET (PSW, PSW_OV);
+	      }
+	  }
+	else if ((x < 0) && (y > 0))
+	  {
+	    if (res >= 0)
+	      {
+		res = 0x8000000000000000LL;
+		CCPU_SR_SET (PSW, PSW_OV);
+	      }
+	  }
+	set_double (cpu, rd, res);
+      }
+      break;
+    case MATCH_UKSUB64:
+      {
+	uint64_t x = get_udouble (cpu, ra);
+	uint64_t y = get_udouble (cpu, rb);
+	uint64_t res = x - y;
+	if (x < y)
+	  {
+	    res = 0ULL;
+	    CCPU_SR_SET (PSW, PSW_OV);
+	  }
+	set_double (cpu, rd, res);
+      }
+      break;
+    case MATCH_SMAR64:
+      {
+	int64_t result = get_double (cpu, rd)
+			 + ((int64_t)cpu->regs[ra].s
+			    * (int64_t)cpu->regs[rb].s);
+	set_double (cpu, rd, result);
+      }
+      break;
+    case MATCH_UMAR64:
+      {
+	uint64_t result = get_udouble (cpu, rd)
+			  + ((uint64_t)cpu->regs[ra].u
+			     * (uint64_t)cpu->regs[rb].u);
+	set_udouble (cpu, rd, result);
+      }
+      break;
+    case MATCH_SMSR64:
+      {
+	int64_t result = get_double (cpu, rd)
+			 - ((int64_t)cpu->regs[ra].s
+			    * (int64_t)cpu->regs[rb].s);
+	set_double (cpu, rd, result);
+      }
+      break;
+    case MATCH_UMSR64:
+      {
+	uint64_t result = get_udouble (cpu, rd)
+			  - ((uint64_t)cpu->regs[ra].u
+			     * (uint64_t)cpu->regs[rb].u);
+	set_udouble (cpu, rd, result);
+      }
+      break;
+    case MATCH_KMAR64:
+      {
+	int64_t acc = get_double (cpu, rd);
+	int64_t mul_val = (int64_t) cpu->regs[ra].s * cpu->regs[rb].s;
+	int64_t res = acc + mul_val;
+
+	if ((acc > 0) && (mul_val > 0))
+	  {
+	    if (res <= 0)
+	      {
+		res = 0x7fffffffffffffffLL;
+		CCPU_SR_SET (PSW, PSW_OV);
+	      }
+	  }
+	else if ((acc < 0) && (mul_val < 0))
+	  {
+	    if (res >= 0)
+	      {
+		res = 0x8000000000000000LL;
+		CCPU_SR_SET (PSW, PSW_OV);
+	      }
+	  }
+	set_double (cpu, rd, res);
+      }
+      break;
+    case MATCH_UKMAR64:
+      {
+	uint64_t acc = get_udouble (cpu, rd);
+	uint64_t mul_val = (uint64_t) cpu->regs[ra].u * cpu->regs[rb].u;
+	uint64_t res = acc + mul_val;
+	if (res < acc)
+	  {
+	    res = 0xffffffffffffffffULL;
+	    CCPU_SR_SET (PSW, PSW_OV);
+	  }
+	set_double (cpu, rd, res);
+      }
+      break;
+    case MATCH_KMSR64:
+      {
+	int64_t acc = get_double (cpu, rd);
+	int64_t mul_val = (int64_t) cpu->regs[ra].s * cpu->regs[rb].s;
+	int64_t res = acc - mul_val;
+	if ((acc > 0) && (mul_val < 0))
+	  {
+	    if (res <= 0)
+	      {
+		res = 0x7fffffffffffffffLL;
+		CCPU_SR_SET (PSW, PSW_OV);
+	      }
+	  }
+	else if ((acc < 0) && (mul_val > 0))
+	  {
+	    if (res >= 0)
+	      {
+		res = 0x8000000000000000LL;
+		CCPU_SR_SET (PSW, PSW_OV);
+	      }
+	  }
+	set_double (cpu, rd, res);
+      }
+      break;
+    case MATCH_UKMSR64:
+      {
+	uint64_t acc = get_udouble (cpu, rd);
+	uint64_t mul_val = (uint64_t) cpu->regs[ra].u * cpu->regs[rb].u;
+	uint64_t res = acc - mul_val;
+	if (acc < mul_val)
+	  {
+	    res = 0ULL;
+	    CCPU_SR_SET (PSW, PSW_OV);
+	  }
+	set_double (cpu, rd, res);
+      }
+      break;
+    case MATCH_SMALDA:
+      {
+	/* 64 = 64 + (Ra[31:16] * Rb[31:16]) + (Ra[15:0] * Rb[15:0]) */
+	int64_t mul_h1 = cpu->regs[ra].b16.h1 * cpu->regs[rb].b16.h1;
+	int64_t mul_h0 = cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h0;
+	int64_t result = get_double (cpu, rd) + mul_h1 + mul_h0;
+	set_double (cpu, rd, result);
+      }
+      break;
+    case MATCH_SMSLDA:
+      {
+	/* 64 = 64 - (Ra[31:16] * Rb[31:16]) + (Ra[15:0] * Rb[15:0]) */
+	int64_t mul_h1 = cpu->regs[ra].b16.h1 * cpu->regs[rb].b16.h1;
+	int64_t mul_h0 = cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h0;
+	int64_t result = get_double (cpu, rd) - mul_h1 - mul_h0;
+	set_double (cpu, rd, result);
+      }
+      break;
+    case MATCH_SMALDS:
+      {
+	/* 64 = 64 + ((Ra[31:16] * Rb[31:16]) - (Ra[15:0] * Rb[15:0])) */
+	int64_t mul_h1 = cpu->regs[ra].b16.h1 * cpu->regs[rb].b16.h1;
+	int64_t mul_h0 = cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h0;
+	int64_t result = get_double (cpu, rd) + mul_h1 - mul_h0;
+	set_double (cpu, rd, result);
+      }
+      break;
+    case MATCH_SMALBB:
+      {
+	/* 64 = 64 + Ra[15:0] * Rb[15:0] */
+	int64_t mul_h0 = cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h0;
+	int64_t result = get_double (cpu, rd) + mul_h0;
+	set_double (cpu, rd, result);
+      }
+      break;
+    case MATCH_SMSLXDA:
+      {
+	/* 64 = 64 - (Ra[31:16] * Rb[15:0]) + (Ra[15:0] * Rb[31:16]) */
+	int64_t mul_h1_h0 = cpu->regs[ra].b16.h1 * cpu->regs[rb].b16.h0;
+	int64_t mul_h0_h1 = cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h1;
+	int64_t result = get_double (cpu, rd) - mul_h1_h0 - mul_h0_h1;
+	set_double (cpu, rd, result);
+      }
+      break;
+    case MATCH_SMALXDS:
+      {
+	/* 64 = 64 + (Ra[31:16] * Rb[15:0]) - (Ra[15:0] * Rb[31:16]) */
+	int64_t mul_h1_h0 = cpu->regs[ra].b16.h1 * cpu->regs[rb].b16.h0;
+	int64_t mul_h0_h1 = cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h1;
+	int64_t result = get_double (cpu, rd) + (mul_h1_h0 - mul_h0_h1);
+	set_double (cpu, rd, result);
+      }
+      break;
+    case MATCH_SMALBT:
+      {
+	/* 64 = 64 + Ra[15:0] * Rb[31:16] */
+	int64_t mul = cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h1;
+	int64_t result = get_double (cpu, rd) + mul;
+	set_double (cpu, rd, result);
+      }
+      break;
+    case MATCH_SMALDRS:
+      {
+	/* 64 = 64 + (Ra[15:0] * Rb[15:0]) - (Ra[31:16] * Rb[31:16]) */
+	int64_t mul_h0 = cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h0;
+	int64_t mul_h1 = cpu->regs[ra].b16.h1 * cpu->regs[rb].b16.h1;
+	int64_t result = get_double (cpu, rd) + (mul_h0 - mul_h1);
+	set_double (cpu, rd, result);
+      }
+      break;
+    case MATCH_SMALTT:
+      {
+	/* 64 = 64 + Ra[31:16] * Rb[31:16] */
+	int64_t mul = cpu->regs[ra].b16.h1 * cpu->regs[rb].b16.h1;
+	int64_t result = get_double (cpu, rd) + mul;
+	set_double (cpu, rd, result);
+      }
+      break;
+    case MATCH_SMALXDA:
+      {
+	/* 64 = 64 + (Ra[31:16] * Rb[15:0]) + (Ra[15:0] * Rb[31:16]) */
+	int64_t mul_h1_h0 = cpu->regs[ra].b16.h1 * cpu->regs[rb].b16.h0;
+	int64_t mul_h0_h1 = cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h1;
+	int64_t result = get_double (cpu, rd) + mul_h1_h0 + mul_h0_h1;
+	set_double (cpu, rd, result);
+      }
+      break;
+    case MATCH_KADDW:
+      {
+	int64_t tmp = (int64_t) cpu->regs[ra].s + (int64_t) cpu->regs[rb].s;
+	cpu->regs[rd].s = insn_sat_helper (cpu, tmp, 31);
+      }
+      break;
+    case MATCH_KSUBW:
+      {
+	int64_t tmp = (int64_t) cpu->regs[ra].s - (int64_t) cpu->regs[rb].s;
+	cpu->regs[rd].s = insn_sat_helper (cpu, tmp, 31);
+      }
+      break;
+    case MATCH_KSLRAW:
+      {
+	if (cpu->regs[rb].b8.b0 < 0)
+	  {
+	    int sh = -cpu->regs[rb].b8.b0;
+	    sh = sh > 31 ? 31 : sh;
+	    cpu->regs[rd].s = cpu->regs[ra].s >> sh;
+	  }
+	else
+	  {
+	    int64_t ret = (int64_t) cpu->regs[ra].s << cpu->regs[rb].b8.b0;
+	    cpu->regs[rd].s = insn_sat_helper (cpu, ret, 31);
+	  }
+      }
+      break;
+    case MATCH_KDMBB:
+      {
+	int16_t aop = cpu->regs[ra].b16.h0;
+	int16_t bop = cpu->regs[rb].b16.h0;
+	int32_t mul = (int32_t) aop * bop;
+	int32_t res = mul << 1;
+
+	if (mul != (res >> 1))
+	  {
+	    res = 0x7fffffff;
+	    CCPU_SR_SET (PSW, PSW_OV);
+	  }
+
+	cpu->regs[rd].s = res;
+      }
+      break;
+    case MATCH_KDMBT:
+      {
+	int16_t aop = cpu->regs[ra].b16.h0;
+	int16_t bop = cpu->regs[rb].b16.h1;
+	int32_t mul = (int32_t) aop * bop;
+	int32_t res = mul << 1;
+
+	if (mul != (res >> 1))
+	  {
+	    res = 0x7fffffff;
+	    CCPU_SR_SET (PSW, PSW_OV);
+	  }
+
+	cpu->regs[rd].s = res;
+      }
+      break;
+    case MATCH_KDMTT:
+      {
+	int16_t aop = cpu->regs[ra].b16.h1;
+	int16_t bop = cpu->regs[rb].b16.h1;
+	int32_t mul = (int32_t) aop * bop;
+	int32_t res = mul << 1;
+
+	if (mul != (res >> 1))
+	  {
+	    res = 0x7fffffff;
+	    CCPU_SR_SET (PSW, PSW_OV);
+	  }
+
+	cpu->regs[rd].s = res;
+      }
+      break;
+    case MATCH_KHMBB:
+      {
+	int16_t aop = cpu->regs[ra].b16.h0;
+	int16_t bop = cpu->regs[rb].b16.h0;
+	cpu->regs[rd].s = insn_sat_khm_helper (cpu, aop, bop);
+      }
+      break;
+    case MATCH_KHMBT:
+      {
+	int16_t aop = cpu->regs[ra].b16.h0;
+	int16_t bop = cpu->regs[rb].b16.h1;
+	cpu->regs[rd].s = insn_sat_khm_helper (cpu, aop, bop);
+      }
+      break;
+    case MATCH_KHMTT:
+      {
+	int16_t aop = cpu->regs[ra].b16.h1;
+	int16_t bop = cpu->regs[rb].b16.h1;
+	cpu->regs[rd].s = insn_sat_khm_helper (cpu, aop, bop);
+      }
+      break;
+    case MATCH_SMUL16:
+      {
+	/* Rt[31:16] = Ra[31:16] * Rb[31:16]
+	   Rt[15:0] = Ra[15:0] * Rb[15:0] */
+	int64_t result = ((int64_t) (cpu->regs[ra].b16.h1
+				     * cpu->regs[rb].b16.h1) << 32)
+			  | ((int64_t) (cpu->regs[ra].b16.h0
+					* cpu->regs[rb].b16.h0) & 0xFFFFFFFF);
+	set_double (cpu, rd, result);
+      }
+      break;
+    case MATCH_SMULX16:
+      {
+	/* Rt[31:16] = Ra[31:16] * Rb[15:0]
+	   Rt[15:0] = Ra[15:0] * Rb[31:16] */
+	int64_t result = ((int64_t) (cpu->regs[ra].b16.h1
+				     * cpu->regs[rb].b16.h0) << 32)
+			  | ((int64_t) (cpu->regs[ra].b16.h0
+					* cpu->regs[rb].b16.h1) & 0xFFFFFFFF);
+	set_double (cpu, rd, result);
+      }
+      break;
+    case MATCH_UMUL16:
+      {
+	/* Rt[31:16] = Ra[31:16] * Rb[31:16]
+	   Rt[15:0] = Ra[15:0] * Rb[15:0] */
+	uint64_t result = ((uint64_t) (cpu->regs[ra].ub16.h1
+				       * cpu->regs[rb].ub16.h1) << 32)
+			   | ((uint64_t) (cpu->regs[ra].ub16.h0
+					  * cpu->regs[rb].ub16.h0) & 0xFFFFFFFF);
+	set_udouble (cpu, rd, result);
+      }
+      break;
+    case MATCH_UMULX16:
+      {
+	/* Rt[31:16] = Ra[31:16] * Rb[15:0]
+	   Rt[15:0] = Ra[15:0] * Rb[31:16] */
+	uint64_t result = ((uint64_t) (cpu->regs[ra].ub16.h1
+				       * cpu->regs[rb].ub16.h0) << 32)
+			   | ((uint64_t) (cpu->regs[ra].ub16.h0
+					  * cpu->regs[rb].ub16.h1) & 0xFFFFFFFF);
+	set_udouble (cpu, rd, result);
+      }
+      break;
+    case MATCH_KADDH:
+      {
+	int32_t tmp = cpu->regs[ra].s + cpu->regs[rb].s;
+	cpu->regs[rd].s = insn_sat_helper (cpu, tmp, 15);
+      }
+      break;
+    case MATCH_KSUBH:
+      {
+	int32_t tmp = cpu->regs[ra].s - cpu->regs[rb].s;
+	cpu->regs[rd].s = insn_sat_helper (cpu, tmp, 15);
+      }
+      break;
+    case MATCH_AVE:
+      {
+	int64_t r = ((int64_t) cpu->regs[ra].s)
+		    + ((int64_t) cpu->regs[rb].s) + 1;
+	cpu->regs[rd].u = (r >> 1);
+      }
+      break;
+    case MATCH_CLO32:
+      {
+	int i, cnt = 0;
+
+	for (i = 31; i >= 0; i--)
+	  {
+	    if (__TEST (cpu->regs[ra].u, i))
+	      cnt++;
+	    else
+	      break;
+	  }
+	cpu->regs[rd].u = cnt;
+      }
+      break;
+    case MATCH_CLZ:
+      {
+	int i, cnt = 0;
+
+	for (i = 31; i >= 0; i--)
+	  {
+	    if (__TEST (cpu->regs[ra].u, i) == 0)
+	      cnt++;
+	    else
+	      break;
+	  }
+	cpu->regs[rd].u = cnt;
+      }
+      break;
+    case MATCH_MAX:
+      cpu->regs[rd].s = (cpu->regs[ra].s > cpu->regs[rb].s)
+			 ? cpu->regs[ra].s : cpu->regs[rb].s;
+      break;
+    case MATCH_MIN:
+      cpu->regs[rd].s = (cpu->regs[ra].s < cpu->regs[rb].s)
+			 ? cpu->regs[ra].s : cpu->regs[rb].s;
+      break;
+    case MATCH_MULSR64:
+      {
+	int64_t r = (int64_t) cpu->regs[ra].s * (int64_t) cpu->regs[rb].s;
+	int d = rd & ~1;
+
+	if (CCPU_SR_TEST (PSW, PSW_BE))
+	  {
+	    cpu->regs[d].u = (r >> 32);
+	    cpu->regs[d + 1].u = r;
+	  }
+	else
+	  {
+	    cpu->regs[d + 1].u = (r >> 32);
+	    cpu->regs[d].u = r;
+	  }
+      }
+      break;
+    case MATCH_MULR64:
+      {
+	uint64_t r = (uint64_t) cpu->regs[ra].u * (uint64_t) cpu->regs[rb].u;
+	int d = rd & ~1;
+
+	if (CCPU_SR_TEST (PSW, PSW_BE))
+	  {
+	    cpu->regs[d].u = (r >> 32);
+	    cpu->regs[d + 1].u = r;
+	  }
+	else
+	  {
+	    cpu->regs[d + 1].u = (r >> 32);
+	    cpu->regs[d].u = r;
+	  }
+      }
+      break;
+
+    default:
+      TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
+      sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
+    }
+  return pc;
+}
+
+static sim_cia
 execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex9)
 {
   SIM_DESC sd = CPU_STATE (cpu);
@@ -2253,6 +4475,8 @@ execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int 
       return execute_i (cpu, iw, op, ex9);
     case INSN_CLASS_M:
       return execute_m (cpu, iw, op, ex9);
+    case INSN_CLASS_P:
+      return execute_p (cpu, iw, op, ex9);
     default:
       TRACE_INSN (cpu, "UNHANDLED EXTENSION: %d", op->insn_class);
       sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
