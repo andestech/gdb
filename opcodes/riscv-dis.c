@@ -30,7 +30,9 @@
 
 #include "bfd_stdint.h"
 #include <ctype.h>
+#ifndef __MINGW32__
 #include <dlfcn.h>
+#endif
 
 struct riscv_private_data
 {
@@ -149,6 +151,7 @@ parse_riscv_dis_option (const char *option)
   /* Load ACE shared library if ACE option is enable */
   else if (strncmp (option, "ace=", 4) == 0)
     {
+#ifndef __MINGW32__
       char *ace_lib_path = malloc (strlen (option) - 4);
       strcpy (ace_lib_path, option + 4);
 
@@ -172,6 +175,7 @@ parse_riscv_dis_option (const char *option)
 	ace_lib_load_success = TRUE;
       else
 	fprintf (stderr, _("Fault to load ACE shared library: %s\n"), err);
+#endif
     }
   else
     {

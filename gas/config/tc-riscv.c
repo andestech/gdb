@@ -34,7 +34,9 @@
 #include "opcode/riscv.h"
 
 #include <stdint.h>
+#ifndef __MINGW32__
 #include <dlfcn.h>
+#endif
 
 /* Information about an instruction, including its format, operands
    and fixups.  */
@@ -3365,6 +3367,7 @@ md_parse_option (int c, const char *arg)
     /* Load ACE shared library if ACE option is enable */
     case OPTION_ACE:
       {
+#ifndef __MINGW32__
 	void *dlc = dlopen (arg, RTLD_NOW | RTLD_LOCAL);
 	char *err;
 
@@ -3393,6 +3396,7 @@ md_parse_option (int c, const char *arg)
 	  }
 	else
 	  as_bad ("Fault to load ACE shared library: %s\n", err);
+#endif
       }
       break;
 
