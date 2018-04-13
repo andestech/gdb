@@ -2081,7 +2081,15 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 	continue;
 
       if (!riscv_multi_subset_supports (insn->subset))
-	continue;
+	{
+	  if (strchr (insn->subset, 'A'))
+	    error = _("Please change the toolchain or use the options "
+		      "(-march=ISA or -matomic) to enable the extension");
+	  else
+	    error = _("Please change the toolchain or use the option "
+		      "-march=ISA to enable the extension");
+	  continue;
+	}
 
       create_insn (ip, insn);
       argnum = 1;
