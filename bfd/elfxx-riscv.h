@@ -81,6 +81,12 @@ riscv_parse_subset (riscv_parse_subset_t *,
 		    const char *);
 
 extern void
+riscv_parse_add_subset (riscv_parse_subset_t *rps,
+			const char *subset,
+			int major,
+			int minor,
+			bool implicit);
+extern void
 riscv_release_subset_list (riscv_subset_list_t *);
 
 extern char *

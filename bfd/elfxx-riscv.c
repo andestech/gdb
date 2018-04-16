@@ -2031,7 +2031,7 @@ riscv_get_default_ext_version (enum riscv_spec_class *default_isa_spec,
    the subset list, if their versions are RISCV_UNKNOWN_VERSION.
    Afterwards, report errors if we can not find their default versions.  */
 
-static void
+void
 riscv_parse_add_subset (riscv_parse_subset_t *rps,
 			const char *subset,
 			int major,
