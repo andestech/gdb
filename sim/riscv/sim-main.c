@@ -3984,18 +3984,10 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	cpu->regs[rd].s = cpu->regs[ra].s;
       break;
     case MATCH_SCLIP8:
-      if (cpu->regs[ra].s > ((1 << imm3u) - 1))
-	{
-	  cpu->regs[rd].s = ((1 << imm3u) - 1);
-	  CCPU_SR_SET (PSW, PSW_OV);
-	}
-      else if (cpu->regs[ra].s < -(1 << imm3u))
-	{
-	  cpu->regs[rd].s = -(1 << imm3u);
-	  CCPU_SR_SET (PSW, PSW_OV);
-	}
-      else
-	cpu->regs[rd].s = cpu->regs[ra].s;
+      cpu->regs[rd].b8.b0 = insn_sat_helper (cpu, cpu->regs[ra].b8.b0, imm3u);
+      cpu->regs[rd].b8.b1 = insn_sat_helper (cpu, cpu->regs[ra].b8.b1, imm3u);
+      cpu->regs[rd].b8.b2 = insn_sat_helper (cpu, cpu->regs[ra].b8.b2, imm3u);
+      cpu->regs[rd].b8.b3 = insn_sat_helper (cpu, cpu->regs[ra].b8.b3, imm3u);
       break;
     case MATCH_UCLIP32:
       if (cpu->regs[ra].s > ((1 << imm5u) - 1))
@@ -4012,18 +4004,10 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	cpu->regs[rd].s = cpu->regs[ra].s;
       break;
     case MATCH_UCLIP8:
-      if (cpu->regs[ra].s > ((1 << imm3u) - 1))
-	{
-	  cpu->regs[rd].s = ((1 << imm3u) - 1);
-	  CCPU_SR_SET (PSW, PSW_OV);
-	}
-      else if (cpu->regs[ra].s < 0)
-	{
-	  cpu->regs[rd].s = 0;
-	  CCPU_SR_SET (PSW, PSW_OV);
-	}
-      else
-	cpu->regs[rd].s = cpu->regs[ra].s;
+      cpu->regs[rd].b8.b0 = insn_usat_helper (cpu, cpu->regs[ra].b8.b0, imm3u);
+      cpu->regs[rd].b8.b1 = insn_usat_helper (cpu, cpu->regs[ra].b8.b1, imm3u);
+      cpu->regs[rd].b8.b2 = insn_usat_helper (cpu, cpu->regs[ra].b8.b2, imm3u);
+      cpu->regs[rd].b8.b3 = insn_usat_helper (cpu, cpu->regs[ra].b8.b3, imm3u);
       break;
     default:
       TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
