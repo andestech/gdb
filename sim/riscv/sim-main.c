@@ -3947,7 +3947,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	c = (c >= 0) ? c : -c;
 	d = (d >= 0) ? d : -d;
 
-	if (MATCH_PBSAD)
+	if (op->match == MATCH_PBSAD)
 	  /* pbsad */
 	  cpu->regs[rd].u = a + b + c + d;
 	else
