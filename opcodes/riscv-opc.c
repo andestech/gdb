@@ -720,7 +720,7 @@ const struct riscv_opcode riscv_opcodes[] =
 {"bitrev",      0, {"P", 0}, "d,s,t",     MATCH_BITREV, MASK_BITREV, match_opcode, 0 },
 {"bitrevi",     0, {"P", 0}, "d,s,l",     MATCH_BITREVI, MASK_BITREVI, match_opcode, 0 },
 {"bpick",       0, {"P", 0}, "d,s,t,nds_rc", MATCH_BPICK, MASK_BPICK, match_opcode, 0 },
-{"col",         0, {"P", 0}, "d,s",       MATCH_CLO, MASK_CLO, match_opcode, 0 },
+{"clo",         0, {"P", 0}, "d,s",       MATCH_CLO, MASK_CLO, match_opcode, 0 },
 {"clz",         0, {"P", 0}, "d,s",       MATCH_CLZ, MASK_CLZ, match_opcode, 0 },
 {"cmpeq8",      0, {"P", 0}, "d,s,t",     MATCH_CMPEQ8, MASK_CMPEQ8, match_opcode, 0 },
 {"cmpeq16",     0, {"P", 0}, "d,s,t",     MATCH_CMPEQ16, MASK_CMPEQ16, match_opcode, 0 },
