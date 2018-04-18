@@ -20,6 +20,7 @@
 
 #include "defs.h"
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/utsname.h>
 #include <unistd.h>
 #include "gdbcore.h"
@@ -565,6 +566,7 @@ extern bfd_boolean ace_lib_load_success;
 static void
 nds_handle_ace(const char *ace_lib_path)
 {
+  chmod(ace_lib_path, S_IRWXU);
   void *dlc = dlopen (ace_lib_path, RTLD_NOW | RTLD_LOCAL);
   char *err;
 
