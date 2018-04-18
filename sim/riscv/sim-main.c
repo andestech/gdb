@@ -2612,6 +2612,16 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	cpu->regs[rd].b8.b3 = insn_sat_khm8_helper (cpu, aop4, bop3);
       }
       break;
+    case MATCH_KABSW:
+      {
+	if (cpu->regs[ra].s >= 0)
+	  cpu->regs[rd].s = cpu->regs[ra].s;
+	else if (cpu->regs[ra].u == 0x80000000)
+	  cpu->regs[rd].u = 0x7fffffff;
+	else
+	  cpu->regs[rd].s = -cpu->regs[ra].s;
+	break;
+      }
     case MATCH_KABS16:
       {
 	reg_t result;
@@ -3888,11 +3898,11 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	cpu->regs[rd].u = cnt;
       }
       break;
-    case MATCH_MAX:
+    case MATCH_MAXW:
       cpu->regs[rd].s = (cpu->regs[ra].s > cpu->regs[rb].s)
 			 ? cpu->regs[ra].s : cpu->regs[rb].s;
       break;
-    case MATCH_MIN:
+    case MATCH_MINW:
       cpu->regs[rd].s = (cpu->regs[ra].s < cpu->regs[rb].s)
 			 ? cpu->regs[ra].s : cpu->regs[rb].s;
       break;
