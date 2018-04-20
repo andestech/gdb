@@ -1137,31 +1137,6 @@ execute_c (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 					  cpu->csr.uitb + EXTRACT_RVC_EX9IT_IMM (iw));
 	  pc = riscv_decode (cpu, iw, cpu->pc, 1);
 	  return pc;
-	case MATCH_C_EX9CS:
-	  {
-	    unsigned int offset = EXTRACT_RVC_EX9CS_IMM(iw);
-	    int len;
-	    TRACE_INSN (cpu, "ex9cs");
-	    iw = sim_core_read_aligned_2 (cpu, cpu->pc, exec_map,
-					  cpu->pc + offset);
-	    len = riscv_insn_length (iw);
-	    if (len == 4) // 32-bit insn
-	      iw |= ((unsigned_word)sim_core_read_aligned_2 (
-				      cpu, cpu->pc, exec_map,
-				      cpu->pc + offset + 2) << 16);
-	    else
-	      iw |= ((unsigned_word)sim_core_read_aligned_2 (
-				      cpu, cpu->pc, exec_map,
-				      cpu->pc + offset));
-
-	    pc = riscv_decode (cpu, iw, cpu->pc, 2);
-	  }
-	  return pc;
-	case MATCH_C_EX10:
-	  iw = sim_core_read_unaligned_4 (cpu, cpu->pc, exec_map,
-					  cpu->csr.uitb + EXTRACT_RVC_EX10_IMM (iw) * 4);
-	  pc = riscv_decode (cpu, iw, cpu->pc, 1);
-	  return pc;
 	default:
 	  TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
 	  sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
