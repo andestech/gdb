@@ -5078,7 +5078,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	  ex9_build_finish = 1;
 	  if (htab->update_ex9_table)
 	    {
-	      info->relax_pass = 5;
+	      info->relax_pass = 6;
 	      *again = TRUE;
 	    }
 	}
@@ -5101,7 +5101,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	      ex9_replace_again = 1;
 	      ex9_build_finish = 0;
 	      ex9_replace_finish = 0;
-	      info->relax_pass = 4;
+	      info->relax_pass = 5;
 	      *again = TRUE;
 	    }
 	  else
