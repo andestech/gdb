@@ -752,10 +752,8 @@ validate_riscv_insn (const struct riscv_opcode *opc, int length)
 	      {
 	      case 'i':
 		used_bits |= ENCODE_RVC_EX9IT_IMM (-1U); break;
-	      case 'c':
-		used_bits |= ENCODE_RVC_EX9CS_IMM (-1U); break;
-	      case 't':
-		used_bits |= ENCODE_RVC_EX10_IMM (-1U); break;
+	      default:
+		break;
 	      }
 	  case 'o': used_bits |= ENCODE_RVC_IMM (-1U); break;
 	  case 'k': used_bits |= ENCODE_RVC_LW_IMM (-1U); break;
@@ -2407,7 +2405,7 @@ rvc_imm_done:
 		    break;
 		  ip->insn_opcode |= ENCODE_RVC_IMM (imm_expr->X_add_number);
 		  goto rvc_imm_done;
-		case 'e': /* c.ex9 or c.ex10 imm  */
+		case 'e': /* c.ex9 imm  */
 		  switch (*++args)
 		    {
 		    case 'i':
@@ -2418,22 +2416,8 @@ rvc_imm_done:
 			    break;
 		      ip->insn_opcode |= ENCODE_RVC_EX9IT_IMM (imm_expr->X_add_number << 2);
 		      goto rvc_imm_done;
-		    case 'c':
-		      if (my_getSmallExpression (imm_expr, imm_reloc, s, p)
-			  || imm_expr->X_op != O_constant
-			  || imm_expr->X_add_number == 0
-			  || !VALID_RVC_EX9CS_IMM (imm_expr->X_add_number))
-		        break;
-		      ip->insn_opcode |= ENCODE_RVC_EX9CS_IMM (imm_expr->X_add_number);
-		      goto rvc_imm_done;
-		    case 't':
-		      if (my_getSmallExpression (imm_expr, imm_reloc, s, p)
-			  || imm_expr->X_op != O_constant
-			  || imm_expr->X_add_number == 0
-			  || !VALID_RVC_EX10_IMM (imm_expr->X_add_number))
-		        break;
-		      ip->insn_opcode |= ENCODE_RVC_EX10_IMM (imm_expr->X_add_number);
-		      goto rvc_imm_done;
+		    default:
+		      break;
 		    }
 		case 'k':
 		  if (riscv_handle_implicit_zero_offset (imm_expr, s))

@@ -435,14 +435,6 @@ print_insn_args (const char *d, insn_t l, bfd_vma pc,
 		  print (info->stream, "#%d	!", (int)EXTRACT_RVC_EX9IT_IMM (l) >> 2);
 		  riscv_ex9_info (pc, info, (int)EXTRACT_RVC_EX9IT_IMM (l) >> 2);
 		  break;
-		case 'c':
-		  print (info->stream, "%x",
-			 (unsigned int)((unsigned int)EXTRACT_RVC_EX9CS_IMM (l) + pc));
-		  break;
-		case 't':
-		  print (info->stream, "#%d       !", (int)EXTRACT_RVC_EX10_IMM (l));
-		  riscv_ex9_info (pc, info, (int)EXTRACT_RVC_EX10_IMM (l));
-		  break;
 		}
 	      break;
 	    case 'k':

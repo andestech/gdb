@@ -709,8 +709,6 @@ const struct riscv_opcode riscv_opcodes[] =
 {"ffmism",      0, {"I", 0}, "d,s,t",MATCH_FFMISM, MASK_FFMISM, match_opcode, 0 },
 {"flmism",      0, {"I", 0}, "d,s,t",MATCH_FLMISM, MASK_FLMISM, match_opcode, 0 },
 {"ex9.it",      0, {"C", 0}, "Cei",  MATCH_C_EX9IT, MASK_C_EX9IT, match_opcode, 0 },
-{"ex9.cs",      0, {"C", 0}, "Cec",  MATCH_C_EX9CS, MASK_C_EX9CS, match_opcode, 0 },
-{"ex10",        0, {"C", 0}, "Cet",  MATCH_C_EX10, MASK_C_EX10, match_opcode, 0 },
 
 /* NDS V5 DSP Extension.  */
 {"add8",        0, {"P", 0}, "d,s,t",     MATCH_ADD8, MASK_ADD8, match_opcode, 0 },
