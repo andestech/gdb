@@ -92,8 +92,8 @@ riscv_elf_append_section (struct bfd_link_info *info, bfd *abfd)
 	  itable->alignment_power = 2;
 	  /* Default ex9 table size can not be zero, so we can not set
 	     it according to ex9_limit. Since we will adjust the table size
-	     in riscv_elf_ex9_build_itable, set it to the maximum value is
-	     ok here.  */
+	     in riscv_elf_ex9_build_itable, it is okay to set the size to
+	     the maximum value here.  */
 	  itable->size = 0x800;
 	  itable->contents = bfd_zalloc (abfd, itable->size);
 

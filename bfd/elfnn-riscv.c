@@ -5341,7 +5341,6 @@ riscv_elf_output_arch_syms (bfd *output_bfd ATTRIBUTE_UNUSED,
 
 #define EX9_SECTION ".ex9.itable"
 #define INSN_CEX9 0x8000
-#define INSN_CEX10 0x9000
 
 /* Global hash list.  */
 struct elf_link_hash_entry_list
@@ -6163,9 +6162,6 @@ riscv_elf_ex9_replace_instruction (struct bfd_link_info *link_info, bfd *abfd, a
   struct elf_link_hash_entry **sym_hashes = elf_sym_hashes (abfd);
   int data_flag, do_replace, save_irel;
   struct elf_link_hash_entry_list *h_list;
-  struct riscv_elf_link_hash_table *table;
-
-  table = riscv_elf_hash_table (link_info);
 
   /* Load section instructions, relocations, and symbol table.  */
   if (!riscv_get_section_contents (abfd, sec, &contents, TRUE)
@@ -6502,13 +6498,9 @@ riscv_elf_ex9_replace_instruction (struct bfd_link_info *link_info, bfd *abfd, a
 	  /* Instruction match so replacing the code here.  */
 	  if (do_replace == 1)
 	    {
-	      if (table->ex9_limit <= 512)
-		insn_ex9 = INSN_CEX9;
-	      else
-		insn_ex9 = INSN_CEX10;
-	      insn16 = insn_ex9 | ENCODE_RVC_EX9IT_IMM (ex9_insn->order << 2);
-
 	      /* Insert ex9 instruction.  */
+	      insn_ex9 = INSN_CEX9;
+	      insn16 = insn_ex9 | ENCODE_RVC_EX9IT_IMM (ex9_insn->order << 2);
 	      riscv_elf_ex9_push_insn (abfd, pre_insn16, contents, pre_off,
 				       pre_irel_ptr, &irel_list, link_info);
 	      pre_off = off;
@@ -7003,10 +6995,7 @@ riscv_elf_relocate_ex9_table (struct bfd_link_info *link_info, bfd *abfd)
 				     &source_contents, TRUE))
 				  (*_bfd_error_handler)
 				    (_("Linker: error cannot fixed ex9 relocation \n"));
-				if (table->ex9_limit <= 512)
-				  insn_ex9 = INSN_CEX9;
-				else
-				  insn_ex9 = INSN_CEX10;
+				insn_ex9 = INSN_CEX9;
 				insn_ex9 = insn_ex9 | ENCODE_RVC_EX9IT_IMM (temp_ptr->order << 2);
 				bfd_put_16 (abfd, insn_ex9, source_contents + fix_ptr->irel->r_offset);
 			      }
