@@ -6622,9 +6622,11 @@ riscv_elf_ex9_total_relax (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *inf
       || last_imported_entry == NULL)
     ex9_insn_head = NULL;
 
-  /* TODO: maybe we should consider the data segment alignment
-     size defined in linker script.  */
   ex9_relax_size += (table->ex9_limit - number) * 4;
+
+  /* Consider the data segment alignment size defined in linker script.  */
+  ex9_relax_size += ELF_MAXPAGESIZE;
+
   /* TODO: consider other relax size after ex9.  */
 }
 
