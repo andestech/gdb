@@ -26,6 +26,8 @@
 void init_registers_riscv (void);
 extern const struct target_desc *tdesc_riscv;
 
+typedef unsigned long uint_reg_t;
+
 #define riscv_num_regs 32
 
 static int riscv_regmap[] =
