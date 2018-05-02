@@ -22,10 +22,11 @@
 
 #include "nat/gdb_ptrace.h"
 #include <asm/ptrace.h>
+#include <elf.h>
 
-/* Defined in auto-generated file reg-riscv.c.  */
-void init_registers_riscv (void);
-extern const struct target_desc *tdesc_riscv;
+/* Defined in auto-generated file riscv64-linux.c.  */
+void init_registers_riscv64_linux (void);
+extern const struct target_desc *tdesc_riscv64_linux;
 
 #define riscv_num_regs 32
 
@@ -157,6 +158,8 @@ riscv_arch_setup (void)
   if (sizeof (void *) == 4)
     if (is_elf64 > 0)
       error (_("Can't debug 64-bit process with 32-bit GDBserver"));
+
+  current_process ()->tdesc = tdesc_riscv64_linux;
 }
 
 /* Support for hardware single step.  */
@@ -208,7 +211,7 @@ struct linux_target_ops the_low_target =
 void
 initialize_low_arch (void)
 {
-  init_registers_riscv();
+  init_registers_riscv64_linux ();
 
   initialize_regsets_info (&riscv_regsets_info);
 }
