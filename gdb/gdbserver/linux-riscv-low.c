@@ -20,7 +20,6 @@
 #include "server.h"
 #include "linux-low.h"
 
-#include <arch/abi.h>
 #include "nat/gdb_ptrace.h"
 
 /* Defined in auto-generated file reg-riscv.c.  */
