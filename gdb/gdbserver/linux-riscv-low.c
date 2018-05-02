@@ -21,25 +21,27 @@
 #include "linux-low.h"
 
 #include "nat/gdb_ptrace.h"
+#include <asm/ptrace.h>
 
 /* Defined in auto-generated file reg-riscv.c.  */
 void init_registers_riscv (void);
 extern const struct target_desc *tdesc_riscv;
 
-typedef unsigned long uint_reg_t;
-
 #define riscv_num_regs 32
+
+#define RISCV_ZERO_REGNUM	0
+#define RISCV_RA_REGNUM		1
+#define RISCV_PC_REGNUM		32
 
 static int riscv_regmap[] =
 {
-   0,  1,  2,  3,  4,  5,  6,  7,
+  -1,  1,  2,  3,  4,  5,  6,  7,
    8,  9, 10, 11, 12, 13, 14, 15,
   16, 17, 18, 19, 20, 21, 22, 23,
   24, 25, 26, 27, 28, 29, 30, 31,
-  32, 33, 34, 35, 36, 37, 38, 39,
-  40, 41, 42, 43, 44, 45, 46, 47,
-  48, 49, 50, 51, 52, 53, 54, 55,
-  56, 57, 58, 59, 60, 61, 62, 63
+
+  /* pc */
+  0,
 };
 
 static int
@@ -102,9 +104,9 @@ riscv_fill_gregset (struct regcache *regcache, void *buf)
 {
   int i;
 
-  for (i = 0; i < riscv_num_regs; i++)
+  for (i = RISCV_ZERO_REGNUM; i <= RISCV_PC_REGNUM; i++)
     if (riscv_regmap[i] != -1)
-      collect_register (regcache, i, ((uint_reg_t *) buf) + riscv_regmap[i]);
+      collect_register (regcache, i, ((elf_greg_t *) buf) + riscv_regmap[i]);
 }
 
 static void
@@ -112,15 +114,16 @@ riscv_store_gregset (struct regcache *regcache, const void *buf)
 {
   int i;
 
-  for (i = 0; i < riscv_num_regs; i++)
+  for (i = RISCV_ZERO_REGNUM; i <= RISCV_PC_REGNUM; i++)
     if (riscv_regmap[i] != -1)
-      supply_register (regcache, i, ((uint_reg_t *) buf) + riscv_regmap[i]);
+      supply_register (regcache, i, ((elf_greg_t *) buf) + riscv_regmap[i]);
 }
 
 static struct regset_info riscv_regsets[] =
 {
-  { PTRACE_GETREGS, PTRACE_SETREGS, 0, riscv_num_regs * 8,
-    GENERAL_REGS, riscv_fill_gregset, riscv_store_gregset },
+  { PTRACE_GETREGSET, PTRACE_SETREGSET, NT_PRSTATUS,
+    sizeof (struct user_regs_struct), GENERAL_REGS,
+    riscv_fill_gregset, riscv_store_gregset },
   NULL_REGSET
 };
 
