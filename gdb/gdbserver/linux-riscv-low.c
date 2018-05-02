@@ -84,10 +84,10 @@ riscv_breakpoint_at (CORE_ADDR where)
   uint8_t insn[4];
 
   (*the_target->read_memory) (where, (unsigned char *) &insn, 4);
-  if (insn[0] == ebreak[0] && inst[1] == ebreak[1]
-      && inst[2] == ebreak[2] && inst[3] == ebreak[3])
+  if (insn[0] == ebreak[0] && insn[1] == ebreak[1]
+      && insn[2] == ebreak[2] && insn[3] == ebreak[3])
     return 1;
-  if (insn[0] == c_ebreak[0] && inst[1] == c_ebreak[1])
+  if (insn[0] == c_ebreak[0] && insn[1] == c_ebreak[1])
     return 1;
 
   /* If necessary, recognize more trap instructions here.  GDB only uses the
