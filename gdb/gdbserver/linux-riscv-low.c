@@ -131,16 +131,10 @@ static struct regsets_info riscv_regsets_info =
     NULL, /* disabled_regsets */
   };
 
-static struct usrregs_info riscv_usrregs_info =
-  {
-    riscv_num_regs,
-    riscv_regmap,
-  };
-
 static struct regs_info regs_info =
   {
     NULL, /* regset_bitmap */
-    &riscv_usrregs_info,
+    NULL, /* usrregs */
     &riscv_regsets_info,
   };
 
