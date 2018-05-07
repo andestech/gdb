@@ -3214,8 +3214,11 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
 	  }
 	break;
       case Tag_arch + Tag_shfit:
-	if (strcmp (in_attr[Tag_arch].s,
-		    out_attr[Tag_arch].s) != 0)
+	if (in_attr[Tag_arch].s && !out_attr[Tag_arch].s)
+	  out_attr[Tag_arch].s = in_attr[Tag_arch].s;
+	if (in_attr[Tag_arch].s && out_attr[Tag_arch].s)
+	  if (strcmp (in_attr[Tag_arch].s,
+		      out_attr[Tag_arch].s) != 0)
 	  result = FALSE;
 	break;
       default:
@@ -3293,7 +3296,7 @@ _bfd_riscv_elf_merge_private_bfd_data (bfd *ibfd, struct bfd_link_info *info)
   /* Allow linking RVC and non-RVC, and keep the RVC flag.  */
   elf_elfheader (obfd)->e_flags |= new_flags & EF_RISCV_RVC;
 
-  return riscv_merge_attributes (ibfd, info);
+  return TRUE;
 
 fail:
   bfd_set_error (bfd_error_bad_value);
@@ -8103,14 +8106,15 @@ riscv_elf_obj_attrs_arg_type (int tag)
       switch (tag)
 	{
 	case Tag_priv_spec:
+	case Tag_priv_spec_minor:
+	case Tag_priv_spec_revision:
 	case Tag_strict_align:
 	case Tag_stack_align:
 	  return ATTR_TYPE_FLAG_INT_VAL;
 	case Tag_arch:
-	case Tag_X_ext:
 	  return ATTR_TYPE_FLAG_STR_VAL;
 	default:
-	  return ATTR_TYPE_FLAG_INT_VAL;
+	  return (tag & 1) != 0 ? ATTR_TYPE_FLAG_STR_VAL : ATTR_TYPE_FLAG_INT_VAL;
 	}
     }
 }

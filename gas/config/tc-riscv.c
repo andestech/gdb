@@ -1158,6 +1158,54 @@ ace_ip (char **args, char **str, struct riscv_cl_insn *ip)
     *args = pch;
 }
 
+/* The information of architecture attribute.  */
+struct arch_info
+{
+  const char *name;
+  const char *v_major;
+  const char *v_minor;
+  int valid;
+};
+
+struct arch_info arch_info[] =
+{
+/* Standard arch info.  */
+{"I", "2", "0", 0}, {"M", "2", "0", 0}, {"A", "2", "0", 0},
+{"F", "2", "0", 0}, {"D", "2", "0", 0}, {"Q", "2", "0", 0},
+{"C", "2", "0", 0}, {"P", "2", "0", 0},
+
+/* Terminate the list.  */
+{0, 0, 0, 0}
+};
+
+static struct hash_control *arch_info_hash = NULL;
+#define DEFAULT_PRIV_SPEC 1
+#define DEFAULT_PRIV_SPEC_MINOR 10
+#define DEFAULT_PRIV_SPEC_REVISION 0
+#define DEFAULT_STRICT_ALIGN 0
+#define DEFAULT_STACK_ALIGN 0
+
+static void
+arch_info_hash_init (void)
+{
+  int i = 0;
+  arch_info_hash = hash_new ();
+
+  for (; arch_info[i].name; i++)
+    {
+      const char *name = arch_info[i].name;
+      const char *hash_error =
+	hash_insert (arch_info_hash, name, (void *) &arch_info[i]);
+      if (hash_error)
+	{
+	  fprintf (stderr, _("internal error: can't hash `%s': %s\n"),
+		   arch_info[i].name, hash_error);
+	  /* Probably a memory allocation problem?  Give up now.  */
+	  as_fatal (_("Broken assembler.  No assembly attempted."));
+	}
+    }
+}
+
 /* This function is called once, at assembler startup time.  It should set up
    all the tables, etc. that the MD part of the assembler will need.  */
 
@@ -1251,6 +1299,9 @@ md_begin (void)
 	  i++;
 	}
     }
+
+  /* Initialization of arch attribute hash table.  */
+  arch_info_hash_init ();
 }
 
 static insn_t
@@ -3269,12 +3320,256 @@ out:
   return error;
 }
 
+/* Parse the version of ISA in .attribute directive.  */
+
+static int
+riscv_parse_arch_version (char **in_ver)
+{
+  int version, num;
+  char *string = *in_ver;
+
+  version = 0;
+  num = 0;
+  /* Major version.  */
+  while (string[0] != '\0'
+	 && string[0] != 'p'
+	 && (string[0] - 48) >= 0
+	 && (string[0] - 48) <= 9)
+    {
+      num = num * 10 + (string[0] - 48);
+      string++;
+    }
+  version = num * 10000;
+  /* Minor verison.  */
+  if (string[0] == 'p')
+    {
+      num = 0;
+      string++;
+      while (string[0] != '\0'
+	     && (string[0] - 48) >= 0
+	     && (string[0] - 48) <= 9)
+	{
+	  num = num * 10 + (string[0] - 48);
+	  string++;
+	  if (num >= 10000)
+	    as_fatal (".attribute: minor version can not "
+		      "be larger than 9999");
+	}
+      version += num;
+    }
+  *in_ver = string;
+
+  if (version > 0)
+    return version;
+  else
+    /* Use default version.  */
+    return -1;
+}
+
+/* Parse the name of ISA in .attribute directive.  */
+
+static void
+riscv_parse_arch_name (char **in_arch, int strlen, char **name)
+{
+  char *string;
+  int i;
+
+  /* Parse the non-standard version name.  */
+  string = *in_arch;
+  if (!strlen)
+    {
+      i = 0;
+      while (string[i] != '\0'
+	     && string[i] != 'p'
+	     && string[i] != '_')
+	{
+	  if ((string[i] - 48) < 0
+	      || (string[i] - 48) > 9)
+	    strlen = i + 1;
+	  i++;
+	}
+    }
+
+  *name = (char *) malloc ((strlen + 1) * sizeof (char));
+  memcpy (*name, *in_arch, strlen);
+  memcpy (*name + strlen, "\0", 1);
+  *in_arch = string + strlen;
+}
+
+static void
+riscv_arch_version_int2str (int version, char *str, int minor)
+{
+  if (minor)
+    sprintf (str, "%d", version % 10000);
+  else
+    sprintf (str, "%d", version / 10000);
+}
+
+static void
+riscv_update_arch_info_hash (const char *arch, int version)
+{
+  const char *key;
+  struct arch_info *info;
+  char str[4];
+
+  key = xstrdup (arch);
+  info = (struct arch_info *) hash_find (arch_info_hash, key);
+  if (info)
+    {
+      if (version != -1)
+	{
+	  riscv_arch_version_int2str (version, str, 0);
+	  info->v_major = xstrdup (str);
+	  riscv_arch_version_int2str (version, str, 1);
+	  info->v_minor = xstrdup (str);
+	}
+      info->valid = 1;
+    }
+  else
+    {
+      struct arch_info *new = malloc (sizeof (struct arch_info));
+      new->name = key;
+      riscv_arch_version_int2str (version, str, 0);
+      new->v_major = xstrdup (str);
+      riscv_arch_version_int2str (version, str, 1);
+      new->v_minor = xstrdup (str);
+      new->valid = 1;
+
+      const char *hash_error =
+	hash_insert (arch_info_hash, key, (void *) new);
+      if (hash_error)
+	{
+	  fprintf (stderr, _("internal error: can't hash `%s': %s\n"),
+		   new->name, hash_error);
+	}
+    }
+}
+
+static bfd_boolean
+riscv_parse_arch_attribute (char *in_arch)
+{
+  const char *all_subsets = "imafdqcp";
+  char *name;
+  int version;
+  unsigned int i;
+
+  riscv_clear_subsets();
+
+  if (strncmp (in_arch, "RV32", 4) == 0
+      || strncmp (in_arch, "RV64", 4) == 0)
+    in_arch += 4;
+  else
+    as_fatal (".attribute %s: ISA string must begin with RV32/RV64",
+	      in_arch);
+
+  switch (*in_arch)
+    {
+    case 'E':
+      /* FIXME: The implementation of 'E' in riscv_set_arch is
+	 inconsistent with the spec.  */
+      riscv_add_subset ("e");
+      riscv_add_subset ("i");
+      in_arch++;
+      version = riscv_parse_arch_version (&in_arch);
+      riscv_update_arch_info_hash ("M", version);
+      riscv_update_arch_info_hash ("A", version);
+      riscv_update_arch_info_hash ("C", version);
+      break;
+    case 'G':
+      for ( ; *all_subsets != 'q'; all_subsets++)
+	{
+	  const char subset[] = {*all_subsets, '\0'};
+	  riscv_add_subset (subset);
+	}
+      in_arch++;
+      version = riscv_parse_arch_version (&in_arch);
+      riscv_update_arch_info_hash ("I", version);
+      riscv_update_arch_info_hash ("M", version);
+      riscv_update_arch_info_hash ("A", version);
+      riscv_update_arch_info_hash ("F", version);
+      riscv_update_arch_info_hash ("D", version);
+      /* Addition.  */
+      riscv_update_arch_info_hash ("C", version);
+      break;
+    case 'I':
+      break;
+    default:
+      as_fatal (".attribue %s: first ISA subset must be I/G/E",
+		in_arch);
+    }
+
+  while (*in_arch)
+    {
+      switch (*in_arch)
+	{
+	case 'I':
+	case 'M':
+	case 'A':
+	case 'F':
+	case 'D':
+	case 'Q':
+	case 'C':
+	case 'P':
+	  name = NULL;
+	  riscv_parse_arch_name (&in_arch, 1, &name);
+	  version = riscv_parse_arch_version (&in_arch);
+	  riscv_update_arch_info_hash (name, version);
+
+	  for (i = 0; i < strlen (name); i++)
+	    name[i] = TOLOWER (name[i]);
+	  riscv_add_subset (name);
+
+	  free ((char *) name);
+	  break;
+	case 'X':
+	  name = NULL;
+	  riscv_parse_arch_name (&in_arch, 0, &name);
+	  version = riscv_parse_arch_version (&in_arch);
+	  if (version < 0)
+	    version = 0;
+	  riscv_update_arch_info_hash (name, version);
+	  if (*in_arch == '_')
+	    in_arch++;
+
+	  free ((char *) name);
+	  break;
+	default:
+	  as_fatal (".attribue %s: ISA subset is unsupported",
+		    in_arch);
+	}
+    }
+
+  return TRUE;
+}
+
+static void
+riscv_set_arch_attributes (void)
+{
+  obj_attribute *attr;
+
+  attr = elf_known_obj_attributes_proc (stdoutput);
+  if (attr[Tag_arch].s
+      && !riscv_parse_arch_attribute (attr[Tag_arch].s))
+    as_fatal ("internal error: cannot parse .attribue %s",
+              attr[Tag_arch].s);
+}
+
+static int start_assemble_insn = 0;
+
 void
 md_assemble (char *str)
 {
   struct riscv_cl_insn insn;
   expressionS imm_expr;
   bfd_reloc_code_real_type imm_reloc = BFD_RELOC_UNUSED;
+
+  /* The target architecture attribute must be set before
+     assembling instructions.  */
+  if (!start_assemble_insn)
+    {
+      riscv_set_arch_attributes ();
+      start_assemble_insn = 1;
+    }
 
   const char *error = riscv_ip (str, &insn, &imm_expr, &imm_reloc, op_hash);
 
@@ -4608,6 +4903,144 @@ riscv_innermost_loop (int mode)
     }
 }
 
+#ifdef DEBUG
+static void
+riscv_print_arch_info_hash (const char *key, void *value)
+{
+  struct arch_info *data = (struct arch_info *) value;
+  printf ("(name, v_major, v_minor, valid): (%s, %s, %s, %d)\n",
+	  key, data->name, data->v_major, data->v_minor, data->valid);
+}
+#endif
+
+static unsigned int arch_attr_strlen = 0;
+static char *out_arch = NULL;
+static int first_X_arch = 1;
+
+static void
+riscv_count_arch_attr_strlen (const char *key ATTRIBUTE_UNUSED,
+			      void *value)
+{
+  struct arch_info *data = (struct arch_info *) value;
+  if (data->valid)
+    {
+      arch_attr_strlen += strlen (data->name)
+	+ strlen (data->v_major)
+	+ strlen (data->v_minor)
+	+ 1; /* for 'p'  */
+      if (*(data->name) == 'X')
+	arch_attr_strlen++; /* for '_'  */
+    }
+}
+
+/* Update standard arch attributes.  */
+
+static void
+riscv_update_non_standard_arch_attr (const char *key ATTRIBUTE_UNUSED,
+				     void *value)
+{
+  struct arch_info *data = (struct arch_info *) value;
+  if (data->valid)
+    {
+      if (first_X_arch)
+	first_X_arch = 0;
+      else
+	strncat(out_arch, "_", 1);
+
+      strncat(out_arch, data->name, strlen (data->name));
+      strncat(out_arch, data->v_major, strlen (data->v_major));
+      strncat(out_arch, "p", 1);
+      strncat(out_arch, data->v_minor, strlen (data->v_minor));
+      data->valid = 0;
+    }
+}
+
+static void
+riscv_write_out_arch_attr (void)
+{
+  unsigned int i;
+  obj_attribute *attr;
+
+  arch_attr_strlen = 0;
+  hash_traverse (arch_info_hash, riscv_count_arch_attr_strlen);
+  /* Arch attribte is not set up.  */
+  if (arch_attr_strlen == 0)
+    return;
+  arch_attr_strlen--; /* First non standard arch without '_'.  */
+  arch_attr_strlen += 4; /* RV32/RV64.  */
+
+  out_arch = (char *) malloc
+    ((arch_attr_strlen + 1) * sizeof (char));
+  memcpy (out_arch + arch_attr_strlen, "\0", 1);
+
+  attr = elf_known_obj_attributes_proc (stdoutput);
+  strncpy (out_arch, attr[Tag_arch].s, 4);
+  memcpy (out_arch + 4, "\0", 1);
+
+  /* Update standard arch attributes.  */
+  for (i = 0; arch_info[i].name; i++)
+    {
+      struct arch_info *info;
+
+      info = (struct arch_info *) hash_find
+	(arch_info_hash, arch_info[i].name);
+      if (info && info->valid)
+	{
+	  strncat(out_arch, info->name, strlen (info->name));
+	  strncat(out_arch, info->v_major, strlen (info->v_major));
+	  strncat(out_arch, "p", 1);
+	  strncat(out_arch, info->v_minor, strlen (info->v_minor));
+	  info->valid = 0;
+	}
+    }
+
+  /* Update non-standard arch attributes.  */
+  hash_traverse (arch_info_hash, riscv_update_non_standard_arch_attr);
+
+  bfd_elf_add_proc_attr_string (stdoutput, Tag_arch, out_arch);
+
+  /* Clean the unused items.  */
+  first_X_arch = 1;
+  free (out_arch);
+  out_arch = NULL;
+}
+
+static void
+riscv_set_public_attributes (void)
+{
+  /* Write out arch attribute according to the arch_info_hash.  */
+#ifdef DEBUG
+  printf ("===== Contents of arch attribute hash table =====\n");
+  hash_traverse (arch_info_hash, riscv_print_arch_info_hash);
+  printf ("\n");
+#endif
+  riscv_write_out_arch_attr ();
+
+  if (!attributes_set_explicitly[Tag_priv_spec])
+    bfd_elf_add_proc_attr_int (stdoutput, Tag_priv_spec,
+			       DEFAULT_PRIV_SPEC);
+  if (!attributes_set_explicitly[Tag_priv_spec_minor])
+    bfd_elf_add_proc_attr_int (stdoutput, Tag_priv_spec_minor,
+			       DEFAULT_PRIV_SPEC_MINOR);
+  if (!attributes_set_explicitly[Tag_priv_spec_revision])
+    bfd_elf_add_proc_attr_int (stdoutput, Tag_priv_spec_revision,
+			       DEFAULT_PRIV_SPEC_REVISION);
+  if (!attributes_set_explicitly[Tag_strict_align])
+    bfd_elf_add_proc_attr_int (stdoutput, Tag_strict_align,
+			       DEFAULT_STRICT_ALIGN);
+  if (!attributes_set_explicitly[Tag_stack_align])
+    bfd_elf_add_proc_attr_int (stdoutput, Tag_stack_align,
+			       DEFAULT_STACK_ALIGN);
+}
+
+/* Add the default contents for the .riscv.attributes section.  */
+
+void
+riscv_md_end (void)
+{
+  riscv_set_public_attributes ();
+}
+
 int
 andes_riscv_convert_symbolic_attribute (const char *name)
 {
@@ -4623,15 +5056,10 @@ andes_riscv_convert_symbolic_attribute (const char *name)
 #define T(tag) {#tag, Tag_##tag},  {"Tag_" #tag, Tag_##tag}
       T(arch),
       T(priv_spec),
+      T(priv_spec_minor),
+      T(priv_spec_revision),
       T(strict_align),
       T(stack_align),
-      T(A_ext),
-      T(C_ext),
-      T(D_ext),
-      T(E_ext),
-      T(F_ext),
-      T(I_ext),
-      T(X_ext),
 #undef T
     };
 
@@ -4647,12 +5075,17 @@ andes_riscv_convert_symbolic_attribute (const char *name)
   return -1;
 }
 
-/* Parse a .eabi_attribute directive.  */
+/* Parse a .attribute directive.  */
 
 static void
 riscv_attribute (int ignored ATTRIBUTE_UNUSED)
 {
   int tag = obj_elf_vendor_attribute (OBJ_ATTR_PROC);
+
+  if (tag == 4
+      && start_assemble_insn)
+    as_fatal ("The target architecture attribute must "
+	      "be set before assembling instructions");
 
   if (tag < NUM_KNOWN_OBJ_ATTRIBUTES)
     attributes_set_explicitly[tag] = 1;
