@@ -145,7 +145,9 @@ extern void riscv_post_relax_hook (void);
    due to performance drop.  */
 #define R_RISCV_RELAX_REGION_INNERMOST_LOOP_FLAG	(1 << 4)
 
+#define md_end riscv_md_end
 #define CONVERT_SYMBOLIC_ATTRIBUTE riscv_convert_symbolic_attribute
+extern void riscv_md_end (void);
 extern int riscv_convert_symbolic_attribute (const char *);
 
 #endif /* TC_RISCV */
