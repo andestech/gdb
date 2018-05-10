@@ -7791,10 +7791,6 @@ riscv_relocation_check (struct bfd_link_info *info,
 		*off = sec->size;
 	      else
 		*off = (*irel)->r_offset;
-
-	      /* The final instruction in the region, regard this one as data to ignore it.  */
-	      result |= DATA_EXIST;
-	      return result;
 	    }
 	  break;
 	case R_RISCV_ALIGN:
