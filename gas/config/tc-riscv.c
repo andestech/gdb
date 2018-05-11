@@ -1252,9 +1252,9 @@ struct arch_info
 struct arch_info arch_info[] =
 {
 /* Standard arch info.  */
-{"I", "2", "0", 0}, {"M", "2", "0", 0}, {"A", "2", "0", 0},
-{"F", "2", "0", 0}, {"D", "2", "0", 0}, {"Q", "2", "0", 0},
-{"C", "2", "0", 0}, {"P", "2", "0", 0},
+{"E", "1", "9", 0}, {"I", "2", "0", 0}, {"M", "2", "0", 0},
+{"A", "2", "0", 0}, {"F", "2", "0", 0}, {"D", "2", "0", 0},
+{"Q", "2", "0", 0}, {"C", "2", "0", 0}, {"P", "2", "0", 0},
 
 /* Terminate the list.  */
 {0, 0, 0, 0}
@@ -3660,15 +3660,12 @@ riscv_parse_arch_attribute (char *in_arch)
   switch (*in_arch)
     {
     case 'E':
-      /* FIXME: The implementation of 'E' in riscv_set_arch is
-	 inconsistent with the spec.  */
+      /* FIXME: the extensions only can be M, A and C.  */
       riscv_add_subset ("e");
       riscv_add_subset ("i");
       in_arch++;
       version = riscv_parse_arch_version (&in_arch);
-      riscv_update_arch_info_hash ("M", version);
-      riscv_update_arch_info_hash ("A", version);
-      riscv_update_arch_info_hash ("C", version);
+      riscv_update_arch_info_hash ("E", version);
       break;
     case 'G':
       for ( ; *all_subsets != 'q'; all_subsets++)
@@ -5190,7 +5187,7 @@ riscv_update_non_standard_arch_attr (const char *key ATTRIBUTE_UNUSED,
 static void
 riscv_write_out_arch_attr (void)
 {
-  const char *all_subsets = "imafdqcp";
+  const char *all_subsets = "eimafdqcp";
   unsigned int i;
   obj_attribute *attr;
 
@@ -5203,6 +5200,10 @@ riscv_write_out_arch_attr (void)
 	  {
 	    subset[0] = TOUPPER (subset[0]);
 	    riscv_update_arch_info_hash (subset, -1);
+
+	    /* Skip 'i' extension.  */
+	    if (*all_subsets == 'e')
+	      all_subsets++;
 	  }
       }
 
