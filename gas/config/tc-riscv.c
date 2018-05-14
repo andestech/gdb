@@ -3412,8 +3412,7 @@ riscv_update_arch_info_hash (const char *arch, int version)
   struct arch_info *info;
   char str[4];
 
-  key = xstrdup (arch);
-  info = (struct arch_info *) hash_find (arch_info_hash, key);
+  info = (struct arch_info *) hash_find (arch_info_hash, arch);
   if (info)
     {
       if (version != -1)
@@ -3428,6 +3427,7 @@ riscv_update_arch_info_hash (const char *arch, int version)
   else
     {
       struct arch_info *new = malloc (sizeof (struct arch_info));
+      key = xstrdup (arch);
       new->name = key;
       riscv_arch_version_int2str (version, str, 0);
       new->v_major = xstrdup (str);
@@ -3482,6 +3482,7 @@ riscv_parse_arch_attribute (char *in_arch)
 	  riscv_add_subset (subset);
 	}
       in_arch++;
+      riscv_add_subset ("c");
       version = riscv_parse_arch_version (&in_arch);
       riscv_update_arch_info_hash ("I", version);
       riscv_update_arch_info_hash ("M", version);
@@ -3538,6 +3539,10 @@ riscv_parse_arch_attribute (char *in_arch)
 		    in_arch);
 	}
     }
+
+  /* We must keep the extension for ACE.  */
+  if (ace_lib_load_success)
+    riscv_add_subset ("x");
 
   return TRUE;
 }

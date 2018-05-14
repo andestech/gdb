@@ -3118,6 +3118,241 @@ riscv_merge_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
   return merged_arch_str;
 }
 
+/* The information of architecture attribute.  */
+struct arch_info
+{
+  char *name;
+  int version;
+  struct arch_info *next;
+};
+
+static struct arch_info *non_standard_arch_info_head = NULL;
+/* Buffer size enough?  */
+static char output_arch_name[100] = {'\0'};
+static char output_arch_buffer[100] = {'\0'};
+
+static int
+riscv_parse_arch_version (char **in_ver)
+{
+  int version, num;
+  char *string = *in_ver;
+
+  version = 0;
+  num = 0;
+  /* Major version.  */
+  while (string[0] != '\0'
+	 && string[0] != 'p'
+	 && (string[0] - 48) >= 0
+	 && (string[0] - 48) <= 9)
+    {
+      num = num * 10 + (string[0] - 48);
+      string++;
+    }
+  version = num * 10000;
+  /* Minor verison.  */
+  if (string[0] == 'p')
+    {
+      num = 0;
+      string++;
+      while (string[0] != '\0'
+	     && (string[0] - 48) >= 0
+	     && (string[0] - 48) <= 9)
+	{
+	  num = num * 10 + (string[0] - 48);
+	  string++;
+	  if (num >= 10000)
+	    {
+	      /* error.  */
+	      _bfd_error_handler
+		(_("error: minor version can not be larger than 9999\n"));
+	    }
+	}
+      version += num;
+    }
+  *in_ver = string;
+
+  return version;
+}
+
+static void
+riscv_parse_arch_name (char **in_arch, int strlen, char **name)
+{
+  char *string;
+  int i;
+
+  /* Parse the non-standard version name.  */
+  string = *in_arch;
+  if (!strlen)
+    {
+      i = 0;
+      while (string[i] != '\0'
+	     && string[i] != 'p'
+	     && string[i] != '_')
+	{
+	  if ((string[i] - 48) < 0
+	      || (string[i] - 48) > 9)
+	    strlen = i + 1;
+	  i++;
+	}
+    }
+
+  *name = (char *) malloc ((strlen + 1) * sizeof (char));
+  memcpy (*name, *in_arch, strlen);
+  memcpy (*name + strlen, "\0", 1);
+  *in_arch = string + strlen;
+}
+
+static void
+riscv_arch_version_int2str (int version, char *str, int minor)
+{
+  if (minor)
+    sprintf (str, "%d", version % 10000);
+  else
+    sprintf (str, "%d", version / 10000);
+}
+
+static void
+riscv_insert_non_standard_arch_info (char *name, int version)
+{
+  struct arch_info *arch = non_standard_arch_info_head;
+
+  while (arch)
+    {
+      if (strcmp (arch->name, name) == 0)
+	return;
+      arch = arch->next;
+    }
+
+  arch = malloc (sizeof (struct arch_info));
+  arch->name = xstrdup (name);
+  arch->version = version;
+  arch->next = non_standard_arch_info_head;
+  non_standard_arch_info_head = arch;
+}
+
+static bfd_boolean
+riscv_parse_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
+{
+  const char *standard_arch = "IMAFDQCPX";
+  char *name;
+  char ver[4];
+  struct arch_info *non_standard_arch = NULL;
+  int version_i, version_o, find_arch_i, find_arch_o, first_X_arch;
+
+  if (!in_arch || !out_arch)
+    return TRUE;
+
+  memset(output_arch_buffer, 0, 100);
+
+  /* Skip RV32/RV64.  */
+  if (strncmp (in_arch, out_arch, 4) == 0
+      && (strncmp (in_arch, "RV32", 4) == 0
+	  || strncmp (in_arch, "RV64", 4) == 0))
+    {
+      strncat(output_arch_buffer, out_arch, 4);
+      in_arch += 4;
+      out_arch += 4;
+    }
+  else
+    return FALSE;
+
+  for ( ; *standard_arch != 'X'; standard_arch++)
+    {
+      version_i = 0;
+      version_o = 0;
+      find_arch_i = 0;
+      find_arch_o = 0;
+
+      if (*in_arch == *standard_arch)
+	{
+	  in_arch++;
+	  version_i = riscv_parse_arch_version (&in_arch);
+	  find_arch_i = 1;
+	}
+      if (*out_arch == *standard_arch)
+	{
+	  out_arch++;
+	  version_o = riscv_parse_arch_version (&out_arch);
+	  find_arch_o = 1;
+	}
+
+      if (*standard_arch == 'I'
+	  && ((find_arch_o && !find_arch_i)
+	      || (!find_arch_o && find_arch_i)))
+	return FALSE;
+
+      /* Must compare the versions of input and output objects.  */
+      if (version_i != 0
+	  && version_o != 0
+	  && version_i != version_o)
+	{
+	  _bfd_error_handler
+	    (_("error: %B: cannot mix the objects that have "
+	       "different versions of ISA %c.\n"),
+	     ibfd, *standard_arch);
+	  return FALSE;
+	}
+      else if (version_o != 0)
+	version_i = version_o;
+
+      if (find_arch_i || find_arch_o)
+	{
+	  strncat(output_arch_buffer, standard_arch, 1);
+	  riscv_arch_version_int2str (version_i, ver, 0);
+	  strncat(output_arch_buffer, ver, strlen (ver));
+	  strncat(output_arch_buffer, "p", 1);
+	  riscv_arch_version_int2str (version_i, ver, 1);
+	  strncat(output_arch_buffer, ver, strlen (ver));
+	}
+    }
+
+  /* Merge non-standard arch attrs directly without checking compatible.  */
+  while (*in_arch == 'X')
+    {
+      name = NULL;
+      riscv_parse_arch_name (&in_arch, 0, &name);
+      version_i = riscv_parse_arch_version (&in_arch);
+      riscv_insert_non_standard_arch_info (name, version_i);
+      if (*in_arch == '_')
+	in_arch++;
+      free ((char *) name);
+    }
+  while (*out_arch == 'X')
+    {
+      name = NULL;
+      riscv_parse_arch_name (&out_arch, 0, &name);
+      version_o = riscv_parse_arch_version (&out_arch);
+      riscv_insert_non_standard_arch_info (name, version_o);
+      if (*out_arch == '_')
+        out_arch++;
+      free ((char *) name);
+    }
+
+  first_X_arch = 1;
+  while (non_standard_arch_info_head)
+    {
+      non_standard_arch = non_standard_arch_info_head;
+
+      if (first_X_arch)
+	first_X_arch = 0;
+      else
+	strncat(output_arch_buffer, "_", 1);
+
+      strncat(output_arch_buffer, non_standard_arch->name,
+	      strlen (non_standard_arch->name));
+      riscv_arch_version_int2str (non_standard_arch->version, ver, 0);
+      strncat(output_arch_buffer, ver, strlen (ver));
+      strncat(output_arch_buffer, "p", 1);
+      riscv_arch_version_int2str (non_standard_arch->version, ver, 1);
+      strncat(output_arch_buffer, ver, strlen (ver));
+
+      non_standard_arch_info_head = non_standard_arch_info_head->next;
+      free (non_standard_arch);
+    }
+
+  return TRUE;
+}
+
 /* Merge object attributes from IBFD into output_bfd of INFO.
    Raise an error if there are conflicting attributes.  */
 
@@ -3134,9 +3369,6 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
   /* Skip linker created files.  */
   if (ibfd->flags & BFD_LINKER_CREATED)
     return TRUE;
-
-  in_attr = elf_known_obj_attributes_proc (ibfd);
-  out_attr = elf_known_obj_attributes_proc (obfd);
 
   /* Skip any input that doesn't have an attribute section.
      This enables to link object files without attribute section with
@@ -3155,7 +3387,7 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
 	 initialized.  */
       out_attr[0].i = 1;
 
-      return result;
+      return TRUE;
     }
 
   in_attr = elf_known_obj_attributes_proc (ibfd);
@@ -3214,12 +3446,51 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
 	  }
 	break;
       case Tag_arch + Tag_shfit:
-	if (in_attr[Tag_arch].s && !out_attr[Tag_arch].s)
+	if (!out_attr[Tag_arch].s)
 	  out_attr[Tag_arch].s = in_attr[Tag_arch].s;
-	if (in_attr[Tag_arch].s && out_attr[Tag_arch].s)
-	  if (strcmp (in_attr[Tag_arch].s,
-		      out_attr[Tag_arch].s) != 0)
-	  result = FALSE;
+	else if (in_attr[Tag_arch].s
+		 && out_attr[Tag_arch].s)
+	  {
+	    /* Check arch compatible.  */
+	    if (!riscv_parse_arch_attr_info (ibfd,
+					     in_attr[Tag_arch].s,
+					     out_attr[Tag_arch].s))
+	      result = FALSE;
+	    else
+	      {
+		memset (output_arch_name, 0, 100);
+		memcpy (output_arch_name, output_arch_buffer, 100);
+		out_attr[Tag_arch].s = output_arch_name;
+	      }
+	  }
+	break;
+      case Tag_priv_spec:
+      case Tag_priv_spec_minor:
+      case Tag_priv_spec_revision:
+	if (out_attr[i].i != in_attr[i].i)
+	  {
+	    _bfd_error_handler
+	      (_("error: %B: conflicting priv spec version "
+		 "(major/minor/revision).\n"), ibfd);
+	    result = FALSE;
+	  }
+	break;
+      case Tag_strict_align:
+	out_attr[i].i |= in_attr[i].i;
+	break;
+      case Tag_stack_align:
+	if (out_attr[i].i == 0)
+	  out_attr[i].i = in_attr[i].i;
+	else if (in_attr[i].i != 0
+		 && out_attr[i].i != 0
+		 && out_attr[i].i != in_attr[i].i)
+	  {
+	    _bfd_error_handler
+	      (_("error: %B use %u-byte stack aligned but the output "
+		 "use %u-byte stack aligned.\n"),
+	       ibfd, in_attr[i].i, out_attr[i].i);
+	    result = FALSE;
+	  }
 	break;
       default:
 	result &= _bfd_elf_merge_unknown_attribute_low (ibfd, obfd, i);
@@ -3268,7 +3539,7 @@ _bfd_riscv_elf_merge_private_bfd_data (bfd *ibfd, struct bfd_link_info *info)
   if (!riscv_merge_attributes (ibfd, info))
     return FALSE;
 
-  if (! elf_flags_init (obfd))
+  if (!elf_flags_init (obfd))
     {
       elf_flags_init (obfd) = TRUE;
       elf_elfheader (obfd)->e_flags = new_flags;

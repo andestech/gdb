@@ -15464,7 +15464,6 @@ display_riscv_attribute (unsigned char *p,
     case Tag_priv_spec + Tag_shfit:
       val = read_uleb128 (p, &len, end);
       p += len;
-
       printf (_("%d\n"), val);
       break;
     case Tag_strict_align + Tag_shfit:
@@ -15488,7 +15487,6 @@ display_riscv_attribute (unsigned char *p,
     case Tag_arch + Tag_shfit:
       p = display_tag_value (-1, p, end);
       break;
-
     default:
       return display_tag_value (tag, p, end);
     }
