@@ -4963,8 +4963,21 @@ riscv_update_non_standard_arch_attr (const char *key ATTRIBUTE_UNUSED,
 static void
 riscv_write_out_arch_attr (void)
 {
+  const char *all_subsets = "imafdqcp";
   unsigned int i;
   obj_attribute *attr;
+
+  attr = elf_known_obj_attributes_proc (stdoutput);
+  if (!attr[Tag_arch].s)
+    for ( ; *all_subsets; all_subsets++)
+      {
+	char subset[] = {*all_subsets, '\0'};
+	if (riscv_subset_supports (subset))
+	  {
+	    subset[0] = TOUPPER (subset[0]);
+	    riscv_update_arch_info_hash (subset, -1);
+	  }
+      }
 
   arch_attr_strlen = 0;
   hash_traverse (arch_info_hash, riscv_count_arch_attr_strlen);
@@ -4978,8 +4991,12 @@ riscv_write_out_arch_attr (void)
     ((arch_attr_strlen + 1) * sizeof (char));
   memcpy (out_arch + arch_attr_strlen, "\0", 1);
 
-  attr = elf_known_obj_attributes_proc (stdoutput);
-  strncpy (out_arch, attr[Tag_arch].s, 4);
+  if (attr[Tag_arch].s)
+    strncpy (out_arch, attr[Tag_arch].s, 4);
+  else if (xlen == 32)
+    strncpy (out_arch, "RV32", 4);
+  else
+    strncpy (out_arch, "RV64", 4);
   memcpy (out_arch + 4, "\0", 1);
 
   /* Update standard arch attributes.  */
