@@ -41,7 +41,7 @@ static FILE *ex9_import_file = NULL;	/* Do ex9 according to the imported
 					   ex9 table.  */
 static int keep_import_ex9 = 0;		/* Keep the imported ex9 table.  */
 static int update_ex9_table = 0;
-static int ex9_limit = -1;		/* Default set it to 512 entries.  */
+static int ex9_limit = -1;		/* Default set it to 1024 entries.  */
 static int ex9_loop_aware = 0;		/* --mex9-loop-aware.  */
 
 /* Put target dependent option into info hash table.  */
@@ -94,7 +94,7 @@ riscv_elf_append_section (struct bfd_link_info *info, bfd *abfd)
 	     it according to ex9_limit. Since we will adjust the table size
 	     in riscv_elf_ex9_build_itable, it is okay to set the size to
 	     the maximum value here.  */
-	  itable->size = 0x800;
+	  itable->size = 0x1000;
 	  itable->contents = bfd_zalloc (abfd, itable->size);
 
 	  /* Add a symbol in the head of ex9.itable to objdump clearly.  */
@@ -340,9 +340,9 @@ PARSE_AND_LIST_ARGS_CASES='
     if (optarg)
       {
 	ex9_limit = atoi (optarg);
-	if (ex9_limit > 512 || ex9_limit < 0)
+	if (ex9_limit > 1024 || ex9_limit < 0)
 	  {
-	    einfo (_("ERROR: the range of ex9_limit must between 0 and 512 (default 512)\n"));
+	    einfo (_("ERROR: the range of ex9_limit must between 0 and 1024 (default 1024)\n"));
 	    exit (1);
 	  }
       }
