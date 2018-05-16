@@ -823,7 +823,15 @@ print_insn_args (const char *d, insn_t l, bfd_vma pc,
 	    if (parse_nds_v5_field (&d, field_name))
 	      {
 		if (strcmp (field_name, "nds_rc") == 0)
+		  print (info->stream, "%s",
+			 riscv_gpr_names[EXTRACT_OPERAND (RC, l)]);
+		else if (strcmp (field_name, "nds_rdp") == 0)
 		  print (info->stream, "%s", riscv_gpr_names[rd]);
+		else if (strcmp (field_name, "nds_rsp") == 0)
+		  print (info->stream, "%s", riscv_gpr_names[rs1]);
+		else if (strcmp (field_name, "nds_rtp") == 0)
+		  print (info->stream, "%s",
+			 riscv_gpr_names[EXTRACT_OPERAND (RS2, l)]);
 		else if (strcmp (field_name, "nds_i3u") == 0)
 		  print (info->stream, "%d", (int)EXTRACT_PTYPE_IMM3U (l));
 		else if (strcmp (field_name, "nds_i4u") == 0)
