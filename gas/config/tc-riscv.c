@@ -841,6 +841,12 @@ validate_riscv_insn (const struct riscv_opcode *opc, int length)
 	      /* TODO: build hash table to store nds-defined operand fields.  */
 	      if (strcmp (field_name, "nds_rc") == 0)
 		USE_BITS (OP_MASK_RC, OP_SH_RC);
+	      else if (strcmp (field_name, "nds_rdp") == 0)
+		USE_BITS (OP_MASK_RD, OP_SH_RD);
+	      else if (strcmp (field_name, "nds_rsp") == 0)
+		USE_BITS (OP_MASK_RD, OP_SH_RS1);
+	      else if (strcmp (field_name, "nds_rtp") == 0)
+		USE_BITS (OP_MASK_RD, OP_SH_RS2);
 	      else if (strcmp (field_name, "nds_i3u") == 0)
 		used_bits |= ENCODE_PTYPE_IMM3U (-1U);
 	      else if (strcmp (field_name, "nds_i4u") == 0)
@@ -3161,6 +3167,45 @@ jump:
 			&& reg_lookup (&s, RCLASS_GPR, &regno))
 		      {
 			INSERT_OPERAND (RC, *ip, regno);
+			args--;
+			continue;
+		      }
+		    else if (strcmp (field_name, "nds_rdp") == 0
+			     && reg_lookup (&s, RCLASS_GPR, &regno))
+		      {
+			if (xlen == 32 && (regno % 2) != 0)
+			  {
+			    as_bad (_("The number of Rd must be even "
+				      "(limitation of register pair)."));
+			    break;
+			  }
+			INSERT_OPERAND (RD, *ip, regno);
+			args--;
+			continue;
+		      }
+		    else if (strcmp (field_name, "nds_rsp") == 0
+			     && reg_lookup (&s, RCLASS_GPR, &regno))
+		      {
+			if (xlen == 32 && (regno % 2) != 0)
+			  {
+			    as_bad (_("The number of Rs1 must be even "
+				      "(limitation of register pair)."));
+			    break;
+			  }
+			INSERT_OPERAND (RS1, *ip, regno);
+			args--;
+			continue;
+		      }
+		    else if (strcmp (field_name, "nds_rtp") == 0
+			     && reg_lookup (&s, RCLASS_GPR, &regno))
+		      {
+			if (xlen == 32 && (regno % 2) != 0)
+			  {
+			    as_bad (_("The number of Rs2 must be even "
+				      "(limitation of register pair)."));
+			    break;
+			  }
+			INSERT_OPERAND (RS2, *ip, regno);
 			args--;
 			continue;
 		      }
