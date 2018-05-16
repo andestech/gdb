@@ -5360,7 +5360,7 @@ riscv_elf_output_arch_syms (bfd *output_bfd ATTRIBUTE_UNUSED,
 /* EX9 Instruction Table Relaxation.  */
 
 #define EX9_SECTION ".ex9.itable"
-#define INSN_CEX9 0x8000
+#define INSN_EXECIT 0x8000
 
 /* Global hash list.  */
 struct elf_link_hash_entry_list
@@ -5945,13 +5945,13 @@ riscv_elf_order_insn_times (struct bfd_link_info *info)
   if (ex9_insn_head == NULL)
     return;
 
-  /* Default maximum number of entries is 512.  */
+  /* Default maximum number of entries is 1024.  */
   table = riscv_elf_hash_table (info);
   if (table->ex9_limit == -1)
-    table->ex9_limit = 512;
+    table->ex9_limit = 1024;
   total_ex9_limit = table->ex9_limit + ex9_import_number;
-  if (total_ex9_limit > 512)
-    total_ex9_limit = 512;
+  if (total_ex9_limit > 1024)
+    total_ex9_limit = 1024;
 
   ex9_insn = ex9_insn_head;
 
@@ -6519,8 +6519,8 @@ riscv_elf_ex9_replace_instruction (struct bfd_link_info *link_info, bfd *abfd, a
 	  if (do_replace == 1)
 	    {
 	      /* Insert ex9 instruction.  */
-	      insn_ex9 = INSN_CEX9;
-	      insn16 = insn_ex9 | ENCODE_RVC_EX9IT_IMM (ex9_insn->order << 2);
+	      insn_ex9 = INSN_EXECIT;
+	      insn16 = insn_ex9 | ENCODE_RVC_EXECIT_IMM (ex9_insn->order << 2);
 	      riscv_elf_ex9_push_insn (abfd, pre_insn16, contents, pre_off,
 				       pre_irel_ptr, &irel_list, link_info);
 	      pre_off = off;
@@ -6790,16 +6790,16 @@ riscv_elf_ex9_import_table (bfd *abfd, struct bfd_link_info *info)
     }
   fclose (ex9_import_file);
 
-  /* Default set the maximun number of the ex9 entries to 512.
-     There are still 512 entries in ex9 table even though the
+  /* Default set the maximun number of the ex9 entries to 1024.
+     There are still 1024 entries in ex9 table even though the
      ex9 limit setting exceeds the remaining entries.  */
   ex9_import_number = num;
   if (table->update_ex9_table
       && table->ex9_limit != -1
-      && (ex9_import_number + table->ex9_limit) > 512)
+      && (ex9_import_number + table->ex9_limit) > 1024)
     (*_bfd_error_handler)
       (_("Warning: There are only %d ex9 entries left for this time."),
-       (512 - ex9_import_number));
+       (1024 - ex9_import_number));
 
   /* We will run riscv_elf_ex9_build_itable for ex9 update
      in the riscv_elf_ex9_finish.  */
@@ -7017,8 +7017,8 @@ riscv_elf_relocate_ex9_table (struct bfd_link_info *link_info, bfd *abfd)
 				     &source_contents, TRUE))
 				  (*_bfd_error_handler)
 				    (_("Linker: error cannot fixed ex9 relocation \n"));
-				insn_ex9 = INSN_CEX9;
-				insn_ex9 = insn_ex9 | ENCODE_RVC_EX9IT_IMM (temp_ptr->order << 2);
+				insn_ex9 = INSN_EXECIT;
+				insn_ex9 = insn_ex9 | ENCODE_RVC_EXECIT_IMM (temp_ptr->order << 2);
 				bfd_put_16 (abfd, insn_ex9, source_contents + fix_ptr->irel->r_offset);
 			      }
 			    break;

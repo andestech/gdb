@@ -142,11 +142,9 @@ static const char * const riscv_vma[2] =
 #define EXTRACT_UJTYPE_IMM_EX9TAB(x) \
   ((RV_X(x, 21, 10) << 1) | (RV_X(x, 20, 1) << 11) | (RV_X(x, 12, 8) << 12) | (RV_X(x, 31, 1) << 20))
 #define EXTRACT_RVC_EX9IT_IMM(x) \
-  ((RV_X(x, 4, 1) << 2) | (RV_X(x, 10, 2) << 3) | (RV_X(x, 2, 1) << 5) | (RV_X(x, 5, 2) << 6) | (RV_X(x, 9, 1) << 8) | (RV_X(x, 3, 1) << 9) |(RV_X(x, 12, 1) << 10))
-#define EXTRACT_RVC_EX9CS_IMM(x) \
-  ((RV_X(x, 3, 2) << 1) | (RV_X(x, 10, 2) << 3) | (RV_X(x, 2, 1) << 5) | (RV_X(x, 5, 2) << 6) | (RV_X(x, 9, 1) << 8) | (-RV_X(x, 12, 1) << 9))
-#define EXTRACT_RVC_EX10_IMM(x) \
-  (RV_X(x, 2, 10))
+  ((RV_X(x, 4, 1) << 2) | (RV_X(x, 10, 2) << 3) | (RV_X(x, 2, 1) << 5) | (RV_X(x, 5, 2) << 6) | (RV_X(x, 9, 1) << 8) | (RV_X(x, 3, 1) << 9) | (RV_X(x, 12, 1) << 10))
+#define EXTRACT_RVC_EXECIT_IMM(x) \
+  ((RV_X(x, 4, 1) << 2) | (RV_X(x, 10, 2) << 3) | (RV_X(x, 2, 1) << 5) | (RV_X(x, 5, 2) << 6) | (RV_X(x, 9, 1) << 8) | (RV_X(x, 3, 1) << 9) | (RV_X(x, 12, 1) << 10) | (RV_X(x, 8, 1) << 11))
 #define EXTRACT_ITYPE_IMM6H(x) \
   (RV_X(x, 26, 6))
 #define EXTRACT_ITYPE_IMM6L(x) \
@@ -261,10 +259,8 @@ static const char * const riscv_vma[2] =
   ((RV_X(x, 3, 2) << 10) | (RV_X(x, 5, 6) << 25) | (RV_X(x, 11, 1) << 7) | (RV_X(x, 12, 3) << 17) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 17, 2) << 8) | (RV_X(x, 19, 1) << 31))
 #define ENCODE_RVC_EX9IT_IMM(x) \
   ((RV_X(x, 2, 1) << 4) | (RV_X(x, 3, 2) << 10) | (RV_X(x, 5, 1) << 2) | (RV_X(x, 6, 2) << 5) | (RV_X(x, 8, 1) << 9) | (RV_X(x, 9, 1) << 3) | (RV_X(x, 10, 1) << 12))
-#define ENCODE_RVC_EX9CS_IMM(x) \
-  ((RV_X(x, 1, 2) << 3) | (RV_X(x, 3, 2) << 10) | (RV_X(x, 5, 1) << 2) | (RV_X(x, 6, 2) << 5) | (RV_X(x, 8, 1) << 9) | (RV_X(x, 9, 1) << 12))
-#define ENCODE_RVC_EX10_IMM(x) \
-  ((RV_X(x, 0, 10) << 2))
+#define ENCODE_RVC_EXECIT_IMM(x) \
+  ((RV_X(x, 2, 1) << 4) | (RV_X(x, 3, 2) << 10) | (RV_X(x, 5, 1) << 2) | (RV_X(x, 6, 2) << 5) | (RV_X(x, 8, 1) << 9) | (RV_X(x, 9, 1) << 3) | (RV_X(x, 10, 1) << 12) | (RV_X(x, 11, 1) << 8))
 /* NDS V5 DSP Extension.  */
 #define ENCODE_PTYPE_IMM3U(x) \
   (RV_X(x, 0, 3) << 20)
@@ -307,8 +303,7 @@ static const char * const riscv_vma[2] =
 #define VALID_GPTYPE_SW_IMM(x) (EXTRACT_GPTYPE_SW_IMM(ENCODE_GPTYPE_SW_IMM(x)) == (x))
 #define VALID_GPTYPE_SD_IMM(x) (EXTRACT_GPTYPE_SD_IMM(ENCODE_GPTYPE_SD_IMM(x)) == (x))
 #define VALID_RVC_EX9IT_IMM(x) (EXTRACT_RVC_EX9IT_IMM(ENCODE_RVC_EX9IT_IMM(x)) == (x))
-#define VALID_RVC_EX9CS_IMM(x) (EXTRACT_RVC_EX9CS_IMM(ENCODE_RVC_EX9CS_IMM(x)) == (x))
-#define VALID_RVC_EX10_IMM(x) (EXTRACT_RVC_EX10_IMM(ENCODE_RVC_EX10_IMM(x)) == (x))
+#define VALID_RVC_EXECIT_IMM(x) (EXTRACT_RVC_EXECIT_IMM(ENCODE_RVC_EXECIT_IMM(x)) == (x))
 /* NDS V5 DSP Extension.  */
 #define VALID_PTYPE_IMM3U(x) (EXTRACT_PTYPE_IMM3U(ENCODE_PTYPE_IMM3U(x)) == (x))
 #define VALID_PTYPE_IMM4U(x) (EXTRACT_PTYPE_IMM4U(ENCODE_PTYPE_IMM4U(x)) == (x))
