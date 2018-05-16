@@ -1132,9 +1132,9 @@ execute_c (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 					  cpu->regs[crs2s].u);
 	    }
 	  return pc;
-	case MATCH_C_EX9IT:
+	case MATCH_C_EXECIT:
 	  iw = sim_core_read_unaligned_4 (cpu, cpu->pc, exec_map,
-					  cpu->csr.uitb + EXTRACT_RVC_EX9IT_IMM (iw));
+					  cpu->csr.uitb + EXTRACT_RVC_EXECIT_IMM (iw));
 	  pc = riscv_decode (cpu, iw, cpu->pc, 1);
 	  return pc;
 	default:
