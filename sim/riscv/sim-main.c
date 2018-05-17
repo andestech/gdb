@@ -1440,6 +1440,8 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
   const int imm2u = (iw >> 20) & 0x3;
 
   sim_cia pc = cpu->pc + 4;
+  if (ex9)
+    pc -= 2;
 
   switch (op->match)
     {
