@@ -3144,6 +3144,9 @@ struct arch_info
   char *name;
   int version;
   struct arch_info *next;
+  /* Used to record input and output objects
+     have the same arch.  */
+  int valid;
 };
 
 static struct arch_info *non_standard_arch_info_head = NULL;
@@ -3182,9 +3185,8 @@ riscv_parse_arch_version (char **in_ver)
 	  string++;
 	  if (num >= 10000)
 	    {
-	      /* error.  */
 	      _bfd_error_handler
-		(_("error: minor version can not be larger than 9999\n"));
+		(_("error: minor version can not be larger than 9999"));
 	    }
 	}
       version += num;
@@ -3205,15 +3207,22 @@ riscv_parse_arch_name (char **in_arch, int strlen, char **name)
   if (!strlen)
     {
       i = 0;
-      while (string[i] != '\0'
-	     && string[i] != 'p'
-	     && string[i] != '_')
-	{
-	  if ((string[i] - 48) < 0
-	      || (string[i] - 48) > 9)
-	    strlen = i + 1;
+      if (strncmp (string, "xv5m", 4) == 0)
+	i += 4;
+      else
+	while (string[i] != '\0'
+	       && string[i] != '_'
+	       && ((string[i] - 48) < 0
+		   || (string[i] - 48) > 9))
 	  i++;
-	}
+
+      /* The first char 'x' is a keyword.  */
+      if (i == 1)
+	_bfd_error_handler
+	  (_("error: empty non standard ISA extension?"),
+	   string);
+      else
+	strlen = i;
     }
 
   *name = (char *) malloc ((strlen + 1) * sizeof (char));
@@ -3246,6 +3255,7 @@ riscv_insert_non_standard_arch_info (char *name, int version)
   arch = malloc (sizeof (struct arch_info));
   arch->name = xstrdup (name);
   arch->version = version;
+  arch->valid = 0;
   arch->next = non_standard_arch_info_head;
   non_standard_arch_info_head = arch;
 }
@@ -3253,7 +3263,7 @@ riscv_insert_non_standard_arch_info (char *name, int version)
 static bfd_boolean
 riscv_parse_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
 {
-  const char *standard_arch = "IMAFDQCPX";
+  const char *standard_arch = "imafdqcpx";
   char *name;
   char ver[4];
   struct arch_info *non_standard_arch = NULL;
@@ -3264,19 +3274,23 @@ riscv_parse_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
 
   memset(output_arch_buffer, 0, 100);
 
-  /* Skip RV32/RV64.  */
+  /* Skip rv32/rv64.  */
   if (strncmp (in_arch, out_arch, 4) == 0
-      && (strncmp (in_arch, "RV32", 4) == 0
-	  || strncmp (in_arch, "RV64", 4) == 0))
+      && (strncmp (in_arch, "rv32", 4) == 0
+	  || strncmp (in_arch, "rv64", 4) == 0))
     {
       strncat(output_arch_buffer, out_arch, 4);
       in_arch += 4;
       out_arch += 4;
     }
   else
-    return FALSE;
+    {
+      _bfd_error_handler
+	(_("error: %B: ISA string must begin with rv32/rv64"), ibfd);
+      return FALSE;
+    }
 
-  for ( ; *standard_arch != 'X'; standard_arch++)
+  for ( ; *standard_arch != 'x'; standard_arch++)
     {
       version_i = 0;
       version_o = 0;
@@ -3296,24 +3310,22 @@ riscv_parse_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
 	  find_arch_o = 1;
 	}
 
-      if (*standard_arch == 'I'
+      /* Objects with i extension can not be linked with objects
+	 wihtout i extension.  */
+      if (*standard_arch == 'i'
 	  && ((find_arch_o && !find_arch_i)
 	      || (!find_arch_o && find_arch_i)))
 	return FALSE;
 
       /* Must compare the versions of input and output objects.  */
-      if (version_i != 0
-	  && version_o != 0
-	  && version_i != version_o)
+      if (version_i != version_o)
 	{
 	  _bfd_error_handler
 	    (_("error: %B: cannot mix the objects that have "
-	       "different versions of ISA %c.\n"),
+	       "different versions of ISA '%c'."),
 	     ibfd, *standard_arch);
 	  return FALSE;
 	}
-      else if (version_o != 0)
-	version_i = version_o;
 
       if (find_arch_i || find_arch_o)
 	{
@@ -3326,25 +3338,50 @@ riscv_parse_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
 	}
     }
 
-  /* Merge non-standard arch attrs directly without checking compatible.  */
-  while (*in_arch == 'X')
-    {
-      name = NULL;
-      riscv_parse_arch_name (&in_arch, 0, &name);
-      version_i = riscv_parse_arch_version (&in_arch);
-      riscv_insert_non_standard_arch_info (name, version_i);
-      if (*in_arch == '_')
-	in_arch++;
-      free ((char *) name);
-    }
-  while (*out_arch == 'X')
+  /* Check non-standard arch attrs.  */
+  while (*out_arch == 'x')
     {
       name = NULL;
       riscv_parse_arch_name (&out_arch, 0, &name);
       version_o = riscv_parse_arch_version (&out_arch);
       riscv_insert_non_standard_arch_info (name, version_o);
       if (*out_arch == '_')
-        out_arch++;
+	out_arch++;
+      free ((char *) name);
+    }
+  while (*in_arch == 'x')
+    {
+      name = NULL;
+      riscv_parse_arch_name (&in_arch, 0, &name);
+      version_i = riscv_parse_arch_version (&in_arch);
+      non_standard_arch = non_standard_arch_info_head;
+      while (non_standard_arch)
+	{
+	  if (strcmp (non_standard_arch->name, name) == 0)
+	    break;
+	  non_standard_arch = non_standard_arch->next;
+	}
+      if (!non_standard_arch)
+	{
+	  _bfd_error_handler
+	    (_("error: %B: non standard ISA '%s' of input is "
+	       "unmatched with output."), ibfd, name);
+	  return FALSE;
+	}
+      else if (non_standard_arch->version != version_i)
+	{
+	  _bfd_error_handler
+	    (_("error: %B: cannot mix the objects that have "
+	       "different versions of ISA '%s'"),
+	     ibfd, name);
+	  return FALSE;
+	}
+      else
+	/* The input object has the same ISA with the output object.  */
+	non_standard_arch->valid = 1;
+
+      if (*in_arch == '_')
+        in_arch++;
       free ((char *) name);
     }
 
@@ -3352,6 +3389,13 @@ riscv_parse_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
   while (non_standard_arch_info_head)
     {
       non_standard_arch = non_standard_arch_info_head;
+      if (!non_standard_arch->valid)
+	{
+	  _bfd_error_handler
+	    (_("error: %B: non standard ISA '%s' of output is "
+	       "unmatched with input."), ibfd, non_standard_arch->name);
+	  return FALSE;
+	}
 
       if (first_X_arch)
 	first_X_arch = 0;
@@ -3491,7 +3535,7 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
 	  {
 	    _bfd_error_handler
 	      (_("error: %B: conflicting priv spec version "
-		 "(major/minor/revision).\n"), ibfd);
+		 "(major/minor/revision)."), ibfd);
 	    result = FALSE;
 	  }
 	break;
@@ -3507,7 +3551,7 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
 	  {
 	    _bfd_error_handler
 	      (_("error: %B use %u-byte stack aligned but the output "
-		 "use %u-byte stack aligned.\n"),
+		 "use %u-byte stack aligned."),
 	       ibfd, in_attr[i].i, out_attr[i].i);
 	    result = FALSE;
 	  }

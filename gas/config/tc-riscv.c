@@ -1252,9 +1252,9 @@ struct arch_info
 struct arch_info arch_info[] =
 {
 /* Standard arch info.  */
-{"E", "1", "9", 0}, {"I", "2", "0", 0}, {"M", "2", "0", 0},
-{"A", "2", "0", 0}, {"F", "2", "0", 0}, {"D", "2", "0", 0},
-{"Q", "2", "0", 0}, {"C", "2", "0", 0}, {"P", "2", "0", 0},
+{"e", "1", "9", 0}, {"i", "2", "0", 0}, {"m", "2", "0", 0},
+{"a", "2", "0", 0}, {"f", "2", "0", 0}, {"d", "2", "0", 0},
+{"q", "2", "0", 0}, {"c", "2", "0", 0}, {"p", "2", "0", 0},
 
 /* Terminate the list.  */
 {0, 0, 0, 0}
@@ -3520,11 +3520,13 @@ out:
 static int
 riscv_parse_arch_version (char **in_ver)
 {
-  int version, num;
+  int version, num, major_set, minor_set;
   char *string = *in_ver;
 
   version = 0;
   num = 0;
+  major_set = 0;
+  minor_set = 0;
   /* Major version.  */
   while (string[0] != '\0'
 	 && string[0] != 'p'
@@ -3533,10 +3535,11 @@ riscv_parse_arch_version (char **in_ver)
     {
       num = num * 10 + (string[0] - 48);
       string++;
+      major_set = 1;
     }
   version = num * 10000;
   /* Minor verison.  */
-  if (string[0] == 'p')
+  if (major_set && string[0] == 'p')
     {
       num = 0;
       string++;
@@ -3548,13 +3551,19 @@ riscv_parse_arch_version (char **in_ver)
 	  string++;
 	  if (num >= 10000)
 	    as_fatal (".attribute: minor version can not "
-		      "be larger than 9999");
+		      "be larger than 9999.");
+	  minor_set = 1;
 	}
       version += num;
     }
   *in_ver = string;
 
-  if (version > 0)
+  /* Major and Minor versions must be set or unset both.  */
+  if (major_set ^ minor_set)
+    as_fatal (".attribute: major and minor versions must be "
+	      "set when 'p' is used.");
+
+  if (version > 0 || major_set)
     return version;
   else
     /* Use default version.  */
@@ -3574,15 +3583,21 @@ riscv_parse_arch_name (char **in_arch, int strlen, char **name)
   if (!strlen)
     {
       i = 0;
-      while (string[i] != '\0'
-	     && string[i] != 'p'
-	     && string[i] != '_')
-	{
-	  if ((string[i] - 48) < 0
-	      || (string[i] - 48) > 9)
-	    strlen = i + 1;
+      if (strncmp (string, "xv5m", 4) == 0)
+	i += 4;
+      else
+	while (string[i] != '\0'
+	       && string[i] != '_'
+	       && ((string[i] - 48) < 0
+		   || (string[i] - 48) > 9))
 	  i++;
-	}
+
+      /* The first char 'x' is a keyword.  */
+      if (i == 1)
+	as_fatal (".attribute %s: empty non standard ISA extension?",
+		  *in_arch);
+      else
+	strlen = i;
     }
 
   *name = (char *) malloc ((strlen + 1) * sizeof (char));
@@ -3590,6 +3605,8 @@ riscv_parse_arch_name (char **in_arch, int strlen, char **name)
   memcpy (*name + strlen, "\0", 1);
   *in_arch = string + strlen;
 }
+
+/* Convert the version from integer to string.  */
 
 static void
 riscv_arch_version_int2str (int version, char *str, int minor)
@@ -3646,48 +3663,45 @@ riscv_parse_arch_attribute (char *in_arch)
   const char *all_subsets = "imafdqcp";
   char *name;
   int version;
-  unsigned int i;
+  int parse_non_standard = 0;
 
+  /* Clear the subsets set by -march option.  */
   riscv_clear_subsets();
 
-  if (strncmp (in_arch, "RV32", 4) == 0
-      || strncmp (in_arch, "RV64", 4) == 0)
+  if (strncmp (in_arch, "rv32", 4) == 0
+      || strncmp (in_arch, "rv64", 4) == 0)
     in_arch += 4;
   else
-    as_fatal (".attribute %s: ISA string must begin with RV32/RV64",
+    as_fatal (".attribute %s: ISA string must begin with rv32/rv64",
 	      in_arch);
 
   switch (*in_arch)
     {
-    case 'E':
-      /* FIXME: the extensions only can be M, A and C.  */
-      riscv_add_subset ("e");
-      riscv_add_subset ("i");
+    case 'e':
+      /* FIXME: the extensions after 'e' only can be M, A and C.  */
       in_arch++;
       version = riscv_parse_arch_version (&in_arch);
-      riscv_update_arch_info_hash ("E", version);
+      riscv_update_arch_info_hash ("e", version);
+      riscv_add_subset ("e");
+      riscv_add_subset ("i");
       break;
-    case 'G':
+    case 'g':
+      in_arch++;
+      version = riscv_parse_arch_version (&in_arch);
       for ( ; *all_subsets != 'q'; all_subsets++)
 	{
 	  const char subset[] = {*all_subsets, '\0'};
+	  riscv_update_arch_info_hash (subset, version);
 	  riscv_add_subset (subset);
 	}
-      in_arch++;
-      riscv_add_subset ("c");
-      version = riscv_parse_arch_version (&in_arch);
-      riscv_update_arch_info_hash ("I", version);
-      riscv_update_arch_info_hash ("M", version);
-      riscv_update_arch_info_hash ("A", version);
-      riscv_update_arch_info_hash ("F", version);
-      riscv_update_arch_info_hash ("D", version);
       /* Addition.  */
-      riscv_update_arch_info_hash ("C", version);
+      riscv_update_arch_info_hash ("c", version);
+      riscv_add_subset ("c");
       break;
-    case 'I':
+    case 'i':
       break;
     default:
-      as_fatal (".attribue %s: first ISA subset must be I/G/E",
+      as_fatal (".attribue %s: first ISA subset must be i/g/e",
 		in_arch);
     }
 
@@ -3695,26 +3709,33 @@ riscv_parse_arch_attribute (char *in_arch)
     {
       switch (*in_arch)
 	{
-	case 'I':
-	case 'M':
-	case 'A':
-	case 'F':
-	case 'D':
-	case 'Q':
-	case 'C':
-	case 'P':
-	  name = NULL;
-	  riscv_parse_arch_name (&in_arch, 1, &name);
-	  version = riscv_parse_arch_version (&in_arch);
-	  riscv_update_arch_info_hash (name, version);
+	case 'i':
+	case 'm':
+	case 'a':
+	case 'f':
+	case 'd':
+	case 'q':
+	case 'c':
+	case 'p':
+	  /* Standard extensions.  */
+	  if (!parse_non_standard)
+	    {
+	      name = NULL;
+	      riscv_parse_arch_name (&in_arch, 1, &name);
+	      version = riscv_parse_arch_version (&in_arch);
+	      riscv_update_arch_info_hash (name, version);
+	      riscv_add_subset (name);
 
-	  for (i = 0; i < strlen (name); i++)
-	    name[i] = TOLOWER (name[i]);
-	  riscv_add_subset (name);
-
-	  free ((char *) name);
+	      free ((char *) name);
+	    }
+	  else
+	    as_fatal (".attribue %c: Standard ISA subset can not "
+		      "be set after Non-standard ISA subset.",
+		      *in_arch);
 	  break;
-	case 'X':
+	case 'x':
+	  /* Non-standard extensions.  */
+	  parse_non_standard = 1;
 	  name = NULL;
 	  riscv_parse_arch_name (&in_arch, 0, &name);
 	  version = riscv_parse_arch_version (&in_arch);
@@ -3732,7 +3753,7 @@ riscv_parse_arch_attribute (char *in_arch)
 	}
     }
 
-  /* We must keep the extension for ACE.  */
+  /* We must keep the extension of ACE if needed.  */
   if (ace_lib_load_success)
     riscv_add_subset ("x");
 
@@ -5157,8 +5178,11 @@ riscv_count_arch_attr_strlen (const char *key ATTRIBUTE_UNUSED,
 	+ strlen (data->v_major)
 	+ strlen (data->v_minor)
 	+ 1; /* for 'p'  */
-      if (*(data->name) == 'X')
-	arch_attr_strlen++; /* for '_'  */
+      if (*(data->name) == 'x')
+	{
+	  first_X_arch = 0;
+	  arch_attr_strlen++; /* for '_'  */
+	}
     }
 }
 
@@ -5174,12 +5198,12 @@ riscv_update_non_standard_arch_attr (const char *key ATTRIBUTE_UNUSED,
       if (first_X_arch)
 	first_X_arch = 0;
       else
-	strncat(out_arch, "_", 1);
+	strncat (out_arch, "_", 1);
 
-      strncat(out_arch, data->name, strlen (data->name));
-      strncat(out_arch, data->v_major, strlen (data->v_major));
-      strncat(out_arch, "p", 1);
-      strncat(out_arch, data->v_minor, strlen (data->v_minor));
+      strncat (out_arch, data->name, strlen (data->name));
+      strncat (out_arch, data->v_major, strlen (data->v_major));
+      strncat (out_arch, "p", 1);
+      strncat (out_arch, data->v_minor, strlen (data->v_minor));
       data->valid = 0;
     }
 }
@@ -5198,7 +5222,6 @@ riscv_write_out_arch_attr (void)
 	char subset[] = {*all_subsets, '\0'};
 	if (riscv_subset_supports (subset))
 	  {
-	    subset[0] = TOUPPER (subset[0]);
 	    riscv_update_arch_info_hash (subset, -1);
 
 	    /* Skip 'i' extension.  */
@@ -5209,23 +5232,23 @@ riscv_write_out_arch_attr (void)
 
   arch_attr_strlen = 0;
   hash_traverse (arch_info_hash, riscv_count_arch_attr_strlen);
-  /* Arch attribte is not set up.  */
+  /* Arch attribute is not set up.  */
   if (arch_attr_strlen == 0)
     return;
-  arch_attr_strlen--; /* First non standard arch without '_'.  */
-  arch_attr_strlen += 4; /* RV32/RV64.  */
+  if (!first_X_arch)
+    arch_attr_strlen--; /* first x do not need '_'.  */
+  first_X_arch = 1;
+  arch_attr_strlen += 4; /* rv32/rv64.  */
 
   out_arch = (char *) malloc
     ((arch_attr_strlen + 1) * sizeof (char));
-  memcpy (out_arch + arch_attr_strlen, "\0", 1);
-
+  out_arch[0] = '\0';
   if (attr[Tag_arch].s)
-    strncpy (out_arch, attr[Tag_arch].s, 4);
+    strncat (out_arch, attr[Tag_arch].s, 4);
   else if (xlen == 32)
-    strncpy (out_arch, "RV32", 4);
+    strncat (out_arch, "rv32", 4);
   else
-    strncpy (out_arch, "RV64", 4);
-  memcpy (out_arch + 4, "\0", 1);
+    strncat (out_arch, "rv64", 4);
 
   /* Update standard arch attributes.  */
   for (i = 0; arch_info[i].name; i++)
@@ -5248,6 +5271,9 @@ riscv_write_out_arch_attr (void)
   hash_traverse (arch_info_hash, riscv_update_non_standard_arch_attr);
 
   bfd_elf_add_proc_attr_string (stdoutput, Tag_arch, out_arch);
+
+  if (strlen (out_arch) > arch_attr_strlen)
+    as_fatal ("Not enough spaces for the architecture attribute name");
 
   /* Clean the unused items.  */
   first_X_arch = 1;
