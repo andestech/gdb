@@ -5229,6 +5229,10 @@ riscv_write_out_arch_attr (void)
 	      all_subsets++;
 	  }
       }
+  /* We only set the specific non-standard ISA "xv5m"
+     in the arch attribute through -march option.  */
+  if (riscv_subset_supports ("xv5m"))
+    riscv_update_arch_info_hash ("xv5m", 0);
 
   arch_attr_strlen = 0;
   hash_traverse (arch_info_hash, riscv_count_arch_attr_strlen);
