@@ -3286,7 +3286,8 @@ riscv_parse_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
   else
     {
       _bfd_error_handler
-	(_("error: %B: ISA string must begin with rv32/rv64"), ibfd);
+	(_("error: %B: ISA string of input (%s) is unmatched with "
+	   "output (%s)."), ibfd, in_arch, out_arch);
       return FALSE;
     }
 
@@ -3318,7 +3319,9 @@ riscv_parse_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
 	return FALSE;
 
       /* Must compare the versions of input and output objects.  */
-      if (version_i != version_o)
+      if (version_i != 0
+	  && version_o != 0
+	  && version_i != version_o)
 	{
 	  _bfd_error_handler
 	    (_("error: %B: cannot mix the objects that have "
@@ -3326,6 +3329,8 @@ riscv_parse_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
 	     ibfd, *standard_arch);
 	  return FALSE;
 	}
+      else if (version_o != 0)
+	version_i = version_o;
 
       if (find_arch_i || find_arch_o)
 	{
@@ -3372,7 +3377,7 @@ riscv_parse_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
 	{
 	  _bfd_error_handler
 	    (_("error: %B: cannot mix the objects that have "
-	       "different versions of ISA '%s'"),
+	       "different versions of ISA '%s'."),
 	     ibfd, name);
 	  return FALSE;
 	}
