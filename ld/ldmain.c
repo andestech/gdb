@@ -623,6 +623,11 @@ get_emulation (int argc, char **argv)
     {
       if (CONST_STRNEQ (argv[i], "-m"))
 	{
+#ifdef ENABLE_PLUGINS
+	  /* Ignore -mace=/path/to/libacetool.so here. */
+	  if (strncmp(argv[i], "-mace=", 6) == 0)
+	    continue;
+#endif /* ENABLE_PLUGINS */
 	  if (argv[i][2] == '\0')
 	    {
 	      /* -m EMUL */
