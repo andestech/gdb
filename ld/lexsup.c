@@ -892,7 +892,14 @@ parse_args (unsigned argc, char **argv)
 	  config.map_filename = "-";
 	  break;
 	case 'm':
-	  /* Ignore.  Was handled in a pre-parse.   */
+	  /* Ignore "-m" emulation options. Was handled in a pre-parse. */
+#ifdef ENABLE_PLUGINS
+	  if (strncmp(optarg, "ace=", 4) == 0)
+	    {
+	      if (plugin_opt_plugin_arg (argv[last_optind]))
+		einfo (_("%P%F: failed to set plugin argument: %s\n"), argv[last_optind]);
+	    }
+#endif /* ENABLE_PLUGINS */
 	  break;
 	case OPTION_MAP:
 	  config.map_filename = optarg;
