@@ -3359,6 +3359,11 @@ riscv_parse_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
       name = NULL;
       riscv_parse_arch_name (&in_arch, 0, &name);
       version_i = riscv_parse_arch_version (&in_arch);
+
+      /* Update the info of 'xv5m' if output does not set.  */
+      if (strcmp (name, "xv5m") == 0)
+	riscv_insert_non_standard_arch_info (name, version_i);
+
       non_standard_arch = non_standard_arch_info_head;
       while (non_standard_arch)
 	{
@@ -3390,12 +3395,27 @@ riscv_parse_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
       free ((char *) name);
     }
 
+  int non_standard_count = 0;
   first_X_arch = 1;
   while (non_standard_arch_info_head)
     {
       non_standard_arch = non_standard_arch_info_head;
-      if (!non_standard_arch->valid)
+      if (strcmp (non_standard_arch->name, "xv5m") == 0
+	  && (non_standard_count != 0
+	      || non_standard_arch->next))
 	{
+	  /* The ISA v5m can not link with other non-standard ISAs.  */
+	  _bfd_error_handler
+	    (_("error: %B: non standard ISA '%s' can not "
+	       "link with other non standard ISAs."),
+	     ibfd, non_standard_arch->name);
+	  return FALSE;
+	}
+      else if (strcmp (non_standard_arch->name, "xv5m") != 0
+	       && !non_standard_arch->valid)
+	{
+	  /* The ISA, except v5m, must be set in the input and
+	     output objects.  */
 	  _bfd_error_handler
 	    (_("error: %B: non standard ISA '%s' of output is "
 	       "unmatched with input."), ibfd, non_standard_arch->name);
@@ -3417,6 +3437,7 @@ riscv_parse_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
 
       non_standard_arch_info_head = non_standard_arch_info_head->next;
       free (non_standard_arch);
+      non_standard_count++;
     }
 
   return TRUE;
