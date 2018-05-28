@@ -5217,22 +5217,24 @@ riscv_write_out_arch_attr (void)
 
   attr = elf_known_obj_attributes_proc (stdoutput);
   if (!attr[Tag_arch].s)
-    for ( ; *all_subsets; all_subsets++)
-      {
-	char subset[] = {*all_subsets, '\0'};
-	if (riscv_subset_supports (subset))
-	  {
-	    riscv_update_arch_info_hash (subset, -1);
+    {
+      for ( ; *all_subsets; all_subsets++)
+	{
+	  char subset[] = {*all_subsets, '\0'};
+	  if (riscv_subset_supports (subset))
+	    {
+	      riscv_update_arch_info_hash (subset, -1);
 
-	    /* Skip 'i' extension.  */
-	    if (*all_subsets == 'e')
-	      all_subsets++;
-	  }
-      }
-  /* We only set the specific non-standard ISA "xv5m"
-     in the arch attribute through -march option.  */
-  if (riscv_subset_supports ("xv5m"))
-    riscv_update_arch_info_hash ("xv5m", 0);
+	      /* Skip 'i' extension.  */
+	      if (*all_subsets == 'e')
+		all_subsets++;
+	    }
+	}
+      /* We only set the specific non-standard ISA "xv5m"
+	 in the arch attribute through -march option.  */
+      if (riscv_subset_supports ("xv5m"))
+	riscv_update_arch_info_hash ("xv5m", 0);
+    }
 
   arch_attr_strlen = 0;
   hash_traverse (arch_info_hash, riscv_count_arch_attr_strlen);
@@ -5294,6 +5296,11 @@ riscv_set_public_attributes (void)
   hash_traverse (arch_info_hash, riscv_print_arch_info_hash);
   printf ("\n");
 #endif
+
+  /* The assembly dose not contain instructions.  */
+  if (!start_assemble_insn)
+    riscv_set_arch_attributes ();
+
   riscv_write_out_arch_attr ();
 
   if (!attributes_set_explicitly[Tag_priv_spec])
