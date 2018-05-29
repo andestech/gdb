@@ -616,6 +616,8 @@ const struct riscv_opcode riscv_opcodes[] =
 {"ffzmism",     0, {"I", 0}, "d,s,t",MATCH_FFZMISM, MASK_FFZMISM, match_opcode, 0 },
 {"ffmism",      0, {"I", 0}, "d,s,t",MATCH_FFMISM, MASK_FFMISM, match_opcode, 0 },
 {"flmism",      0, {"I", 0}, "d,s,t",MATCH_FLMISM, MASK_FLMISM, match_opcode, 0 },
+{"flhw",        0, {"F", 0}, "D,o(s)", MATCH_FLHW, MASK_FLHW, match_opcode, 0 },
+{"fshw",        0, {"F", 0}, "T,q(s)", MATCH_FSHW, MASK_FSHW, match_opcode, 0 },
 {"exec.it",     0, {"C", 0}, "Cet",  MATCH_C_EXECIT, MASK_C_EXECIT, match_opcode, 0 },
 {"ex9.it",      0, {"C", 0}, "Cei",  MATCH_C_EX9IT, MASK_C_EX9IT, match_opcode, 0 },
 
