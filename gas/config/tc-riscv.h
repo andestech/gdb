@@ -133,14 +133,14 @@ extern void riscv_post_relax_hook (void);
 
 /* Set if relax on this section is done or disabled.  */
 #define R_RISCV_RELAX_ENTRY_DISABLE_RELAX_FLAG		(1 << 31)
-/* EX9 must be explicitly enabled, so we won't mess up handcraft assembly code.
-   Enable EX9 optimization for this section.  */
-#define R_RISCV_RELAX_ENTRY_EX9_FLAG			(1 << 2)
+/* EXECIT must be explicitly enabled, so we won't mess up handcraft assembly code.
+   Enable EXECIT optimization for this section.  */
+#define R_RISCV_RELAX_ENTRY_EXECIT_FLAG			(1 << 2)
 
 /* Relocation flags for R_RISCV_RELAX_REGION_BEGIN/END.  */
 
-/* Suppress EX9 optimization in the region.  */
-#define R_RISCV_RELAX_REGION_NO_EX9_FLAG		(1 << 2)
+/* Suppress EXECIT optimization in the region.  */
+#define R_RISCV_RELAX_REGION_NO_EXECIT_FLAG		(1 << 2)
 /* A Innermost loop region.  Some optimizations is suppressed in this region
    due to performance drop.  */
 #define R_RISCV_RELAX_REGION_INNERMOST_LOOP_FLAG	(1 << 4)

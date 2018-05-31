@@ -1878,13 +1878,13 @@ nds_ld_list_options (FILE *file)
   --m[no-]gp-insn             Support gp relative instructions\n\
   --mexport-symbols=FILE      Exporting global symbols into linker script\n\
   --m[no-]avoid-btb-miss      Avoid btb miss \n\
-  --m[no-]ex9                 Disable/enable link-time EX9 relaxation\n\
-  --mexport-ex9=FILE          Export EX9 table after linking\n\
-  --mimport-ex9=FILE          Import Ex9 table for EX9 relaxation\n\
-  --mkeep-import-ex9          Keep import Ex9 table\n\
-  --mupdate-ex9               Update existing EX9 table\n\
-  --mex9-limit=NUM            Set maximum number of entries in ex9 table\n\
-  --mex9-loop-aware           Avoid generate EX9 instruction inside loop\n\
+  --m[no-]execit              Disable/enable link-time EXECIT relaxation\n\
+  --mexport-execit=FILE       Export .exec.itable after linking\n\
+  --mimport-execit=FILE       Import .exec.itable for EXECIT relaxation\n\
+  --mkeep-import-execit       Keep imported .exec.itable\n\
+  --mupdate-execit            Update existing .exec.itable\n\
+  --mexecit-limit=NUM         Set maximum number of entries in .exec.itable for this times\n\
+  --mexecit-loop-aware        Avoid generate exec.it instruction inside loop\n\
   "));
 }
 

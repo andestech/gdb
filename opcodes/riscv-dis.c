@@ -49,12 +49,12 @@ static int
 riscv_parse_opcode (bfd_vma, insn_t, disassemble_info *,
 		    struct riscv_private_data *, uint32_t);
 
-#define RISCV_PARSE_EX9IT       0x04
-#define RISCV_PARSE_EX9TAB      0x08
+#define RISCV_PARSE_EXECIT      0x04
+#define RISCV_PARSE_EXECIT_TAB  0x08
 
 static void
-riscv_ex9_info (bfd_vma pc ATTRIBUTE_UNUSED,
-		disassemble_info *info, uint32_t ex9_index)
+riscv_execit_info (bfd_vma pc ATTRIBUTE_UNUSED,
+		   disassemble_info *info, uint32_t execit_index)
 {
   uint32_t insn;
   static asection *section = NULL;
@@ -62,7 +62,7 @@ riscv_ex9_info (bfd_vma pc ATTRIBUTE_UNUSED,
   int insnlen;
   struct riscv_private_data *pd = info->private_data;
 
-  /* If no section info can be related to this ex9 insn, this may be just
+  /* If no section info can be related to this exec.it insn, this may be just
      a uninitial memory content, so not to decode it.  */
   if (info->section == NULL)
     return;
@@ -70,9 +70,9 @@ riscv_ex9_info (bfd_vma pc ATTRIBUTE_UNUSED,
   /* Lookup section in which itb is located.  */
   if (!section)
     {
-      section = bfd_get_section_by_name (info->section->owner, ".ex9.itable");
+      section = bfd_get_section_by_name (info->section->owner, ".exec.itable");
 
-      /* Lookup it only once, in case .ex9.itable doesn't exist at all.  */
+      /* Lookup it only once, in case .exec.itable doesn't exist at all.  */
       if (section == NULL)
 	section = (void *) -1;
     }
@@ -84,16 +84,16 @@ riscv_ex9_info (bfd_vma pc ATTRIBUTE_UNUSED,
     return;
 
   bfd_get_section_contents (section->owner, section, buffer,
-			    ex9_index * 4, 4);
+			    execit_index * 4, 4);
   insn = bfd_get_32 (section->owner, buffer);
   insnlen = riscv_insn_length (insn);
 
-  /* 16-bit instructions in ex9 table.  */
+  /* 16-bit instructions in .exec.itable.  */
   if (insnlen == 2)
-    riscv_parse_opcode (pc, (insn & 0x0000FFFF), info, pd, RISCV_PARSE_EX9IT);
-  /* 32-bit instructions in ex9 table.  */
+    riscv_parse_opcode (pc, (insn & 0x0000FFFF), info, pd, RISCV_PARSE_EXECIT);
+  /* 32-bit instructions in .exec.itable.  */
   else
-    riscv_parse_opcode (pc, insn, info, pd, RISCV_PARSE_EX9IT);
+    riscv_parse_opcode (pc, insn, info, pd, RISCV_PARSE_EXECIT);
 }
 
 /* Data structures used by ACE */
@@ -433,10 +433,10 @@ print_insn_args (const char *d, insn_t l, bfd_vma pc,
 		{
 		case 'i':
 		  print (info->stream, "#%d	!", (int)EXTRACT_RVC_EX9IT_IMM (l) >> 2);
-		  riscv_ex9_info (pc, info, (int)EXTRACT_RVC_EX9IT_IMM (l) >> 2);
+		  riscv_execit_info (pc, info, (int)EXTRACT_RVC_EX9IT_IMM (l) >> 2);
 		case 't':
 		  print (info->stream, "#%d     !", (int)EXTRACT_RVC_EXECIT_IMM (l) >> 2);
-		  riscv_ex9_info (pc, info, (int)EXTRACT_RVC_EXECIT_IMM (l) >> 2);
+		  riscv_execit_info (pc, info, (int)EXTRACT_RVC_EXECIT_IMM (l) >> 2);
 		  break;
 		}
 	      break;
@@ -557,17 +557,17 @@ print_insn_args (const char *d, insn_t l, bfd_vma pc,
 	  break;
 
 	case 'a':
-	  if (parse_mode & RISCV_PARSE_EX9IT)
+	  if (parse_mode & RISCV_PARSE_EXECIT)
 	    {
-	      /* Check instruction in ex9 table.  */
-	      info->target = EXTRACT_UJTYPE_IMM_EX9TAB (l);
+	      /* Check instruction in .exec.itable.  */
+	      info->target = EXTRACT_UJTYPE_IMM_EXECIT_TAB (l);
 	      info->target |= (pc & 0xffe00000);
 	      (*info->print_address_func) (info->target, info);
 	    }
-	  else if (parse_mode & RISCV_PARSE_EX9TAB)
+	  else if (parse_mode & RISCV_PARSE_EXECIT_TAB)
 	    {
-	      /* Check if decode ex9 table.  */
-	      info->target = EXTRACT_UJTYPE_IMM_EX9TAB (l);
+	      /* Check if decode .exec.itable.  */
+	      info->target = EXTRACT_UJTYPE_IMM_EXECIT_TAB (l);
 	      print (info->stream, "PC(31,21)|#0x%lx", info->target);
 	    }
 	  else
@@ -1045,8 +1045,8 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
     }
 
   if (info->section
-      && strstr (info->section->name, ".ex9.itable") != NULL)
-    match = riscv_parse_opcode (memaddr, word, info, pd, RISCV_PARSE_EX9TAB);
+      && strstr (info->section->name, ".exec.itable") != NULL)
+    match = riscv_parse_opcode (memaddr, word, info, pd, RISCV_PARSE_EXECIT_TAB);
   else
     match = riscv_parse_opcode (memaddr, word, info, pd, 0);
 
