@@ -998,7 +998,7 @@ static reloc_howto_type howto_table[] =
 	 ENCODE_ITYPE_IMM (-1U),	/* dst_mask */
 	 FALSE),			/* pcrel_offset */
 
-  /* Mark which section can do extra linker optimization (like ex9).  */
+  /* Mark which section can do extra linker optimization (like EXECIT).  */
   HOWTO (R_RISCV_RELAX_ENTRY,		/* type */
 	 0,				/* rightshift */
 	 2,				/* size */

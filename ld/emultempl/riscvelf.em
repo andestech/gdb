@@ -33,16 +33,16 @@ static FILE *sym_ld_script = NULL;	/* Export global symbols into linker
 					   script.  */
 static int avoid_btb_miss = 1;		/* Default avoid BTB miss.  */
 
-#define RISCV_EX9_EXT
+#define RISCV_EXECIT_EXT
 static int target_optimize = 0;		/* Switch optimization.  */
 static int relax_status = 0;		/* Finish optimization.  */
-static char *ex9_export_file = NULL;	/* Export the ex9 table.  */
-static FILE *ex9_import_file = NULL;	/* Do ex9 according to the imported
-					   ex9 table.  */
-static int keep_import_ex9 = 0;		/* Keep the imported ex9 table.  */
-static int update_ex9_table = 0;
-static int ex9_limit = -1;		/* Default set it to 1024 entries.  */
-static int ex9_loop_aware = 0;		/* --mex9-loop-aware.  */
+static char *execit_export_file = NULL;	/* Export the .exec.itable.  */
+static FILE *execit_import_file = NULL;	/* Do EXECIT according to the imported
+					   .exec.itable.  */
+static int keep_import_execit = 0;	/* Keep the imported .exec.itable.  */
+static int update_execit_table = 0;
+static int execit_limit = -1;		/* Default set it to 1024 entries.  */
+static int execit_loop_aware = 0;	/* --mexecit-loop-aware.  */
 
 /* Put target dependent option into info hash table.  */
 
@@ -61,12 +61,12 @@ riscv_elf_set_target_option (struct bfd_link_info *info)
   table->avoid_btb_miss = avoid_btb_miss;
   table->target_optimize = target_optimize;
   table->relax_status = relax_status;
-  table->ex9_export_file = ex9_export_file;
-  table->ex9_import_file = ex9_import_file;
-  table->keep_import_ex9 = keep_import_ex9;
-  table->update_ex9_table = update_ex9_table;
-  table->ex9_limit = ex9_limit;
-  table->ex9_loop_aware = ex9_loop_aware;
+  table->execit_export_file = execit_export_file;
+  table->execit_import_file = execit_import_file;
+  table->keep_import_execit = keep_import_execit;
+  table->update_execit_table = update_execit_table;
+  table->execit_limit = execit_limit;
+  table->execit_loop_aware = execit_loop_aware;
 }
 
 static void
@@ -75,13 +75,13 @@ riscv_elf_append_section (struct bfd_link_info *info, bfd *abfd)
   asection *itable;
   struct bfd_link_hash_entry *h;
 
-  if (target_optimize & RISCV_RELAX_EX9_ON
-      && (ex9_import_file == NULL
-	  || keep_import_ex9
-	  || update_ex9_table))
+  if (target_optimize & RISCV_RELAX_EXECIT_ON
+      && (execit_import_file == NULL
+	  || keep_import_execit
+	  || update_execit_table))
     {
-      /* Create section ".ex9.itable".  */
-      itable = bfd_make_section_with_flags (abfd, ".ex9.itable",
+      /* Create section ".exec.itable".  */
+      itable = bfd_make_section_with_flags (abfd, ".exec.itable",
 					    SEC_CODE | SEC_ALLOC | SEC_LOAD
 					    | SEC_HAS_CONTENTS | SEC_READONLY
 					    | SEC_IN_MEMORY | SEC_KEEP
@@ -90,18 +90,18 @@ riscv_elf_append_section (struct bfd_link_info *info, bfd *abfd)
 	{
 	  itable->gc_mark = 1;
 	  itable->alignment_power = 2;
-	  /* Default ex9 table size can not be zero, so we can not set
-	     it according to ex9_limit. Since we will adjust the table size
-	     in riscv_elf_ex9_build_itable, it is okay to set the size to
+	  /* Default size of .exec.itable can not be zero, so we can not set
+	     it according to execit_limit. Since we will adjust the table size
+	     in riscv_elf_execit_build_itable, it is okay to set the size to
 	     the maximum value here.  */
 	  itable->size = 0x1000;
 	  itable->contents = bfd_zalloc (abfd, itable->size);
 
-	  /* Add a symbol in the head of ex9.itable to objdump clearly.  */
-	  h = bfd_link_hash_lookup (info->hash, "_EX9_BASE_",
+	  /* Add a symbol in the head of .exec.itable to objdump clearly.  */
+	  h = bfd_link_hash_lookup (info->hash, "_EXECIT_BASE_",
 				    FALSE, FALSE, FALSE);
 	  _bfd_generic_link_add_one_symbol
-	    (info, info->output_bfd, "_EX9_BASE_",
+	    (info, info->output_bfd, "_EXECIT_BASE_",
 	     BSF_GLOBAL | BSF_WEAK, itable, 0, (const char *) NULL, FALSE,
 	     get_elf_backend_data (info->output_bfd)->collect, &h);
 	}
@@ -225,17 +225,18 @@ PARSE_AND_LIST_PROLOGUE='
 #define OPTION_AVOID_BTB_MISS		(OPTION_BASELINE + 5)
 #define OPTION_NO_AVOID_BTB_MISS	(OPTION_BASELINE + 6)
 
-/* These are only available to ex9.  */
-#if defined RISCV_EX9_EXT
-#define OPTION_EX9_BASELINE		320
-#define OPTION_EX9_TABLE		(OPTION_EX9_BASELINE + 1)
-#define OPTION_NO_EX9_TABLE		(OPTION_EX9_BASELINE + 2)
-#define OPTION_EXPORT_EX9		(OPTION_EX9_BASELINE + 3)
-#define OPTION_IMPORT_EX9		(OPTION_EX9_BASELINE + 4)
-#define OPTION_KEEP_IMPORT_EX9		(OPTION_EX9_BASELINE + 5)
-#define OPTION_UPDATE_EX9		(OPTION_EX9_BASELINE + 6)
-#define OPTION_EX9_LIMIT		(OPTION_EX9_BASELINE + 7)
-#define OPTION_EX9_LOOP			(OPTION_EX9_BASELINE + 8)
+/* These are only available to EXECIT.  */
+#if defined RISCV_EXECIT_EXT
+#define OPTION_EXECIT_BASELINE		320
+#define OPTION_EXECIT_TABLE		(OPTION_EXECIT_BASELINE + 1)
+#define OPTION_EX9_TABLE		(OPTION_EXECIT_BASELINE + 2)
+#define OPTION_NO_EXECIT_TABLE		(OPTION_EXECIT_BASELINE + 3)
+#define OPTION_EXPORT_EXECIT		(OPTION_EXECIT_BASELINE + 4)
+#define OPTION_IMPORT_EXECIT		(OPTION_EXECIT_BASELINE + 5)
+#define OPTION_KEEP_IMPORT_EXECIT	(OPTION_EXECIT_BASELINE + 6)
+#define OPTION_UPDATE_EXECIT		(OPTION_EXECIT_BASELINE + 7)
+#define OPTION_EXECIT_LIMIT		(OPTION_EXECIT_BASELINE + 8)
+#define OPTION_EXECIT_LOOP		(OPTION_EXECIT_BASELINE + 9)
 #endif
 '
 PARSE_AND_LIST_LONGOPTS='
@@ -246,16 +247,25 @@ PARSE_AND_LIST_LONGOPTS='
   { "mavoid-btb-miss", no_argument, NULL, OPTION_AVOID_BTB_MISS},
   { "mno-avoid-btb-miss", no_argument, NULL, OPTION_NO_AVOID_BTB_MISS},
 
-/* These are specific optioins for ex9-ext support.  */
-#if defined RISCV_EX9_EXT
+/* These are specific optioins for EXECIT support.  */
+#if defined RISCV_EXECIT_EXT
+  { "mexecit", no_argument, NULL, OPTION_EXECIT_TABLE},
+  { "mno-execit", no_argument, NULL, OPTION_NO_EXECIT_TABLE},
+  { "mexport-execit", required_argument, NULL, OPTION_EXPORT_EXECIT},
+  { "mimport-execit", required_argument, NULL, OPTION_IMPORT_EXECIT},
+  { "mkeep-import-execit", no_argument, NULL, OPTION_KEEP_IMPORT_EXECIT},
+  { "mupdate-execit", no_argument, NULL, OPTION_UPDATE_EXECIT},
+  { "mexecit-limit", required_argument, NULL, OPTION_EXECIT_LIMIT},
+  { "mexecit-loop-aware", no_argument, NULL, OPTION_EXECIT_LOOP},
+  /* Obsolete options for EXECIT.  */
   { "mex9", no_argument, NULL, OPTION_EX9_TABLE},
-  { "mno-ex9", no_argument, NULL, OPTION_NO_EX9_TABLE},
-  { "mexport-ex9", required_argument, NULL, OPTION_EXPORT_EX9},
-  { "mimport-ex9", required_argument, NULL, OPTION_IMPORT_EX9},
-  { "mkeep-import-ex9", no_argument, NULL, OPTION_KEEP_IMPORT_EX9},
-  { "mupdate-ex9", no_argument, NULL, OPTION_UPDATE_EX9},
-  { "mex9-limit", required_argument, NULL, OPTION_EX9_LIMIT},
-  { "mex9-loop-aware", no_argument, NULL, OPTION_EX9_LOOP},
+  { "mno-ex9", no_argument, NULL, OPTION_NO_EXECIT_TABLE},
+  { "mexport-ex9", required_argument, NULL, OPTION_EXPORT_EXECIT},
+  { "mimport-ex9", required_argument, NULL, OPTION_IMPORT_EXECIT},
+  { "mkeep-import-ex9", no_argument, NULL, OPTION_KEEP_IMPORT_EXECIT},
+  { "mupdate-ex9", no_argument, NULL, OPTION_UPDATE_EXECIT},
+  { "mex9-limit", required_argument, NULL, OPTION_EXECIT_LIMIT},
+  { "mex9-loop-aware", no_argument, NULL, OPTION_EXECIT_LOOP},
 #endif
 '
 PARSE_AND_LIST_OPTIONS='
@@ -266,15 +276,15 @@ fprintf (file, _("\
     --m[no-]avoid-btb-miss      Avoid btb miss \n\
 "));
 
-#if defined RISCV_EX9_EXT
+#if defined RISCV_EXECIT_EXT
   fprintf (file, _("\
-    --m[no-]ex9                 Disable/enable link-time EX9 relaxation\n\
-    --mexport-ex9=FILE          Export EX9 table after linking\n\
-    --mimport-ex9=FILE          Import Ex9 table for EX9 relaxation\n\
-    --mkeep-import-ex9          Keep import Ex9 table\n\
-    --mupdate-ex9               Update existing EX9 table\n\
-    --mex9-limit=NUM            Set maximum number of entries in ex9 table for this times\n\
-    --mex9-loop-aware           Avoid generate EX9 instruction inside loop\n\
+    --m[no-]execit              Disable/enable link-time EXECIT relaxation\n\
+    --mexport-execit=FILE       Export .exec.itable after linking\n\
+    --mimport-execit=FILE       Import .exec.itable for EXECIT relaxation\n\
+    --mkeep-import-execit       Keep imported .exec.itable\n\
+    --mupdate-execit            Update existing .exec.itable\n\
+    --mexecit-limit=NUM         Set maximum number of entries in .exec.itable for this times\n\
+    --mexecit-loop-aware        Avoid generate exec.it instruction inside loop\n\
 "));
 #endif
 '
@@ -308,47 +318,59 @@ PARSE_AND_LIST_ARGS_CASES='
     avoid_btb_miss = 0;
     break;
 
-#if defined RISCV_EX9_EXT
+#if defined RISCV_EXECIT_EXT
   case OPTION_EX9_TABLE:
-    target_optimize |= RISCV_RELAX_EX9_ON;
+    if (execit_limit == -1
+	|| execit_limit > 512)
+    execit_limit = 512;
+  case OPTION_EXECIT_TABLE:
+    target_optimize |= RISCV_RELAX_EXECIT_ON;
     break;
-  case OPTION_NO_EX9_TABLE:
-    target_optimize &= ~RISCV_RELAX_EX9_ON;
+  case OPTION_NO_EXECIT_TABLE:
+    target_optimize &= ~RISCV_RELAX_EXECIT_ON;
     break;
-  case OPTION_EXPORT_EX9:
+  case OPTION_EXPORT_EXECIT:
     if (!optarg)
-      einfo (_("Missing file for --mexport-ex9=<file>.\n"));
+      einfo (_("Missing file for --mexport-execit=<file>.\n"));
 
-      ex9_export_file = optarg;
-      /* Open file in the riscv_elf_relocate_ex9_table.  */
+      execit_export_file = optarg;
+      /* Open file in the riscv_elf_relocate_execit_table.  */
       break;
-  case OPTION_IMPORT_EX9:
+  case OPTION_IMPORT_EXECIT:
     if (!optarg)
-      einfo (_("Missing file for --mimport-ex9=<file>.\n"));
+      einfo (_("Missing file for --mimport-execit=<file>.\n"));
 
-    ex9_import_file = fopen (optarg, "rb+");
-    if(ex9_import_file == NULL)
-      einfo (_("ERROR %P%F: cannot open ex9 import file %s.\n"), optarg);
+    execit_import_file = fopen (optarg, "rb+");
+    if(execit_import_file == NULL)
+      einfo (_("ERROR %P%F: cannot open execit import file %s.\n"), optarg);
     break;
-  case OPTION_KEEP_IMPORT_EX9:
-    keep_import_ex9 = 1;
+  case OPTION_KEEP_IMPORT_EXECIT:
+    keep_import_execit = 1;
     break;
-  case OPTION_UPDATE_EX9:
-    update_ex9_table = 1;
+  case OPTION_UPDATE_EXECIT:
+    update_execit_table = 1;
     break;
-  case OPTION_EX9_LIMIT:
+  case OPTION_EXECIT_LIMIT:
     if (optarg)
       {
-	ex9_limit = atoi (optarg);
-	if (ex9_limit > 1024 || ex9_limit < 0)
+	if (execit_limit != -1
+	    && atoi (optarg) > execit_limit)
+	  einfo (_("Warning: the value of execit_limit (%d) is larger "
+		   "than the current setting (%d)\n"),
+		 atoi (optarg), execit_limit);
+	else
+	  execit_limit = atoi (optarg);
+
+	if (execit_limit > 1024 || execit_limit < 0)
 	  {
-	    einfo (_("ERROR: the range of ex9_limit must between 0 and 1024 (default 1024)\n"));
+	    einfo (_("ERROR: the range of execit_limit must between "
+		     "0 and 1024 (default 1024)\n"));
 	    exit (1);
 	  }
       }
     break;
-  case OPTION_EX9_LOOP:
-    ex9_loop_aware = 1;
+  case OPTION_EXECIT_LOOP:
+    execit_loop_aware = 1;
     break;
 #endif
 '

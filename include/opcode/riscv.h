@@ -139,7 +139,7 @@ static const char * const riscv_vma[2] =
   (RV_X(x, 20, 11))
 
 /* NDS V5 Extension.  */
-#define EXTRACT_UJTYPE_IMM_EX9TAB(x) \
+#define EXTRACT_UJTYPE_IMM_EXECIT_TAB(x) \
   ((RV_X(x, 21, 10) << 1) | (RV_X(x, 20, 1) << 11) | (RV_X(x, 12, 8) << 12) | (RV_X(x, 31, 1) << 20))
 #define EXTRACT_RVC_EX9IT_IMM(x) \
   ((RV_X(x, 4, 1) << 2) | (RV_X(x, 10, 2) << 3) | (RV_X(x, 2, 1) << 5) | (RV_X(x, 5, 2) << 6) | (RV_X(x, 9, 1) << 8) | (RV_X(x, 3, 1) << 9) | (RV_X(x, 12, 1) << 10))
