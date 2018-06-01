@@ -3701,7 +3701,7 @@ riscv_parse_arch_attribute (char *in_arch)
     case 'i':
       break;
     default:
-      as_fatal (".attribue %s: first ISA subset must be i/g/e",
+      as_fatal (".attribute %s: first ISA subset must be i/g/e",
 		in_arch);
     }
 
@@ -3729,7 +3729,7 @@ riscv_parse_arch_attribute (char *in_arch)
 	      free ((char *) name);
 	    }
 	  else
-	    as_fatal (".attribue %c: Standard ISA subset can not "
+	    as_fatal (".attribute %c: Standard ISA subset can not "
 		      "be set after Non-standard ISA subset.",
 		      *in_arch);
 	  break;
@@ -3748,7 +3748,7 @@ riscv_parse_arch_attribute (char *in_arch)
 	  free ((char *) name);
 	  break;
 	default:
-	  as_fatal (".attribue %s: ISA subset is unsupported",
+	  as_fatal (".attribute %s: ISA subset is unsupported",
 		    in_arch);
 	}
     }
@@ -3768,7 +3768,7 @@ riscv_set_arch_attributes (void)
   attr = elf_known_obj_attributes_proc (stdoutput);
   if (attr[Tag_arch].s
       && !riscv_parse_arch_attribute (attr[Tag_arch].s))
-    as_fatal ("internal error: cannot parse .attribue %s",
+    as_fatal ("internal error: cannot parse .attribute %s",
               attr[Tag_arch].s);
 }
 
