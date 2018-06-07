@@ -3182,8 +3182,8 @@ riscv_parse_arch_name (char **in_arch, int strlen, char **name)
   if (!strlen)
     {
       i = 0;
-      if (strncmp (string, "xv5m", 4) == 0)
-	i += 4;
+      if (strncmp (string, "xv5", 3) == 0)
+	i += 3;
       else
 	while (string[i] != '\0'
 	       && string[i] != '_'
@@ -3335,8 +3335,8 @@ riscv_parse_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
       riscv_parse_arch_name (&in_arch, 0, &name);
       version_i = riscv_parse_arch_version (&in_arch);
 
-      /* Update the info of 'xv5m' if output does not set.  */
-      if (strcmp (name, "xv5m") == 0)
+      /* Update the info of 'xv5' if output does not set.  */
+      if (strcmp (name, "xv5") == 0)
 	riscv_insert_non_standard_arch_info (name, version_i);
 
       non_standard_arch = non_standard_arch_info_head;
@@ -3375,21 +3375,21 @@ riscv_parse_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
   while (non_standard_arch_info_head)
     {
       non_standard_arch = non_standard_arch_info_head;
-      if (strcmp (non_standard_arch->name, "xv5m") == 0
+      if (strcmp (non_standard_arch->name, "xv5") == 0
 	  && (non_standard_count != 0
 	      || non_standard_arch->next))
 	{
-	  /* The ISA v5m can not link with other non-standard ISAs.  */
+	  /* The ISA v5 can not link with other non-standard ISAs.  */
 	  _bfd_error_handler
 	    (_("error: %B: non standard ISA '%s' can not "
 	       "link with other non standard ISAs."),
 	     ibfd, non_standard_arch->name);
 	  return FALSE;
 	}
-      else if (strcmp (non_standard_arch->name, "xv5m") != 0
+      else if (strcmp (non_standard_arch->name, "xv5") != 0
 	       && !non_standard_arch->valid)
 	{
-	  /* The ISA, except v5m, must be set in the input and
+	  /* The ISA, except v5, must be set in the input and
 	     output objects.  */
 	  _bfd_error_handler
 	    (_("error: %B: non standard ISA '%s' of output is "
@@ -4149,7 +4149,7 @@ _bfd_riscv_relax_lui (bfd *abfd,
 	h = (struct elf_link_hash_entry *) h->root.u.i.link;
     }
 
-  /* Enable nds v5m gp relative insns.  */
+  /* Enable nds v5 gp relative insns.  */
   if (gp_relative_insn)
     {
       int do_replace = 0;
@@ -4241,7 +4241,7 @@ _bfd_riscv_relax_lui (bfd *abfd,
 	      bfd_put_32 (abfd, insn, contents + rel->r_offset);
 	    }
 	  else
-	    /* The low insn can not be relaxed to v5m gp-relative insn.
+	    /* The low insn can not be relaxed to v5 gp-relative insn.
 	       Record the referenced symbol.  */
 	    record_and_find_relax_gp_syms (sym_sec, isym, h, 1);
 	  return TRUE;
