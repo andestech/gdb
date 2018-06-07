@@ -3583,8 +3583,8 @@ riscv_parse_arch_name (char **in_arch, int strlen, char **name)
   if (!strlen)
     {
       i = 0;
-      if (strncmp (string, "xv5m", 4) == 0)
-	i += 4;
+      if (strncmp (string, "xv5", 3) == 0)
+	i += 3;
       else
 	while (string[i] != '\0'
 	       && string[i] != '_'
@@ -5231,10 +5231,10 @@ riscv_write_out_arch_attr (void)
 		all_subsets++;
 	    }
 	}
-      /* We only set the specific non-standard ISA "xv5m"
+      /* We only set the specific non-standard ISA "xv5"
 	 in the arch attribute through -march option.  */
-      if (riscv_subset_supports ("xv5m"))
-	riscv_update_arch_info_hash ("xv5m", 0);
+      if (riscv_subset_supports ("xv5"))
+	riscv_update_arch_info_hash ("xv5", 0);
     }
 
   arch_attr_strlen = 0;
