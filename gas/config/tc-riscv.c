@@ -3546,7 +3546,10 @@ riscv_parse_arch_attribute (char *in_arch)
 	  version = riscv_parse_arch_version (&in_arch);
 	  if (version < 0)
 	    version = 0;
-	  riscv_update_arch_info_hash (name, version);
+	  if (strcmp (name, "xv5") == 0)
+	    riscv_update_arch_info_hash ("xv5-", version);
+	  else
+	    riscv_update_arch_info_hash (name, version);
 	  if (*in_arch == '_')
 	    in_arch++;
 
@@ -5007,7 +5010,7 @@ riscv_write_out_arch_attr (void)
       /* We only set the specific non-standard ISA "xv5"
 	 in the arch attribute through -march option.  */
       if (riscv_subset_supports ("xv5"))
-	riscv_update_arch_info_hash ("xv5", 0);
+	riscv_update_arch_info_hash ("xv5-", 0);
     }
 
   arch_attr_strlen = 0;
