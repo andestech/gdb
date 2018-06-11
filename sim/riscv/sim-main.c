@@ -947,12 +947,16 @@ execute_f (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 								+ i_imm);
       break;
     case MATCH_FSHW:
+      {
+      union32_t val;
       TRACE_INSN (cpu, "fshw %s, %" PRIiTW "(%s)",
 		  frs2_name, s_imm, rs1_name);
-      float val = riscv_get_FP_half (cpu, rs2);
+
+      val.S = riscv_get_FP_half (cpu, rs2);
       sim_core_write_unaligned_2 (cpu, cpu->pc, write_map,
-				  cpu->regs[rs1].u + s_imm, val);
+				  cpu->regs[rs1].u + s_imm, val.h[0]);
       break;
+      }
     default:
       TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
       sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);

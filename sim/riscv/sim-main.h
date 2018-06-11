@@ -115,6 +115,17 @@ typedef union
     } b32;
 } union64_t;
 
+typedef union
+{
+  int32_t  w;
+  int16_t  H[2];
+
+  uint32_t W;
+  uint16_t h[2];
+
+  float    S;
+} union32_t;
+
 typedef union FRegisterValue
 {
   uint64_t     v[2];
