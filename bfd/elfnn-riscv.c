@@ -3202,8 +3202,8 @@ riscv_parse_arch_name (char **in_arch, int strlen, char **name)
   if (!strlen)
     {
       i = 0;
-      if (strncmp (string, "xv5", 3) == 0)
-	i += 3;
+      if (strncmp (string, "xv5-", 4) == 0)
+	i += 4;
       else
 	while (string[i] != '\0'
 	       && string[i] != '_'
@@ -3355,8 +3355,8 @@ riscv_parse_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
       riscv_parse_arch_name (&in_arch, 0, &name);
       version_i = riscv_parse_arch_version (&in_arch);
 
-      /* Update the info of 'xv5' if output does not set.  */
-      if (strcmp (name, "xv5") == 0)
+      /* Update the info of 'xv5-' if output does not set.  */
+      if (strcmp (name, "xv5-") == 0)
 	riscv_insert_non_standard_arch_info (name, version_i);
 
       non_standard_arch = non_standard_arch_info_head;
@@ -3395,7 +3395,7 @@ riscv_parse_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
   while (non_standard_arch_info_head)
     {
       non_standard_arch = non_standard_arch_info_head;
-      if (strcmp (non_standard_arch->name, "xv5") == 0
+      if (strcmp (non_standard_arch->name, "xv5-") == 0
 	  && (non_standard_count != 0
 	      || non_standard_arch->next))
 	{
@@ -3406,7 +3406,7 @@ riscv_parse_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
 	     ibfd, non_standard_arch->name);
 	  return FALSE;
 	}
-      else if (strcmp (non_standard_arch->name, "xv5") != 0
+      else if (strcmp (non_standard_arch->name, "xv5-") != 0
 	       && !non_standard_arch->valid)
 	{
 	  /* The ISA, except v5, must be set in the input and
