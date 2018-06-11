@@ -119,13 +119,14 @@ typedef union FRegisterValue
 {
   uint64_t     v[2];
   uint32_t     w[4];
+  uint16_t     h[8];
 
   int64_t      V[2];
   int32_t      W[4];
+  int16_t      H[8];
 
   float        S[4];
   double       D[2];
-
 } FRegister;
 
 struct _sim_cpu {
