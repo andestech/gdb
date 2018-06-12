@@ -117,10 +117,10 @@ typedef union
 
 typedef union
 {
-  int32_t  w;
+  int32_t  W;
   int16_t  H[2];
 
-  uint32_t W;
+  uint32_t w;
   uint16_t h[2];
 
   float    S;
