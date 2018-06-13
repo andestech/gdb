@@ -24,4 +24,7 @@ SIM_OBJS = \
 	machs.o \
 	sim-main.o
 
+SIM_EXTRA_LIBDEPS = \
+	libsoftfloat.a
+
 ## COMMON_POST_CONFIG_FRAG

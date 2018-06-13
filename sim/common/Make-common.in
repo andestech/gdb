@@ -143,6 +143,228 @@ SIM_COMMON_HW_OBJS = \
 	hw-tree.o \
 	sim-hw.o \
 
+LIBSOFTFLOAT_OBJS = \
+	f128_add.o \
+	f128_classify.o \
+	f128_div.o \
+	f128_eq.o \
+	f128_eq_signaling.o \
+	f128_isSignalingNaN.o \
+	f128_le.o \
+	f128_le_quiet.o \
+	f128_lt.o \
+	f128_lt_quiet.o \
+	f128_mulAdd.o \
+	f128_mul.o \
+	f128_rem.o \
+	f128_roundToInt.o \
+	f128_sqrt.o \
+	f128_sub.o \
+	f128_to_f16.o \
+	f128_to_f32.o \
+	f128_to_f64.o \
+	f128_to_i32.o \
+	f128_to_i32_r_minMag.o \
+	f128_to_i64.o \
+	f128_to_i64_r_minMag.o \
+	f128_to_ui32.o \
+	f128_to_ui32_r_minMag.o \
+	f128_to_ui64.o \
+	f128_to_ui64_r_minMag.o \
+	f16_add.o \
+	f16_div.o \
+	f16_eq.o \
+	f16_eq_signaling.o \
+	f16_isSignalingNaN.o \
+	f16_le.o \
+	f16_le_quiet.o \
+	f16_lt.o \
+	f16_lt_quiet.o \
+	f16_mulAdd.o \
+	f16_mul.o \
+	f16_rem.o \
+	f16_roundToInt.o \
+	f16_sqrt.o \
+	f16_sub.o \
+	f16_to_f128.o \
+	f16_to_f32.o \
+	f16_to_f64.o \
+	f16_to_i32.o \
+	f16_to_i32_r_minMag.o \
+	f16_to_i64.o \
+	f16_to_i64_r_minMag.o \
+	f16_to_ui32.o \
+	f16_to_ui32_r_minMag.o \
+	f16_to_ui64.o \
+	f16_to_ui64_r_minMag.o \
+	f32_add.o \
+	f32_classify.o \
+	f32_div.o \
+	f32_eq.o \
+	f32_eq_signaling.o \
+	f32_isSignalingNaN.o \
+	f32_le.o \
+	f32_le_quiet.o \
+	f32_lt.o \
+	f32_lt_quiet.o \
+	f32_mulAdd.o \
+	f32_mul.o \
+	f32_rem.o \
+	f32_roundToInt.o \
+	f32_sqrt.o \
+	f32_sub.o \
+	f32_to_f128.o \
+	f32_to_f16.o \
+	f32_to_f64.o \
+	f32_to_i32.o \
+	f32_to_i32_r_minMag.o \
+	f32_to_i64.o \
+	f32_to_i64_r_minMag.o \
+	f32_to_ui32.o \
+	f32_to_ui32_r_minMag.o \
+	f32_to_ui64.o \
+	f32_to_ui64_r_minMag.o \
+	f64_add.o \
+	f64_classify.o \
+	f64_div.o \
+	f64_eq.o \
+	f64_eq_signaling.o \
+	f64_isSignalingNaN.o \
+	f64_le.o \
+	f64_le_quiet.o \
+	f64_lt.o \
+	f64_lt_quiet.o \
+	f64_mulAdd.o \
+	f64_mul.o \
+	f64_rem.o \
+	f64_roundToInt.o \
+	f64_sqrt.o \
+	f64_sub.o \
+	f64_to_f128.o \
+	f64_to_f16.o \
+	f64_to_f32.o \
+	f64_to_i32.o \
+	f64_to_i32_r_minMag.o \
+	f64_to_i64.o \
+	f64_to_i64_r_minMag.o \
+	f64_to_ui32.o \
+	f64_to_ui32_r_minMag.o \
+	f64_to_ui64.o \
+	f64_to_ui64_r_minMag.o \
+	i32_to_f128.o \
+	i32_to_f16.o \
+	i32_to_f32.o \
+	i32_to_f64.o \
+	i64_to_f128.o \
+	i64_to_f16.o \
+	i64_to_f32.o \
+	i64_to_f64.o \
+	s_add128.o \
+	s_add256M.o \
+	s_addCarryM.o \
+	s_addComplCarryM.o \
+	s_addMagsF128.o \
+	s_addMagsF16.o \
+	s_addMagsF32.o \
+	s_addMagsF64.o \
+	s_addM.o \
+	s_approxRecip_1Ks.o \
+	s_approxRecip32_1.o \
+	s_approxRecipSqrt_1Ks.o \
+	s_approxRecipSqrt32_1.o \
+	s_commonNaNToF128UI.o \
+	s_commonNaNToF16UI.o \
+	s_commonNaNToF32UI.o \
+	s_commonNaNToF64UI.o \
+	s_compare128M.o \
+	s_compare96M.o \
+	s_countLeadingZeros16.o \
+	s_countLeadingZeros32.o \
+	s_countLeadingZeros64.o \
+	s_countLeadingZeros8.o \
+	s_eq128.o \
+	s_f128UIToCommonNaN.o \
+	s_f16UIToCommonNaN.o \
+	s_f32UIToCommonNaN.o \
+	s_f64UIToCommonNaN.o \
+	s_le128.o \
+	s_lt128.o \
+	s_mul128By32.o \
+	s_mul128MTo256M.o \
+	s_mul128To256M.o \
+	s_mul64ByShifted32To128.o \
+	s_mul64To128.o \
+	s_mul64To128M.o \
+	s_mulAddF128.o \
+	s_mulAddF16.o \
+	s_mulAddF32.o \
+	s_mulAddF64.o \
+	s_negXM.o \
+	s_normRoundPackToF128.o \
+	s_normRoundPackToF16.o \
+	s_normRoundPackToF32.o \
+	s_normRoundPackToF64.o \
+	s_normSubnormalF128Sig.o \
+	s_normSubnormalF16Sig.o \
+	s_normSubnormalF32Sig.o \
+	s_normSubnormalF64Sig.o \
+	softfloat_raiseFlags.o \
+	softfloat_state.o \
+	s_propagateNaNF128UI.o \
+	s_propagateNaNF16UI.o \
+	s_propagateNaNF32UI.o \
+	s_propagateNaNF64UI.o \
+	s_remStepMBy32.o \
+	s_roundMToI64.o \
+	s_roundMToUI64.o \
+	s_roundPackMToI64.o \
+	s_roundPackMToUI64.o \
+	s_roundPackToF128.o \
+	s_roundPackToF16.o \
+	s_roundPackToF32.o \
+	s_roundPackToF64.o \
+	s_roundPackToI32.o \
+	s_roundPackToI64.o \
+	s_roundPackToUI32.o \
+	s_roundPackToUI64.o \
+	s_roundToI32.o \
+	s_roundToI64.o \
+	s_roundToUI32.o \
+	s_roundToUI64.o \
+	s_shiftRightJam128.o \
+	s_shiftRightJam128Extra.o \
+	s_shiftRightJam256M.o \
+	s_shiftRightJam32.o \
+	s_shiftRightJam64.o \
+	s_shiftRightJam64Extra.o \
+	s_shortShiftLeft128.o \
+	s_shortShiftLeft64To96M.o \
+	s_shortShiftLeftM.o \
+	s_shortShiftRight128.o \
+	s_shortShiftRightExtendM.o \
+	s_shortShiftRightJam128.o \
+	s_shortShiftRightJam128Extra.o \
+	s_shortShiftRightJam64.o \
+	s_shortShiftRightJam64Extra.o \
+	s_shortShiftRightJamM.o \
+	s_shortShiftRightM.o \
+	s_sub128.o \
+	s_sub1XM.o \
+	s_sub256M.o \
+	s_subMagsF128.o \
+	s_subMagsF16.o \
+	s_subMagsF32.o \
+	s_subMagsF64.o \
+	s_subM.o \
+	ui32_to_f128.o \
+	ui32_to_f16.o \
+	ui32_to_f32.o \
+	ui32_to_f64.o \
+	ui64_to_f128.o \
+	ui64_to_f16.o \
+	ui64_to_f32.o \
+	ui64_to_f64.o
+
 SIM_NEW_COMMON_OBJS = \
 	sim-arange.o \
 	sim-bits.o \
@@ -212,7 +434,10 @@ CSEARCH = -I. -I$(srcdir) -I../common -I$(srccom) \
   -I../../opcodes -I$(srcroot)/opcodes \
   -I../.. \
   $(INTL_CFLAGS)
-ALL_CFLAGS = $(CONFIG_CFLAGS) $(CSEARCH) $(INCGNU) $(SIM_EXTRA_CFLAGS) $(CFLAGS)
+SOFTFLOAT_CFLAGS = \
+  -DSOFTFLOAT_ROUND_ODD -DINLINE_LEVEL=5 -DSOFTFLOAT_FAST_DIV32TO16 \
+ 
+ALL_CFLAGS = $(CONFIG_CFLAGS) $(CSEARCH) $(INCGNU) $(SIM_EXTRA_CFLAGS) $(CFLAGS) $(SOFTFLOAT_CFLAGS)
 BUILD_CFLAGS = $(CFLAGS_FOR_BUILD) $(CSEARCH)
 
 COMMON_DEP_CFLAGS = $(CONFIG_CFLAGS) $(CSEARCH) $(SIM_EXTRA_CFLAGS)
@@ -224,7 +449,8 @@ LIBIBERTY_LIB = ../../libiberty/libiberty.a
 BFD_LIB = ../../bfd/libbfd.a
 OPCODES_LIB = ../../opcodes/libopcodes.a
 CONFIG_LIBS = $(COMMON_LIBS) @LIBS@ $(ZLIB)
-LIBDEPS = $(BFD_LIB) $(OPCODES_LIB) $(LIBINTL_DEP) $(LIBIBERTY_LIB)
+LIBDEPS = $(BFD_LIB) $(OPCODES_LIB) $(LIBINTL_DEP) $(LIBIBERTY_LIB) \
+	$(SIM_EXTRA_LIBDEPS)
 EXTRA_LIBS = $(BFD_LIB) $(OPCODES_LIB) $(LIBINTL) $(LIBIBERTY_LIB) \
 	$(CONFIG_LIBS) $(SIM_EXTRA_LIBS) $(LIBDL) $(LIBGNU) $(LIBGNU_EXTRA_LIBS)
 
@@ -251,6 +477,11 @@ callback_h = $(srcroot)/include/sim/callback.h
 remote_sim_h = $(srcroot)/include/sim/sim.h
 
 all: libsim.a run$(EXEEXT) .gdbinit
+
+libsoftfloat.a: $(LIBSOFTFLOAT_OBJS)
+	rm -f libsoftfloat.a
+	$(AR) $(AR_FLAGS) libsoftfloat.a $(LIBSOFTFLOAT_OBJS)
+	$(RANLIB) libsoftfloat.a
 
 libsim.a: $(LIB_OBJS)
 	$(SILENCE) rm -f libsim.a
@@ -505,6 +736,10 @@ mostlyclean clean: $(SIM_EXTRA_CLEAN)
 distclean maintainer-clean realclean: clean $(SIM_EXTRA_DISTCLEAN)
 	rm -f TAGS
 	rm -f Makefile config.cache config.log config.status .gdbinit
+
+%.o: softfloat/%.c
+	$(COMPILE) $<
+	$(POSTCOMPILE)
 
 .c.o:
 	$(COMPILE) $<
