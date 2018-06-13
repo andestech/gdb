@@ -323,6 +323,7 @@ PARSE_AND_LIST_ARGS_CASES='
     if (execit_limit == -1
 	|| execit_limit > 512)
     execit_limit = 512;
+    /* FALL THROUGH.  */
   case OPTION_EXECIT_TABLE:
     target_optimize |= RISCV_RELAX_EXECIT_ON;
     break;
