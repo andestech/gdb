@@ -34,6 +34,7 @@
 #include "sim-signal.h"
 #include "sim-fpu.h"
 #include "sim-syscall.h"
+#include "softfloat/softfloat.h"
 
 #include "opcode/riscv.h"
 
@@ -89,20 +90,6 @@ static inline void
 store_frd64 (SIM_CPU *cpu, int rd, uint64_t val)
 {
   cpu->fpregs[rd].v[0] = val;
-}
-
-static INLINE float
-riscv_get_FP_half (sim_cpu *cpu, int reg)
-{
-  union
-  {
-    uint16_t h[2];
-    float    f;
-  } u;
-
-  u.h[0] = 0;
-  u.h[1] = cpu->fpregs[reg].h[0];
-  return u.f;
 }
 
 static INLINE unsigned_word
@@ -939,23 +926,29 @@ execute_f (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       store_csr (cpu, "fflags", CSR_FFLAGS, &cpu->csr.fflags, cpu->regs[rs1].u);
       break;
     case MATCH_FLHW:
-      TRACE_INSN (cpu, "flhw %s, %" PRIiTW "(%s)",
-		  frd_name, i_imm, rs1_name);
-      cpu->fpregs[rd].S[0] = (float) sim_core_read_unaligned_2 (cpu, cpu->pc,
-								read_map,
-								cpu->regs[rs1].u
-								+ i_imm);
-      break;
+      {
+        union32_t val;
+	TRACE_INSN (cpu, "flhw %s, %" PRIiTW "(%s)",
+		    frd_name, i_imm, rs1_name);
+	val.h[0] = sim_core_read_unaligned_2 (cpu, cpu->pc,
+					      read_map,
+					      cpu->regs[rs1].u + i_imm);
+	/* Round towards Zero. */
+	softfloat_roundingMode = softfloat_round_minMag;
+	cpu->fpregs[rd].f[0] = f16_to_f32(val.hf[0]);
+        break;
+      }
     case MATCH_FSHW:
       {
-      union32_t val;
-      TRACE_INSN (cpu, "fshw %s, %" PRIiTW "(%s)",
-		  frs2_name, s_imm, rs1_name);
-
-      val.S = riscv_get_FP_half (cpu, rs2);
-      sim_core_write_unaligned_2 (cpu, cpu->pc, write_map,
-				  cpu->regs[rs1].u + s_imm, val.h[0]);
-      break;
+        union32_t val;
+        TRACE_INSN (cpu, "fshw %s, %" PRIiTW "(%s)",
+		    frs2_name, s_imm, rs1_name);
+	/* Round towards Zero. */
+	softfloat_roundingMode = softfloat_round_minMag;
+	val.hf[0] = f32_to_f16 (cpu->fpregs[rs2].f[0]);
+	sim_core_write_unaligned_2 (cpu, cpu->pc, write_map,
+				    cpu->regs[rs1].u + s_imm, val.h[0]);
+        break;
       }
     default:
       TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);

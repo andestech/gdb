@@ -24,6 +24,7 @@
 #include "sim-basics.h"
 #include "machs.h"
 #include "sim-base.h"
+#include "softfloat/softfloat_types.h"
 
 typedef int64_t signed64;
 typedef uint64_t unsigned64;
@@ -124,6 +125,9 @@ typedef union
   uint16_t h[2];
 
   float    S;
+
+  float16_t hf[2];
+  float32_t f;
 } union32_t;
 
 typedef union FRegisterValue
@@ -138,6 +142,8 @@ typedef union FRegisterValue
 
   float        S[4];
   double       D[2];
+
+  float32_t    f[4];
 } FRegister;
 
 struct _sim_cpu {
