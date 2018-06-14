@@ -772,7 +772,7 @@ sparc-*-*)		gdb_sim=erc32 ;;
 v850*-*-*)		gdb_sim=v850 ;;
 esac
 if test "x$gdb_sim" != "x"; then
-  gdb_sim="../sim/${gdb_sim}/libsim.a"
+  gdb_sim="../sim/${gdb_sim}/libsim.a ../sim/riscv/libsoftfloat.a"
 fi
 
 # map target onto default OS ABI

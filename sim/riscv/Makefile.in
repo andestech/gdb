@@ -27,4 +27,7 @@ SIM_OBJS = \
 SIM_EXTRA_LIBDEPS = \
 	libsoftfloat.a
 
+SIM_EXTRA_LIBS = \
+	libsoftfloat.a
+
 ## COMMON_POST_CONFIG_FRAG
