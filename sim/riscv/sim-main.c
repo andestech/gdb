@@ -42,6 +42,7 @@
 
 
 #define TRACE_REG(cpu, reg) TRACE_REGISTER (cpu, "wrote %s = %#"PRIxTW, riscv_gpr_names_abi[reg], cpu->regs[reg].u)
+#define TRACE_FREG(cpu, reg) TRACE_REGISTER (cpu, "wrote %s = %#" PRIx64, riscv_fpr_names_abi[reg], cpu->fpregs[reg].v[0])
 
 #define HASH_TABLE_SZ (OP_MASK_OP + 1)
 static const struct riscv_opcode *riscv_hash[HASH_TABLE_SZ];
@@ -82,12 +83,14 @@ static INLINE void
 store_frd (SIM_CPU *cpu, int rd, unsigned_word val)
 {
   cpu->fpregs[rd].w[0] = val;
+  TRACE_FREG (cpu, rd);
 }
 
 static inline void
 store_frd64 (SIM_CPU *cpu, int rd, uint64_t val)
 {
   cpu->fpregs[rd].v[0] = val;
+  TRACE_FREG (cpu, rd);
 }
 
 static INLINE unsigned_word
@@ -933,6 +936,7 @@ execute_f (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	/* Round towards Zero. */
 	softfloat_roundingMode = softfloat_round_minMag;
 	cpu->fpregs[rd].f[0] = f16_to_f32(val.hf[0]);
+	TRACE_FREG (cpu, rd);
         break;
       }
     case MATCH_FSHW:
