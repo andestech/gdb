@@ -4192,62 +4192,134 @@ _bfd_riscv_relax_lui (bfd *abfd,
 	    }
 	  else if (link_info->relax_pass == 1)
 	    {
-	      if ((insn & MASK_ADDI) == MATCH_ADDI)
+	      if ((insn & MASK_ADDI) == MATCH_ADDI
+		  && ((symval >= gp
+		       && VALID_GPTYPE_LB_IMM
+		       (symval - gp + max_alignment + reserve_size))
+		      || (symval < gp
+			  && VALID_GPTYPE_LB_IMM
+			  (symval - gp - max_alignment - reserve_size))))
 		{
 		  rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP18S0);
 		  insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_ADDIGP;
 		}
-	      else if ((insn & MASK_LB) == MATCH_LB)
+	      else if ((insn & MASK_LB) == MATCH_LB
+		       && ((symval >= gp
+			    && VALID_GPTYPE_LB_IMM
+			    (symval - gp + max_alignment + reserve_size))
+			   || (symval < gp
+			       && VALID_GPTYPE_LB_IMM
+			       (symval - gp - max_alignment - reserve_size))))
 		{
 		  rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP18S0);
 		  insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LBGP;
 		}
-	      else if ((insn & MASK_LBU) == MATCH_LBU)
+	      else if ((insn & MASK_LBU) == MATCH_LBU
+		       && ((symval >= gp
+			    && VALID_GPTYPE_LB_IMM
+			    (symval - gp + max_alignment + reserve_size))
+			   || (symval < gp
+			       && VALID_GPTYPE_LB_IMM
+			       (symval - gp - max_alignment - reserve_size))))
 		{
 		  rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP18S0);
 		  insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LBUGP;
 		}
-	      else if ((insn & MASK_LH) == MATCH_LH)
+	      else if ((insn & MASK_LH) == MATCH_LH
+		       && ((symval >= gp
+			    && VALID_GPTYPE_LH_IMM
+			    (symval - gp + max_alignment + reserve_size))
+			   || (symval < gp
+			       && VALID_GPTYPE_LH_IMM
+			       (symval - gp - max_alignment - reserve_size))))
 		{
 		  rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S1);
 		  insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LHGP;
 		}
-	      else if ((insn & MASK_LHU) == MATCH_LHU)
+	      else if ((insn & MASK_LHU) == MATCH_LHU
+		       && ((symval >= gp
+			    && VALID_GPTYPE_LH_IMM
+			    (symval - gp + max_alignment + reserve_size))
+			   || (symval < gp
+			       && VALID_GPTYPE_LH_IMM
+			       (symval - gp - max_alignment - reserve_size))))
 		{
 		  rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S1);
 		  insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LHUGP;
 		}
-	      else if ((insn & MASK_LW) == MATCH_LW)
+	      else if ((insn & MASK_LW) == MATCH_LW
+		       && ((symval >= gp
+			    && VALID_GPTYPE_LW_IMM
+			    (symval - gp + max_alignment + reserve_size))
+			   || (symval < gp
+			       && VALID_GPTYPE_LW_IMM
+			       (symval - gp - max_alignment - reserve_size))))
 		{
 		  rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S2);
 		  insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LWGP;
 		}
-	      else if ((insn & MASK_LWU) == MATCH_LWU)
+	      else if ((insn & MASK_LWU) == MATCH_LWU
+		       && ((symval >= gp
+			    && VALID_GPTYPE_LW_IMM
+			    (symval - gp + max_alignment + reserve_size))
+			   || (symval < gp
+			       && VALID_GPTYPE_LW_IMM
+			       (symval - gp - max_alignment - reserve_size))))
 		{
 		  rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S2);
 		  insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LWUGP;
 		}
-	      else if ((insn & MASK_LW) == MATCH_LD)
+	      else if ((insn & MASK_LD) == MATCH_LD
+		       && ((symval >= gp
+			    && VALID_GPTYPE_LD_IMM
+			    (symval - gp + max_alignment + reserve_size))
+			   || (symval < gp
+			       && VALID_GPTYPE_LD_IMM
+			       (symval - gp - max_alignment - reserve_size))))
 		{
 		  rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S3);
 		  insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LDGP;
 		}
-	      else if ((insn & MASK_SB) == MATCH_SB)
+	      else if ((insn & MASK_SB) == MATCH_SB
+		       && ((symval >= gp
+			    && VALID_GPTYPE_SB_IMM
+			    (symval - gp + max_alignment + reserve_size))
+			   || (symval < gp
+			       && VALID_GPTYPE_SB_IMM
+			       (symval - gp - max_alignment - reserve_size))))
 		{
 		  rel->r_info = ELFNN_R_INFO (sym, R_RISCV_SGP18S0);
 		  insn = (insn & (OP_MASK_RS2 << OP_SH_RS2)) | MATCH_SBGP;
 		}
-	      else if ((insn & MASK_SH) == MATCH_SH)
+	      else if ((insn & MASK_SH) == MATCH_SH
+		       && ((symval >= gp
+			    && VALID_GPTYPE_SH_IMM
+			    (symval - gp + max_alignment + reserve_size))
+			   || (symval < gp
+			       && VALID_GPTYPE_SH_IMM
+			       (symval - gp - max_alignment - reserve_size))))
 		{
 		  rel->r_info = ELFNN_R_INFO (sym, R_RISCV_SGP17S1);
 		  insn = (insn & (OP_MASK_RS2 << OP_SH_RS2)) | MATCH_SHGP;
 		}
-	      else if ((insn & MASK_SW) == MATCH_SW)
+	      else if ((insn & MASK_SW) == MATCH_SW
+		       && ((symval >= gp
+			    && VALID_GPTYPE_SW_IMM
+			    (symval - gp + max_alignment + reserve_size))
+			   || (symval < gp
+			       && VALID_GPTYPE_SW_IMM
+			       (symval - gp - max_alignment - reserve_size))))
 		{
 		  rel->r_info = ELFNN_R_INFO (sym, R_RISCV_SGP17S2);
 		  insn = (insn & (OP_MASK_RS2 << OP_SH_RS2)) | MATCH_SWGP;
 		}
-	      else if ((insn & MASK_SD) == MATCH_SD)
+	      else if ((insn & MASK_SD) == MATCH_SD
+		       && ((symval >= gp
+			    && VALID_GPTYPE_SD_IMM
+			    (symval - gp + max_alignment + reserve_size))
+			   || (symval < gp
+			       && VALID_GPTYPE_SD_IMM
+			       (symval - gp - max_alignment - reserve_size))))
 		{
 		  rel->r_info = ELFNN_R_INFO (sym, R_RISCV_SGP17S3);
 		  insn = (insn & (OP_MASK_RS2 << OP_SH_RS2)) | MATCH_SDGP;
