@@ -241,8 +241,8 @@ PARSE_AND_LIST_PROLOGUE='
 '
 PARSE_AND_LIST_LONGOPTS='
   { "mno-target-aligned", no_argument, NULL, OPTION_NO_TARGET_ALIGNED},
-  { "mgp-insn", no_argument, NULL, OPTION_GP_RELATIVE_INSN},
-  { "mno-gp-insn", no_argument, NULL, OPTION_NO_GP_RELATIVE_INSN},
+  { "mgp-insn-relax", no_argument, NULL, OPTION_GP_RELATIVE_INSN},
+  { "mno-gp-insn-relax", no_argument, NULL, OPTION_NO_GP_RELATIVE_INSN},
   { "mexport-symbols", required_argument, NULL, OPTION_EXPORT_SYMBOLS},
   { "mavoid-btb-miss", no_argument, NULL, OPTION_AVOID_BTB_MISS},
   { "mno-avoid-btb-miss", no_argument, NULL, OPTION_NO_AVOID_BTB_MISS},
