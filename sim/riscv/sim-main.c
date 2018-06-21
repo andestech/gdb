@@ -2001,20 +2001,20 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_SRL8:
       {
 	reg_t result;
-	result.b8.b0 = cpu->regs[ra].b8.b0 >> (cpu->regs[rb].u & 0x7);
-	result.b8.b1 = cpu->regs[ra].b8.b1 >> (cpu->regs[rb].u & 0x7);
-	result.b8.b2 = cpu->regs[ra].b8.b2 >> (cpu->regs[rb].u & 0x7);
-	result.b8.b3 = cpu->regs[ra].b8.b3 >> (cpu->regs[rb].u & 0x7);
+	result.ub8.b0 = cpu->regs[ra].ub8.b0 >> (cpu->regs[rb].u & 0x7);
+	result.ub8.b1 = cpu->regs[ra].ub8.b1 >> (cpu->regs[rb].u & 0x7);
+	result.ub8.b2 = cpu->regs[ra].ub8.b2 >> (cpu->regs[rb].u & 0x7);
+	result.ub8.b3 = cpu->regs[ra].ub8.b3 >> (cpu->regs[rb].u & 0x7);
 	cpu->regs[rd].s = result.s;
       }
       break;
     case MATCH_SRLI8:
       {
 	reg_t result;
-	result.b8.b0 = cpu->regs[ra].b8.b0 >> imm3u;
-	result.b8.b1 = cpu->regs[ra].b8.b1 >> imm3u;
-	result.b8.b2 = cpu->regs[ra].b8.b2 >> imm3u;
-	result.b8.b3 = cpu->regs[ra].b8.b3 >> imm3u;
+	result.ub8.b0 = cpu->regs[ra].ub8.b0 >> imm3u;
+	result.ub8.b1 = cpu->regs[ra].ub8.b1 >> imm3u;
+	result.ub8.b2 = cpu->regs[ra].ub8.b2 >> imm3u;
+	result.ub8.b3 = cpu->regs[ra].ub8.b3 >> imm3u;
 	cpu->regs[rd].s = result.s;
       }
       break;
@@ -3826,10 +3826,10 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 				  * cpu->regs[rb].b8.b1) << 16)
 		       | ((int32_t) (cpu->regs[ra].b8.b0
 				     * cpu->regs[rb].b8.b0) & 0xFFFF);
-	int32_t high = ((int32_t) (cpu->regs[ra].b8.b2
-				   * cpu->regs[rb].b8.b2) << 16)
-		       | ((int32_t) (cpu->regs[ra].b8.b3
-				     * cpu->regs[rb].b8.b3) & 0xFFFF);
+	int32_t high = ((int32_t) (cpu->regs[ra].b8.b3
+				   * cpu->regs[rb].b8.b3) << 16)
+		       | ((int32_t) (cpu->regs[ra].b8.b2
+				     * cpu->regs[rb].b8.b2) & 0xFFFF);
 	cpu->regs[rd].s = low;
 	cpu->regs[rd + 1].s = high;
       }
@@ -3840,10 +3840,10 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 				  * cpu->regs[rb].b8.b0) << 16)
 		       | ((int32_t) (cpu->regs[ra].b8.b0
 				     * cpu->regs[rb].b8.b1) & 0xFFFF);
-	int32_t high = ((int32_t) (cpu->regs[ra].b8.b2
-				   * cpu->regs[rb].b8.b3) << 16)
-		       | ((int32_t) (cpu->regs[ra].b8.b3
-				     * cpu->regs[rb].b8.b2) & 0xFFFF);
+	int32_t high = ((int32_t) (cpu->regs[ra].b8.b3
+				   * cpu->regs[rb].b8.b2) << 16)
+		       | ((int32_t) (cpu->regs[ra].b8.b2
+				     * cpu->regs[rb].b8.b3) & 0xFFFF);
 	cpu->regs[rd].s = low;
 	cpu->regs[rd + 1].s = high;
       }
@@ -3854,10 +3854,10 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 				    * cpu->regs[rb].ub8.b1) << 16)
 			| ((uint32_t) (cpu->regs[ra].ub8.b0
 				       * cpu->regs[rb].ub8.b0) & 0xFFFF);
-	uint32_t high = ((uint32_t) (cpu->regs[ra].ub8.b2
-				     * cpu->regs[rb].ub8.b2) << 16)
-			 | ((uint32_t) (cpu->regs[ra].ub8.b3
-				        * cpu->regs[rb].ub8.b3) & 0xFFFF);
+	uint32_t high = ((uint32_t) (cpu->regs[ra].ub8.b3
+				     * cpu->regs[rb].ub8.b3) << 16)
+			 | ((uint32_t) (cpu->regs[ra].ub8.b2
+				        * cpu->regs[rb].ub8.b2) & 0xFFFF);
 	cpu->regs[rd].u = low;
 	cpu->regs[rd + 1].u = high;
       }
@@ -3868,10 +3868,10 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 				    * cpu->regs[rb].ub8.b0) << 16)
 			| ((uint32_t) (cpu->regs[ra].ub8.b0
 				       * cpu->regs[rb].ub8.b1) & 0xFFFF);
-	uint32_t high = ((uint32_t) (cpu->regs[ra].ub8.b2
-				     * cpu->regs[rb].ub8.b3) << 16)
-			 | ((uint32_t) (cpu->regs[ra].ub8.b3
-				        * cpu->regs[rb].ub8.b2) & 0xFFFF);
+	uint32_t high = ((uint32_t) (cpu->regs[ra].ub8.b3
+				     * cpu->regs[rb].ub8.b2) << 16)
+			 | ((uint32_t) (cpu->regs[ra].ub8.b2
+				        * cpu->regs[rb].ub8.b3) & 0xFFFF);
 	cpu->regs[rd].u = low;
 	cpu->regs[rd + 1].u = high;
       }
