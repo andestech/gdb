@@ -201,6 +201,8 @@ set_double (sim_cpu *cpu, int regnum, int64_t val)
       cpu->regs[regnum].s = val & 0xFFFFFFFF;
       cpu->regs[regnum + 1].s = (val >> 32) & 0xFFFFFFFF;
     }
+  TRACE_REG (cpu, regnum);
+  TRACE_REG (cpu, regnum + 1);
 }
 
 static void
@@ -1510,18 +1512,21 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_ADD16:
       cpu->regs[rd].b16.h1 = cpu->regs[ra].b16.h1 + cpu->regs[rb].b16.h1;
       cpu->regs[rd].b16.h0 = cpu->regs[ra].b16.h0 + cpu->regs[rb].b16.h0;
+      TRACE_REG (cpu, rd);
       break;
     case MATCH_RADD16:
       cpu->regs[rd].b16.h1 = (int16_t) (((int32_t) cpu->regs[ra].b16.h1
 					+ cpu->regs[rb].b16.h1) >> 1);
       cpu->regs[rd].b16.h0 = (int16_t) (((int32_t) cpu->regs[ra].b16.h0
 					+ cpu->regs[rb].b16.h0) >> 1);
+      TRACE_REG (cpu, rd);
       break;
     case MATCH_URADD16:
       cpu->regs[rd].ub16.h1 = (uint16_t) (((uint32_t) cpu->regs[ra].ub16.h1
 					   + cpu->regs[rb].ub16.h1) >> 1);
       cpu->regs[rd].ub16.h0 = (uint16_t) (((uint32_t) cpu->regs[ra].ub16.h0
 					   + cpu->regs[rb].ub16.h0) >> 1);
+      TRACE_REG (cpu, rd);
       break;
     case MATCH_KADD16:
       {
@@ -1549,6 +1554,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    *(ptr + i) = res;
 	  }
 	cpu->regs[rd].u = result.u;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_UKADD16:
@@ -1561,6 +1567,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	res2 = insn_usat_helper (cpu, res2, 16);
 	cpu->regs[rd].ub16.h1 = res1;
 	cpu->regs[rd].ub16.h0 = res2;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SUB16:
@@ -1571,6 +1578,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.b16.h1 = cpu->regs[ra].b16.h1 - cpu->regs[rb].b16.h1;
 	result.b16.h0 = cpu->regs[ra].b16.h0 - cpu->regs[rb].b16.h0;
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_RSUB16:
@@ -1583,6 +1591,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.b16.h0 = (int16_t) (((int32_t) cpu->regs[ra].b16.h0
 				     - cpu->regs[rb].b16.h0) >> 1);
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_URSUB16:
@@ -1595,6 +1604,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.ub16.h0 = (uint16_t) (((uint32_t) cpu->regs[ra].ub16.h0
 				       - cpu->regs[rb].ub16.h0) >> 1);
 	cpu->regs[rd].u = result.u;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KSUB16:
@@ -1605,6 +1615,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int32_t res2 = cpu->regs[ra].b16.h0 - cpu->regs[rb].b16.h0;
 	cpu->regs[rd].b16.h1 = insn_sat_helper (cpu, res1, 15);
 	cpu->regs[rd].b16.h0 = insn_sat_helper (cpu, res2, 15);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_UKSUB16:
@@ -1617,6 +1628,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	res2 = insn_usat_helper (cpu, res2, 16);
 	cpu->regs[rd].ub16.h1 = res1;
 	cpu->regs[rd].ub16.h0 = res2;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_CRAS16:
@@ -1627,6 +1639,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.b16.h1 = cpu->regs[ra].b16.h1 + cpu->regs[rb].b16.h0;
 	result.b16.h0 = cpu->regs[ra].b16.h0 - cpu->regs[rb].b16.h1;
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_RCRAS16:
@@ -1639,6 +1652,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.b16.h0 = (int16_t) (((int32_t) cpu->regs[ra].b16.h0
 				     - cpu->regs[rb].b16.h1) >> 1);
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_URCRAS16:
@@ -1651,6 +1665,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.ub16.h0 = (uint16_t) (((uint32_t) cpu->regs[ra].ub16.h0
 				       - cpu->regs[rb].ub16.h1) >> 1);
 	cpu->regs[rd].u = result.u;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KCRAS16:
@@ -1661,6 +1676,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int32_t res2 = cpu->regs[ra].b16.h0 - cpu->regs[rb].b16.h1;
 	cpu->regs[rd].b16.h1 = insn_sat_helper (cpu, res1, 15);
 	cpu->regs[rd].b16.h0 = insn_sat_helper (cpu, res2, 15);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_UKCRAS16:
@@ -1673,6 +1689,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	res2 = insn_usat_helper (cpu, res2, 16);
 	cpu->regs[rd].ub16.h1 = res1;
 	cpu->regs[rd].ub16.h0 = res2;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_CRSA16:
@@ -1683,6 +1700,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.b16.h1 = cpu->regs[ra].b16.h1 - cpu->regs[rb].b16.h0;
 	result.b16.h0 = cpu->regs[ra].b16.h0 + cpu->regs[rb].b16.h1;
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_RCRSA16:
@@ -1695,6 +1713,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.b16.h0 = (int16_t) (((int32_t) cpu->regs[ra].b16.h0
 				     + cpu->regs[rb].b16.h1) >> 1);
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_URCRSA16:
@@ -1707,6 +1726,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.ub16.h0 = (uint16_t) (((uint32_t) cpu->regs[ra].ub16.h0
 				       + cpu->regs[rb].ub16.h1) >> 1);
 	cpu->regs[rd].u = result.u;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KCRSA16:
@@ -1717,6 +1737,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int32_t res2 = cpu->regs[ra].b16.h0 + cpu->regs[rb].b16.h1;
 	cpu->regs[rd].b16.h1 = insn_sat_helper (cpu, res1, 15);
 	cpu->regs[rd].b16.h0 = insn_sat_helper (cpu, res2, 15);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_UKCRSA16:
@@ -1729,6 +1750,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	res2 = insn_usat_helper (cpu, res2, 16);
 	cpu->regs[rd].ub16.h1 = res1;
 	cpu->regs[rd].ub16.h0 = res2;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_ADD8:
@@ -1743,6 +1765,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.b8.b1 = cpu->regs[ra].b8.b1 + cpu->regs[rb].b8.b1;
 	result.b8.b0 = cpu->regs[ra].b8.b0 + cpu->regs[rb].b8.b0;
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_RADD8:
@@ -1761,6 +1784,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.b8.b0 = (int8_t) (((int16_t) cpu->regs[ra].b8.b0
 				   + cpu->regs[rb].b8.b0) >> 1);
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_URADD8:
@@ -1779,6 +1803,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.ub8.b0 = (uint8_t) (((uint16_t) cpu->regs[ra].ub8.b0
 				     + cpu->regs[rb].ub8.b0) >> 1);
 	cpu->regs[rd].u = result.u;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KADD8:
@@ -1795,6 +1820,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	cpu->regs[rd].b8.b1 = insn_sat_helper (cpu, res2, 7);
 	cpu->regs[rd].b8.b2 = insn_sat_helper (cpu, res3, 7);
 	cpu->regs[rd].b8.b3 = insn_sat_helper (cpu, res4, 7);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_UKADD8:
@@ -1815,6 +1841,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	cpu->regs[rd].ub8.b1 = res2;
 	cpu->regs[rd].ub8.b2 = res3;
 	cpu->regs[rd].ub8.b3 = res4;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SUB8:
@@ -1829,6 +1856,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.b8.b1 = cpu->regs[ra].b8.b1 - cpu->regs[rb].b8.b1;
 	result.b8.b0 = cpu->regs[ra].b8.b0 - cpu->regs[rb].b8.b0;
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_RSUB8:
@@ -1847,6 +1875,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.b8.b0 = (int8_t) (((int16_t) cpu->regs[ra].b8.b0
 				   - cpu->regs[rb].b8.b0) >> 1);
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_URSUB8:
@@ -1865,6 +1894,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.ub8.b0 = (uint8_t) (((uint16_t) cpu->regs[ra].ub8.b0
 				     - cpu->regs[rb].ub8.b0) >> 1);
 	cpu->regs[rd].u = result.u;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KSUB8:
@@ -1881,6 +1911,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	cpu->regs[rd].b8.b1 = insn_sat_helper (cpu, res2, 7);
 	cpu->regs[rd].b8.b2 = insn_sat_helper (cpu, res3, 7);
 	cpu->regs[rd].b8.b3 = insn_sat_helper (cpu, res4, 7);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_UKSUB8:
@@ -1901,6 +1932,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	cpu->regs[rd].ub8.b1 = res2;
 	cpu->regs[rd].ub8.b2 = res3;
 	cpu->regs[rd].ub8.b3 = res4;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SRA16:
@@ -1917,6 +1949,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.b16.h1 = cpu->regs[ra].b16.h1 >> imm4u;
 	result.b16.h0 = cpu->regs[ra].b16.h0 >> imm4u;
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SRA8:
@@ -1927,6 +1960,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.b8.b2 = cpu->regs[ra].b8.b2 >> (cpu->regs[rb].u & 0x7);
 	result.b8.b3 = cpu->regs[ra].b8.b3 >> (cpu->regs[rb].u & 0x7);
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SRAI8:
@@ -1937,6 +1971,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.b8.b2 = cpu->regs[ra].b8.b2 >> imm3u;
 	result.b8.b3 = cpu->regs[ra].b8.b3 >> imm3u;
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SRA16_U:
@@ -1954,6 +1989,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 			+ rnd_val;
 
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SRA8_U:
@@ -1976,6 +2012,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 			+ rnd_val;
 
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SRAI16_U:
@@ -1991,6 +2028,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.b16.h0 = (cpu->regs[ra].b16.h0 >> imm4u) + rnd_val;
 
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SRAI8_U:
@@ -2012,6 +2050,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.b8.b3 = (cpu->regs[ra].b8.b3 >> imm3u) + rnd_val;
 
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SRL16:
@@ -2020,6 +2059,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.ub16.h1 = cpu->regs[ra].ub16.h1 >> (cpu->regs[rb].u & 0xf);
 	result.ub16.h0 = cpu->regs[ra].ub16.h0 >> (cpu->regs[rb].u & 0xf);
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SRLI16:
@@ -2028,6 +2068,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.ub16.h1 = cpu->regs[ra].ub16.h1 >> imm4u;
 	result.ub16.h0 = cpu->regs[ra].ub16.h0 >> imm4u;
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SRL8:
@@ -2038,6 +2079,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.ub8.b2 = cpu->regs[ra].ub8.b2 >> (cpu->regs[rb].u & 0x7);
 	result.ub8.b3 = cpu->regs[ra].ub8.b3 >> (cpu->regs[rb].u & 0x7);
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SRLI8:
@@ -2048,6 +2090,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.ub8.b2 = cpu->regs[ra].ub8.b2 >> imm3u;
 	result.ub8.b3 = cpu->regs[ra].ub8.b3 >> imm3u;
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SRL16_U:
@@ -2065,6 +2108,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 			 + rnd_val;
 
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SRL8_U:
@@ -2086,6 +2130,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.ub8.b3 = (cpu->regs[ra].ub8.b3 >> (cpu->regs[rb].u & 0xf))
 			 + rnd_val;
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SRLI16_U:
@@ -2101,6 +2146,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.ub16.h0 = (cpu->regs[ra].ub16.h0 >> imm4u) + rnd_val;
 
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SRLI8_U:
@@ -2122,6 +2168,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.ub8.b3 = (cpu->regs[ra].ub8.b3 >> imm3u) + rnd_val;
 
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SLL16:
@@ -2130,6 +2177,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.b16.h1 = cpu->regs[ra].b16.h1 << (cpu->regs[rb].u & 0xf);
 	result.b16.h0 = cpu->regs[ra].b16.h0 << (cpu->regs[rb].u & 0xf);
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SLLI16:
@@ -2138,6 +2186,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.b16.h1 = cpu->regs[ra].b16.h1 << imm4u;
 	result.b16.h0 = cpu->regs[ra].b16.h0 << imm4u;
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SLL8:
@@ -2148,6 +2197,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.b8.b2 = cpu->regs[ra].b8.b2 << (cpu->regs[rb].u & 0x7);
 	result.b8.b3 = cpu->regs[ra].b8.b3 << (cpu->regs[rb].u & 0x7);
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SLLI8:
@@ -2158,6 +2208,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.b8.b2 = cpu->regs[ra].b8.b2 << imm3u;
 	result.b8.b3 = cpu->regs[ra].b8.b3 << imm3u;
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KSLL8:
@@ -2176,6 +2227,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	  }
 	else
 	  cpu->regs[rd].s = cpu->regs[ra].s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KSLLI8:
@@ -2194,6 +2246,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	  }
 	else
 	  cpu->regs[rd].s = cpu->regs[ra].s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KSLL16:
@@ -2211,6 +2264,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	  }
 	else
 	  cpu->regs[rd].s = cpu->regs[ra].s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KSLLI16:
@@ -2228,6 +2282,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	  }
 	else
 	  cpu->regs[rd].s = cpu->regs[ra].s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KSLRA16:
@@ -2252,6 +2307,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    else
 	      cpu->regs[rd].s = cpu->regs[ra].s;
 	  }
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KSLRA8:
@@ -2281,6 +2337,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    else
 	      cpu->regs[rd].s = cpu->regs[ra].s;
 	  }
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KSLRA16_U:
@@ -2315,6 +2372,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    else
 	      cpu->regs[rd].s = cpu->regs[ra].s;
 	  }
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KSLRA8_U:
@@ -2361,6 +2419,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    else
 	      cpu->regs[rd].s = cpu->regs[ra].s;
 	  }
+	TRACE_REG (cpu, rd);
       }
     case MATCH_CMPEQ16:
       {
@@ -2373,6 +2432,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	  result.ub16.h0 = 0xffff;
 
 	cpu->regs[rd].s = result.u;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SCMPLT16:
@@ -2399,6 +2459,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	  result.ub16.h0 = 0xffff;
 
 	cpu->regs[rd].s = result.u;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SMIN16:
@@ -2409,6 +2470,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.b16.h0 = (cpu->regs[ra].b16.h0 < cpu->regs[rb].b16.h0)
 			 ? cpu->regs[ra].b16.h0 : cpu->regs[rb].b16.h0;
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_CMPEQ8:
@@ -2426,6 +2488,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	  result.ub8.b0 = 0xff;
 
 	cpu->regs[rd].s = result.u;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SCMPLT8:
@@ -2443,6 +2506,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	  result.ub8.b0 = 0xff;
 
 	cpu->regs[rd].s = result.u;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SCMPLE8:
@@ -2460,6 +2524,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	  result.ub8.b0 = 0xff;
 
 	cpu->regs[rd].s = result.u;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SMIN8:
@@ -2474,6 +2539,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.b8.b0 = (cpu->regs[ra].b8.b0 < cpu->regs[rb].b8.b0)
 			? cpu->regs[ra].b8.b0 : cpu->regs[rb].b8.b0;
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_UCMPLT16:
@@ -2487,6 +2553,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	  result.ub16.h0 = 0xffff;
 
 	cpu->regs[rd].u = result.u;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_UCMPLE16:
@@ -2510,6 +2577,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.ub16.h0 = (cpu->regs[ra].ub16.h0 < cpu->regs[rb].ub16.h0)
 			  ? cpu->regs[ra].ub16.h0 : cpu->regs[rb].ub16.h0;
 	cpu->regs[rd].u = result.u;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_UCMPLT8:
@@ -2527,6 +2595,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	  result.ub8.b0 = 0xff;
 
 	cpu->regs[rd].u = result.u;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_UCMPLE8:
@@ -2544,6 +2613,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	  result.ub8.b0 = 0xff;
 
 	cpu->regs[rd].u = result.u;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_UMIN8:
@@ -2558,11 +2628,13 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.ub8.b0 = (cpu->regs[ra].ub8.b0 < cpu->regs[rb].ub8.b0)
 			 ? cpu->regs[ra].ub8.b0 : cpu->regs[rb].ub8.b0;
 	cpu->regs[rd].u = result.u;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SCLIP16:
       cpu->regs[rd].b16.h1 = insn_sat_helper (cpu, cpu->regs[ra].b16.h1, imm4u);
       cpu->regs[rd].b16.h0 = insn_sat_helper (cpu, cpu->regs[ra].b16.h0, imm4u);
+      TRACE_REG (cpu, rd);
       break;
     case MATCH_SMAX16:
       {
@@ -2574,6 +2646,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.b16.h0 = (cpu->regs[ra].b16.h0 > cpu->regs[rb].b16.h0)
 			 ? cpu->regs[ra].b16.h0 : cpu->regs[rb].b16.h0;
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SMAX8:
@@ -2592,11 +2665,13 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.b8.b0 = (cpu->regs[ra].b8.b0 > cpu->regs[rb].b8.b0)
 			? cpu->regs[ra].b8.b0 : cpu->regs[rb].b8.b0;
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_UCLIP16:
       cpu->regs[rd].b16.h1 = insn_usat_helper (cpu, cpu->regs[ra].b16.h1, imm4u);
       cpu->regs[rd].b16.h0 = insn_usat_helper (cpu, cpu->regs[ra].b16.h0, imm4u);
+      TRACE_REG (cpu, rd);
       break;
     case MATCH_UMAX16:
       {
@@ -2608,6 +2683,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.ub16.h0 = (cpu->regs[ra].ub16.h0 > cpu->regs[rb].ub16.h0)
 			  ? cpu->regs[ra].ub16.h0 : cpu->regs[rb].ub16.h0;
 	cpu->regs[rd].u = result.u;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_UMAX8:
@@ -2626,6 +2702,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.ub8.b0 = (cpu->regs[ra].ub8.b0 > cpu->regs[rb].ub8.b0)
 			 ? cpu->regs[ra].ub8.b0 : cpu->regs[rb].ub8.b0;
 	cpu->regs[rd].u = result.u;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KHM16:
@@ -2636,6 +2713,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int16_t bop2 = cpu->regs[rb].b16.h1;
 	cpu->regs[rd].b16.h0 = insn_sat_khm_helper (cpu, aop1, bop1);
 	cpu->regs[rd].b16.h1 = insn_sat_khm_helper (cpu, aop2, bop2);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KHMX16:
@@ -2646,6 +2724,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int16_t bop2 = cpu->regs[rb].b16.h1;
 	cpu->regs[rd].b16.h0 = insn_sat_khm_helper (cpu, aop1, bop1);
 	cpu->regs[rd].b16.h1 = insn_sat_khm_helper (cpu, aop2, bop2);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KHM8:
@@ -2662,6 +2741,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	cpu->regs[rd].b8.b1 = insn_sat_khm8_helper (cpu, aop2, bop2);
 	cpu->regs[rd].b8.b2 = insn_sat_khm8_helper (cpu, aop3, bop3);
 	cpu->regs[rd].b8.b3 = insn_sat_khm8_helper (cpu, aop4, bop4);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KHMX8:
@@ -2679,6 +2759,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	cpu->regs[rd].b8.b1 = insn_sat_khm8_helper (cpu, aop2, bop1);
 	cpu->regs[rd].b8.b2 = insn_sat_khm8_helper (cpu, aop3, bop4);
 	cpu->regs[rd].b8.b3 = insn_sat_khm8_helper (cpu, aop4, bop3);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KABSW:
@@ -2689,6 +2770,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	  cpu->regs[rd].u = 0x7fffffff;
 	else
 	  cpu->regs[rd].s = -cpu->regs[ra].s;
+	TRACE_REG (cpu, rd);
 	break;
       }
     case MATCH_KABS16:
@@ -2708,6 +2790,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	      *ptr = -(*ptr);
 	  }
 	cpu->regs[rd].u = result.u;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KABS8:
@@ -2727,6 +2810,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	      *ptr = -(*ptr);
 	  }
 	cpu->regs[rd].u = result.u;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SUNPKD810:
@@ -2735,6 +2819,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.b16.h1 = (int16_t) cpu->regs[ra].b8.b1;
 	result.b16.h0 = (int16_t) cpu->regs[ra].b8.b0;
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SUNPKD820:
@@ -2743,6 +2828,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.b16.h1 = (int16_t) cpu->regs[ra].b8.b2;
 	result.b16.h0 = (int16_t) cpu->regs[ra].b8.b0;
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SUNPKD830:
@@ -2751,6 +2837,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.b16.h1 = (int16_t) cpu->regs[ra].b8.b3;
 	result.b16.h0 = (int16_t) cpu->regs[ra].b8.b0;
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SUNPKD831:
@@ -2759,6 +2846,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.b16.h1 = (int16_t) cpu->regs[ra].b8.b3;
 	result.b16.h0 = (int16_t) cpu->regs[ra].b8.b1;
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SUNPKD832:
@@ -2767,6 +2855,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.b16.h1 = (int16_t) cpu->regs[ra].b8.b3;
 	result.b16.h0 = (int16_t) cpu->regs[ra].b8.b2;
 	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_ZUNPKD810:
@@ -2775,6 +2864,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.ub16.h1 = (uint16_t) cpu->regs[ra].ub8.b1;
 	result.ub16.h0 = (uint16_t) cpu->regs[ra].ub8.b0;
 	cpu->regs[rd].u = result.u;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_ZUNPKD820:
@@ -2783,6 +2873,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.ub16.h1 = (uint16_t) cpu->regs[ra].ub8.b2;
 	result.ub16.h0 = (uint16_t) cpu->regs[ra].ub8.b0;
 	cpu->regs[rd].u = result.u;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_ZUNPKD830:
@@ -2791,6 +2882,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.ub16.h1 = (uint16_t) cpu->regs[ra].ub8.b3;
 	result.ub16.h0 = (uint16_t) cpu->regs[ra].ub8.b0;
 	cpu->regs[rd].u = result.u;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_ZUNPKD831:
@@ -2799,6 +2891,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.ub16.h1 = (uint16_t) cpu->regs[ra].ub8.b3;
 	result.ub16.h0 = (uint16_t) cpu->regs[ra].ub8.b1;
 	cpu->regs[rd].u = result.u;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_ZUNPKD832:
@@ -2807,30 +2900,35 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	result.ub16.h1 = (uint16_t) cpu->regs[ra].ub8.b3;
 	result.ub16.h0 = (uint16_t) cpu->regs[ra].ub8.b2;
 	cpu->regs[rd].u = result.u;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_RADDW:
       {
 	cpu->regs[rd].s = (int32_t) (((int64_t) cpu->regs[ra].s
 				     + (int64_t) cpu->regs[rb].s) >> 1);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_RSUBW:
       {
 	cpu->regs[rd].s = (int32_t) (((int64_t) cpu->regs[ra].s
 				     - (int64_t) cpu->regs[rb].s) >> 1);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_URADDW:
       {
 	cpu->regs[rd].u =
 	  (uint32_t) (((uint64_t)cpu->regs[ra].u + cpu->regs[rb].u) >> 1);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_URSUBW:
       {
 	cpu->regs[rd].u =
 	  (uint32_t) (((uint64_t)cpu->regs[ra].u - cpu->regs[rb].u) >> 1);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SRA_U:
@@ -2838,6 +2936,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	uint32_t rnd_mask = (1UL << (cpu->regs[rb].u - 1));
 	int32_t rnd_val = (cpu->regs[ra].s & rnd_mask) ? 1 : 0;
 	cpu->regs[rd].s = (cpu->regs[ra].s >> (cpu->regs[rb].u & 0x1f)) + rnd_val ;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SRAI_U:
@@ -2845,6 +2944,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	uint32_t rnd_mask = (1UL << (imm5u - 1));
 	int32_t rnd_val = (cpu->regs[ra].s & rnd_mask) ? 1 : 0;
 	cpu->regs[rd].s = (cpu->regs[ra].s >> imm5u) + rnd_val ;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KSLL:
@@ -2860,6 +2960,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	  }
 	else
 	  cpu->regs[rd].s = cpu->regs[ra].s;
+	TRACE_REG (cpu, rd);
       }
       break;
 
@@ -2875,6 +2976,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	  }
 	else
 	  cpu->regs[rd].s = cpu->regs[ra].s;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KSLRAW_U:
@@ -2901,36 +3003,42 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    ret = insn_sat_helper (cpu, tmp, 31);
 	  }
 	cpu->regs[rd].s = ret;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_PKTT16:
       {
 	/* Rt[31:0] = CONCAT(Ra[31:16], Rb[31:16]) */
 	cpu->regs[rd].s = (cpu->regs[ra].b16.h1 << 16) | cpu->regs[rb].ub16.h1;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_PKTB16:
       {
 	/* Rt[31:0] = CONCAT(Ra[31:16], Rb[15:0]) */
 	cpu->regs[rd].s = (cpu->regs[ra].b16.h1 << 16) | cpu->regs[rb].ub16.h0;
+	TRACE_REG (cpu, rd);
       }
       break;
      case MATCH_PKBT16:
       {
 	/* Rt[31:0] = CONCAT(Ra[15:0], Rb[31:16]) */
 	cpu->regs[rd].s = (cpu->regs[ra].b16.h0 << 16) | cpu->regs[rb].ub16.h1;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_PKBB16:
       {
 	/* Rt[31:0] = CONCAT(Ra[15:0], Rb[15:0]) */
 	cpu->regs[rd].s = (cpu->regs[ra].b16.h0 << 16) | cpu->regs[rb].ub16.h0;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SMMUL:
       {
 	cpu->regs[rd].s =
 	  ((int64_t) cpu->regs[ra].s * (int64_t) cpu->regs[rb].s) >> 32;
+	TRACE_REG (cpu, rd);
       }
       break;
    case MATCH_SMMUL_U:
@@ -2943,6 +3051,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	  cpu->regs[rd].s = (result >> 32) + 1;
 	else
 	  cpu->regs[rd].s = result >> 32;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KMMAC:
@@ -2952,6 +3061,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	res.d0 = (int64_t) cpu->regs[rd].s + temp.b32.w1;
 	res.d0 = insn_sat_helper (cpu, res.d0, 31);
 	cpu->regs[rd].s = res.d0;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KMMAC_U:
@@ -2965,6 +3075,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	res.d0 = (int64_t) cpu->regs[rd].s + temp.b32.w1;
 	res.d0 = insn_sat_helper (cpu, res.d0, 31);
 	cpu->regs[rd].s = res.d0;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KWMMUL:
@@ -2981,6 +3092,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    cpu->regs[rd].s = 0x7fffffff;
 	    CCPU_SR_SET (PSW, PSW_OV);
 	  }
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KWMMUL_U:
@@ -2999,12 +3111,14 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    cpu->regs[rd].s = 0x7fffffff;
 	    CCPU_SR_SET (PSW, PSW_OV);
 	  }
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SMMWB:
       {
 	cpu->regs[rd].s =
 	  ((int64_t) cpu->regs[ra].s * (int64_t) cpu->regs[rb].b16.h0) >> 16;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SMMWB_U:
@@ -3018,6 +3132,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	  cpu->regs[rd].s = (result >> 16) + 1;
 	else
 	  cpu->regs[rd].s = result >> 16;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KMMSB:
@@ -3027,6 +3142,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	res.d0 = (int64_t) cpu->regs[rd].s - temp.b32.w1;
 	res.d0 = insn_sat_helper (cpu, res.d0, 31);
 	cpu->regs[rd].s = res.d0;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KMMSB_U:
@@ -3040,12 +3156,14 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	res.d0 = (int64_t) cpu->regs[rd].s - temp.b32.w1;
 	res.d0 = insn_sat_helper (cpu, res.d0, 31);
 	cpu->regs[rd].s = res.d0;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SMMWT:
       {
 	cpu->regs[rd].s =
 	  ((int64_t) cpu->regs[ra].s * (int64_t) cpu->regs[rb].b16.h1) >> 16;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SMMWT_U:
@@ -3059,6 +3177,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	  cpu->regs[rd].s = (result >> 16) + 1;
 	else
 	  cpu->regs[rd].s = result >> 16;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KMMAWB:
@@ -3070,6 +3189,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	res = (int64_t) cpu->regs[rd].s + (int32_t) (temp.d0 >> 16);
 	res = insn_sat_helper (cpu, res, 31);
 	cpu->regs[rd].s = res;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KMMAWB_U:
@@ -3084,6 +3204,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	res = (int64_t) cpu->regs[rd].s + (int32_t) (temp.d0 >> 16);
 	res = insn_sat_helper (cpu, res, 31);
 	cpu->regs[rd].s = res;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KMMAWT:
@@ -3095,6 +3216,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	res = (int64_t) cpu->regs[rd].s + (int32_t) (temp.d0 >> 16);
 	res = insn_sat_helper (cpu, res, 31);
 	cpu->regs[rd].s = res;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KMMAWT_U:
@@ -3109,24 +3231,28 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	res = (int64_t) cpu->regs[rd].s + (int32_t) (temp.d0 >> 16);
 	res = insn_sat_helper (cpu, res, 31);
 	cpu->regs[rd].s = res;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SMBB:
       {
 	/* Rt = Ra[15:0] * Rb[15:0] */
 	cpu->regs[rd].s = cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h0;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SMBT:
       {
 	/* Rt = Ra[15:0] * Rb[31:16] */
 	cpu->regs[rd].s = cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h1;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SMTT:
       {
 	/* Rt = Ra[31:16] * Rb[31:16] */
 	cpu->regs[rd].s = cpu->regs[ra].b16.h1 * cpu->regs[rb].b16.h1;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KMABB:
@@ -3134,6 +3260,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int32_t mul = (int32_t) cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h0;
 	int64_t res = (int64_t) cpu->regs[rd].s + mul;
 	cpu->regs[rd].s = insn_sat_helper (cpu, res, 31);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KMABT:
@@ -3141,6 +3268,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int32_t mul = (int32_t) cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h1;
 	int64_t res = (int64_t) cpu->regs[rd].s + mul;
 	cpu->regs[rd].s = insn_sat_helper (cpu, res, 31);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KMATT:
@@ -3148,6 +3276,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int32_t mul = (int32_t) cpu->regs[ra].b16.h1 * cpu->regs[rb].b16.h1;
 	int64_t res = (int64_t) cpu->regs[rd].s + mul;
 	cpu->regs[rd].s = insn_sat_helper (cpu, res, 31);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KMDA:
@@ -3164,6 +3293,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    CCPU_SR_SET (PSW, PSW_OV);
 	  }
 	cpu->regs[rd].s = res;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KMXDA:
@@ -3180,6 +3310,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    CCPU_SR_SET (PSW, PSW_OV);
 	  }
 	cpu->regs[rd].s = res;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KMADA:
@@ -3188,6 +3319,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 		      + ((int32_t) cpu->regs[ra].b16.h1 * cpu->regs[rb].b16.h1)
 		      + ((int32_t) cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h0);
 	cpu->regs[rd].s = insn_sat_helper (cpu, res, 31);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KMAXDA:
@@ -3196,6 +3328,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 		      + ((int32_t) cpu->regs[ra].b16.h1 * cpu->regs[rb].b16.h0)
 		      + ((int32_t) cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h1);
 	cpu->regs[rd].s = insn_sat_helper (cpu, res, 31);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KMSDA:
@@ -3204,6 +3337,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int32_t mul_h0 = (int32_t) cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h0;
 	int64_t res = (int64_t) cpu->regs[rd].s - (mul_h1 + mul_h0);
 	cpu->regs[rd].s = insn_sat_helper (cpu, res, 31);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KMSXDA:
@@ -3212,6 +3346,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int32_t mul_h0_h1 = (int32_t) cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h1;
 	int64_t res = (int64_t) cpu->regs[rd].s - (mul_h1_h0 + mul_h0_h1);
 	cpu->regs[rd].s = insn_sat_helper (cpu, res, 31);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SMDS:
@@ -3220,6 +3355,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int32_t mul_h1 = cpu->regs[ra].b16.h1 * cpu->regs[rb].b16.h1;
 	int32_t mul_h0 = cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h0;
 	cpu->regs[rd].s = mul_h1 - mul_h0;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SMXDS:
@@ -3228,6 +3364,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int32_t mul_h1_h0 = cpu->regs[ra].b16.h1 * cpu->regs[rb].b16.h0;
 	int32_t mul_h0_h1 = cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h1;
 	cpu->regs[rd].s = mul_h1_h0 - mul_h0_h1;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SMDRS:
@@ -3236,6 +3373,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int32_t mul_h1 = cpu->regs[ra].b16.h1 * cpu->regs[rb].b16.h1;
 	int32_t mul_h0 = cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h0;
 	cpu->regs[rd].s = mul_h0 - mul_h1;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KMADRS:
@@ -3244,6 +3382,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int32_t mul_h0 = (int32_t) cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h0;
 	int64_t res = (int64_t) cpu->regs[rd].s + (mul_h0 - mul_h1);
 	cpu->regs[rd].s = insn_sat_helper (cpu, res, 31);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KMADS:
@@ -3252,6 +3391,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int32_t mul_h0 = (int32_t) cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h0;
 	int64_t res = (int64_t) cpu->regs[rd].s + (mul_h1 - mul_h0);
 	cpu->regs[rd].s = insn_sat_helper (cpu, res, 31);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KMAXDS:
@@ -3260,6 +3400,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int32_t mul_h0_h1 = (int32_t) cpu->regs[ra].b16.h0 * cpu->regs[rb].b16.h1;
 	int64_t res = (int64_t) cpu->regs[rd].s + (mul_h1_h0 - mul_h0_h1);
 	cpu->regs[rd].s = insn_sat_helper (cpu, res, 31);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SMAL:
@@ -3280,6 +3421,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	bits = ((bits >> 16) | (bits << 16));
 
 	cpu->regs[rd].u = bits >> (32 - (cpu->regs[rb].u + 1));
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_BITREVI:
@@ -3292,19 +3434,23 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	bits = ((bits >> 16) | (bits << 16));
 
 	cpu->regs[rd].u = bits >> (32 - (imm5u + 1));
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_WEXT:
       cpu->regs[rd].s = (int32_t) (get_udouble (cpu, ra) >> (cpu->regs[rb].u & 0x1f));
+      TRACE_REG (cpu, rd);
       break;
     case MATCH_WEXTI:
       cpu->regs[rd].s = (int32_t) (get_udouble (cpu, ra) >> imm5u);
+      TRACE_REG (cpu, rd);
       break;
     case MATCH_BPICK:
       {
 	uint32_t temp_ctl = ~cpu->regs[rc].u;
 	cpu->regs[rd].u = (uint32_t) ((cpu->regs[ra].u & ~temp_ctl)
 				     | (cpu->regs[rb].u & temp_ctl));
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_INSB:
@@ -3331,6 +3477,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	  }
 
 	cpu->regs[rd].s = (cpu->regs[rd].s & mask) | (temp & (~mask));
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_ADD64:
@@ -3704,24 +3851,28 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       {
 	int64_t tmp = (int64_t) cpu->regs[ra].s + (int64_t) cpu->regs[rb].s;
 	cpu->regs[rd].s = insn_sat_helper (cpu, tmp, 31);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KSUBW:
       {
 	int64_t tmp = (int64_t) cpu->regs[ra].s - (int64_t) cpu->regs[rb].s;
 	cpu->regs[rd].s = insn_sat_helper (cpu, tmp, 31);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_UKADDW:
       {
 	uint64_t tmp = (uint64_t) cpu->regs[ra].u + (uint64_t) cpu->regs[rb].u;
 	cpu->regs[rd].u = insn_usat_helper (cpu, tmp, 31);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_UKSUBW:
       {
 	uint64_t tmp = (uint64_t) cpu->regs[ra].u - (uint64_t) cpu->regs[rb].u;
 	cpu->regs[rd].u = insn_usat_helper (cpu, tmp, 31);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KSLRAW:
@@ -3737,6 +3888,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    int64_t ret = (int64_t) cpu->regs[ra].s << cpu->regs[rb].b8.b0;
 	    cpu->regs[rd].s = insn_sat_helper (cpu, ret, 31);
 	  }
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KDMBB:
@@ -3753,6 +3905,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	  }
 
 	cpu->regs[rd].s = res;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KDMBT:
@@ -3769,6 +3922,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	  }
 
 	cpu->regs[rd].s = res;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KDMTT:
@@ -3785,6 +3939,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	  }
 
 	cpu->regs[rd].s = res;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KHMBB:
@@ -3792,6 +3947,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int16_t aop = cpu->regs[ra].b16.h0;
 	int16_t bop = cpu->regs[rb].b16.h0;
 	cpu->regs[rd].s = insn_sat_khm_helper (cpu, aop, bop);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KHMBT:
@@ -3799,6 +3955,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int16_t aop = cpu->regs[ra].b16.h0;
 	int16_t bop = cpu->regs[rb].b16.h1;
 	cpu->regs[rd].s = insn_sat_khm_helper (cpu, aop, bop);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KHMTT:
@@ -3806,6 +3963,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int16_t aop = cpu->regs[ra].b16.h1;
 	int16_t bop = cpu->regs[rb].b16.h1;
 	cpu->regs[rd].s = insn_sat_khm_helper (cpu, aop, bop);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SMUL16:
@@ -3864,6 +4022,9 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 				     * cpu->regs[rb].b8.b2) & 0xFFFF);
 	cpu->regs[rd].s = low;
 	cpu->regs[rd + 1].s = high;
+
+	TRACE_REG (cpu, rd);
+	TRACE_REG (cpu, rd + 1);
       }
       break;
     case MATCH_SMULX8:
@@ -3878,6 +4039,9 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 				     * cpu->regs[rb].b8.b3) & 0xFFFF);
 	cpu->regs[rd].s = low;
 	cpu->regs[rd + 1].s = high;
+
+	TRACE_REG (cpu, rd);
+	TRACE_REG (cpu, rd + 1);
       }
       break;
     case MATCH_UMUL8:
@@ -3892,6 +4056,9 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 				        * cpu->regs[rb].ub8.b2) & 0xFFFF);
 	cpu->regs[rd].u = low;
 	cpu->regs[rd + 1].u = high;
+
+	TRACE_REG (cpu, rd);
+	TRACE_REG (cpu, rd + 1);
       }
       break;
     case MATCH_UMULX8:
@@ -3906,30 +4073,38 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 				        * cpu->regs[rb].ub8.b3) & 0xFFFF);
 	cpu->regs[rd].u = low;
 	cpu->regs[rd + 1].u = high;
+
+	TRACE_REG (cpu, rd);
+	TRACE_REG (cpu, rd + 1);
       }
       break;
     case MATCH_KADDH:
       {
 	int32_t tmp = cpu->regs[ra].s + cpu->regs[rb].s;
 	cpu->regs[rd].s = insn_sat_helper (cpu, tmp, 15);
+
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KSUBH:
       {
 	int32_t tmp = cpu->regs[ra].s - cpu->regs[rb].s;
 	cpu->regs[rd].s = insn_sat_helper (cpu, tmp, 15);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_UKADDH:
       {
 	uint32_t tmp = cpu->regs[ra].u + cpu->regs[rb].u;
 	cpu->regs[rd].u = insn_usat_helper (cpu, tmp, 15);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_UKSUBH:
       {
 	uint32_t tmp = cpu->regs[ra].u - cpu->regs[rb].u;
 	cpu->regs[rd].u = insn_usat_helper (cpu, tmp, 15);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_AVE:
@@ -3937,6 +4112,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int64_t r = ((int64_t) cpu->regs[ra].s)
 		    + ((int64_t) cpu->regs[rb].s) + 1;
 	cpu->regs[rd].u = (r >> 1);
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_CLO:
@@ -3951,6 +4127,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	      break;
 	  }
 	cpu->regs[rd].u = cnt;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_CLZ:
@@ -3965,15 +4142,18 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	      break;
 	  }
 	cpu->regs[rd].u = cnt;
+	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_MAXW:
       cpu->regs[rd].s = (cpu->regs[ra].s > cpu->regs[rb].s)
 			 ? cpu->regs[ra].s : cpu->regs[rb].s;
+      TRACE_REG (cpu, rd);
       break;
     case MATCH_MINW:
       cpu->regs[rd].s = (cpu->regs[ra].s < cpu->regs[rb].s)
 			 ? cpu->regs[ra].s : cpu->regs[rb].s;
+      TRACE_REG (cpu, rd);
       break;
     case MATCH_MULSR64:
       {
@@ -3990,6 +4170,8 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    cpu->regs[d + 1].u = (r >> 32);
 	    cpu->regs[d].u = r;
 	  }
+	TRACE_REG (cpu, rd);
+	TRACE_REG (cpu, rd + 1);
       }
       break;
     case MATCH_MULR64:
@@ -4007,6 +4189,8 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    cpu->regs[d + 1].u = (r >> 32);
 	    cpu->regs[d].u = r;
 	  }
+	TRACE_REG (cpu, rd);
+	TRACE_REG (cpu, rd + 1);
       }
       break;
     case MATCH_PBSAD:
@@ -4032,21 +4216,26 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	else
 	  /* pbsada */
 	  cpu->regs[rd].u = cpu->regs[rd].u + a + b + c + d;
+	TRACE_REG (cpu, rd);
 	break;
       }
     case MATCH_MADDR32:
       cpu->regs[rd].u += (cpu->regs[ra].u * cpu->regs[rb].u);
+      TRACE_REG (cpu, rd);
       break;
     case MATCH_MSUBR32:
       cpu->regs[rd].u -= (cpu->regs[ra].u * cpu->regs[rb].u);
+      TRACE_REG (cpu, rd);
       break;
     case MATCH_SWAP8:
       cpu->regs[rd].u = ((cpu->regs[ra].u & 0xFF00FF00) >> 8)
 		       | ((cpu->regs[ra].u & 0x00FF00FF) << 8);
+      TRACE_REG (cpu, rd);
       break;
     case MATCH_SWAP16:
       cpu->regs[rd].u = ((cpu->regs[ra].u & 0xFFFF0000) >> 16)
 		       | ((cpu->regs[ra].u & 0x0000FFFF) << 16);
+      TRACE_REG (cpu, rd);
       break;
     case MATCH_SCLIP32:
       if (cpu->regs[ra].s > ((1 << imm5u) - 1))
@@ -4061,12 +4250,14 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	}
       else
 	cpu->regs[rd].s = cpu->regs[ra].s;
+      TRACE_REG (cpu, rd);
       break;
     case MATCH_SCLIP8:
       cpu->regs[rd].b8.b0 = insn_sat_helper (cpu, cpu->regs[ra].b8.b0, imm3u);
       cpu->regs[rd].b8.b1 = insn_sat_helper (cpu, cpu->regs[ra].b8.b1, imm3u);
       cpu->regs[rd].b8.b2 = insn_sat_helper (cpu, cpu->regs[ra].b8.b2, imm3u);
       cpu->regs[rd].b8.b3 = insn_sat_helper (cpu, cpu->regs[ra].b8.b3, imm3u);
+      TRACE_REG (cpu, rd);
       break;
     case MATCH_UCLIP32:
       if (cpu->regs[ra].s > ((1 << imm5u) - 1))
@@ -4081,12 +4272,14 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	}
       else
 	cpu->regs[rd].s = cpu->regs[ra].s;
+      TRACE_REG (cpu, rd);
       break;
     case MATCH_UCLIP8:
       cpu->regs[rd].b8.b0 = insn_usat_helper (cpu, cpu->regs[ra].b8.b0, imm3u);
       cpu->regs[rd].b8.b1 = insn_usat_helper (cpu, cpu->regs[ra].b8.b1, imm3u);
       cpu->regs[rd].b8.b2 = insn_usat_helper (cpu, cpu->regs[ra].b8.b2, imm3u);
       cpu->regs[rd].b8.b3 = insn_usat_helper (cpu, cpu->regs[ra].b8.b3, imm3u);
+      TRACE_REG (cpu, rd);
       break;
     default:
       TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
