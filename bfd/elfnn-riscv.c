@@ -7286,6 +7286,20 @@ riscv_elf_relocate_execit_table (struct bfd_link_info *link_info, bfd *abfd)
     }
 }
 
+static bfd_boolean
+riscv_elf_execit_check_insn_available (uint32_t insn)
+{
+  /* For bug-11621, system call should not be replaced by exec.it.  */
+  /* According to spec, SCALL and SBREAK have been renamed to
+     ECALL and EBREAK. Their encoding and functionality are unchanged.  */
+  /* Invalid insns: ecall, ebreak, ACE.  */
+  if ((insn & MASK_ECALL) == MATCH_ECALL
+      || (insn & MASK_EBREAK) == MATCH_EBREAK
+      || (insn & 0x7f) == 0x7b)
+    return FALSE;
+  return TRUE;
+}
+
 /* Generate EXECIT hash table.  */
 
 static bfd_boolean
@@ -7362,11 +7376,7 @@ riscv_elf_execit_build_hash_table (bfd *abfd, asection *sec,
 
       insn = bfd_get_32 (abfd, contents + off);
 
-      /* For bug-11621, system call should not be replaced by exec.it.  */
-      /* According to spec, SCALL and SBREAK have been renamed to
-	 ECALL and EBREAK. Their encoding and functionality are unchanged.  */
-      if ((insn & MASK_ECALL) == MATCH_ECALL
-	  || (insn & MASK_EBREAK) == MATCH_EBREAK)
+      if (!riscv_elf_execit_check_insn_available (insn))
 	{
 	  off += 4;
 	  continue;
