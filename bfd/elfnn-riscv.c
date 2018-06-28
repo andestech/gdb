@@ -7286,16 +7286,22 @@ riscv_elf_relocate_execit_table (struct bfd_link_info *link_info, bfd *abfd)
     }
 }
 
+#define MASK_IMM ENCODE_ITYPE_IMM (-1U)
+#define MASK_RS1 (OP_MASK_RS1 << OP_SH_RS1)
+#define MASK_RD (OP_MASK_RD << OP_SH_RD)
+
 static bfd_boolean
 riscv_elf_execit_check_insn_available (uint32_t insn)
 {
   /* For bug-11621, system call should not be replaced by exec.it.  */
   /* According to spec, SCALL and SBREAK have been renamed to
      ECALL and EBREAK. Their encoding and functionality are unchanged.  */
-  /* Invalid insns: ecall, ebreak, ACE.  */
+  /* Invalid insns: ecall, ebreak, ACE, ret.  */
   if ((insn & MASK_ECALL) == MATCH_ECALL
       || (insn & MASK_EBREAK) == MATCH_EBREAK
-      || (insn & 0x7f) == 0x7b)
+      || (insn & 0x7f) == 0x7b
+      || ((insn & (MASK_JALR | MASK_RD | MASK_RS1 | MASK_IMM))
+	  == (MATCH_JALR | (X_RA << OP_SH_RS1))))
     return FALSE;
   return TRUE;
 }
