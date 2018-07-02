@@ -82,14 +82,14 @@ store_rd (SIM_CPU *cpu, int rd, unsigned_word val)
 }
 
 static INLINE void
-store_frd (SIM_CPU *cpu, int rd, unsigned_word val)
+store_frd (SIM_CPU *cpu, int rd, unsigned32 val)
 {
   cpu->fpregs[rd].w[0] = val;
   TRACE_FREG (cpu, rd);
 }
 
 static inline void
-store_frd64 (SIM_CPU *cpu, int rd, uint64_t val)
+store_frd64 (SIM_CPU *cpu, int rd, unsigned64 val)
 {
   cpu->fpregs[rd].v[0] = val;
   TRACE_FREG (cpu, rd);
