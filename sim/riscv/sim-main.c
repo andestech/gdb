@@ -35,6 +35,7 @@
 #include "softfloat/softfloat.h"
 
 #include "opcode/riscv.h"
+#include "elf/riscv.h"
 
 #include "gdb/sim-riscv.h"
 
@@ -5819,7 +5820,31 @@ pc_set (sim_cpu *cpu, sim_cia pc)
 static int
 reg_fetch (sim_cpu *cpu, int rn, unsigned char *buf, int len)
 {
-  if (len <= 0 || len > sizeof (unsigned_word))
+  if (len <= 0)
+    return -1;
+
+  if (rn >= SIM_RISCV_FIRST_FP_REGNUM && rn <= SIM_RISCV_LAST_FP_REGNUM)
+    {
+      int float_abi = CPU_ELF_FLAGS(cpu) & EF_RISCV_FLOAT_ABI;
+      int n = float_abi >> 1;
+
+      switch (float_abi)
+	{
+	case EF_RISCV_FLOAT_ABI_SOFT:
+	  if (len > sizeof (unsigned_word))
+	    return -1;
+	  break;
+	case EF_RISCV_FLOAT_ABI_SINGLE:
+	case EF_RISCV_FLOAT_ABI_DOUBLE:
+	case EF_RISCV_FLOAT_ABI_QUAD:
+	  if (len > (sizeof (unsigned32) * n))
+	    return -1;
+	  break;
+	default:
+	  return -1;
+	}
+    }
+  else if (len > sizeof (unsigned_word))
     return -1;
 
   switch (rn)
@@ -5850,7 +5875,31 @@ reg_fetch (sim_cpu *cpu, int rn, unsigned char *buf, int len)
 static int
 reg_store (sim_cpu *cpu, int rn, unsigned char *buf, int len)
 {
-  if (len <= 0 || len > sizeof (unsigned_word))
+  if (len <= 0)
+    return -1;
+
+  if (rn >= SIM_RISCV_FIRST_FP_REGNUM && rn <= SIM_RISCV_LAST_FP_REGNUM)
+    {
+      int float_abi = CPU_ELF_FLAGS(cpu) & EF_RISCV_FLOAT_ABI;
+      int n = float_abi >> 1;
+
+      switch (float_abi)
+	{
+	case EF_RISCV_FLOAT_ABI_SOFT:
+	  if (len > sizeof (unsigned_word))
+	    return -1;
+	  break;
+	case EF_RISCV_FLOAT_ABI_SINGLE:
+	case EF_RISCV_FLOAT_ABI_DOUBLE:
+	case EF_RISCV_FLOAT_ABI_QUAD:
+	  if (len > (sizeof (unsigned32) * n))
+	    return -1;
+	  break;
+	default:
+	  return -1;
+	}
+    }
+  else if (len > sizeof (unsigned_word))
     return -1;
 
   switch (rn)
