@@ -3964,6 +3964,12 @@ _bfd_riscv_relax_call (bfd *abfd, asection *sec, asection *sym_sec,
   bfd_vma auipc, jalr;
   int rd, r_type, len = 4, rvc = elf_elfheader (abfd)->e_flags & EF_RISCV_RVC;
 
+  /* FIXME: If the call crosses section boundaries and some sections
+     are fixed, ex9 and later relaxations may increase the PC-relative
+     offset.  */
+  if (sym_sec->output_section != sec->output_section)
+    return TRUE;
+
   /* If the call crosses section boundaries, an alignment directive could
      cause the PC-relative offset to later increase.  */
   if (VALID_UJTYPE_IMM (foff) && sym_sec->output_section != sec->output_section)
