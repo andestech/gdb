@@ -37,6 +37,7 @@
 
 #include "elf-bfd.h"		/* elf_elfheader () */
 #include "objfiles.h"
+#include "nds-elf.h"
 
 void nds_init_remote_cmds (void);
 
@@ -430,6 +431,95 @@ nds_query_target_command (const char *args, int from_tty)
   set_prompt (buf);
 }
 
+/* Callback for elf-check.  */
+
+static reg_t
+nds_elf_check_get_register (unsigned int csr_no)
+{
+  ULONGEST regval;
+  struct regcache *regcache = get_current_regcache ();
+  struct gdbarch *gdbarch = regcache->arch ();
+  enum bfd_endian byte_order;
+  int regnum = -1;
+  gdb_byte regbuf[8] = { 0 };
+
+  if (nds_remote_info.endian == BFD_ENDIAN_UNKNOWN)
+    byte_order = gdbarch_byte_order (gdbarch);
+  else
+    byte_order = nds_remote_info.endian;
+
+  switch (csr_no)
+    {
+    case 0x301: /* misa */
+      regnum = user_reg_map_name_to_regnum (gdbarch, "csr769", -1);
+      break;
+    case 0xfc2: /* mmsc_cfg */
+      regnum = user_reg_map_name_to_regnum (gdbarch, "csr4034", -1);
+      break;
+    default:
+      break;
+    }
+
+  if (regnum == -1)
+    error ("Fail to access system registers for elf-check.");
+
+  /* Use target-endian instead of gdbarch-endian.  */
+  if (regcache->cooked_read (regnum, regbuf) != REG_VALID)
+    return -1;
+  regval = extract_unsigned_integer (regbuf, 8, byte_order);
+
+  return regval;
+}
+
+/* Callback for "nds32 elf-check" command.  */
+
+static void
+nds_elf_check_command (const char *args, int from_tty)
+{
+  const char *filename = NULL;
+  struct stat st;
+  int fd;
+  void *data = NULL;
+  char check_msg[0x1000];
+  int err;
+
+  if (current_program_space->exec_bfd () == NULL || current_program_space->exec_bfd ()->filename == NULL)
+    error (_("Cannot check ELF without executable.\n"
+	     "Use the \"file\" or \"exec-file\" command."));
+
+  /* elf-check with SID/ICE only. */
+  if (nds_remote_info.type == nds_rt_unknown)
+    error (_("Cannot check ELF without SID/ICE.\n"));
+
+  filename = current_program_space->exec_bfd ()->filename;
+  fd = open (filename, O_RDWR, 0);
+
+  if (fd < 0)
+    error (_("Cannot open `%s': %s"), filename, strerror (errno));
+
+  if (fstat (fd, &st) < 0)
+    error (_("Cannot stat `%s': %s"), filename, strerror (errno));
+
+  data = mmap (0, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+
+  if (data == MAP_FAILED)
+    error (_("Cannot mmap `%s': %s"), filename, strerror (errno));
+
+  close(fd);
+
+  err = elf_check (filename, data, st.st_size, nds_elf_check_get_register,
+		   check_msg, sizeof (check_msg));
+
+  if (err)
+    {
+      /* internal test */
+      if ((args != NULL) && (strcmp (args, "test") == 0))
+	warning ("%s", check_msg);
+      else
+	error ("%s", check_msg);
+    }
+}
+
 static void
 nds_endian_check_command (const char *args, int from_tty)
 {
@@ -724,6 +814,12 @@ nds_init_remote_cmds (void)
   /* Hook for query remote target information.  */
 
   nds_remote_info_init ();
+
+  /* nds elf-check */
+  add_cmd ("elf-check", class_files, nds_elf_check_command,
+	   _("Check elf/target compatibility before loading. "
+	     "Throwing error if failed."),
+	   &nds_cmdlist);
 
   add_cmd ("endian-check", class_files, nds_endian_check_command,
 	   _("Check endian consistency between elf and target. "
