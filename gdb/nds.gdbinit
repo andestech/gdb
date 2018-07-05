@@ -44,6 +44,9 @@ set remotetimeout 60
 #  1 - SID
 #  2 - OpenOCD
 
+# Enable elf-check by default. Users(IDE) can disable it by setting it to 0.
+set $nds_elf_check = 1
+
 # Turn off frame argument displaying when connecting to remote.
 define target hook-remote
   set print frame-arguments none
@@ -86,6 +89,14 @@ end
 define reset-and-run
   monitor reset run
   flushregs
+end
+
+define hook-load
+  if $_nds_target_type
+    if $nds_elf_check
+      nds elf-check
+    end
+  end
 end
 
 echo [info] .Andesgdbinit loaded.\n
