@@ -4595,18 +4595,22 @@ riscv_convert_16_to_32 (uint16_t insn16, uint32_t *insn32)
       /* CI format to I-TYPE.  */
       /* c.addi16sp shares the opcode with c.lui.  */
       int rd = (insn16 >> 7) & 0x1f;
-      if (rd == 0)
+      if (rd != X_SP)
 	return 0;
-      else if (rd == X_SP)
-	{
-	  imm = EXTRACT_RVC_ADDI16SP_IMM (insn16);
-	  *insn32 = RISCV_ITYPE (ADDI, X_SP, X_SP, imm); /* addi x2, x2, nzimm  */
-	}
-      else
-	{
-	  imm = EXTRACT_RVC_LUI_IMM (insn16);
-	  *insn32 = RISCV_UTYPE (LUI, rd, imm); /* lui rd, nzimm  */
-	}
+
+      imm = EXTRACT_RVC_ADDI16SP_IMM (insn16);
+      *insn32 = RISCV_ITYPE (ADDI, X_SP, X_SP, imm); /* addi x2, x2, nzimm  */
+    }
+  else if ((insn16 & MASK_C_LUI) == MATCH_C_LUI)
+    {
+      /* CI format to I-TYPE.  */
+      /* c.addi16sp shares the opcode with c.lui.  */
+      int rd = (insn16 >> 7) & 0x1f;
+      if (rd == 0 || rd == X_SP)
+	return 0;
+
+      imm = EXTRACT_RVC_LUI_IMM (insn16);
+      *insn32 = RISCV_UTYPE (LUI, rd, imm); /* lui rd, nzimm  */
     }
   else if ((insn16 & MASK_C_ADDI4SPN) == MATCH_C_ADDI4SPN)
     {
