@@ -876,16 +876,13 @@ parse_elf_attribute_section (const uint8_t * buf, const uint8_t * end)
 }
 
 static int
-elf_check (const char *filename, void *file_data, unsigned int file_size,
+elf_check (void *file_data, unsigned int file_size,
 	   CALLBACK_FUNC reg_read_callback, char *buf, unsigned int len)
 {
   unsigned int n_error = 0;
   buf_t file = {.data = (uint8_t *) file_data,.size = file_size };
 
   NEC_buf_init (buf, len);
-
-  if (filename != NULL || *filename != '\0')
-    NEC_output ("ELF filename: %s\n", filename);
 
   if (file.size < EI_NIDENT)
     die ("Not an ELF file.\n");
