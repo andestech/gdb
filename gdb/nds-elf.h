@@ -104,7 +104,7 @@ NEC_buf_init (char *buf, unsigned int len)
 do \
 { \
   char temp[OUTPUT_MSG_MAX_LEN]; \
-  NEC_sprintf(temp, fmt, ##__VA_ARGS__); \
+  NEC_snprintf (temp, sizeof (temp), fmt, ##__VA_ARGS__); \
   NEC_strcat_safety (nec_buf, nec_buf_len, temp); \
 } \
 while (0)
@@ -116,6 +116,14 @@ do \
   return -1; \
 } \
 while (0)
+
+	//NDS32 strcat for avoiding buf overflow
+static inline void
+NEC_strcat_safety (char *destination, unsigned int destination_size,
+		   char *source)
+{
+  strncat (destination, source, destination_size - strlen (destination) - 1);
+}
 
 static inline void
 NEC_itoa (unsigned int value, char *buf, const unsigned int base)
@@ -152,11 +160,13 @@ NEC_format (char *buf, unsigned int width)
 }
 
 static void
-NEC_sprintf (char *buf, const char *str, ...)
+NEC_snprintf (char *buf, size_t size, const char *str, ...)
 {
-  int width, len = 0;
+#define TEMP_SZ	100
+  int width;
+  size_t len = 0 ;
   va_list ap;
-  char token, temp[100];
+  char token, temp[TEMP_SZ];
   buf[0] = '\0';
 
 
@@ -186,7 +196,8 @@ NEC_sprintf (char *buf, const char *str, ...)
 	      NEC_itoa (va_arg (ap, unsigned int), temp, 16);
 	      break;
 	    case 's':
-	      strcpy (temp, va_arg (ap, char *));
+	      strncpy (temp, va_arg (ap, char *), sizeof (temp) - 1);
+	      temp[TEMP_SZ - 1] = '\0';
 	      break;
 	    }
 
@@ -194,21 +205,18 @@ NEC_sprintf (char *buf, const char *str, ...)
 	    NEC_format (temp, width);
 
 	  buf[len++] = '\0';
-	  strcat (buf, temp);
+	  NEC_strcat_safety (buf, size, temp);
 	  len = strlen (buf);
+
+	  if (len > size)
+	    /* The buffer is full.  */
+	    return;
 	}
 
       str++;
     }
   buf[len] = '\0';
-}
-
-	//NDS32 strcat for avoiding buf overflow
-static inline void
-NEC_strcat_safety (char *destination, unsigned int destination_size,
-		   char *source)
-{
-  strncat (destination, source, destination_size - strlen (destination) - 1);
+#undef TEMP_SZ
 }
 
 	//NDS32 Elf Check print
@@ -950,7 +958,7 @@ elf_check (const char *filename, void *file_data, unsigned int file_size,
   for (i = 0; i < EXT_COUNT; i++)
     {
       ext_str[0] = riscv_extensions[i];
-      NEC_sprintf (temp, "Extension '%s'", ext_str);
+      NEC_snprintf (temp, sizeof (temp), "Extension '%s'", ext_str);
       if (NEC_check_bool (EFT_ERROR, temp,
 			  cpu_support_std_ext (CSR_misa, riscv_extensions[i]),
 			  elf_use_ext_i (i, true)))
