@@ -507,7 +507,7 @@ nds_elf_check_command (const char *args, int from_tty)
 
   close(fd);
 
-  err = elf_check (filename, data, st.st_size, nds_elf_check_get_register,
+  err = elf_check (data, st.st_size, nds_elf_check_get_register,
 		   check_msg, sizeof (check_msg));
 
   if (err)
