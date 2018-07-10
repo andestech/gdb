@@ -193,7 +193,7 @@ static struct hash_control *insn_type_hash = NULL;
 
 /* This array holds the chars that always start a comment.  If the
     pre-processor is disabled, these aren't very useful */
-const char comment_chars[] = "#!";
+const char comment_chars[] = "#";
 
 /* This array holds the chars that only start a comment at the beginning of
    a line.  If the line seems to have the form '# 123 filename'
@@ -202,7 +202,7 @@ const char comment_chars[] = "#!";
    first line of the input file.  This is because the compiler outputs
    #NO_APP at the beginning of its output.  */
 /* Also note that C style comments are always supported.  */
-const char line_comment_chars[] = "#!";
+const char line_comment_chars[] = "#";
 
 /* This array holds machine specific line separator characters.  */
 const char line_separator_chars[] = ";";
