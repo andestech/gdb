@@ -238,6 +238,10 @@ PARSE_AND_LIST_PROLOGUE='
 #define OPTION_EXECIT_LIMIT		(OPTION_EXECIT_BASELINE + 8)
 #define OPTION_EXECIT_LOOP		(OPTION_EXECIT_BASELINE + 9)
 #endif
+
+/* These are only for lld internal usage and not affected for bfd.  */
+#define OPTION_LLD_COMPATIBLE_BASELINE	340
+#define OPTION_RELAX_GP_TO_RODATA	(OPTION_LLD_COMPATIBLE_BASELINE + 1)
 '
 PARSE_AND_LIST_LONGOPTS='
   { "mno-target-aligned", no_argument, NULL, OPTION_NO_TARGET_ALIGNED},
@@ -267,6 +271,9 @@ PARSE_AND_LIST_LONGOPTS='
   { "mex9-limit", required_argument, NULL, OPTION_EXECIT_LIMIT},
   { "mex9-loop-aware", no_argument, NULL, OPTION_EXECIT_LOOP},
 #endif
+
+/* These are only for lld internal usage and not affected for bfd.  */
+  {"mrelax-gp-to-rodata", no_argument, NULL, OPTION_RELAX_GP_TO_RODATA},
 '
 PARSE_AND_LIST_OPTIONS='
 fprintf (file, _("\
@@ -374,6 +381,9 @@ PARSE_AND_LIST_ARGS_CASES='
     execit_loop_aware = 1;
     break;
 #endif
+  case OPTION_RELAX_GP_TO_RODATA:
+    /* Do nothing.  */
+    break;
 '
 
 LDEMUL_BEFORE_ALLOCATION=riscv_elf_before_allocation
