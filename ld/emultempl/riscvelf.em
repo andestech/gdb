@@ -241,13 +241,26 @@ PARSE_AND_LIST_PROLOGUE='
 
 /* These are only for lld internal usage and not affected for bfd.  */
 #define OPTION_LLD_COMPATIBLE_BASELINE	340
-#define OPTION_RELAX_GP_TO_RODATA	(OPTION_LLD_COMPATIBLE_BASELINE + 1)
+#define OPTION_BEST_GP			(OPTION_LLD_COMPATIBLE_BASELINE + 1)
+#define OPTION_EXECIT_OPT_DATA		(OPTION_LLD_COMPATIBLE_BASELINE + 2)
+#define OPTION_EXECIT_OPT_RODATA	(OPTION_LLD_COMPATIBLE_BASELINE + 3)
+#define OPTION_EXECIT_SEPERATE_CALL	(OPTION_LLD_COMPATIBLE_BASELINE + 4)
+#define OPTION_RELAX_GP_TO_RODATA	(OPTION_LLD_COMPATIBLE_BASELINE + 5)
+#define OPTION_RELAX_CROSS_SECTION_CALL	(OPTION_LLD_COMPATIBLE_BASELINE + 6)
+#define OPTION_DEBUG_EXECIT_LIMIT	(OPTION_LLD_COMPATIBLE_BASELINE + 7)
+#define OPTION_NO_EXECIT_AUIPC		(OPTION_LLD_COMPATIBLE_BASELINE + 8)
+#define OPTION_NO_EXECIT_LUI		(OPTION_LLD_COMPATIBLE_BASELINE + 9)
+#define OPTION_NO_RELAX_PCREL		(OPTION_LLD_COMPATIBLE_BASELINE + 10)
+#define OPTION_NO_RELAX_CALL		(OPTION_LLD_COMPATIBLE_BASELINE + 11)
+#define OPTION_NO_RELAX_LUI		(OPTION_LLD_COMPATIBLE_BASELINE + 12)
+#define OPTION_ALLOW_INCOMPATIBLE_ATTR	(OPTION_LLD_COMPATIBLE_BASELINE + 13)
 '
 PARSE_AND_LIST_LONGOPTS='
+  { "mexport-symbols", required_argument, NULL, OPTION_EXPORT_SYMBOLS},
+/* Generally, user does not need to set these options by themselves.  */
   { "mno-target-aligned", no_argument, NULL, OPTION_NO_TARGET_ALIGNED},
   { "mgp-insn-relax", no_argument, NULL, OPTION_GP_RELATIVE_INSN},
   { "mno-gp-insn-relax", no_argument, NULL, OPTION_NO_GP_RELATIVE_INSN},
-  { "mexport-symbols", required_argument, NULL, OPTION_EXPORT_SYMBOLS},
   { "mavoid-btb-miss", no_argument, NULL, OPTION_AVOID_BTB_MISS},
   { "mno-avoid-btb-miss", no_argument, NULL, OPTION_NO_AVOID_BTB_MISS},
 
@@ -273,14 +286,23 @@ PARSE_AND_LIST_LONGOPTS='
 #endif
 
 /* These are only for lld internal usage and not affected for bfd.  */
+  {"mbest-gp", no_argument, NULL, OPTION_BEST_GP},
+  {"mexecit_opt_data", no_argument, NULL, OPTION_EXECIT_OPT_DATA},
+  {"mexecit_opt_rodata", no_argument, NULL, OPTION_EXECIT_OPT_RODATA},
+  {"mexecit_opt_seperate_call", no_argument, NULL, OPTION_EXECIT_SEPERATE_CALL},
   {"mrelax-gp-to-rodata", no_argument, NULL, OPTION_RELAX_GP_TO_RODATA},
+  {"mrelax_cross_section_call", no_argument, NULL, OPTION_RELAX_CROSS_SECTION_CALL},
+  {"mdebug-execit-limit", required_argument, NULL, OPTION_DEBUG_EXECIT_LIMIT},
+  {"mno-execit-auipc", no_argument, NULL, OPTION_NO_EXECIT_AUIPC},
+  {"mno-execit-lui", no_argument, NULL, OPTION_NO_EXECIT_LUI},
+  {"mno-relax-pcrel", no_argument, NULL, OPTION_NO_RELAX_PCREL},
+  {"mno-relax-call", no_argument, NULL, OPTION_NO_RELAX_CALL},
+  {"mno-relax-lui", no_argument, NULL, OPTION_NO_RELAX_LUI},
+  {"mallow-incompatible-attributes", no_argument, NULL, OPTION_ALLOW_INCOMPATIBLE_ATTR},
 '
 PARSE_AND_LIST_OPTIONS='
 fprintf (file, _("\
-    --mno-target-aligned        Disable target aligned\n\
-    --m[no-]gp-insn             Support gp relative instructions\n\
     --mexport-symbols=FILE      Exporting global symbols into linker script\n\
-    --m[no-]avoid-btb-miss      Avoid btb miss \n\
 "));
 
 #if defined RISCV_EXECIT_EXT
@@ -381,7 +403,24 @@ PARSE_AND_LIST_ARGS_CASES='
     execit_loop_aware = 1;
     break;
 #endif
+  case OPTION_DEBUG_EXECIT_LIMIT:
+    if (optarg)
+      {
+	/* Do nothing.  */
+      }
+    break;
+  case OPTION_BEST_GP:
+  case OPTION_EXECIT_OPT_DATA:
+  case OPTION_EXECIT_OPT_RODATA:
+  case OPTION_EXECIT_SEPERATE_CALL:
   case OPTION_RELAX_GP_TO_RODATA:
+  case OPTION_RELAX_CROSS_SECTION_CALL:
+  case OPTION_NO_EXECIT_AUIPC:
+  case OPTION_NO_EXECIT_LUI:
+  case OPTION_NO_RELAX_PCREL:
+  case OPTION_NO_RELAX_CALL:
+  case OPTION_NO_RELAX_LUI:
+  case OPTION_ALLOW_INCOMPATIBLE_ATTR:
     /* Do nothing.  */
     break;
 '
