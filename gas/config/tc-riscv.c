@@ -5269,6 +5269,14 @@ riscv_write_out_arch_attr (void)
 	(arch_info_hash, arch_info[i].name);
       if (info && info->valid)
 	{
+	  /* For bug-16227, skip 'c' extension if
+	     option "-mno-16-bit" is set.  */
+	  if (strcmp (arch_info[i].name, "c") == 0
+	      && riscv_opts.no_16_bit)
+	    {
+	      info->valid = 0;
+	      continue;
+	    }
 	  strncat(out_arch, info->name, strlen (info->name));
 	  strncat(out_arch, info->v_major, strlen (info->v_major));
 	  strncat(out_arch, "p", 1);
