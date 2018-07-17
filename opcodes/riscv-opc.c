@@ -177,7 +177,9 @@ match_c_add_with_hint (const struct riscv_opcode *op,
 		       insn_t insn,
 		       int constraints ATTRIBUTE_UNUSED)
 {
-  return match_opcode (op, insn, 0) && ((insn & MASK_CRS2) != 0);
+  return match_opcode (op, insn, 0)
+	  && ((insn & MASK_CRS2) != 0)
+	  && ((insn & MASK_RD) != 0);
 }
 
 static int
