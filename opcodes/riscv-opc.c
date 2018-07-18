@@ -308,8 +308,10 @@ const struct riscv_opcode riscv_opcodes[] =
 {"li",          0, INSN_CLASS_I, "d,j",       MATCH_ADDI, MASK_ADDI|MASK_RS1, match_opcode, INSN_ALIAS }, /* addi  */
 {"li",          0, INSN_CLASS_I, "d,I",       0, (int) M_LI,  match_never, INSN_MACRO },
 {"mv",          0, INSN_CLASS_C, "d,CV",      MATCH_C_MV, MASK_C_MV, match_c_add, INSN_ALIAS },
+{"mv",          0, INSN_CLASS_C, "d,Cz",      MATCH_C_LI, MASK_C_LI | MASK_RVC_IMM, match_rd_nonzero, INSN_ALIAS },
 {"mv",          0, INSN_CLASS_I, "d,s",       MATCH_ADDI, MASK_ADDI|MASK_IMM, match_opcode, INSN_ALIAS },
 {"move",        0, INSN_CLASS_C, "d,CV",      MATCH_C_MV, MASK_C_MV, match_c_add, INSN_ALIAS },
+{"move",        0, INSN_CLASS_C, "d,Cz",      MATCH_C_LI, MASK_C_LI | MASK_RVC_IMM, match_rd_nonzero, INSN_ALIAS },
 {"move",        0, INSN_CLASS_I, "d,s",       MATCH_ADDI, MASK_ADDI|MASK_IMM, match_opcode, INSN_ALIAS },
 {"zext.b",      0, INSN_CLASS_I, "d,s",       MATCH_ANDI|ENCODE_ITYPE_IMM (255), MASK_ANDI | MASK_IMM, match_opcode, INSN_ALIAS },
 {"andi",        0, INSN_CLASS_C, "Cs,Cw,Co",  MATCH_C_ANDI, MASK_C_ANDI, match_opcode, INSN_ALIAS },
