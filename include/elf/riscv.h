@@ -151,6 +151,9 @@ enum
   Tag_RISCV_priv_spec_revision = 12
 };
 
+/* Processor specific program header types */
+#define PT_RISCV_ATTRIBUTES 0x70000000 /* .riscv.attributes section */
+
 /* Additional section types.  */
 #define SHT_RISCV_ATTRIBUTES   0x70000003  /* Section holds attributes.  */
 
