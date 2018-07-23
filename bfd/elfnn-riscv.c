@@ -8270,6 +8270,58 @@ riscv_elf_obj_attrs_arg_type (int tag)
     }
 }
 
+/* Add a PT_RISCV_ATTRIBUTES program header.  */
+
+static bfd_boolean
+riscv_elf_modify_segment_map (bfd *abfd,
+			      struct bfd_link_info *info ATTRIBUTE_UNUSED)
+{
+  struct elf_segment_map *m, *m_prev;
+  asection *sec;
+
+  sec = bfd_get_section_by_name (abfd, ".riscv.attributes");
+  if (sec != NULL)
+    {
+      /* If there is already a PT_RISCV_ATTRIBUTES header,
+	 then we do not want to add another one.  */
+      m = elf_seg_map (abfd);
+      m_prev = m;
+      while (m && m->p_type != PT_RISCV_ATTRIBUTES)
+	{
+	  m_prev = m;
+	  m = m->next;
+	}
+
+      if (!m)
+	{
+	  m = (struct elf_segment_map *)
+	    bfd_zalloc (abfd, sizeof (struct elf_segment_map));
+	  if (m == NULL)
+	    return FALSE;
+	  m->p_type = PT_RISCV_ATTRIBUTES;
+	  m->count = 1;
+	  m->sections[0] = sec;
+	  /* Add it to the last.  */
+	  m_prev->next = m;
+	}
+    }
+
+  return TRUE;
+}
+
+static int
+riscv_elf_additional_program_headers (bfd *abfd,
+				      struct bfd_link_info *info ATTRIBUTE_UNUSED)
+{
+  asection *sec;
+
+  sec = bfd_get_section_by_name (abfd, ".riscv.attributes");
+  if (sec != NULL)
+    return 1;
+  else
+    return 0;
+}
+
 #define TARGET_LITTLE_SYM		riscv_elfNN_vec
 #define TARGET_LITTLE_NAME		"elfNN-littleriscv"
 
@@ -8321,5 +8373,8 @@ riscv_elf_obj_attrs_arg_type (int tag)
 #define elf_backend_obj_attrs_section_type      SHT_RISCV_ATTRIBUTES
 #undef  elf_backend_obj_attrs_section
 #define elf_backend_obj_attrs_section           ".riscv.attributes"
+#define elf_backend_additional_program_headers \
+  riscv_elf_additional_program_headers
+#define elf_backend_modify_segment_map		riscv_elf_modify_segment_map
 
 #include "elfNN-target.h"
