@@ -123,6 +123,10 @@ bfd_boolean ace_lib_load_success = FALSE;
 
 /* Other options.  */
 static int no_aliases;	/* If set disassemble as most general inst.  */
+/* Debugging mode:
+ * Display ex9 table with ID.
+ * Show the ACE insn even if the ACE library is loaded fail.  */
+static int debugging;
 
 static void
 set_default_riscv_dis_options (void)
@@ -131,12 +135,15 @@ set_default_riscv_dis_options (void)
   riscv_fpr_names = riscv_fpr_names_abi;
   riscv_vecr_names = riscv_vecr_names_numeric;
   no_aliases = 0;
+  debugging = 0;
 }
 
 static void
 parse_riscv_dis_option (const char *option)
 {
-  if (strcmp (option, "no-aliases") == 0)
+  if (strcmp (option, "debugging") == 0)
+    debugging = 1;
+  else if (strcmp (option, "no-aliases") == 0)
     no_aliases = 1;
   else if (strcmp (option, "numeric") == 0)
     {
@@ -924,6 +931,7 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
   struct riscv_private_data *pd;
   int insnlen;
   int match;
+  static int execit_id = 0;
 
 #define OP_HASH_IDX(i) ((i) & (riscv_insn_length (i) == 2 ? 0x3 : OP_MASK_OP))
 
@@ -1047,15 +1055,34 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
 
   if (info->section
       && strstr (info->section->name, ".exec.itable") != NULL)
-    match = riscv_parse_opcode (memaddr, word, info, pd, RISCV_PARSE_EXECIT_TAB);
+    {
+      match = riscv_parse_opcode (memaddr, word, info, pd, RISCV_PARSE_EXECIT_TAB);
+      if (debugging)
+	(*info->fprintf_func) (info->stream, "\t/* %d */", execit_id++);
+    }
   else
     match = riscv_parse_opcode (memaddr, word, info, pd, 0);
 
   if (!match)
     {
-      /* We did not find a match, so just print the instruction bits.  */
-      info->insn_type = dis_noninsn;
-      (*info->fprintf_func) (info->stream, "0x%llx", (unsigned long long)word);
+      /* We did not find a match above. */
+      /* It may be ACE insn but the ACE shared library is
+	 failed to load.  */
+      if (debugging
+	  && !ace_lib_load_success
+	  && (word & 0x7f) == 0x7b)
+	{
+	  info->insn_type = dis_noninsn;
+	  (*info->fprintf_func) (info->stream,
+				 "ACE insn (0x%llx)",
+				 (unsigned long long)word);
+	}
+      else
+	{
+	  /* Just print the instruction bits.  */
+	  info->insn_type = dis_noninsn;
+	  (*info->fprintf_func) (info->stream, "0x%llx", (unsigned long long)word);
+	}
     }
 
   return insnlen;
