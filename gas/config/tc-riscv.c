@@ -2965,7 +2965,7 @@ jump:
 	    case 'c':
 	      my_getExpression (imm_expr, s);
 	      s = expr_end;
-	      if (strcmp (s, "@plt") == 0)
+	      if (strcmp (s, "@plt") == 0 || strcmp(s, "@PLT") == 0)
 		{
 		  *imm_reloc = BFD_RELOC_RISCV_CALL_PLT;
 		  s += 4;
