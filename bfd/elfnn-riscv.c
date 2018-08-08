@@ -5525,20 +5525,25 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
       relax_func = NULL;
       if (info->relax_pass == 1)
 	{
-	  if (type == R_RISCV_CALL || type == R_RISCV_CALL_PLT)
+	  if (htab->set_relax_call
+	      && (type == R_RISCV_CALL
+		  || type == R_RISCV_CALL_PLT))
 	    relax_func = _bfd_riscv_relax_call;
-	  else if (type == R_RISCV_LO12_I
-		   || type == R_RISCV_LO12_S)
+	  else if (htab->set_relax_lui
+		   && (type == R_RISCV_LO12_I
+		       || type == R_RISCV_LO12_S))
 	    relax_func = _bfd_riscv_relax_lui;
-	  else if (!bfd_link_pic(info)
+	  else if (htab->set_relax_pc
+		   && !bfd_link_pic(info)
 		   && (type == R_RISCV_PCREL_HI20
-		   || type == R_RISCV_PCREL_LO12_I
-		   || type == R_RISCV_PCREL_LO12_S))
+		       || type == R_RISCV_PCREL_LO12_I
+		       || type == R_RISCV_PCREL_LO12_S))
 	    relax_func = _bfd_riscv_relax_pc;
-	  else if (type == R_RISCV_TPREL_HI20
-		   || type == R_RISCV_TPREL_ADD
-		   || type == R_RISCV_TPREL_LO12_I
-		   || type == R_RISCV_TPREL_LO12_S)
+	  else if (htab->set_relax_tls_le
+		   && (type == R_RISCV_TPREL_HI20
+		       || type == R_RISCV_TPREL_ADD
+		       || type == R_RISCV_TPREL_LO12_I
+		       || type == R_RISCV_TPREL_LO12_S))
 	    relax_func = _bfd_riscv_relax_tls_le;
 	  else
 	    continue;
@@ -5552,7 +5557,9 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	  /* Skip over the R_RISCV_RELAX.  */
 	  i++;
 	}
-      else if (info->relax_pass == 2 && type == R_RISCV_HI20)
+      else if (info->relax_pass == 2
+	       && htab->set_relax_lui
+	       && type == R_RISCV_HI20)
 	{
 	  relax_func = _bfd_riscv_relax_lui;
 
@@ -5565,9 +5572,11 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	  /* Skip over the R_RISCV_RELAX.  */
 	  i++;
 	}
-      else if (info->relax_pass == 3 && type == R_RISCV_DELETE)
+      else if (info->relax_pass == 3
+	       && type == R_RISCV_DELETE)
 	relax_func = _bfd_riscv_relax_delete;
       else if (info->relax_pass == 4
+	       && htab->set_relax_align
 	       && (type == R_RISCV_ALIGN
 		   || type == R_RISCV_ALIGN_BTB))
 	relax_func = _bfd_riscv_relax_align;

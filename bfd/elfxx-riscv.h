@@ -118,10 +118,16 @@ struct riscv_elf_link_hash_table
   bfd_vma max_alignment;
 
   /* Target dependent options.  */
-  int target_aligned;
-  int gp_relative_insn;
   FILE *sym_ld_script;
+  /* For internal usage.  */
+  int gp_relative_insn;
+  int set_relax_align;
+  int target_aligned;
   int avoid_btb_miss;
+  int set_relax_lui;
+  int set_relax_pc;
+  int set_relax_call;
+  int set_relax_tls_le;
   /* For EXECIT.  */
   int target_optimize;
   int relax_status;
