@@ -1416,11 +1416,13 @@ append_insn (struct riscv_cl_insn *ip, expressionS *address_expr,
       frag_new (0);
     }
 
-  /* TODO: The following code is used for doing target aligned.
-     Should it be here?  */
-  if (optimize && riscv_opts.verbatim &&
-      ((align_call && ((ip->insn_opcode >> 7 & 0x1f)) != 0)
-       || (!align_call && ((ip->insn_opcode & MASK_JALR) == MATCH_JALR))))
+  /* TODO: The following code is used for doing target aligned
+     and avoiding BTB miss.  Should it be here?  */
+  /* Do not do target aligned and avoid BTB miss when Os and
+     .option norelax.  */
+  if (optimize && riscv_opts.verbatim && riscv_opts.relax
+      && ((align_call && ((ip->insn_opcode >> 7 & 0x1f)) != 0)
+	  || (!align_call && ((ip->insn_opcode & MASK_JALR) == MATCH_JALR))))
     {
       char *nops = frag_more (4);
       expressionS ex;
