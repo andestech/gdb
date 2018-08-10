@@ -155,7 +155,7 @@ riscv_elf_before_allocation (void)
 	ENABLE_RELAXATION;
     }
 
-  link_info.relax_pass = 7;
+  link_info.relax_pass = 8;
 }
 
 static void
