@@ -1420,7 +1420,8 @@ append_insn (struct riscv_cl_insn *ip, expressionS *address_expr,
      and avoiding BTB miss.  Should it be here?  */
   /* Do not do target aligned and avoid BTB miss when Os and
      .option norelax.  */
-  if (optimize && riscv_opts.verbatim && riscv_opts.relax
+  /* We do target aligned and avoid BTB miss only when RVC is enabled.  */
+  if (optimize && riscv_opts.verbatim && riscv_opts.relax && riscv_opts.rvc
       && ((align_call && ((ip->insn_opcode >> 7 & 0x1f)) != 0)
 	  || (!align_call && ((ip->insn_opcode & MASK_JALR) == MATCH_JALR))))
     {
