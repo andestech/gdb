@@ -246,11 +246,10 @@ main (int argc, char **argv)
       bfd_size_type total = total_textsize + total_datasize + total_bsssize;
 
       rprint_number (7, total_textsize);
-      printf (" (");
-      rprint_number (4, (total_textsize - total_rodata_size));
-      printf (" + ");
-      rprint_number (6, total_rodata_size);
-      printf (")");
+      putchar ('\t');
+      rprint_number (7, total_textsize - total_rodata_size);
+      putchar ('\t');
+      rprint_number (7, total_rodata_size);
       putchar ('\t');
       rprint_number (7, total_datasize);
       putchar ('\t');
@@ -493,8 +492,8 @@ print_berkeley_format (bfd *abfd)
   bsssize += common_size;
   if (files_seen++ == 0)
     puts ((radix == octal) ?
-	  "   text (code + rodata)\t   data\t    bss\t    oct\t    hex\tfilename" :
-	  "   text (code + rodata)\t   data\t    bss\t    dec\t    hex\tfilename");
+	  "   text\t   code\t rodata\t   data\t    bss\t    oct\t    hex\tfilename" :
+	  "   text\t   code\t rodata\t   data\t    bss\t    dec\t    hex\tfilename");
 
   total = textsize + datasize + bsssize;
 
@@ -507,11 +506,10 @@ print_berkeley_format (bfd *abfd)
     }
 
   rprint_number (7, textsize);
-  printf (" (");
-  rprint_number (4, (textsize - rodata_size));
-  printf (" + ");
-  rprint_number (6, rodata_size);
-  printf (")");
+  putchar ('\t');
+  rprint_number (7, textsize - rodata_size);
+  putchar ('\t');
+  rprint_number (7, rodata_size);
   putchar ('\t');
   rprint_number (7, datasize);
   putchar ('\t');
