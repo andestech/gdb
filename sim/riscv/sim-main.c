@@ -2240,38 +2240,24 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_SRA8:
       {
-	reg_t result;
-	result.b8.b0 = cpu->regs[ra].b8.b0 >> (cpu->regs[rb].u & 0x7);
-	result.b8.b1 = cpu->regs[ra].b8.b1 >> (cpu->regs[rb].u & 0x7);
-	result.b8.b2 = cpu->regs[ra].b8.b2 >> (cpu->regs[rb].u & 0x7);
-	result.b8.b3 = cpu->regs[ra].b8.b3 >> (cpu->regs[rb].u & 0x7);
-
-	if (RISCV_XLEN (cpu) == 64)
+	for (i = 0; i < vec8_num; i++)
 	  {
-	    result.b8.b4 = cpu->regs[ra].b8.b4 >> (cpu->regs[rb].u & 0x7);
-	    result.b8.b5 = cpu->regs[ra].b8.b5 >> (cpu->regs[rb].u & 0x7);
-	    result.b8.b6 = cpu->regs[ra].b8.b6 >> (cpu->regs[rb].u & 0x7);
-	    result.b8.b7 = cpu->regs[ra].b8.b7 >> (cpu->regs[rb].u & 0x7);
+	    res = *(ptr_a8 + i) >> (cpu->regs[rb].u & 0x7);
+	    *(ptr8 + i) = res;
 	  }
+
 	cpu->regs[rd].s = result.s;
 	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SRAI8:
       {
-	reg_t result;
-	result.b8.b0 = cpu->regs[ra].b8.b0 >> imm3u;
-	result.b8.b1 = cpu->regs[ra].b8.b1 >> imm3u;
-	result.b8.b2 = cpu->regs[ra].b8.b2 >> imm3u;
-	result.b8.b3 = cpu->regs[ra].b8.b3 >> imm3u;
-
-	if (RISCV_XLEN (cpu) == 64)
+	for (i = 0; i < vec8_num; i++)
 	  {
-	    result.b8.b0 = cpu->regs[ra].b8.b0 >> imm3u;
-	    result.b8.b1 = cpu->regs[ra].b8.b1 >> imm3u;
-	    result.b8.b2 = cpu->regs[ra].b8.b2 >> imm3u;
-	    result.b8.b3 = cpu->regs[ra].b8.b3 >> imm3u;
+	    res = *(ptr_a8 + i) >> imm3u;
+	    *(ptr8 + i) = res;
 	  }
+
 	cpu->regs[rd].s = result.s;
 	TRACE_REG (cpu, rd);
       }
@@ -2306,38 +2292,16 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_SRA8_U:
       {
-	reg_t result;
 	uint32_t rnd_mask = (1UL << (cpu->regs[rb].u - 1));
 	int8_t rnd_val;
 
-	rnd_val = (cpu->regs[ra].b8.b0 & rnd_mask) ? 1 : 0;
-	result.b8.b0 = (cpu->regs[ra].b8.b0 >> (cpu->regs[rb].u & 0xf))
-			+ rnd_val;
-	rnd_val = (cpu->regs[ra].b8.b1 & rnd_mask) ? 1 : 0;
-	result.b8.b1 = (cpu->regs[ra].b8.b1 >> (cpu->regs[rb].u & 0xf))
-			+ rnd_val;
-	rnd_val = (cpu->regs[ra].b8.b2 & rnd_mask) ? 1 : 0;
-	result.b8.b2 = (cpu->regs[ra].b8.b2 >> (cpu->regs[rb].u & 0xf))
-			+ rnd_val;
-	rnd_val = (cpu->regs[ra].b8.b3 & rnd_mask) ? 1 : 0;
-	result.b8.b3 = (cpu->regs[ra].b8.b3 >> (cpu->regs[rb].u & 0xf))
-			+ rnd_val;
-
-	if (RISCV_XLEN (cpu) == 64)
+	for (i = 0; i < vec8_num; i++)
 	  {
-	    rnd_val = (cpu->regs[ra].b8.b4 & rnd_mask) ? 1 : 0;
-	    result.b8.b4 = (cpu->regs[ra].b8.b4 >> (cpu->regs[rb].u & 0xf))
-			    + rnd_val;
-	    rnd_val = (cpu->regs[ra].b8.b5 & rnd_mask) ? 1 : 0;
-	    result.b8.b5 = (cpu->regs[ra].b8.b5 >> (cpu->regs[rb].u & 0xf))
-			    + rnd_val;
-	    rnd_val = (cpu->regs[ra].b8.b6 & rnd_mask) ? 1 : 0;
-	    result.b8.b6 = (cpu->regs[ra].b8.b6 >> (cpu->regs[rb].u & 0xf))
-			    + rnd_val;
-	    rnd_val = (cpu->regs[ra].b8.b7 & rnd_mask) ? 1 : 0;
-	    result.b8.b7 = (cpu->regs[ra].b8.b7 >> (cpu->regs[rb].u & 0xf))
-			    + rnd_val;
+	    rnd_val = (*(ptr_a8 + i) & rnd_mask) ? 1 : 0;
+	    res = *(ptr_a8 + i) >> (cpu->regs[rb].u & 0xf) + rnd_val;
+	    *(ptr8 + i) = res;
 	  }
+
 	cpu->regs[rd].s = result.s;
 	TRACE_REG (cpu, rd);
       }
@@ -2372,36 +2336,16 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_SRAI8_U:
       {
-	reg_t result;
 	uint32_t rnd_mask = (1UL << (imm3u - 1));
 	int8_t rnd_val;
 
-	rnd_val = (cpu->regs[ra].b8.b0 & rnd_mask) ? 1 : 0;
-	result.b8.b0 = (cpu->regs[ra].b8.b0 >> imm3u) + rnd_val;
-
-	rnd_val = (cpu->regs[ra].b8.b1 & rnd_mask) ? 1 : 0;
-	result.b8.b1 = (cpu->regs[ra].b8.b1 >> imm3u) + rnd_val;
-
-	rnd_val = (cpu->regs[ra].b8.b2 & rnd_mask) ? 1 : 0;
-	result.b8.b2 = (cpu->regs[ra].b8.b2 >> imm3u) + rnd_val;
-
-	rnd_val = (cpu->regs[ra].b8.b3 & rnd_mask) ? 1 : 0;
-	result.b8.b3 = (cpu->regs[ra].b8.b3 >> imm3u) + rnd_val;
-
-	if (RISCV_XLEN (cpu) == 64)
+	for (i = 0; i < vec8_num; i++)
 	  {
-	    rnd_val = (cpu->regs[ra].b8.b4 & rnd_mask) ? 1 : 0;
-	    result.b8.b4 = (cpu->regs[ra].b8.b4 >> imm3u) + rnd_val;
-
-	    rnd_val = (cpu->regs[ra].b8.b5 & rnd_mask) ? 1 : 0;
-	    result.b8.b5 = (cpu->regs[ra].b8.b5 >> imm3u) + rnd_val;
-
-	    rnd_val = (cpu->regs[ra].b8.b6 & rnd_mask) ? 1 : 0;
-	    result.b8.b6 = (cpu->regs[ra].b8.b6 >> imm3u) + rnd_val;
-
-	    rnd_val = (cpu->regs[ra].b8.b7 & rnd_mask) ? 1 : 0;
-	    result.b8.b7 = (cpu->regs[ra].b8.b7 >> imm3u) + rnd_val;
+	    rnd_val = (*(ptr_a8 + i) & rnd_mask) ? 1 : 0;
+	    res = (*(ptr_a8 + i) >> imm3u) + rnd_val;
+	    *(ptr8 + i) = res;
 	  }
+
 	cpu->regs[rd].s = result.s;
 	TRACE_REG (cpu, rd);
       }
@@ -2452,38 +2396,24 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_SRL8:
       {
-	reg_t result;
-	result.ub8.b0 = cpu->regs[ra].ub8.b0 >> (cpu->regs[rb].u & 0x7);
-	result.ub8.b1 = cpu->regs[ra].ub8.b1 >> (cpu->regs[rb].u & 0x7);
-	result.ub8.b2 = cpu->regs[ra].ub8.b2 >> (cpu->regs[rb].u & 0x7);
-	result.ub8.b3 = cpu->regs[ra].ub8.b3 >> (cpu->regs[rb].u & 0x7);
-
-	if (RISCV_XLEN (cpu) == 64)
+	for (i = 0; i < vec8_num; i++)
 	  {
-	    result.ub8.b4 = cpu->regs[ra].ub8.b4 >> (cpu->regs[rb].u & 0x7);
-	    result.ub8.b5 = cpu->regs[ra].ub8.b5 >> (cpu->regs[rb].u & 0x7);
-	    result.ub8.b6 = cpu->regs[ra].ub8.b6 >> (cpu->regs[rb].u & 0x7);
-	    result.ub8.b7 = cpu->regs[ra].ub8.b7 >> (cpu->regs[rb].u & 0x7);
+	    res = *(uptr_a8 + i) >> (cpu->regs[rb].u & 0x7);
+	    *(uptr8 + i) = res;
 	  }
+
 	cpu->regs[rd].s = result.s;
 	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SRLI8:
       {
-	reg_t result;
-	result.ub8.b0 = cpu->regs[ra].ub8.b0 >> imm3u;
-	result.ub8.b1 = cpu->regs[ra].ub8.b1 >> imm3u;
-	result.ub8.b2 = cpu->regs[ra].ub8.b2 >> imm3u;
-	result.ub8.b3 = cpu->regs[ra].ub8.b3 >> imm3u;
-
-	if (RISCV_XLEN (cpu) == 64)
+	for (i = 0; i < vec8_num; i++)
 	  {
-	    result.ub8.b4 = cpu->regs[ra].ub8.b4 >> imm3u;
-	    result.ub8.b5 = cpu->regs[ra].ub8.b5 >> imm3u;
-	    result.ub8.b6 = cpu->regs[ra].ub8.b6 >> imm3u;
-	    result.ub8.b7 = cpu->regs[ra].ub8.b7 >> imm3u;
+	    res = *(uptr_a8 + i) >> imm3u;
+	    *(uptr8 + i) = res;
 	  }
+
 	cpu->regs[rd].s = result.s;
 	TRACE_REG (cpu, rd);
       }
@@ -2518,38 +2448,17 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_SRL8_U:
       {
-	reg_t result;
 	uint32_t rnd_mask = (1UL << (cpu->regs[rb].u - 1));
 	int8_t rnd_val;
 
-	rnd_val = (cpu->regs[ra].ub8.b0 & rnd_mask) ? 1 : 0;
-	result.ub8.b0 = (cpu->regs[ra].ub8.b0 >> (cpu->regs[rb].u & 0xf))
-			 + rnd_val;
-	rnd_val = (cpu->regs[ra].ub8.b1 & rnd_mask) ? 1 : 0;
-	result.ub8.b1 = (cpu->regs[ra].ub8.b1 >> (cpu->regs[rb].u & 0xf))
-			 + rnd_val;
-	rnd_val = (cpu->regs[ra].ub8.b2 & rnd_mask) ? 1 : 0;
-	result.ub8.b2 = (cpu->regs[ra].ub8.b2 >> (cpu->regs[rb].u & 0xf))
-			 + rnd_val;
-	rnd_val = (cpu->regs[ra].ub8.b3 & rnd_mask) ? 1 : 0;
-	result.ub8.b3 = (cpu->regs[ra].ub8.b3 >> (cpu->regs[rb].u & 0xf))
-			 + rnd_val;
-
-	if (RISCV_XLEN (cpu) == 64)
+	for (i = 0; i < vec8_num; i++)
 	  {
-	    rnd_val = (cpu->regs[ra].ub8.b4 & rnd_mask) ? 1 : 0;
-	    result.ub8.b4 = (cpu->regs[ra].ub8.b4 >> (cpu->regs[rb].u & 0xf))
-			     + rnd_val;
-	    rnd_val = (cpu->regs[ra].ub8.b5 & rnd_mask) ? 1 : 0;
-	    result.ub8.b5 = (cpu->regs[ra].ub8.b5 >> (cpu->regs[rb].u & 0xf))
-			     + rnd_val;
-	    rnd_val = (cpu->regs[ra].ub8.b6 & rnd_mask) ? 1 : 0;
-	    result.ub8.b6 = (cpu->regs[ra].ub8.b6 >> (cpu->regs[rb].u & 0xf))
-			     + rnd_val;
-	    rnd_val = (cpu->regs[ra].ub8.b7 & rnd_mask) ? 1 : 0;
-	    result.ub8.b7 = (cpu->regs[ra].ub8.b7 >> (cpu->regs[rb].u & 0xf))
-			     + rnd_val;
+	    rnd_val = (*(uptr_a8 + i) & rnd_mask) ? 1 : 0;
+
+	    res = (*(uptr_a8 + i) >> (cpu->regs[rb].u & 0xf)) + rnd_val;
+	    *(uptr8 + i) = res;
 	  }
+
 	cpu->regs[rd].s = result.s;
 	TRACE_REG (cpu, rd);
       }
@@ -2584,36 +2493,17 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_SRLI8_U:
       {
-	reg_t result;
 	uint32_t rnd_mask = (1UL << (imm3u - 1));
 	int8_t rnd_val;
 
-	rnd_val = (cpu->regs[ra].ub8.b0 & rnd_mask) ? 1 : 0;
-	result.ub8.b0 = (cpu->regs[ra].ub8.b0 >> imm3u) + rnd_val;
-
-	rnd_val = (cpu->regs[ra].ub8.b1 & rnd_mask) ? 1 : 0;
-	result.ub8.b1 = (cpu->regs[ra].ub8.b1 >> imm3u) + rnd_val;
-
-	rnd_val = (cpu->regs[ra].ub8.b2 & rnd_mask) ? 1 : 0;
-	result.ub8.b2 = (cpu->regs[ra].ub8.b2 >> imm3u) + rnd_val;
-
-	rnd_val = (cpu->regs[ra].ub8.b3 & rnd_mask) ? 1 : 0;
-	result.ub8.b3 = (cpu->regs[ra].ub8.b3 >> imm3u) + rnd_val;
-
-	if (RISCV_XLEN (cpu) == 64)
+	for (i = 0; i < vec8_num; i++)
 	  {
-	    rnd_val = (cpu->regs[ra].ub8.b4 & rnd_mask) ? 1 : 0;
-	    result.ub8.b4 = (cpu->regs[ra].ub8.b4 >> imm3u) + rnd_val;
+	    rnd_val = (*(uptr_a8 + i) & rnd_mask) ? 1 : 0;
 
-	    rnd_val = (cpu->regs[ra].ub8.b5 & rnd_mask) ? 1 : 0;
-	    result.ub8.b5 = (cpu->regs[ra].ub8.b5 >> imm3u) + rnd_val;
-
-	    rnd_val = (cpu->regs[ra].ub8.b6 & rnd_mask) ? 1 : 0;
-	    result.ub8.b6 = (cpu->regs[ra].ub8.b6 >> imm3u) + rnd_val;
-
-	    rnd_val = (cpu->regs[ra].ub8.b7 & rnd_mask) ? 1 : 0;
-	    result.ub8.b7 = (cpu->regs[ra].ub8.b7 >> imm3u) + rnd_val;
+	    res = (*(uptr_a8 + i) >> imm3u) + rnd_val;
+	    *(uptr8 + i) = res;
 	  }
+
 	cpu->regs[rd].s = result.s;
 	TRACE_REG (cpu, rd);
       }
@@ -2664,18 +2554,10 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_SLL8:
       {
-	reg_t result;
-	result.b8.b0 = cpu->regs[ra].b8.b0 << (cpu->regs[rb].u & 0x7);
-	result.b8.b1 = cpu->regs[ra].b8.b1 << (cpu->regs[rb].u & 0x7);
-	result.b8.b2 = cpu->regs[ra].b8.b2 << (cpu->regs[rb].u & 0x7);
-	result.b8.b3 = cpu->regs[ra].b8.b3 << (cpu->regs[rb].u & 0x7);
-
-	if (RISCV_XLEN (cpu) == 64)
+	for (i = 0; i < vec8_num; i++)
 	  {
-	    result.b8.b4 = cpu->regs[ra].b8.b4 << (cpu->regs[rb].u & 0x7);
-	    result.b8.b5 = cpu->regs[ra].b8.b5 << (cpu->regs[rb].u & 0x7);
-	    result.b8.b6 = cpu->regs[ra].b8.b6 << (cpu->regs[rb].u & 0x7);
-	    result.b8.b7 = cpu->regs[ra].b8.b7 << (cpu->regs[rb].u & 0x7);
+	    res = *(ptr_a8 + i) << (cpu->regs[rb].u & 0x7);
+	    *(ptr8 + i) = res;
 	  }
 	cpu->regs[rd].s = result.s;
 	TRACE_REG (cpu, rd);
@@ -2683,19 +2565,12 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_SLLI8:
       {
-	reg_t result;
-	result.b8.b0 = cpu->regs[ra].b8.b0 << imm3u;
-	result.b8.b1 = cpu->regs[ra].b8.b1 << imm3u;
-	result.b8.b2 = cpu->regs[ra].b8.b2 << imm3u;
-	result.b8.b3 = cpu->regs[ra].b8.b3 << imm3u;
-
-	if (RISCV_XLEN (cpu) == 64)
+	for (i = 0; i < vec8_num; i++)
 	  {
-	    result.b8.b4 = cpu->regs[ra].b8.b4 << imm3u;
-	    result.b8.b5 = cpu->regs[ra].b8.b5 << imm3u;
-	    result.b8.b6 = cpu->regs[ra].b8.b6 << imm3u;
-	    result.b8.b7 = cpu->regs[ra].b8.b7 << imm3u;
+	    res = *(ptr_a8 + i) << imm3u;
+	    *(ptr8 + i) = res;
 	  }
+
 	cpu->regs[rd].s = result.s;
 	TRACE_REG (cpu, rd);
       }
@@ -2705,25 +2580,12 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int32_t sa = cpu->regs[rb].u & 0x7;
 	if (sa != 0)
 	  {
-	    int32_t res1 = (int32_t) cpu->regs[ra].b8.b0 << sa;
-	    int32_t res2 = (int32_t) cpu->regs[ra].b8.b1 << sa;
-	    int32_t res3 = (int32_t) cpu->regs[ra].b8.b2 << sa;
-	    int32_t res4 = (int32_t) cpu->regs[ra].b8.b3 << sa;
-	    cpu->regs[rd].b8.b0 = insn_sat_helper (cpu, res1, 7);
-	    cpu->regs[rd].b8.b1 = insn_sat_helper (cpu, res2, 7);
-	    cpu->regs[rd].b8.b2 = insn_sat_helper (cpu, res3, 7);
-	    cpu->regs[rd].b8.b3 = insn_sat_helper (cpu, res4, 7);
-	    if (RISCV_XLEN (cpu) == 64)
+	    for (i = 0; i < vec8_num; i++)
 	      {
-		int32_t res5 = (int32_t) cpu->regs[ra].b8.b4 << sa;
-		int32_t res6 = (int32_t) cpu->regs[ra].b8.b5 << sa;
-		int32_t res7 = (int32_t) cpu->regs[ra].b8.b6 << sa;
-		int32_t res8 = (int32_t) cpu->regs[ra].b8.b7 << sa;
-		cpu->regs[rd].b8.b4 = insn_sat_helper (cpu, res5, 7);
-		cpu->regs[rd].b8.b5 = insn_sat_helper (cpu, res6, 7);
-		cpu->regs[rd].b8.b6 = insn_sat_helper (cpu, res7, 7);
-		cpu->regs[rd].b8.b7 = insn_sat_helper (cpu, res8, 7);
+		res = (int32_t) *(ptr_a8 + i) << sa;
+		*(ptr8 + i) = insn_sat_helper (cpu, res, 7);;
 	      }
+	    cpu->regs[rd].s = result.s;
 	  }
 	else
 	  cpu->regs[rd].s = cpu->regs[ra].s;
@@ -2733,28 +2595,14 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_KSLLI8:
       {
-	int32_t sa = cpu->regs[rb].u & 0x7;
 	if (imm3u != 0)
 	  {
-	    int32_t res1 = (int32_t) cpu->regs[ra].b8.b0 << imm3u;
-	    int32_t res2 = (int32_t) cpu->regs[ra].b8.b1 << imm3u;
-	    int32_t res3 = (int32_t) cpu->regs[ra].b8.b2 << imm3u;
-	    int32_t res4 = (int32_t) cpu->regs[ra].b8.b3 << imm3u;
-	    cpu->regs[rd].b8.b0 = insn_sat_helper (cpu, res1, 7);
-	    cpu->regs[rd].b8.b1 = insn_sat_helper (cpu, res2, 7);
-	    cpu->regs[rd].b8.b2 = insn_sat_helper (cpu, res3, 7);
-	    cpu->regs[rd].b8.b3 = insn_sat_helper (cpu, res4, 7);
-	    if (RISCV_XLEN (cpu) == 64)
+	    for (i = 0; i < vec8_num; i++)
 	      {
-		int32_t res5 = (int32_t) cpu->regs[ra].b8.b4 << imm3u;
-		int32_t res6 = (int32_t) cpu->regs[ra].b8.b5 << imm3u;
-		int32_t res7 = (int32_t) cpu->regs[ra].b8.b6 << imm3u;
-		int32_t res8 = (int32_t) cpu->regs[ra].b8.b7 << imm3u;
-		cpu->regs[rd].b8.b4 = insn_sat_helper (cpu, res5, 7);
-		cpu->regs[rd].b8.b5 = insn_sat_helper (cpu, res6, 7);
-		cpu->regs[rd].b8.b6 = insn_sat_helper (cpu, res7, 7);
-		cpu->regs[rd].b8.b7 = insn_sat_helper (cpu, res8, 7);
+		res = (int32_t) *(ptr_a8 + i) << imm3u;
+		*(ptr8 + i) = insn_sat_helper (cpu, res, 7);;
 	      }
+	    cpu->regs[rd].s = result.s;
 	  }
 	else
 	  cpu->regs[rd].s = cpu->regs[ra].s;
@@ -2823,7 +2671,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       {
 	int32_t res1, res2;
 
-	if (imm3u != 0)
+	if (imm5u != 0)
 	  {
 	    for (i = 0; i < vec32_num; i++)
 	      {
@@ -2900,45 +2748,24 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       {
 	if (cpu->regs[rb].b8.b0 < 0)
 	  {
-	    cpu->regs[rd].b8.b0 = cpu->regs[ra].b8.b0 >> (-cpu->regs[rb].b8.b0);
-	    cpu->regs[rd].b8.b1 = cpu->regs[ra].b8.b1 >> (-cpu->regs[rb].b8.b0);
-	    cpu->regs[rd].b8.b2 = cpu->regs[ra].b8.b2 >> (-cpu->regs[rb].b8.b0);
-	    cpu->regs[rd].b8.b3 = cpu->regs[ra].b8.b3 >> (-cpu->regs[rb].b8.b0);
-	    if (RISCV_XLEN (cpu) == 64)
+	    for (i = 0; i < vec8_num; i++)
 	      {
-		cpu->regs[rd].b8.b4 = cpu->regs[ra].b8.b4 >> (-cpu->regs[rb].b8.b0);
-		cpu->regs[rd].b8.b5 = cpu->regs[ra].b8.b5 >> (-cpu->regs[rb].b8.b0);
-		cpu->regs[rd].b8.b6 = cpu->regs[ra].b8.b6 >> (-cpu->regs[rb].b8.b0);
-		cpu->regs[rd].b8.b7 = cpu->regs[ra].b8.b7 >> (-cpu->regs[rb].b8.b0);
+		res = *(ptr_a8 + i) >> (-cpu->regs[rb].b8.b0);
+		*(ptr8 + i) = res;
 	      }
+	    cpu->regs[rd].s = result.s;
 	  }
 	else
 	  {
-	    int32_t res1, res2, res3, res4, res5, res6, res7, res8;
 	    if (cpu->regs[rb].b8.b0 != 0)
 	      {
-		res1 = (int32_t) cpu->regs[ra].b8.b0 << cpu->regs[rb].b8.b0;
-		res2 = (int32_t) cpu->regs[ra].b8.b1 << cpu->regs[rb].b8.b0;
-		res3 = (int32_t) cpu->regs[ra].b8.b2 << cpu->regs[rb].b8.b0;
-		res4 = (int32_t) cpu->regs[ra].b8.b3 << cpu->regs[rb].b8.b0;
-
-		cpu->regs[rd].b8.b0 = insn_sat_helper (cpu, res1, 7);
-		cpu->regs[rd].b8.b1 = insn_sat_helper (cpu, res2, 7);
-		cpu->regs[rd].b8.b2 = insn_sat_helper (cpu, res3, 7);
-		cpu->regs[rd].b8.b3 = insn_sat_helper (cpu, res4, 7);
-
-		if (RISCV_XLEN (cpu) == 64)
+		for (i = 0; i < vec8_num; i++)
 		  {
-		    res5 = (int32_t) cpu->regs[ra].b8.b4 << cpu->regs[rb].b8.b0;
-		    res6 = (int32_t) cpu->regs[ra].b8.b5 << cpu->regs[rb].b8.b0;
-		    res7 = (int32_t) cpu->regs[ra].b8.b6 << cpu->regs[rb].b8.b0;
-		    res8 = (int32_t) cpu->regs[ra].b8.b7 << cpu->regs[rb].b8.b0;
-
-		    cpu->regs[rd].b8.b4 = insn_sat_helper (cpu, res5, 7);
-		    cpu->regs[rd].b8.b5 = insn_sat_helper (cpu, res6, 7);
-		    cpu->regs[rd].b8.b6 = insn_sat_helper (cpu, res7, 7);
-		    cpu->regs[rd].b8.b7 = insn_sat_helper (cpu, res8, 7);
+		    res = (int32_t) *(ptr_a8 + i) << (cpu->regs[rb].b8.b0);
+		    *(ptr8 + i) = insn_sat_helper (cpu, res, 7);
 		  }
+		cpu->regs[rd].s = result.s;
+
 	      }
 	    else
 	      cpu->regs[rd].s = cpu->regs[ra].s;
@@ -3031,68 +2858,26 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    sh = (sh == 8) ? 7: sh;
 	    mask_sh = 1UL << (sh - 1);
 
-	    rnd = (cpu->regs[ra].b8.b0 & mask_sh) ? 1 : 0;
-	    cpu->regs[rd].b8.b0 = cpu->regs[ra].b8.b0 >> sh;
-	    cpu->regs[rd].b8.b0 += rnd;
-
-	    rnd = (cpu->regs[ra].b8.b1 & mask_sh) ? 1 : 0;
-	    cpu->regs[rd].b8.b1 = cpu->regs[ra].b8.b1 >> sh;
-	    cpu->regs[rd].b8.b1 += rnd;
-
-	    rnd = (cpu->regs[ra].b8.b2 & mask_sh) ? 1 : 0;
-	    cpu->regs[rd].b8.b2 = cpu->regs[ra].b8.b2 >> sh;
-	    cpu->regs[rd].b8.b2 += rnd;
-
-	    rnd = (cpu->regs[ra].b8.b3 & mask_sh) ? 1 : 0;
-	    cpu->regs[rd].b8.b3 = cpu->regs[ra].b8.b3 >> sh;
-	    cpu->regs[rd].b8.b3 += rnd;
-
-	    if (RISCV_XLEN (cpu) == 64)
+	    for (i = 0; i < vec8_num; i++)
 	      {
-		rnd = (cpu->regs[ra].b8.b4 & mask_sh) ? 1 : 0;
-		cpu->regs[rd].b8.b4 = cpu->regs[ra].b8.b4 >> sh;
-		cpu->regs[rd].b8.b4 += rnd;
+		rnd = (*(ptr_a8 + i) & mask_sh) ? 1 : 0;
 
-		rnd = (cpu->regs[ra].b8.b5 & mask_sh) ? 1 : 0;
-		cpu->regs[rd].b8.b5 = cpu->regs[ra].b8.b5 >> sh;
-		cpu->regs[rd].b8.b5 += rnd;
-
-		rnd = (cpu->regs[ra].b8.b6 & mask_sh) ? 1 : 0;
-		cpu->regs[rd].b8.b6 = cpu->regs[ra].b8.b6 >> sh;
-		cpu->regs[rd].b8.b6 += rnd;
-
-		rnd = (cpu->regs[ra].b8.b7 & mask_sh) ? 1 : 0;
-		cpu->regs[rd].b8.b7 = cpu->regs[ra].b8.b7 >> sh;
-		cpu->regs[rd].b8.b7 += rnd;
+		res = *(ptr_a8 + i) >> sh;
+		*(ptr8 + i) = res + rnd;
 	      }
+	    cpu->regs[rd].s = result.s;
 	  }
 	else
 	  {
 	    int32_t res1, res2, res3, res4;
 	    if (cpu->regs[rb].b8.b0 != 0)
 	      {
-		res1 = (int32_t) cpu->regs[ra].b8.b0 << cpu->regs[rb].b8.b0;
-		res2 = (int32_t) cpu->regs[ra].b8.b1 << cpu->regs[rb].b8.b0;
-		res3 = (int32_t) cpu->regs[ra].b8.b2 << cpu->regs[rb].b8.b0;
-		res4 = (int32_t) cpu->regs[ra].b8.b3 << cpu->regs[rb].b8.b0;
-
-		cpu->regs[rd].b8.b0 = insn_sat_helper (cpu, res1, 7);
-		cpu->regs[rd].b8.b1 = insn_sat_helper (cpu, res2, 7);
-		cpu->regs[rd].b8.b2 = insn_sat_helper (cpu, res3, 7);
-		cpu->regs[rd].b8.b3 = insn_sat_helper (cpu, res4, 7);
-
-		if (RISCV_XLEN (cpu) == 64)
+		for (i = 0; i < vec8_num; i++)
 		  {
-		    res1 = (int32_t) cpu->regs[ra].b8.b4 << cpu->regs[rb].b8.b0;
-		    res2 = (int32_t) cpu->regs[ra].b8.b5 << cpu->regs[rb].b8.b0;
-		    res3 = (int32_t) cpu->regs[ra].b8.b6 << cpu->regs[rb].b8.b0;
-		    res4 = (int32_t) cpu->regs[ra].b8.b7 << cpu->regs[rb].b8.b0;
-
-		    cpu->regs[rd].b8.b4 = insn_sat_helper (cpu, res1, 7);
-		    cpu->regs[rd].b8.b5 = insn_sat_helper (cpu, res2, 7);
-		    cpu->regs[rd].b8.b6 = insn_sat_helper (cpu, res3, 7);
-		    cpu->regs[rd].b8.b7 = insn_sat_helper (cpu, res4, 7);
+		    res = (int32_t) *(ptr_a8 + i) << cpu->regs[rb].b8.b0;
+		    *(ptr8 + i) = insn_sat_helper (cpu, res, 7);
 		  }
+		cpu->regs[rd].s = result.s;
 	      }
 	    else
 	      cpu->regs[rd].s = cpu->regs[ra].s;
@@ -3788,7 +3573,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	else
 	  {
 	    int64_t tmp;
-            sh = cpu->regs[rb].b8.b0 > 31 ? 31 : sh;
+	    sh = cpu->regs[rb].b8.b0 > 31 ? 31 : sh;
 	    tmp = (int64_t) cpu->regs[ra].s << sh;
 	    ret = insn_sat_helper (cpu, tmp, 31);
 	  }
@@ -6129,10 +5914,12 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       }
       break;
     case MATCH_SCLIP8:
-      cpu->regs[rd].b8.b0 = insn_sat_helper (cpu, cpu->regs[ra].b8.b0, imm3u);
-      cpu->regs[rd].b8.b1 = insn_sat_helper (cpu, cpu->regs[ra].b8.b1, imm3u);
-      cpu->regs[rd].b8.b2 = insn_sat_helper (cpu, cpu->regs[ra].b8.b2, imm3u);
-      cpu->regs[rd].b8.b3 = insn_sat_helper (cpu, cpu->regs[ra].b8.b3, imm3u);
+      for (i = 0; i < vec8_num; i++)
+	{
+	  res = *(ptr_a8 + i) + *(ptr_b8 + i);
+	  *(ptr8 + i) = insn_sat_helper (cpu, *(ptr_a8 + i), imm3u);
+	}
+      cpu->regs[rd].s = result.s;
       TRACE_REG (cpu, rd);
       break;
     case MATCH_UCLIP32:
@@ -6159,10 +5946,12 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       }
       break;
     case MATCH_UCLIP8:
-      cpu->regs[rd].b8.b0 = insn_usat_helper (cpu, cpu->regs[ra].b8.b0, imm3u);
-      cpu->regs[rd].b8.b1 = insn_usat_helper (cpu, cpu->regs[ra].b8.b1, imm3u);
-      cpu->regs[rd].b8.b2 = insn_usat_helper (cpu, cpu->regs[ra].b8.b2, imm3u);
-      cpu->regs[rd].b8.b3 = insn_usat_helper (cpu, cpu->regs[ra].b8.b3, imm3u);
+      for (i = 0; i < vec8_num; i++)
+	{
+	  res = *(ptr_a8 + i) + *(ptr_b8 + i);
+	  *(ptr8 + i) = insn_usat_helper (cpu, *(ptr_a8 + i), imm3u);
+	}
+      cpu->regs[rd].s = result.s;
       TRACE_REG (cpu, rd);
       break;
     default:
