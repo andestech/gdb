@@ -1994,6 +1994,7 @@ static const struct percent_op_match percent_op_utype[] =
   {"%tls_ie_pcrel_hi", BFD_RELOC_RISCV_TLS_GOT_HI20},
   {"%tls_gd_pcrel_hi", BFD_RELOC_RISCV_TLS_GD_HI20},
   {"%hi", BFD_RELOC_RISCV_HI20},
+  {"%got_hi", BFD_RELOC_RISCV_GOT_HI20},
   {0, 0}
 };
 
