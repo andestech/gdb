@@ -224,7 +224,7 @@ set_udouble (sim_cpu *cpu, int regnum, uint64_t val)
 static int64_t
 insn_usat_helper (sim_cpu *cpu, int64_t res, const short range)
 {
-  const uint64_t max = (1ULL << range) - 1;
+  const int64_t max = (1LL << range) - 1;
 
   if (res > max)
     {
@@ -5893,12 +5893,12 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    val = *(ptr_a32 + i);
 	    if (val > ((1 << imm5u) - 1))
 	      {
-		val = ((1 << imm5u) - 1);
+		*(ptr32 + i) = ((1 << imm5u) - 1);
 		CCPU_SR_SET (PSW, PSW_OV);
 	      }
 	    else if (val < -(1 << imm5u))
 	      {
-		val = -(1 << imm5u);
+		*(ptr32 + i) = -(1 << imm5u);
 		CCPU_SR_SET (PSW, PSW_OV);
 	      }
 	    else
@@ -5910,10 +5910,8 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_SCLIP8:
       for (i = 0; i < vec8_num; i++)
-	{
-	  res = *(ptr_a8 + i) + *(ptr_b8 + i);
-	  *(ptr8 + i) = insn_sat_helper (cpu, *(ptr_a8 + i), imm3u);
-	}
+	*(ptr8 + i) = insn_sat_helper (cpu, *(ptr_a8 + i), imm3u);
+
       cpu->regs[rd].s = result.s;
       TRACE_REG (cpu, rd);
       break;
@@ -5942,10 +5940,8 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_UCLIP8:
       for (i = 0; i < vec8_num; i++)
-	{
-	  res = *(ptr_a8 + i) + *(ptr_b8 + i);
-	  *(ptr8 + i) = insn_usat_helper (cpu, *(ptr_a8 + i), imm3u);
-	}
+	*(ptr8 + i) = insn_usat_helper (cpu, *(ptr_a8 + i), imm3u);
+
       cpu->regs[rd].s = result.s;
       TRACE_REG (cpu, rd);
       break;
