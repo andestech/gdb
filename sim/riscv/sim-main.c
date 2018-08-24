@@ -5809,40 +5809,42 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_MULSR64:
       {
-	int64_t r = (int64_t) cpu->regs[ra].s * (int64_t) cpu->regs[rb].s;
-	int d = rd & ~1;
-
-	if (CCPU_SR_TEST (PSW, PSW_BE))
+	if (RISCV_XLEN (cpu) == 32)
 	  {
-	    cpu->regs[d].u = (r >> 32);
-	    cpu->regs[d + 1].u = r;
+	    int64_t r = (int64_t) cpu->regs[ra].u
+			 * (int64_t) cpu->regs[rb].u;
+	    int d = rd & ~1;
+	    cpu->regs[d + 1].u = (r >> 32);
+	    cpu->regs[d].u = r;
+	    TRACE_REG (cpu, rd);
+	    TRACE_REG (cpu, rd + 1);
 	  }
 	else
 	  {
-	    cpu->regs[d + 1].u = (r >> 32);
-	    cpu->regs[d].u = r;
+	    cpu->regs[rd].s = (int64_t) cpu->regs[ra].b32.i0
+			      * (int64_t) cpu->regs[rb].b32.i0;
+	    TRACE_REG (cpu, rd);
 	  }
-	TRACE_REG (cpu, rd);
-	TRACE_REG (cpu, rd + 1);
       }
       break;
     case MATCH_MULR64:
       {
-	uint64_t r = (uint64_t) cpu->regs[ra].u * (uint64_t) cpu->regs[rb].u;
-	int d = rd & ~1;
-
-	if (CCPU_SR_TEST (PSW, PSW_BE))
+	if (RISCV_XLEN (cpu) == 32)
 	  {
-	    cpu->regs[d].u = (r >> 32);
-	    cpu->regs[d + 1].u = r;
+	    uint64_t r = (uint64_t) cpu->regs[ra].u
+			 * (uint64_t) cpu->regs[rb].u;
+	    int d = rd & ~1;
+	    cpu->regs[d + 1].u = (r >> 32);
+	    cpu->regs[d].u = r;
+	    TRACE_REG (cpu, rd);
+	    TRACE_REG (cpu, rd + 1);
 	  }
 	else
 	  {
-	    cpu->regs[d + 1].u = (r >> 32);
-	    cpu->regs[d].u = r;
+	    cpu->regs[rd].s = (uint64_t) cpu->regs[ra].ub32.i0
+			      * (uint64_t) cpu->regs[rb].ub32.i0;
+	    TRACE_REG (cpu, rd);
 	  }
-	TRACE_REG (cpu, rd);
-	TRACE_REG (cpu, rd + 1);
       }
       break;
     case MATCH_PBSAD:
