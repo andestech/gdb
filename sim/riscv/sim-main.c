@@ -5798,13 +5798,21 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       }
       break;
     case MATCH_MAXW:
-      cpu->regs[rd].s = (cpu->regs[ra].s > cpu->regs[rb].s)
-			 ? cpu->regs[ra].s : cpu->regs[rb].s;
+      if (RISCV_XLEN (cpu) == 32)
+	cpu->regs[rd].s = (cpu->regs[ra].s > cpu->regs[rb].s)
+			   ? cpu->regs[ra].s : cpu->regs[rb].s;
+      else
+	cpu->regs[rd].s = (cpu->regs[ra].b32.i0 > cpu->regs[rb].b32.i0)
+			   ? cpu->regs[ra].b32.i0 : cpu->regs[rb].b32.i0;
       TRACE_REG (cpu, rd);
       break;
     case MATCH_MINW:
-      cpu->regs[rd].s = (cpu->regs[ra].s < cpu->regs[rb].s)
-			 ? cpu->regs[ra].s : cpu->regs[rb].s;
+      if (RISCV_XLEN (cpu) == 32)
+	cpu->regs[rd].s = (cpu->regs[ra].s < cpu->regs[rb].s)
+			   ? cpu->regs[ra].s : cpu->regs[rb].s;
+      else
+	cpu->regs[rd].s = (cpu->regs[ra].b32.i0 < cpu->regs[rb].b32.i0)
+			   ? cpu->regs[ra].b32.i0 : cpu->regs[rb].b32.i0;
       TRACE_REG (cpu, rd);
       break;
     case MATCH_MULSR64:
