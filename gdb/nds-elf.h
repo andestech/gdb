@@ -498,7 +498,8 @@ static int elfnn_get_riscv_attribute_section(buf_t file, buf_t *ret) \
 	} \
     } \
 \
-  die ("No SHT_RISCV_ATTRIBUTES sections found.\n"); \
+  /* No SHT_RISCV_ATTRIBUTES sections found.  */ \
+  return 1; \
 }
 
 #define Elf_Ehdr Elf32_Ehdr
@@ -896,7 +897,10 @@ elf_check (void *file_data, unsigned int file_size,
   int ret = is64 ? elf64_get_riscv_attribute_section (file, &sec)
     : elf32_get_riscv_attribute_section (file, &sec);
 
-  if (ret == -1)
+  if (ret == 1)
+    /* No RISCV attribute sections found, exit normally.  */
+    return 0;
+  else if (ret == -1)
     return -1;
 
   Debug_printf
