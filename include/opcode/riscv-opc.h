@@ -3199,6 +3199,7 @@ funct6 VM  VS2  VS1/RS1/IMM funct3 VD   opcode
 #define CSR_TDATA1 0x7a1
 #define CSR_TDATA2 0x7a2
 #define CSR_TDATA3 0x7a3
+#define CSR_TINFO 0x7a4
 #define CSR_DCSR 0x7b0
 #define CSR_DPC 0x7b1
 #define CSR_DSCRATCH 0x7b2
@@ -4125,6 +4126,7 @@ DECLARE_CSR(tselect, CSR_TSELECT)
 DECLARE_CSR(tdata1, CSR_TDATA1)
 DECLARE_CSR(tdata2, CSR_TDATA2)
 DECLARE_CSR(tdata3, CSR_TDATA3)
+DECLARE_CSR(tinfo, CSR_TINFO)
 DECLARE_CSR(dcsr, CSR_DCSR)
 DECLARE_CSR(dpc, CSR_DPC)
 /* DECLARE_CSR(dscratch, CSR_DSCRATCH) */
@@ -4213,9 +4215,13 @@ DECLARE_CSR_ALIAS(sbadaddr, CSR_STVAL)
 DECLARE_CSR_ALIAS(sptbr, CSR_SATP)
 /* Mbadaddr is 0x343 in 1.9.1, but 0x343 is mtval in 1.10.  */
 DECLARE_CSR_ALIAS(mbadaddr, CSR_MTVAL)
-/* For NDS V5.  */
+/* NDS V5.  */
 DECLARE_CSR_ALIAS(dscratch, CSR_DSCRATCH0)
+/* Riscv debug spec 0.13.  */
 DECLARE_CSR_ALIAS(mcontrol, CSR_TDATA1)
+DECLARE_CSR_ALIAS(icount, CSR_TDATA1)
+DECLARE_CSR_ALIAS(itrigger, CSR_TDATA1)
+DECLARE_CSR_ALIAS(etrigger, CSR_TDATA1)
 #endif
 #ifdef DECLARE_CAUSE
 DECLARE_CAUSE("misaligned fetch", CAUSE_MISALIGNED_FETCH)
