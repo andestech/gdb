@@ -67,6 +67,7 @@ struct riscv_cl_insn
 #endif
 
 static const char default_arch[] = DEFAULT_ARCH;
+static const char *save_arch = NULL;
 
 static unsigned xlen = 0; /* width of an x-register */
 static unsigned abi_xlen = 0; /* width of a pointer in the ABI */
@@ -121,6 +122,10 @@ static struct riscv_set_options riscv_opts =
 static void
 riscv_set_rvc (bfd_boolean rvc_value)
 {
+  /* Always close the rvc when -mno-16-bit option is set.  */
+  if (riscv_opts.no_16_bit)
+    return;
+
   if (rvc_value)
     elf_flags |= EF_RISCV_RVC;
 
@@ -168,7 +173,7 @@ riscv_multi_subset_supports (const char *features[])
 
 /* Set which ISA and extensions are available.  */
 
-static void
+ATTRIBUTE_UNUSED static void
 riscv_set_arch (const char *s)
 {
   riscv_parse_subset_t rps;
@@ -1260,6 +1265,11 @@ struct arch_info arch_info[] =
 /* Terminate the list.  */
 {0, 0, 0, 0}
 };
+
+/* Generally, we do not allow the name of non-standard
+   arch includes numbers, but you can define your own
+   special arch name here.  */
+const char *non_standard_arch_name[] = {"xv5"};
 
 static struct hash_control *arch_info_hash = NULL;
 #define DEFAULT_PRIV_SPEC 1
@@ -3529,10 +3539,10 @@ out:
 /* Parse the version of ISA in .attribute directive.  */
 
 static int
-riscv_parse_arch_version (char **in_ver)
+riscv_parse_arch_version (const char **in_ver)
 {
   int version, num, major_set, minor_set;
-  char *string = *in_ver;
+  const char *string = *in_ver;
 
   version = 0;
   num = 0;
@@ -3566,13 +3576,13 @@ riscv_parse_arch_version (char **in_ver)
 	  minor_set = 1;
 	}
       version += num;
+
+      /* Major and Minor versions must be set or unset both.  */
+      if (major_set ^ minor_set)
+	as_fatal (".attribute: major and minor versions must be "
+		  "set when 'p' is used.");
     }
   *in_ver = string;
-
-  /* Major and Minor versions must be set or unset both.  */
-  if (major_set ^ minor_set)
-    as_fatal (".attribute: major and minor versions must be "
-	      "set when 'p' is used.");
 
   if (version > 0 || major_set)
     return version;
@@ -3584,19 +3594,24 @@ riscv_parse_arch_version (char **in_ver)
 /* Parse the name of ISA in .attribute directive.  */
 
 static void
-riscv_parse_arch_name (char **in_arch, int strlen, char **name)
+riscv_parse_arch_name (const char **in_arch, int len, char **name)
 {
-  char *string;
-  int i;
-
   /* Parse the non-standard version name.  */
-  string = *in_arch;
-  if (!strlen)
+  const char *string = *in_arch;
+  if (!len)
     {
-      i = 0;
-      if (strncmp (string, "xv5", 3) == 0)
-	i += 3;
-      else
+      int i = 0, j = 0;
+      for (; non_standard_arch_name[j]; j++)
+	{
+	  if (strncmp (string, non_standard_arch_name[j],
+		       strlen (non_standard_arch_name[j])) == 0)
+	    {
+	      i += strlen (non_standard_arch_name[j]);
+	      break;
+	    }
+	}
+      /* No match.  */
+      if (i == 0)
 	while (string[i] != '\0'
 	       && string[i] != '_'
 	       && ((string[i] - 48) < 0
@@ -3608,13 +3623,13 @@ riscv_parse_arch_name (char **in_arch, int strlen, char **name)
 	as_fatal (".attribute %s: empty non standard ISA extension?",
 		  *in_arch);
       else
-	strlen = i;
+	len = i;
     }
 
-  *name = (char *) malloc ((strlen + 1) * sizeof (char));
-  memcpy (*name, *in_arch, strlen);
-  memcpy (*name + strlen, "\0", 1);
-  *in_arch = string + strlen;
+  *name = (char *) malloc ((len + 1) * sizeof (char));
+  memcpy (*name, *in_arch, len);
+  memcpy (*name + len, "\0", 1);
+  *in_arch = string + len;
 }
 
 /* Convert the version from integer to string.  */
@@ -3629,11 +3644,15 @@ riscv_arch_version_int2str (int version, char *str, int minor)
 }
 
 static void
-riscv_update_arch_info_hash (const char *arch, int version)
+riscv_update_arch_info_hash (const char *arch, int version,
+			     bfd_boolean update)
 {
   const char *key;
   struct arch_info *info;
   char str[4];
+
+  if (!update)
+    return;
 
   info = (struct arch_info *) hash_find (arch_info_hash, arch);
   if (info)
@@ -3669,72 +3688,89 @@ riscv_update_arch_info_hash (const char *arch, int version)
 }
 
 static bfd_boolean
-riscv_parse_arch_attribute (char *in_arch)
+riscv_parse_arch_attribute (const char *in_arch, bfd_boolean update)
 {
   const char *all_subsets = "imafdqcp";
   char *name;
   int version;
   int parse_non_standard = 0;
+  const char *in_arch_p = in_arch;
 
   /* Clear the subsets set by -march option.  */
   riscv_clear_subsets();
+  /* We must clear the riscv_opts.rvc here.  */
+  riscv_set_rvc (FALSE);
 
-  if (strncmp (in_arch, "rv32", 4) == 0
-      || strncmp (in_arch, "rv64", 4) == 0)
-    in_arch += 4;
+  if (strncmp (in_arch_p, "rv32", 4) == 0)
+    {
+      xlen = 32;
+      in_arch_p += 4;
+    }
+  else if (strncmp (in_arch_p, "rv64", 4) == 0)
+    {
+      xlen = 64;
+      in_arch_p += 4;
+    }
   else
     as_fatal (".attribute %s: ISA string must begin with rv32/rv64",
-	      in_arch);
+	      in_arch_p);
 
-  switch (*in_arch)
+  switch (*in_arch_p)
     {
     case 'e':
       /* FIXME: the extensions after 'e' only can be M, A and C.  */
-      in_arch++;
-      version = riscv_parse_arch_version (&in_arch);
-      riscv_update_arch_info_hash ("e", version);
+      in_arch_p++;
+      version = riscv_parse_arch_version (&in_arch_p);
+      riscv_update_arch_info_hash ("e", version, update);
       riscv_add_subset ("e");
       riscv_add_subset ("i");
+      riscv_set_rve (TRUE);
       break;
     case 'g':
-      in_arch++;
-      version = riscv_parse_arch_version (&in_arch);
+      in_arch_p++;
+      version = riscv_parse_arch_version (&in_arch_p);
       for ( ; *all_subsets != 'q'; all_subsets++)
 	{
 	  const char subset[] = {*all_subsets, '\0'};
-	  riscv_update_arch_info_hash (subset, version);
+	  riscv_update_arch_info_hash (subset, version, update);
 	  riscv_add_subset (subset);
 	}
       /* Addition.  */
-      riscv_update_arch_info_hash ("c", version);
-      riscv_add_subset ("c");
+      if (!riscv_opts.no_16_bit)
+	{
+	  riscv_update_arch_info_hash ("c", version, update);
+	  riscv_set_rvc (TRUE);
+	}
       break;
     case 'i':
       break;
     default:
       as_fatal (".attribute %s: first ISA subset must be i/g/e",
-		in_arch);
+		in_arch_p);
     }
 
-  while (*in_arch)
+  while (*in_arch_p)
     {
-      switch (*in_arch)
+      switch (*in_arch_p)
 	{
+	case 'c':
+	  if (riscv_opts.no_16_bit)
+	    break;
+	  riscv_set_rvc (TRUE);
 	case 'i':
 	case 'm':
 	case 'a':
 	case 'f':
 	case 'd':
 	case 'q':
-	case 'c':
 	case 'p':
 	  /* Standard extensions.  */
 	  if (!parse_non_standard)
 	    {
 	      name = NULL;
-	      riscv_parse_arch_name (&in_arch, 1, &name);
-	      version = riscv_parse_arch_version (&in_arch);
-	      riscv_update_arch_info_hash (name, version);
+	      riscv_parse_arch_name (&in_arch_p, 1, &name);
+	      version = riscv_parse_arch_version (&in_arch_p);
+	      riscv_update_arch_info_hash (name, version, update);
 	      riscv_add_subset (name);
 
 	      free ((char *) name);
@@ -3742,48 +3778,98 @@ riscv_parse_arch_attribute (char *in_arch)
 	  else
 	    as_fatal (".attribute %c: Standard ISA subset can not "
 		      "be set after Non-standard ISA subset.",
-		      *in_arch);
+		      *in_arch_p);
 	  break;
 	case 'x':
 	  /* Non-standard extensions.  */
 	  parse_non_standard = 1;
 	  name = NULL;
-	  riscv_parse_arch_name (&in_arch, 0, &name);
-	  version = riscv_parse_arch_version (&in_arch);
+	  riscv_parse_arch_name (&in_arch_p, 0, &name);
+	  version = riscv_parse_arch_version (&in_arch_p);
 	  if (version < 0)
 	    version = 0;
 	  if (strcmp (name, "xv5") == 0)
-	    riscv_update_arch_info_hash ("xv5-", version);
+	    {
+	      riscv_update_arch_info_hash ("xv5-", version, update);
+	      riscv_add_subset ("xv5-");
+	    }
 	  else
-	    riscv_update_arch_info_hash (name, version);
-	  if (*in_arch == '_')
-	    in_arch++;
+	    {
+	      riscv_update_arch_info_hash (name, version, update);
+	      riscv_add_subset (name);
+	    }
+
+	  if (*in_arch_p == '_')
+	    in_arch_p++;
 
 	  free ((char *) name);
 	  break;
 	default:
 	  as_fatal (".attribute %s: ISA subset is unsupported",
-		    in_arch);
+		    in_arch_p);
 	}
     }
 
-  /* We must keep the extension of ACE if needed.  */
+  /* We must keep the extension for ACE and those set by the
+     options if needed.  */
   if (ace_lib_load_success)
     riscv_add_subset ("x");
+
+  if (riscv_opts.atomic)
+    riscv_add_subset ("a");
+
+  if (riscv_opts.dsp)
+    riscv_add_subset ("xdsp");
+
+  /* Always add `c' into `all_subsets' for the `riscv_opcodes' table.  */
+  riscv_add_subset ("c");
+  if (riscv_opts.rvc)
+    riscv_set_rvc (TRUE);
 
   return TRUE;
 }
 
+/* The priority of arch setting (attribute and subset extension):
+   1. Ext options: -mext-dsp, -mno-16-bit.
+   2. Attribute directive: Only use the last setting.
+   3. -march option.
+   4. default_arch.
+
+   First, call the riscv_set_arch_attributes when encountering the
+   `-march' option, otherwise, call it with the `default_arch' in the
+   riscv_after_parse_args. If attribute directive is set, we need
+   to clean the previous setting, and then reset the subsets again
+   according to the attribute directive.  */
+
 static void
-riscv_set_arch_attributes (void)
+riscv_set_arch_attributes (const char *name)
 {
   obj_attribute *attr;
+  const char *string;
+  bfd_boolean update;
 
-  attr = elf_known_obj_attributes_proc (stdoutput);
-  if (attr[Tag_arch].s
-      && !riscv_parse_arch_attribute (attr[Tag_arch].s))
+  /* We can not update the arch hash table when parsing architectures
+     for the `-march' option and `default_arch' since the hash table has
+     not been initialized yet. I prefer to keep the initialization in
+     the md_begin, and then use a boolean variable `update' to avoid
+     the segment fault. If there is no attribute directive, then we will
+     update the hash table in the riscv_write_out_arch_attr according to
+     the `all_subsets' set by `-march' or `default_arch'.  */
+  if (name)
+    {
+      string = name;
+      update = FALSE;
+    }
+  else
+    {
+      attr = elf_known_obj_attributes_proc (stdoutput);
+      string = attr[Tag_arch].s;
+      update = TRUE;
+    }
+
+  if (string && !riscv_parse_arch_attribute (string, update))
     as_fatal ("internal error: cannot parse .attribute %s",
-              attr[Tag_arch].s);
+	      string);
 }
 
 static int start_assemble_insn = 0;
@@ -3799,7 +3885,7 @@ md_assemble (char *str)
      assembling instructions.  */
   if (!start_assemble_insn)
     {
-      riscv_set_arch_attributes ();
+      riscv_set_arch_attributes (NULL);
       start_assemble_insn = 1;
     }
 
@@ -3905,7 +3991,8 @@ md_parse_option (int c, const char *arg)
   switch (c)
     {
     case OPTION_MARCH:
-      riscv_set_arch (arg);
+      /* Save the arch name for riscv_set_arch_attributes.  */
+      save_arch = arg;
       break;
 
     case OPTION_NO_PIC:
@@ -4096,16 +4183,6 @@ riscv_after_parse_args (void)
 	    float_abi = FLOAT_ABI_QUAD;
 	}
     }
-
-  if (rve_abi)
-    elf_flags |= EF_RISCV_RVE;
-
-  if (riscv_opts.atomic)
-    riscv_add_subset (&riscv_subsets, "a", 0, 0);
-
-
-  if (riscv_opts.dsp)
-    riscv_add_subset (&riscv_subsets, "p", 0, 0);
 
   /* Insert float_abi into the EF_RISCV_FLOAT_ABI field of elf_flags.  */
   elf_flags |= float_abi * (EF_RISCV_FLOAT_ABI & ~(EF_RISCV_FLOAT_ABI << 1));
@@ -5226,29 +5303,33 @@ riscv_update_non_standard_arch_attr (const char *key ATTRIBUTE_UNUSED,
 static void
 riscv_write_out_arch_attr (void)
 {
-  const char *all_subsets = "eimafdqcp";
   unsigned int i;
   obj_attribute *attr;
 
+  /* If we can't find any attribute directive, update the arch hash
+     table according to the `all_subsets' set by the `-march' option
+     or `default_arch'.  */
   attr = elf_known_obj_attributes_proc (stdoutput);
   if (!attr[Tag_arch].s)
     {
-      for ( ; *all_subsets; all_subsets++)
+      while (riscv_subsets != NULL)
 	{
-	  char subset[] = {*all_subsets, '\0'};
-	  if (riscv_subset_supports (subset))
-	    {
-	      riscv_update_arch_info_hash (subset, -1);
-
-	      /* Skip 'i' extension.  */
-	      if (*all_subsets == 'e')
-		all_subsets++;
-	    }
+	  struct riscv_subset *next = riscv_subsets->next;
+	  /* Since riscv_subsets does not save the version so far,
+	     1. Standard arch version: default setting
+	     2. Non standard arch version: zero.  */
+	  for (i = 0; arch_info[i].name; i++)
+	    if (strcmp (riscv_subsets->name, arch_info[i].name) == 0)
+	      {
+		riscv_update_arch_info_hash (riscv_subsets->name, -1, TRUE);
+		break;
+	      }
+	  /* Can not find the matched standard arch, regard it as
+	     non-standard one.  */
+	  if (!arch_info[i].name)
+	    riscv_update_arch_info_hash (riscv_subsets->name, 0, TRUE);
+	  riscv_subsets = next;
 	}
-      /* We only set the specific non-standard ISA "xv5"
-	 in the arch attribute through -march option.  */
-      if (riscv_subset_supports ("xv5"))
-	riscv_update_arch_info_hash ("xv5-", 0);
     }
 
   arch_attr_strlen = 0;
@@ -5280,14 +5361,6 @@ riscv_write_out_arch_attr (void)
 	(arch_info_hash, arch_info[i].name);
       if (info && info->valid)
 	{
-	  /* For bug-16227, skip 'c' extension if
-	     option "-mno-16-bit" is set.  */
-	  if (strcmp (arch_info[i].name, "c") == 0
-	      && riscv_opts.no_16_bit)
-	    {
-	      info->valid = 0;
-	      continue;
-	    }
 	  strncat(out_arch, info->name, strlen (info->name));
 	  strncat(out_arch, info->v_major, strlen (info->v_major));
 	  strncat(out_arch, "p", 1);
@@ -5322,7 +5395,7 @@ riscv_set_public_attributes (void)
 
   /* The assembly dose not contain instructions.  */
   if (!start_assemble_insn)
-    riscv_set_arch_attributes ();
+    riscv_set_arch_attributes (NULL);
 
   riscv_write_out_arch_attr ();
 
