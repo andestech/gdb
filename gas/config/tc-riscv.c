@@ -119,17 +119,36 @@ static struct riscv_set_options riscv_opts =
   0,	/* dsp */
 };
 
+/* The priority: `-mno-16-bit' option
+   > `.option rvc/norvc' directive
+   > attribute directive > `-march' option
+   > default_arch
+
+   Only the higher priority mode can change the rvc setting.
+   mode 1: -march option and default_arch
+   mode 2: attribute directive
+   mode 3: .option directive.  */
+
 static void
-riscv_set_rvc (bfd_boolean rvc_value)
+riscv_set_rvc (bfd_boolean rvc_value, int mode)
 {
+  static int save_mode = -1;
+
   /* Always close the rvc when -mno-16-bit option is set.  */
-  if (riscv_opts.no_16_bit)
+  if (riscv_opts.no_16_bit
+      || mode < save_mode)
     return;
 
   if (rvc_value)
     elf_flags |= EF_RISCV_RVC;
+  /* Can we turn off the rvc flags here? Is it safe enough?  */
+/*
+  else if (save_mode <= 2)
+    elf_flags &= ~EF_RISCV_RVC;
+*/
 
   riscv_opts.rvc = rvc_value;
+  save_mode = mode;
 }
 
 static void
@@ -1334,6 +1353,9 @@ md_begin (void)
   opcode_names_hash = hash_new ();
   init_opcode_names_hash ();
 
+  /* Initialization of arch attribute hash table.  */
+  arch_info_hash_init ();
+
   /* Set the default alignment for the text section.  */
   record_alignment (text_section, riscv_opts.rvc ? 1 : 2);
 
@@ -1393,9 +1415,6 @@ md_begin (void)
 	  i++;
 	}
     }
-
-  /* Initialization of arch attribute hash table.  */
-  arch_info_hash_init ();
 }
 
 static insn_t
@@ -3698,8 +3717,9 @@ riscv_parse_arch_attribute (const char *in_arch, bfd_boolean update)
 
   /* Clear the subsets set by -march option.  */
   riscv_clear_subsets();
-  /* We must clear the riscv_opts.rvc here.  */
-  riscv_set_rvc (FALSE);
+  /* Clear the riscv_opts.rvc if priority is higher.  */
+  int rvc_mode = update ? 2 : 1;
+  riscv_set_rvc (FALSE, rvc_mode);
 
   if (strncmp (in_arch_p, "rv32", 4) == 0)
     {
@@ -3739,7 +3759,7 @@ riscv_parse_arch_attribute (const char *in_arch, bfd_boolean update)
       if (!riscv_opts.no_16_bit)
 	{
 	  riscv_update_arch_info_hash ("c", version, update);
-	  riscv_set_rvc (TRUE);
+	  riscv_set_rvc (TRUE, rvc_mode);
 	}
       break;
     case 'i':
@@ -3755,8 +3775,16 @@ riscv_parse_arch_attribute (const char *in_arch, bfd_boolean update)
 	{
 	case 'c':
 	  if (riscv_opts.no_16_bit)
-	    break;
-	  riscv_set_rvc (TRUE);
+	    {
+	      /* We still need to parse the `c' ext here, but
+		 don't update the arch hash table.  */
+	      name = NULL;
+	      riscv_parse_arch_name (&in_arch_p, 1, &name);
+	      version = riscv_parse_arch_version (&in_arch_p);
+	      free ((char *) name);
+	      break;
+	    }
+	  riscv_set_rvc (TRUE, rvc_mode);
 	case 'i':
 	case 'm':
 	case 'a':
@@ -3823,17 +3851,16 @@ riscv_parse_arch_attribute (const char *in_arch, bfd_boolean update)
 
   /* Always add `c' into `all_subsets' for the `riscv_opcodes' table.  */
   riscv_add_subset ("c");
-  if (riscv_opts.rvc)
-    riscv_set_rvc (TRUE);
 
   return TRUE;
 }
 
 /* The priority of arch setting (attribute and subset extension):
    1. Ext options: -mext-dsp, -mno-16-bit.
-   2. Attribute directive: Only use the last setting.
-   3. -march option.
-   4. default_arch.
+   2. .option rvc.
+   3. Attribute directive: Only use the last one.
+   4. -march option.
+   5. default_arch.
 
    First, call the riscv_set_arch_attributes when encountering the
    `-march' option, otherwise, call it with the `default_arch' in the
@@ -4524,9 +4551,9 @@ s_riscv_option (int x ATTRIBUTE_UNUSED)
   *input_line_pointer = '\0';
 
   if (strcmp (name, "rvc") == 0)
-    riscv_set_rvc (TRUE);
+    riscv_set_rvc (TRUE, 3);
   else if (strcmp (name, "norvc") == 0)
-    riscv_set_rvc (FALSE);
+    riscv_set_rvc (FALSE, 3);
   else if (strcmp (name, "pic") == 0)
     riscv_opts.pic = TRUE;
   else if (strcmp (name, "nopic") == 0)
@@ -5321,7 +5348,8 @@ riscv_write_out_arch_attr (void)
 	  for (i = 0; arch_info[i].name; i++)
 	    if (strcmp (riscv_subsets->name, arch_info[i].name) == 0)
 	      {
-		riscv_update_arch_info_hash (riscv_subsets->name, -1, TRUE);
+		if (strcmp (arch_info[i].name, "c") != 0)
+		  riscv_update_arch_info_hash (riscv_subsets->name, -1, TRUE);
 		break;
 	      }
 	  /* Can not find the matched standard arch, regard it as
@@ -5331,6 +5359,12 @@ riscv_write_out_arch_attr (void)
 	  riscv_subsets = next;
 	}
     }
+
+  /* Check the `elf_flags' rather than `riscv_subsets' and `riscv_opts'
+     since .option rvc/norvc may occur at any place (after parsing
+     attribute and -march).  */
+  if (elf_flags & EF_RISCV_RVC)
+    riscv_update_arch_info_hash ("c", -1, TRUE);
 
   arch_attr_strlen = 0;
   hash_traverse (arch_info_hash, riscv_count_arch_attr_strlen);
