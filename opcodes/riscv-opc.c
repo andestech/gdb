@@ -160,9 +160,7 @@ match_c_add (const struct riscv_opcode *op, insn_t insn)
 static int
 match_c_add_with_hint (const struct riscv_opcode *op, insn_t insn)
 {
-  return match_opcode (op, insn)
-	 && ((insn & MASK_CRS2) != 0)
-	 && ((insn & MASK_RD) != 0);
+  return match_opcode (op, insn) && ((insn & MASK_CRS2) != 0);
 }
 
 static int
