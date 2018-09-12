@@ -3339,6 +3339,8 @@ riscv_parse_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
     }
 
   /* Check non-standard arch attrs.  */
+  /* TODO: This need to be rewrited, so I just choose the union
+     of all non-standard architectures.  */
   while (*out_arch == 'x')
     {
       name = NULL;
@@ -3354,68 +3356,17 @@ riscv_parse_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
       name = NULL;
       riscv_parse_arch_name (&in_arch, 0, &name);
       version_i = riscv_parse_arch_version (&in_arch);
-
-      /* Update the info of 'xv5-' if output does not set.  */
-      if (strcmp (name, "xv5-") == 0)
-	riscv_insert_non_standard_arch_info (name, version_i);
-
-      non_standard_arch = non_standard_arch_info_head;
-      while (non_standard_arch)
-	{
-	  if (strcmp (non_standard_arch->name, name) == 0)
-	    break;
-	  non_standard_arch = non_standard_arch->next;
-	}
-      if (!non_standard_arch)
-	{
-	  _bfd_error_handler
-	    (_("error: %B: non standard ISA '%s' of input is "
-	       "unmatched with output."), ibfd, name);
-	  return FALSE;
-	}
-      else if (non_standard_arch->version != version_i)
-	{
-	  _bfd_error_handler
-	    (_("error: %B: cannot mix the objects that have "
-	       "different versions of ISA '%s'."),
-	     ibfd, name);
-	  return FALSE;
-	}
-      else
-	/* The input object has the same ISA with the output object.  */
-	non_standard_arch->valid = 1;
+      riscv_insert_non_standard_arch_info (name, version_i);
 
       if (*in_arch == '_')
         in_arch++;
       free ((char *) name);
     }
 
-  int non_standard_count = 0;
   first_X_arch = 1;
   while (non_standard_arch_info_head)
     {
       non_standard_arch = non_standard_arch_info_head;
-      if (strcmp (non_standard_arch->name, "xv5-") == 0
-	  && (non_standard_count != 0
-	      || non_standard_arch->next))
-	{
-	  /* The ISA v5 can not link with other non-standard ISAs.  */
-	  _bfd_error_handler
-	    (_("error: %B: non standard ISA '%s' can not "
-	       "link with other non standard ISAs."),
-	     ibfd, non_standard_arch->name);
-	  return FALSE;
-	}
-      else if (strcmp (non_standard_arch->name, "xv5-") != 0
-	       && !non_standard_arch->valid)
-	{
-	  /* The ISA, except v5, must be set in the input and
-	     output objects.  */
-	  _bfd_error_handler
-	    (_("error: %B: non standard ISA '%s' of output is "
-	       "unmatched with input."), ibfd, non_standard_arch->name);
-	  return FALSE;
-	}
 
       if (first_X_arch)
 	first_X_arch = 0;
@@ -3432,7 +3383,6 @@ riscv_parse_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
 
       non_standard_arch_info_head = non_standard_arch_info_head->next;
       free (non_standard_arch);
-      non_standard_count++;
     }
 
   return TRUE;
