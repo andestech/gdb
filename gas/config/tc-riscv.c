@@ -881,6 +881,8 @@ validate_riscv_insn (const struct riscv_opcode *opc, int length)
 		used_bits |= ENCODE_PTYPE_IMM4U (-1U);
 	      else if (strcmp (field_name, "nds_i5u") == 0)
 		used_bits |= ENCODE_PTYPE_IMM5U (-1U);
+	      else if (strcmp (field_name, "nds_i6u") == 0)
+		used_bits |= ENCODE_PTYPE_IMM6U (-1U);
 	      else if (strcmp (field_name, "nds_i15s") == 0)
 		used_bits |= ENCODE_PTYPE_IMM15S (-1U);
 	      else
@@ -3319,6 +3321,9 @@ jump:
 		    else if (strcmp (field_name, "nds_i5u") == 0
 			     && VALID_PTYPE_IMM5U (imm_expr->X_add_number))
 		      ip->insn_opcode |= ENCODE_PTYPE_IMM5U (imm_expr->X_add_number);
+		    else if (strcmp (field_name, "nds_i6u") == 0
+			     && VALID_PTYPE_IMM6U (imm_expr->X_add_number))
+		      ip->insn_opcode |= ENCODE_PTYPE_IMM6U (imm_expr->X_add_number);
 		    else if (strcmp (field_name, "nds_i15s") == 0
 			     && VALID_PTYPE_IMM15S (imm_expr->X_add_number))
 		      ip->insn_opcode |= ENCODE_PTYPE_IMM15S (imm_expr->X_add_number);

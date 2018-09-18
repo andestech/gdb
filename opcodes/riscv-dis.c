@@ -841,6 +841,8 @@ print_insn_args (const char *d, insn_t l, bfd_vma pc,
 		  print (info->stream, "%d", (int)EXTRACT_PTYPE_IMM4U (l));
 		else if (strcmp (field_name, "nds_i5u") == 0)
 		  print (info->stream, "%d", (int)EXTRACT_PTYPE_IMM5U (l));
+		else if (strcmp (field_name, "nds_i6u") == 0)
+		  print (info->stream, "%d", (int)EXTRACT_PTYPE_IMM6U (l));
 		else if (strcmp (field_name, "nds_i15s") == 0)
 		  print (info->stream, "%d", (int)EXTRACT_PTYPE_IMM15S (l));
 		else
