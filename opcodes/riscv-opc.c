@@ -923,7 +923,7 @@ const struct riscv_opcode riscv_opcodes[] =
 {"smul16",      0, {"XDSP", 0}, "nds_rdp,s,t", MATCH_SMUL16, MASK_SMUL16, match_opcode, 0 },
 {"smulx16",     0, {"XDSP", 0}, "nds_rdp,s,t", MATCH_SMULX16, MASK_SMULX16, match_opcode, 0 },
 {"sra.u",       0, {"XDSP", 0}, "d,s,t",     MATCH_SRA_U, MASK_SRA_U, match_opcode, 0 },
-{"srai.u",      0, {"XDSP", 0}, "d,s,nds_i5u", MATCH_SRAI_U, MASK_SRAI_U, match_opcode, 0 },
+{"srai.u",      0, {"XDSP", 0}, "d,s,nds_i6u", MATCH_SRAI_U, MASK_SRAI_U, match_opcode, 0 },
 {"sra8",        0, {"XDSP", 0}, "d,s,t",     MATCH_SRA8, MASK_SRA8, match_opcode, 0 },
 {"sra8.u",      0, {"XDSP", 0}, "d,s,t",     MATCH_SRA8_U, MASK_SRA8_U, match_opcode, 0 },
 {"srai8",       0, {"XDSP", 0}, "d,s,nds_i3u", MATCH_SRAI8, MASK_SRAI8, match_opcode, 0 },

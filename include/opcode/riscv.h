@@ -182,6 +182,8 @@ static const char * const riscv_vma[2] =
   (RV_X(x, 20, 4))
 #define EXTRACT_PTYPE_IMM5U(x) \
   (RV_X(x, 20, 5))
+#define EXTRACT_PTYPE_IMM6U(x) \
+  (RV_X(x, 20, 6))
 #define EXTRACT_PTYPE_IMM15S(x) \
   ((-RV_X(x, 24, 1) << 15) | (RV_X(x, 7, 5) << 0) | RV_X(x, 15, 9) << 5)
 
@@ -268,6 +270,8 @@ static const char * const riscv_vma[2] =
   (RV_X(x, 0, 4) << 20)
 #define ENCODE_PTYPE_IMM5U(x) \
   (RV_X(x, 0, 5) << 20)
+#define ENCODE_PTYPE_IMM6U(x) \
+  (RV_X(x, 0, 6) << 20)
 #define ENCODE_PTYPE_IMM15S(x) \
   ((RV_X(x, 0, 5) << 7) | RV_X(x, 5, 10) << 15)
 
@@ -308,6 +312,7 @@ static const char * const riscv_vma[2] =
 #define VALID_PTYPE_IMM3U(x) (EXTRACT_PTYPE_IMM3U(ENCODE_PTYPE_IMM3U(x)) == (x))
 #define VALID_PTYPE_IMM4U(x) (EXTRACT_PTYPE_IMM4U(ENCODE_PTYPE_IMM4U(x)) == (x))
 #define VALID_PTYPE_IMM5U(x) (EXTRACT_PTYPE_IMM5U(ENCODE_PTYPE_IMM5U(x)) == (x))
+#define VALID_PTYPE_IMM6U(x) (EXTRACT_PTYPE_IMM6U(ENCODE_PTYPE_IMM6U(x)) == (x))
 #define VALID_PTYPE_IMM15S(x) (EXTRACT_PTYPE_IMM15S(ENCODE_PTYPE_IMM15S(x)) == (x))
 
 #define RISCV_RTYPE(insn, rd, rs1, rs2) \

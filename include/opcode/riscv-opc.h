@@ -3072,8 +3072,8 @@ funct6 VM  VS2  VS1/RS1/IMM funct3 VD   opcode
 #define MASK_SMULX16 0xfe00707f
 #define MATCH_SRA_U 0x2400107f
 #define MASK_SRA_U 0xfe00707f
-#define MATCH_SRAI_U 0x3400107f
-#define MASK_SRAI_U 0xfe00707f
+#define MATCH_SRAI_U 0xd400107f
+#define MASK_SRAI_U 0xfc00707f
 #define MATCH_SRA8 0x5800007f
 #define MASK_SRA8 0xfe00707f
 #define MATCH_SRA8_U 0x6800007f
