@@ -4321,7 +4321,7 @@ _bfd_riscv_relax_lui (bfd *abfd,
 	  /* We can delete the unnecessary LUI and reloc.  */
 	  rel->r_info = ELFNN_R_INFO (0, R_RISCV_NONE);
 	  *again = TRUE;
-	  return TRUE;
+	  return riscv_relax_delete_bytes (abfd, sec, rel->r_offset, 4);
 
 	default:
 	  abort ();
