@@ -169,7 +169,7 @@ riscv_arch_setup (void)
 static int
 riscv_supports_hardware_single_step (void)
 {
-  return 0;
+  return 1;
 }
 
 
