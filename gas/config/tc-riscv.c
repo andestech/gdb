@@ -201,6 +201,11 @@ static void
 ace_ip (char **args, char **str, struct riscv_cl_insn *ip);
 /* } Andes ACE */
 
+/* { Andes */
+static void
+riscv_rvc_reloc_setting (int mode);
+/* } Andes */
+
 /* Set the default_isa_spec.  Return 0 if the spec isn't supported.
    Otherwise, return 1.  */
 
@@ -4113,6 +4118,12 @@ md_assemble (char *str)
   bfd_reloc_code_real_type imm_reloc = BFD_RELOC_UNUSED;
   insn.cmodel.method = METHOD_DEFAULT;
 
+  /* { Andes */
+  /* Set the first rvc info for the the current fragmant.  */
+  if (!frag_now->tc_frag_data.rvc)
+    frag_now->tc_frag_data.rvc = riscv_opts.rvc ? 1 : -1;
+  /* } Andes */
+
   /* The architecture and privileged elf attributes should be set
      before assembling.  */
   if (!start_assemble)
@@ -4830,11 +4841,18 @@ s_riscv_option (int x ATTRIBUTE_UNUSED)
     {
       riscv_update_subset (&riscv_rps_as, "+c");
       riscv_set_rvc (true);
+      riscv_rvc_reloc_setting (1);
     }
   else if (strcmp (name, "norvc") == 0)
     {
+      /* Force to set the 4-byte aligned when converting
+	 rvc to norvc.  The repeated alignment setting is
+	 fine since linker will remove the redundant nops.  */
+      if (riscv_opts.rvc && !riscv_opts.no_16_bit && start_assemble)
+	riscv_frag_align_code (2);
       riscv_update_subset (&riscv_rps_as, "-c");
       riscv_set_rvc (false);
+      riscv_rvc_reloc_setting (0);
     }
   else if (strcmp (name, "pic") == 0)
     riscv_opts.pic = true;
@@ -4874,8 +4892,10 @@ s_riscv_option (int x ATTRIBUTE_UNUSED)
   else if (strcmp (name, "pop") == 0)
     {
       struct riscv_option_stack *s;
+      int pre_rvc;
 
       s = riscv_opts_stack;
+      pre_rvc = riscv_opts.rvc;
       if (s == NULL)
 	as_bad (_(".option pop with no .option push"));
       else
@@ -4887,6 +4907,22 @@ s_riscv_option (int x ATTRIBUTE_UNUSED)
 	  riscv_rps_as.subset_list = riscv_subsets;
 	  riscv_release_subset_list (release_subsets);
 	  free (s);
+	}
+
+      /* Deal with the rvc setting.  */
+      if (riscv_opts.rvc && !pre_rvc)
+	/* norvc to rvc.  */
+	riscv_rvc_reloc_setting (1);
+      else if (!riscv_opts.rvc && pre_rvc)
+	{
+	  /* rvc to norvc.  */
+	  if (!riscv_opts.no_16_bit)
+	    {
+	      riscv_opts.rvc = 1;
+	      riscv_frag_align_code (2);
+	    }
+	  riscv_opts.rvc = 0;
+	  riscv_rvc_reloc_setting (0);
 	}
     }
   /* { Andes  */
@@ -6340,6 +6376,27 @@ tc_cons_fix_new_riscv (fragS *frag, int where, int size, expressionS * exp,
       exp->X_md = 0;
       exp->user = NULL;
     }
+}
+
+static void
+riscv_rvc_reloc_setting (int mode)
+{
+  /* We skip the rvc/norvc options which are set before the first
+     instruction.  It is no necessary to insert the NO_RVC_REGION relocs
+     according to these options since the first rvc information is
+     stored in the fragment's tc_frag_data.rvc.  */
+  /* RVC is disable entirely when -mno-16-bit is enabled  */
+  if (!start_assemble  || riscv_opts.no_16_bit)
+    return;
+
+  if (mode)
+    /* RVC.  */
+    fix_new (frag_now, frag_now_fix (), 0, abs_section_sym,
+	     0x1, 0, BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN);
+  else
+    /* No RVC.  */
+    fix_new (frag_now, frag_now_fix (), 0, abs_section_sym,
+	     0x0, 0, BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN);
 }
 
 /* } Andes */
