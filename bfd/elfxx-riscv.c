@@ -900,10 +900,38 @@ static reloc_howto_type howto_table[] =
   EMPTY_HOWTO (222), EMPTY_HOWTO (223), EMPTY_HOWTO (224), EMPTY_HOWTO (225),
   EMPTY_HOWTO (226), EMPTY_HOWTO (227), EMPTY_HOWTO (228), EMPTY_HOWTO (229),
   EMPTY_HOWTO (230), EMPTY_HOWTO (231), EMPTY_HOWTO (232), EMPTY_HOWTO (233),
-  EMPTY_HOWTO (234), EMPTY_HOWTO (235), EMPTY_HOWTO (236), EMPTY_HOWTO (237),
-  EMPTY_HOWTO (238),
+  EMPTY_HOWTO (234), EMPTY_HOWTO (235), EMPTY_HOWTO (236),
 
   /* Relocations for NDS V5.  */
+  /* Mark the begin of the region that can not do RVC relaxations.  */
+  HOWTO (R_RISCV_NO_RVC_REGION_BEGIN,	/* type */
+	 0,				/* rightshift */
+	 2,				/* size */
+	 32,				/* bitsize */
+	 FALSE,				/* pc_relative */
+	 0,				/* bitpos */
+	 complain_overflow_dont,	/* complain_on_overflow */
+	 bfd_elf_generic_reloc,		/* special_function */
+	 "R_RISCV_NO_RVC_REGION_BEGIN",	/* name */
+	 FALSE,				/* partial_inplace */
+	 0,				/* src_mask */
+	 MINUS_ONE,			/* dst_mask */
+	 FALSE),			/* pcrel_offset */
+  /* Mark the end of the region that can not do RVC relaxations.  */
+  HOWTO (R_RISCV_NO_RVC_REGION_END,	/* type */
+         0,				/* rightshift */
+         2,				/* size */
+         32,				/* bitsize */
+         FALSE,				/* pc_relative */
+         0,				/* bitpos */
+         complain_overflow_dont,	/* complain_on_overflow */
+         bfd_elf_generic_reloc,		/* special_function */
+         "R_RISCV_NO_RVC_REGION_END",	/* name */
+         FALSE,				/* partial_inplace */
+         0,				/* src_mask */
+         MINUS_ONE,			/* dst_mask */
+         FALSE),			/* pcrel_offset */
+
   /* Deleting the unused insn for pc to gp relaxation.
      This is defined to 256 (R_RISCV_max + 1) originally in the elfnn-riscv.c
      for internal relocations used exclusively by the relaxation pass.
@@ -1224,6 +1252,8 @@ static const struct elf_reloc_map riscv_reloc_map[] =
   { BFD_RELOC_RISCV_SET16, R_RISCV_SET16 },
   { BFD_RELOC_RISCV_SET32, R_RISCV_SET32 },
   { BFD_RELOC_RISCV_32_PCREL, R_RISCV_32_PCREL },
+  { BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN, R_RISCV_NO_RVC_REGION_BEGIN },
+  { BFD_RELOC_RISCV_NO_RVC_REGION_END, R_RISCV_NO_RVC_REGION_END },
   { BFD_RELOC_RISCV_DELETE, R_RISCV_DELETE },
   { BFD_RELOC_RISCV_ALIGN_BTB, R_RISCV_ALIGN_BTB },
   { BFD_RELOC_RISCV_10_PCREL, R_RISCV_10_PCREL },

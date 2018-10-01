@@ -3718,6 +3718,10 @@ md_assemble (char *str)
   expressionS imm_expr;
   bfd_reloc_code_real_type imm_reloc = BFD_RELOC_UNUSED;
 
+  /* Set the first rvc info for the the current fragmant.  */
+  if (!frag_now->tc_frag_data.rvc)
+    frag_now->tc_frag_data.rvc = riscv_opts.rvc ? 1 : -1;
+
   /* The target architecture attribute must be set before
      assembling instructions.  */
   if (!start_assemble_insn)
@@ -4257,6 +4261,8 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
     case BFD_RELOC_RISCV_SGP17S3:
     case BFD_RELOC_RISCV_RELAX_REGION_BEGIN:
     case BFD_RELOC_RISCV_RELAX_REGION_END:
+    case BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN:
+    case BFD_RELOC_RISCV_NO_RVC_REGION_END:
     case BFD_RELOC_RISCV_RELAX_ENTRY:
       break;
 
@@ -4313,6 +4319,25 @@ riscv_pre_output_hook (void)
       }
 }
 
+static void
+riscv_rvc_reloc_setting (int mode)
+{
+  /* We skip the rvc/norvc options which are set before the first
+     instruction.  It is no necessary to insert the NO_RVC_REGION relocs
+     according to these options since the first rvc information is
+     stored in the fragment's tc_frag_data.rvc.  */
+  if (!start_assemble_insn)
+    return;
+
+  if (mode)
+    /* RVC.  */
+    fix_new (frag_now, frag_now_fix (), 0, abs_section_sym,
+	     0x1, 0, BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN);
+  else
+    /* No RVC.  */
+    fix_new (frag_now, frag_now_fix (), 0, abs_section_sym,
+	     0x0, 0, BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN);
+}
 
 /* This structure is used to hold a stack of .option values.  */
 
@@ -4337,9 +4362,15 @@ s_riscv_option (int x ATTRIBUTE_UNUSED)
   *input_line_pointer = '\0';
 
   if (strcmp (name, "rvc") == 0)
-    riscv_set_rvc (TRUE, 3);
+    {
+      riscv_set_rvc (TRUE, 3);
+      riscv_rvc_reloc_setting (1);
+    }
   else if (strcmp (name, "norvc") == 0)
-    riscv_set_rvc (FALSE, 3);
+    {
+      riscv_set_rvc (FALSE, 3);
+      riscv_rvc_reloc_setting (0);
+    }
   else if (strcmp (name, "pic") == 0)
     riscv_opts.pic = TRUE;
   else if (strcmp (name, "nopic") == 0)
@@ -4777,54 +4808,142 @@ tc_riscv_regname_to_dw2regnum (char *regname)
   return -1;
 }
 
+/* We don't allow the overlapped NO_RVC_REGION_BEGIN and NO_RVC_REGION_END.
+   Therefore, we choose the last NO_RVC_REGION as the effective setting
+   at the same address.  */
+
+static void
+riscv_find_next_effective_rvc_region (fixS **fixp)
+{
+  fixS *effective_fixp = NULL;
+
+  while (*fixp && (*fixp)->fx_r_type != BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN)
+    *fixp = (*fixp)->fx_next;
+  effective_fixp = *fixp;
+  if (!effective_fixp)
+    return;
+
+  *fixp = (*fixp)->fx_next;
+  while (*fixp
+	 && (*fixp)->fx_frag == effective_fixp->fx_frag
+	 && (*fixp)->fx_where == effective_fixp->fx_where)
+    {
+      if ((*fixp)->fx_r_type == BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN)
+	{
+	  effective_fixp->fx_offset = 2;
+	  effective_fixp->fx_done = 1;
+	  effective_fixp = *fixp;
+	}
+      *fixp = (*fixp)->fx_next;
+    }
+  *fixp = effective_fixp;
+}
+
+/* The Addend of BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN means,
+   0: norvc, unchecked
+   1: rvc, unchecked
+   2: Already checked.  */
+
 static void
 riscv_insert_relax_entry (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
 			  void *xxx ATTRIBUTE_UNUSED)
 {
   segment_info_type *seginfo;
-  fragS *fragP;
-  fixS *fixP;
-  expressionS exp;
-  fixS *fixp;
+  frchainS *frch;
+  fixS *fixp, *pre_fixp_begin;
+  offsetT X_add_number;
+  int current_rvc = 0;
 
   seginfo = seg_info (sec);
   if (!seginfo || !symbol_rootP || !subseg_text_p (sec) || sec->size == 0)
     return;
-  /* If there is no relocation and relax is disabled, it is not necessary to
-     insert R_RISCV_RELAX_ENTRY for linker do EXECIT optimization.  */
-  for (fixp = seginfo->fix_root; fixp; fixp = fixp->fx_next)
-    if (!fixp->fx_done)
-      break;
-  if (!fixp && !riscv_opts.execit)
-    return;
 
   subseg_change (sec, 0);
 
+  frch = seginfo->frchainP;
+  pre_fixp_begin = NULL;
+  current_rvc = frch->frch_root->tc_frag_data.rvc;
+  if (current_rvc == -1)
+    {
+      fixp = fix_at_start (frch->frch_root, 0, abs_section_sym, 0x2,
+			   0, BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN);
+      pre_fixp_begin = fixp;
+      fixp = seginfo->fix_root->fx_next;
+    }
+  else
+    fixp = seginfo->fix_root;
+
+  /* Assume the offset of the NO_RVC_REGION are in order.  */
+  for (; fixp; fixp = fixp->fx_next)
+    {
+      /* Find the next effective NO_RVC_REGION relocations.  */
+      riscv_find_next_effective_rvc_region (&fixp);
+      if (!fixp)
+	break;
+
+      /* Remove the redundant NO_RVC_REGION relocations.  */
+      if (fixp->fx_offset == 0)
+	{
+	  /* norvc to norvc.  */
+	  if (current_rvc == -1)
+	    fixp->fx_done = 1;
+	  else
+	    {
+	      /* rvc to norvc.  */
+	      current_rvc = -1;
+	      pre_fixp_begin = fixp;
+	    }
+	}
+      else if (fixp->fx_offset == 1)
+	{
+	  /* Cannot find the corresponding NO_RVC_REGION_BEGIN
+	     or rvc to rvc.  */
+	  if (!pre_fixp_begin
+	      || current_rvc == 1)
+	    fixp->fx_done = 1;
+	  else
+	    {
+	      /* norvc to rvc.  */
+	      current_rvc = 1;
+	      pre_fixp_begin = NULL;
+	      fixp->fx_r_type = BFD_RELOC_RISCV_NO_RVC_REGION_END;
+	    }
+	}
+      fixp->fx_offset = 2;
+    }
+
+  /* If there is no relocation and execit is disabled, we don't need to
+     insert R_RISCV_RELAX_ENTRY for linker to do EXECIT optimization.  */
+  fixp = seginfo->fix_root;
+  if (!fixp && !riscv_opts.execit)
+    return;
+
   /* Set RELAX_ENTRY flags for linker.  */
-  fragP = seginfo->frchainP->frch_root;
-  exp.X_op = O_symbol;
-  exp.X_add_symbol = abs_section_sym;
-  exp.X_add_number = 0;
+  X_add_number = 0;
 
   if (!riscv_opts.relax)
-    exp.X_add_number |= R_RISCV_RELAX_ENTRY_DISABLE_RELAX_FLAG;
+    X_add_number |= R_RISCV_RELAX_ENTRY_DISABLE_RELAX_FLAG;
   else
     {
       /* These flags are only enabled when global relax is enabled.
 	 Maybe we can check DISABLE_RELAX_FLAG at linke-time,
 	 so we set them anyway.  */
       if (riscv_opts.execit)
-	exp.X_add_number |= R_RISCV_RELAX_ENTRY_EXECIT_FLAG;
+	X_add_number |= R_RISCV_RELAX_ENTRY_EXECIT_FLAG;
     }
 
-  fixP = fix_new_exp (fragP, 0, 0, &exp, 0, BFD_RELOC_RISCV_RELAX_ENTRY);
-  fixP->fx_no_overflow = 1;
+  fixp = fix_at_start (frch->frch_root, 0, abs_section_sym, X_add_number,
+		       0, BFD_RELOC_RISCV_RELAX_ENTRY);
+  fixp->fx_no_overflow = 1;
 }
 
 void
 riscv_post_relax_hook (void)
 {
   bfd_map_over_sections (stdoutput, riscv_insert_relax_entry, NULL);
+
+  /* TODO: Maybe we can sort the relocations here to reduce the burden
+     of linker.  */
 }
 
 void

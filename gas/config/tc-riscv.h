@@ -150,4 +150,10 @@ extern void riscv_post_relax_hook (void);
 extern void riscv_md_end (void);
 extern int riscv_convert_symbolic_attribute (const char *);
 
+#define TC_FRAG_TYPE	struct riscv_frag_type
+struct riscv_frag_type
+{
+  int rvc;
+};
+
 #endif /* TC_RISCV */
