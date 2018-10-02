@@ -1891,7 +1891,9 @@ riscv_elf_relocate_section (bfd *output_bfd,
 	  || r_type == R_RISCV_RELAX_ENTRY
 	  || r_type == R_RISCV_ALIGN
 	  || r_type == R_RISCV_RELAX_REGION_BEGIN
-	  || r_type == R_RISCV_RELAX_REGION_END)
+	  || r_type == R_RISCV_RELAX_REGION_END
+	  || r_type == R_RISCV_NO_RVC_REGION_BEGIN
+	  || r_type == R_RISCV_NO_RVC_REGION_END)
 	continue;
 
       /* This is a final link.  */
@@ -3886,7 +3888,8 @@ typedef bfd_boolean (*relax_func_t) (bfd *, asection *, asection *,
 				     struct bfd_link_info *,
 				     Elf_Internal_Rela *,
 				     bfd_vma, bfd_vma, bfd_vma, bfd_boolean *,
-				     riscv_pcgp_relocs *);
+				     riscv_pcgp_relocs *,
+				     bfd_boolean);
 
 /* Relax AUIPC + JALR into JAL.  */
 
@@ -3898,13 +3901,14 @@ _bfd_riscv_relax_call (bfd *abfd, asection *sec, asection *sym_sec,
 		       bfd_vma max_alignment,
 		       bfd_vma reserve_size ATTRIBUTE_UNUSED,
 		       bfd_boolean *again,
-		       riscv_pcgp_relocs *pcgp_relocs ATTRIBUTE_UNUSED)
+		       riscv_pcgp_relocs *pcgp_relocs ATTRIBUTE_UNUSED,
+		       bfd_boolean rvc)
 {
   bfd_byte *contents = elf_section_data (sec)->this_hdr.contents;
   bfd_signed_vma foff = symval - (sec_addr (sec) + rel->r_offset);
   bfd_boolean near_zero = (symval + RISCV_IMM_REACH/2) < RISCV_IMM_REACH;
   bfd_vma auipc, jalr;
-  int rd, r_type, len = 4, rvc = elf_elfheader (abfd)->e_flags & EF_RISCV_RVC;
+  int rd, r_type, len = 4;
 
   /* FIXME: If the call crosses section boundaries and some sections
      are fixed, ex9 and later relaxations may increase the PC-relative
@@ -4030,10 +4034,10 @@ riscv_relax_lui_to_rvc (bfd *abfd,
 			asection *sec,
 			Elf_Internal_Rela *rel,
 			bfd_vma symval,
-			bfd_boolean *again)
+			bfd_boolean *again,
+			bfd_boolean rvc)
 {
   bfd_byte *contents = elf_section_data (sec)->this_hdr.contents;
-  int use_rvc = elf_elfheader (abfd)->e_flags & EF_RISCV_RVC;
 
   /* Can we relax LUI to C.LUI?  Alignment might move the section forward;
      account for this assuming page alignment at worst.  */
@@ -4043,7 +4047,7 @@ riscv_relax_lui_to_rvc (bfd *abfd,
      For sovling this problem, I remove the limitation of VALID_RVC_LUI_IMM,
      and then convert the illegal c.lui to c.li in the linker relocation
      (perform_relocation).  */
-  if (use_rvc
+  if (rvc
       && ELFNN_R_TYPE (rel->r_info) == R_RISCV_HI20
       && VALID_RVC_LUI_IMM (RISCV_CONST_HIGH_PART (symval))
       && VALID_RVC_LUI_IMM (RISCV_CONST_HIGH_PART (symval + ELF_MAXPAGESIZE)))
@@ -4081,7 +4085,8 @@ _bfd_riscv_relax_lui_gp_insn (bfd *abfd,
 			      bfd_vma max_alignment,
 			      bfd_vma reserve_size,
 			      bfd_boolean *again ATTRIBUTE_UNUSED,
-			      riscv_pcgp_relocs *pcgp_relocs ATTRIBUTE_UNUSED)
+			      riscv_pcgp_relocs *pcgp_relocs ATTRIBUTE_UNUSED,
+			      bfd_boolean rvc ATTRIBUTE_UNUSED)
 {
   bfd_byte *contents = elf_section_data (sec)->this_hdr.contents;
   bfd_vma gp = riscv_global_pointer_value (link_info);
@@ -4285,7 +4290,8 @@ _bfd_riscv_relax_lui (bfd *abfd,
 		      bfd_vma max_alignment,
 		      bfd_vma reserve_size,
 		      bfd_boolean *again,
-		      riscv_pcgp_relocs *pcgp_relocs ATTRIBUTE_UNUSED)
+		      riscv_pcgp_relocs *pcgp_relocs ATTRIBUTE_UNUSED,
+		      bfd_boolean rvc)
 {
   bfd_vma gp = riscv_global_pointer_value (link_info);
   bfd_vma data_start = riscv_data_start_value (link_info);
@@ -4340,7 +4346,7 @@ _bfd_riscv_relax_lui (bfd *abfd,
 	}
     }
 
-  return riscv_relax_lui_to_rvc (abfd, sec, rel, symval, again);
+  return riscv_relax_lui_to_rvc (abfd, sec, rel, symval, again, rvc);
 }
 
 /* Relax non-PIC TLS references.  */
@@ -4355,7 +4361,8 @@ _bfd_riscv_relax_tls_le (bfd *abfd ATTRIBUTE_UNUSED,
 			 bfd_vma max_alignment ATTRIBUTE_UNUSED,
 			 bfd_vma reserve_size ATTRIBUTE_UNUSED,
 			 bfd_boolean *again,
-			 riscv_pcgp_relocs *prcel_relocs ATTRIBUTE_UNUSED)
+			 riscv_pcgp_relocs *prcel_relocs ATTRIBUTE_UNUSED,
+			 bfd_boolean rvc ATTRIBUTE_UNUSED)
 {
   /* See if this symbol is in range of tp.  */
   if (RISCV_CONST_HIGH_PART (tpoff (link_info, symval)) != 0)
@@ -4980,7 +4987,8 @@ _bfd_riscv_relax_align (bfd *abfd, asection *sec,
 			bfd_vma max_alignment ATTRIBUTE_UNUSED,
 			bfd_vma reserve_size ATTRIBUTE_UNUSED,
 			bfd_boolean *again ATTRIBUTE_UNUSED,
-			riscv_pcgp_relocs *pcrel_relocs ATTRIBUTE_UNUSED)
+			riscv_pcgp_relocs *pcgp_relocs ATTRIBUTE_UNUSED,
+			bfd_boolean rvc)
 {
   if (rel->r_addend & (1 << 31))
     return TRUE;
@@ -5032,7 +5040,6 @@ _bfd_riscv_relax_align (bfd *abfd, asection *sec,
   bfd_vma insn16_off = 0xffffffff;
   Elf_Internal_Rela *irel_save = NULL;
   bfd_vma where = pre_align_off;
-  int rvc = elf_elfheader (abfd)->e_flags & EF_RISCV_RVC;
   if (table->target_aligned && rvc
       && nop_bytes && alignment == 4)
     {
@@ -5162,7 +5169,8 @@ _bfd_riscv_relax_pc  (bfd *abfd,
 		      bfd_vma max_alignment,
 		      bfd_vma reserve_size,
 		      bfd_boolean *again ATTRIBUTE_UNUSED,
-		      riscv_pcgp_relocs *pcgp_relocs)
+		      riscv_pcgp_relocs *pcgp_relocs,
+		      bfd_boolean rvc ATTRIBUTE_UNUSED)
 {
   bfd_vma gp = riscv_global_pointer_value (link_info);
 
@@ -5280,7 +5288,8 @@ _bfd_riscv_relax_delete (bfd *abfd,
 			 bfd_vma max_alignment ATTRIBUTE_UNUSED,
 			 bfd_vma reserve_size ATTRIBUTE_UNUSED,
 			 bfd_boolean *again ATTRIBUTE_UNUSED,
-			 riscv_pcgp_relocs *pcgp_relocs ATTRIBUTE_UNUSED)
+			 riscv_pcgp_relocs *pcgp_relocs ATTRIBUTE_UNUSED,
+			 bfd_boolean rvc ATTRIBUTE_UNUSED)
 {
   if (!riscv_relax_delete_bytes(abfd, sec, rel->r_offset, rel->r_addend,
 				link_info))
@@ -5293,6 +5302,30 @@ _bfd_riscv_relax_delete (bfd *abfd,
   *again = TRUE;
 */
   return TRUE;
+}
+
+/* Find the closest previous NO_RVC_REGION, and then check
+   if the RVC is enabled.  */
+
+static int
+riscv_enable_rvc (Elf_Internal_Rela *rel)
+{
+  int type, result = -1;
+  bfd_vma offset = rel->r_offset;
+
+  while (rel && rel->r_offset == offset)
+    {
+      type = ELFNN_R_TYPE (rel->r_info);
+      switch (type)
+	{
+	case R_RISCV_NO_RVC_REGION_BEGIN: result = 1; break;
+	case R_RISCV_NO_RVC_REGION_END: result = 0; break;
+	default: break;
+	}
+      rel = rel + 1;
+    }
+
+  return result;
 }
 
 /* Relax a section.
@@ -5322,6 +5355,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
   static int execit_replace_finish = 0;
   /* For EXECIT update.  */
   static int execit_replace_again = 0;
+  bfd_boolean rvc = FALSE;
 
   /* Reset it for each input section.
      It used to record orevious alignment offset
@@ -5500,6 +5534,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
   else
     max_alignment = _bfd_riscv_get_max_alignment (sec);
 
+  rvc = elf_elfheader (abfd)->e_flags & EF_RISCV_RVC;
   /* Examine and consider relaxing each reloc.  */
   for (i = 0; i < sec->reloc_count; i++)
     {
@@ -5508,6 +5543,13 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
       relax_func_t relax_func;
       int type = ELFNN_R_TYPE (rel->r_info);
       bfd_vma symval;
+
+      switch (riscv_enable_rvc (rel))
+	{
+	case 1: rvc = 0; break;
+	case 0: rvc = 1; break;
+	default: break;
+	}
 
       relax_func = NULL;
       if (info->relax_pass == 1)
@@ -5649,7 +5691,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 
       if (!relax_func (abfd, sec, sym_sec, info, rel, symval,
 		       max_alignment, reserve_size, again,
-		       &pcgp_relocs))
+		       &pcgp_relocs, rvc))
 	goto fail;
     }
 
@@ -8087,7 +8129,9 @@ riscv_relocation_check (struct bfd_link_info *info,
 	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_SET6
 	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_SET8
 	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_SET16
-	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_SET32)
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_SET32
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_NO_RVC_REGION_BEGIN
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_NO_RVC_REGION_END)
 	    {
 	      /* Since we already consider all relocations above, this won't
 		 happen unless supporting new relocations. */
