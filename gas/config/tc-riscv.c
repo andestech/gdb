@@ -4391,8 +4391,10 @@ s_riscv_option (int x ATTRIBUTE_UNUSED)
   else if (strcmp (name, "pop") == 0)
     {
       struct riscv_option_stack *s;
+      int pre_rvc;
 
       s = riscv_opts_stack;
+      pre_rvc = riscv_opts.rvc;
       if (s == NULL)
 	as_bad (_(".option pop with no .option push"));
       else
@@ -4401,6 +4403,14 @@ s_riscv_option (int x ATTRIBUTE_UNUSED)
 	  riscv_opts_stack = s->next;
 	  free (s);
 	}
+
+      /* Deal with the rvc setting.  */
+      if (riscv_opts.rvc && !pre_rvc)
+	/* norvc to rvc.  */
+	riscv_rvc_reloc_setting (1);
+      else if (!riscv_opts.rvc && pre_rvc)
+	/* rvc to norvc.  */
+	riscv_rvc_reloc_setting (0);
     }
   else if (strcmp (name, "execit") == 0
 	   || strcmp (name, "ex9") == 0)
