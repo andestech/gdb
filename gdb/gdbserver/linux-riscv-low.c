@@ -24,9 +24,15 @@
 #include <asm/ptrace.h>
 #include <elf.h>
 
+#if _LP64 != 1
+/* Defined in auto-generated file riscv32-linux.c.  */
+void init_registers_riscv32_linux (void);
+extern const struct target_desc *tdesc_riscv32_linux;
+#else
 /* Defined in auto-generated file riscv64-linux.c.  */
 void init_registers_riscv64_linux (void);
 extern const struct target_desc *tdesc_riscv64_linux;
+#endif
 
 #define riscv_num_regs 32
 
@@ -159,7 +165,11 @@ riscv_arch_setup (void)
     if (is_elf64 > 0)
       error (_("Can't debug 64-bit process with 32-bit GDBserver"));
 
+#if _LP64 != 1
+  current_process ()->tdesc = tdesc_riscv32_linux;
+#else
   current_process ()->tdesc = tdesc_riscv64_linux;
+#endif
 }
 
 /* Support for hardware single step.  */
@@ -211,7 +221,11 @@ struct linux_target_ops the_low_target =
 void
 initialize_low_arch (void)
 {
+#if _LP64 != 1
+  init_registers_riscv32_linux ();
+#else
   init_registers_riscv64_linux ();
+#endif
 
   initialize_regsets_info (&riscv_regsets_info);
 }
