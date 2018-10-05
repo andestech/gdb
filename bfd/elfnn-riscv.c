@@ -2247,6 +2247,7 @@ riscv_elf_relocate_section (bfd *output_bfd,
 	    {
 	      Elf_Internal_Rela outrel;
 	      bfd_boolean skip_static_relocation, skip_dynamic_relocation;
+	      bfd_boolean dyn;
 
 	      /* When generating a shared object, these relocations
 		 are copied into the output file to be resolved at run
@@ -2258,6 +2259,17 @@ riscv_elf_relocate_section (bfd *output_bfd,
 	      skip_static_relocation = outrel.r_offset != (bfd_vma) -2;
 	      skip_dynamic_relocation = outrel.r_offset >= (bfd_vma) -2;
 	      outrel.r_offset += sec_addr (input_section);
+
+	      dyn = elf_hash_table (info)->dynamic_sections_created;
+	      if (sreloc == NULL && dyn)
+		{
+		  sreloc = _bfd_elf_get_dynamic_reloc_section
+		    (input_bfd, input_section,
+		     TRUE);
+
+		  if (sreloc == NULL)
+		    return bfd_reloc_notsupported;
+		}
 
 	      if (skip_dynamic_relocation)
 		memset (&outrel, 0, sizeof outrel);
