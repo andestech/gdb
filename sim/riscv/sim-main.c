@@ -1043,7 +1043,7 @@ execute_c (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 	  /* c.mv */
 	  TRACE_INSN (cpu, "c.mv %s, %s // %s = %s",
 		      rd_name, crs2_name, rd_name, crs2_name);
-	  cpu->regs[rd].u = cpu->regs[crs2].u;
+	  store_rd (cpu, rd, cpu->regs[crs2].u);
 	}
       else
 	{
