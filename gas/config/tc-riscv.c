@@ -4587,6 +4587,11 @@ s_riscv_option (int x ATTRIBUTE_UNUSED)
     }
   else if (strcmp (name, "norvc") == 0)
     {
+      /* Force to set the 4-byte aligned when converting
+	 rvc to norvc.  The repeated alignment setting is
+	 fine since linker will remove the redundant nops.  */
+      if (riscv_opts.rvc)
+	riscv_frag_align_code (2);
       riscv_set_rvc (FALSE, 3);
       riscv_rvc_reloc_setting (0);
     }
@@ -4636,8 +4641,13 @@ s_riscv_option (int x ATTRIBUTE_UNUSED)
 	/* norvc to rvc.  */
 	riscv_rvc_reloc_setting (1);
       else if (!riscv_opts.rvc && pre_rvc)
-	/* rvc to norvc.  */
-	riscv_rvc_reloc_setting (0);
+	{
+	  /* rvc to norvc.  */
+	  riscv_opts.rvc = 1;
+	  riscv_frag_align_code (2);
+	  riscv_opts.rvc = 0;
+	  riscv_rvc_reloc_setting (0);
+	}
     }
   else if (strcmp (name, "execit") == 0
 	   || strcmp (name, "ex9") == 0)
