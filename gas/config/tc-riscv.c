@@ -5092,13 +5092,12 @@ riscv_find_next_effective_rvc_region (fixS **fixp)
    2: Already checked.  */
 
 static void
-riscv_insert_relax_entry (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
-			  void *xxx ATTRIBUTE_UNUSED)
+riscv_final_no_rvc_region (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
+			   void *xxx ATTRIBUTE_UNUSED)
 {
   segment_info_type *seginfo;
   frchainS *frch;
   fixS *fixp, *pre_fixp_begin;
-  offsetT X_add_number;
   int current_rvc = 0;
 
   seginfo = seg_info (sec);
@@ -5158,6 +5157,89 @@ riscv_insert_relax_entry (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
 	}
       fixp->fx_offset = 2;
     }
+}
+
+static void
+riscv_final_no_execit_region (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
+			      void *xxx ATTRIBUTE_UNUSED)
+{
+  segment_info_type *seginfo;
+  fixS *fixp;
+  int no_execit_count;
+
+  seginfo = seg_info (sec);
+  if (!seginfo || !symbol_rootP || !subseg_text_p (sec) || sec->size == 0)
+    return;
+
+  subseg_change (sec, 0);
+
+  /* First, we also need to insert noexecit directives according to
+     the NO_RVC_REGION directives set at riscv_final_no_rvc_region.  */
+  fixp = seginfo->fix_root;
+  for (; fixp; fixp = fixp->fx_next)
+    {
+      if (fixp->fx_r_type == BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN)
+	fix_new (fixp->fx_frag, fixp->fx_where, 0, abs_section_sym,
+		 R_RISCV_RELAX_REGION_NO_EXECIT_FLAG, 0,
+		 BFD_RELOC_RISCV_RELAX_REGION_BEGIN);
+      else if (fixp->fx_r_type == BFD_RELOC_RISCV_NO_RVC_REGION_END)
+	fix_new (fixp->fx_frag, fixp->fx_where, 0, abs_section_sym,
+		 R_RISCV_RELAX_REGION_NO_EXECIT_FLAG, 0,
+		 BFD_RELOC_RISCV_RELAX_REGION_END);
+    }
+
+  /* Assume the offset of the BFD_RELOC_RISCV_RELAX_REGION_BEGIN/END
+     are in order.  */
+  no_execit_count = 0;
+  fixp = seginfo->fix_root;
+  for (; fixp; fixp = fixp->fx_next)
+    {
+      if (fixp->fx_r_type == BFD_RELOC_RISCV_RELAX_REGION_BEGIN
+	  && fixp->fx_offset == R_RISCV_RELAX_REGION_NO_EXECIT_FLAG)
+
+	{
+	  /* We must find the corresponding REGION_END later.  */
+	  if (no_execit_count > 0)
+	    fixp->fx_done = 1;
+	  no_execit_count++;
+	}
+      else if (fixp->fx_r_type == BFD_RELOC_RISCV_RELAX_REGION_END
+	       && fixp->fx_offset == R_RISCV_RELAX_REGION_NO_EXECIT_FLAG)
+	{
+	  no_execit_count--;
+	  if (no_execit_count > 0)
+	    fixp->fx_done = 1;
+	  else if (no_execit_count < 0)
+	    {
+	      /* Find the unmatched REGION_END, ignore it.  */
+	      no_execit_count++;
+	      fixp->fx_done = 1;
+	    }
+	}
+    }
+
+  /* We have handle the negative no_execit_count cases above.  */
+  if (no_execit_count > 0)
+    {
+      /* Find the unmatched REGION_BEGIN, we should print
+	 warning/error msg here.  */
+    }
+}
+
+static void
+riscv_insert_relax_entry (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
+			  void *xxx ATTRIBUTE_UNUSED)
+{
+  segment_info_type *seginfo;
+  frchainS *frch;
+  fixS *fixp;
+  offsetT X_add_number;
+
+  seginfo = seg_info (sec);
+  if (!seginfo || !symbol_rootP || !subseg_text_p (sec) || sec->size == 0)
+    return;
+
+  subseg_change (sec, 0);
 
   /* If there is no relocation and execit is disabled, we don't need to
      insert R_RISCV_RELAX_ENTRY for linker to do EXECIT optimization.  */
@@ -5166,6 +5248,7 @@ riscv_insert_relax_entry (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
     return;
 
   /* Set RELAX_ENTRY flags for linker.  */
+  frch = seginfo->frchainP;
   X_add_number = 0;
 
   if (!riscv_opts.relax)
@@ -5187,10 +5270,11 @@ riscv_insert_relax_entry (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
 void
 riscv_post_relax_hook (void)
 {
-  bfd_map_over_sections (stdoutput, riscv_insert_relax_entry, NULL);
-
   /* TODO: Maybe we can sort the relocations here to reduce the burden
      of linker.  */
+  bfd_map_over_sections (stdoutput, riscv_final_no_rvc_region, NULL);
+  bfd_map_over_sections (stdoutput, riscv_final_no_execit_region, NULL);
+  bfd_map_over_sections (stdoutput, riscv_insert_relax_entry, NULL);
 }
 
 void
