@@ -5241,11 +5241,10 @@ riscv_insert_relax_entry (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
 
   subseg_change (sec, 0);
 
-  /* If there is no relocation and execit is disabled, we don't need to
-     insert R_RISCV_RELAX_ENTRY for linker to do EXECIT optimization.  */
-  fixp = seginfo->fix_root;
-  if (!fixp && !riscv_opts.execit)
-    return;
+  /* The original code says that it is not necessary to insert the
+     R_RISCV_RELAX_ENTRY when there is no relocation and the execit
+     is disabled. It is weird for me now, I think always insert the
+     R_RISCV_RELAX_ENTRY is fine and do no harm.  */
 
   /* Set RELAX_ENTRY flags for linker.  */
   frch = seginfo->frchainP;
@@ -5256,7 +5255,7 @@ riscv_insert_relax_entry (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
   else
     {
       /* These flags are only enabled when global relax is enabled.
-	 Maybe we can check DISABLE_RELAX_FLAG at linke-time,
+	 Maybe we can check DISABLE_RELAX_FLAG at link-time,
 	 so we set them anyway.  */
       if (riscv_opts.execit)
 	X_add_number |= R_RISCV_RELAX_ENTRY_EXECIT_FLAG;
