@@ -40,7 +40,7 @@ extern "C"
 #else
 #include <stdbool.h>
 #endif //#ifdef __cplusplus
-
+#define __STDC_FORMAT_MACROS 1
 #include <ctype.h>
 #include <errno.h>
 #include <inttypes.h>
@@ -405,6 +405,12 @@ elf_use_ext_i (int i, bool std)
 static bool
 cpu_support_std_ext (reg_t misa, char ext)
 {
+  // I-Extension allow E-Extension
+  if (ext == 'E')
+    {
+      return ((misa & (1 << ('E' - 'A'))) != 0) || ((misa & (1 << ('I' - 'A'))) != 0);
+    }
+
   int i = ext - 'A';
 
   return (misa & (1 << i)) != 0;
