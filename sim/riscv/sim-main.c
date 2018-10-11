@@ -5807,36 +5807,6 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	TRACE_REG (cpu, rd);
       }
       break;
-    case MATCH_CLO32:
-      {
-	int i, cnt = 0;
-
-	for (i = 31; i >= 0; i--)
-	  {
-	    if (__TEST (cpu->regs[ra].u, i))
-	      cnt++;
-	    else
-	      break;
-	  }
-	cpu->regs[rd].u = cnt;
-	TRACE_REG (cpu, rd);
-      }
-      break;
-    case MATCH_CLZ:
-      {
-	int i, cnt = 0;
-
-	for (i = 31; i >= 0; i--)
-	  {
-	    if (__TEST (cpu->regs[ra].u, i) == 0)
-	      cnt++;
-	    else
-	      break;
-	  }
-	cpu->regs[rd].u = cnt;
-	TRACE_REG (cpu, rd);
-      }
-      break;
     case MATCH_MAXW:
       if (RISCV_XLEN (cpu) == 32)
 	cpu->regs[rd].s = (cpu->regs[ra].s > cpu->regs[rb].s)
@@ -5997,6 +5967,48 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 
       cpu->regs[rd].s = result.s;
       TRACE_REG (cpu, rd);
+      break;
+    case MATCH_CLO32:
+      {
+	int j, cnt = 0;
+
+	for (i = 0; i < vec32_num; i++)
+	  {
+	    for (j = 31; j >= 0; j--)
+	      {
+		if (__TEST (*(ptr_a32 + i), j))
+		  cnt++;
+		else
+		  break;
+	      }
+	    *(ptr32 + i) = cnt;
+	    cnt = 0;
+	  }
+
+	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
+      }
+      break;
+    case MATCH_CLZ32:
+      {
+	int j, cnt = 0;
+
+	for (i = 0; i < vec32_num; i++)
+	  {
+	    for (j = 31; j >= 0; j--)
+	      {
+		if (__TEST (*(ptr_a32 + i), j) == 0)
+		  cnt++;
+		else
+		  break;
+	      }
+	    *(ptr32 + i) = cnt;
+	    cnt = 0;
+	  }
+
+	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
+      }
       break;
     default:
       TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
