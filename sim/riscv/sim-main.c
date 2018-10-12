@@ -5980,8 +5980,9 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_CLO32:
       {
 	int j, cnt = 0;
+	int vec = RISCV_XLEN (cpu) == 64 ? 1 : 0;
 
-	for (i = 0; i < vec32_num; i++)
+	for (i = 0; i <= vec; i++)
 	  {
 	    for (j = 31; j >= 0; j--)
 	      {
@@ -6001,8 +6002,9 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_CLZ32:
       {
 	int j, cnt = 0;
+	int vec = RISCV_XLEN (cpu) == 64 ? 1 : 0;
 
-	for (i = 0; i < vec32_num; i++)
+	for (i = 0; i <= vec; i++)
 	  {
 	    for (j = 31; j >= 0; j--)
 	      {
@@ -7431,8 +7433,10 @@ execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int 
       return execute_i (cpu, iw, op, ex9);
     case 'M':
       return execute_m (cpu, iw, op, ex9);
-    case 'P':
-      return execute_p (cpu, iw, op, ex9);
+    case 'X':
+      subset++;
+      if (strncmp (subset, "DSP", 3) == 0)
+	return execute_p (cpu, iw, op, ex9);
     case '3':
       if (subset[1] == '2')
 	{
