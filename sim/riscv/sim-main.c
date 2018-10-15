@@ -3699,7 +3699,9 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       {
 	int32_t round_up;
 	int64_t res;
-	for (i = 0; i < vec32_num; i++)
+	int vec = RISCV_XLEN (cpu) == 64 ? 1 : 0;
+
+	for (i = 0; i <= vec; i++)
 	  {
 	    res = (int64_t) *(ptr_a32 + i) * (int64_t) *(ptr_b32 + i);
 	    round_up = (res >> 31) & 0x1;
@@ -3792,7 +3794,9 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_SMMWB:
       {
 	int b16_offset = 0;
-	for (i = 0; i < vec32_num; i++)
+	int vec = RISCV_XLEN (cpu) == 64 ? 1 : 0;
+
+	for (i = 0; i <= vec; i++)
 	  {
 	    *(ptr32 + i) = ((int64_t) *(ptr_a32 + i)
 			    * (int64_t) *(ptr_b16 + b16_offset)) >> 16;
@@ -3828,7 +3832,9 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       {
 	int64_t res;
 	int round_up, b16_offset = 0;
-	for (i = 0; i < vec32_num; i++)
+	int vec = RISCV_XLEN (cpu) == 64 ? 1 : 0;
+
+	for (i = 0; i <= vec; i++)
 	  {
 	    res = ((int64_t) *(ptr_a32 + i)
 		   * (int64_t) *(ptr_b16 + b16_offset));
@@ -3907,7 +3913,9 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_SMMWT:
       {
 	int b16_offset = 1;
-	for (i = 0; i < vec32_num; i++)
+	int vec = RISCV_XLEN (cpu) == 64 ? 1 : 0;
+
+	for (i = 0; i <= vec; i++)
 	  {
 	    *(ptr32 + i) = ((int64_t) *(ptr_a32 + i)
 			    * (int64_t) *(ptr_b16 + b16_offset)) >> 16;
@@ -3943,7 +3951,9 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       {
 	int64_t res;
 	int round_up, b16_offset = 1;
-	for (i = 0; i < vec32_num; i++)
+	int vec = RISCV_XLEN (cpu) == 64 ? 1 : 0;
+
+	for (i = 0; i <= vec; i++)
 	  {
 	    res = ((int64_t) *(ptr_a32 + i)
 		   * (int64_t) *(ptr_b16 + b16_offset));
@@ -5671,6 +5681,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 				     * cpu->regs[rb].b16.h1) << 32)
 			  | ((int64_t) (cpu->regs[ra].b16.h0
 					* cpu->regs[rb].b16.h0) & 0xFFFFFFFF);
+
 	set_double (cpu, rd, result);
 	TRACE_REG (cpu, rd);
       }
@@ -6000,6 +6011,29 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    for (j = 31; j >= 0; j--)
 	      {
 		if (__TEST (*(ptr_a32 + i), j) == 0)
+		  cnt++;
+		else
+		  break;
+	      }
+	    *(ptr32 + i) = cnt;
+	    cnt = 0;
+	  }
+
+	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
+      }
+      break;
+    case MATCH_CLRS32:
+      {
+	int j, cnt = 0;
+	int vec = RISCV_XLEN (cpu) == 64 ? 1 : 0;
+
+	for (i = 0; i <= vec; i++)
+	  {
+	    int leading = (*(ptr_a32 + i) >> 31) & 0x1;
+	    for (j = 30; j >= 0; j--)
+	      {
+		if (__TEST (*(ptr_a32 + i), j) == leading)
 		  cnt++;
 		else
 		  break;
