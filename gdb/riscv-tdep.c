@@ -57,6 +57,7 @@
 #include "prologue-value.h"
 #include "arch/riscv.h"
 #include "riscv-ravenscar-thread.h"
+#include "stack.h"
 
 /* The stack must be 16-byte aligned.  */
 #define SP_ALIGNMENT 16
@@ -3380,6 +3381,73 @@ static const struct frame_unwind riscv_frame_unwind =
   /*.prev_arch     =*/ NULL,
 };
 
+/* Return non-zero if function NAME should be handled specially during
+   stepping over.
+
+   Functions "__riscv_save_[0-12]" and "__riscv_restore_[0-12]" are
+   used as trampoline to push/pop registers and to adjust stack pointer.  The
+   normal mechanism for step over doesn't work for this.  */
+
+static int
+riscv_in_solib_return_trampoline (struct gdbarch *gdbarch,
+				  CORE_ADDR pc, const char *name)
+{
+  return name && startswith (name, "__riscv_")
+	 && (startswith (name, "__riscv_save_")
+	     || startswith (name, "__riscv_restore_"));
+}
+
+/* Skip code that cannot be handled correctly when stepping over.
+
+   Result is desired PC to step until, or NULL if we are not in
+   code that should be skipped.  */
+
+#define RISCV_T0_REGNUM 5
+static CORE_ADDR
+riscv_skip_trampoline_code (struct frame_info *frame, CORE_ADDR pc)
+{
+  struct gdbarch *gdbarch = get_frame_arch (frame);
+  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+  struct bound_minimal_symbol msymbol;
+  const char *func_name = NULL;
+  int restore_arg = 0;
+  CORE_ADDR sp = 0;
+  uint32_t sp_offset = 0;
+
+  msymbol = lookup_minimal_symbol_by_pc (pc);
+  if (msymbol.minsym)
+    {
+      func_name = msymbol.minsym->linkage_name ();
+      if (startswith (func_name, "__riscv_save_"))
+	return get_frame_register_unsigned (frame, RISCV_T0_REGNUM);
+      if (startswith (func_name, "__riscv_restore_"))
+	{
+	  sp  = get_frame_register_unsigned (frame, RISCV_SP_REGNUM);
+
+	  sscanf (&func_name[16], "%d", &restore_arg);
+	  switch (restore_arg)
+	    {
+	    case 12:
+	      sp_offset += 16;
+	      /* FALLTHROUGH */
+	    case 8 ... 11:
+	      sp_offset += 16;
+	      /* FALLTHROUGH */
+	    case 4 ... 7:
+	      sp_offset += 16;
+	      /* FALLTHROUGH */
+	    case 0 ... 3:
+	      sp_offset += 12;
+	      break;
+	    default:
+	      return 0;
+	    }
+	  return read_memory_unsigned_integer (sp + sp_offset, 4, byte_order);
+	}
+    }
+  return 0;
+}
+
 /* Extract a set of required target features out of ABFD.  If ABFD is
    nullptr then a RISCV_GDBARCH_FEATURES is returned in its default state.  */
 
@@ -3738,6 +3806,11 @@ riscv_gdbarch_init (struct gdbarch_info info,
 
   /* Functions handling dummy frames.  */
   set_gdbarch_push_dummy_call (gdbarch, riscv_push_dummy_call);
+
+  /* Trampoline.  */
+  set_gdbarch_in_solib_return_trampoline
+    (gdbarch, riscv_in_solib_return_trampoline);
+  set_gdbarch_skip_trampoline_code (gdbarch, riscv_skip_trampoline_code);
 
   /* Frame unwinders.  Use DWARF debug info if available, otherwise use our own
      unwinder.  */
