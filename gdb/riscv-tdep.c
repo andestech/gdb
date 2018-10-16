@@ -1604,22 +1604,6 @@ riscv_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
   return riscv_scan_prologue (gdbarch, pc, ((CORE_ADDR) -1), NULL);
 }
 
-/* Implement the gdbarch push dummy code callback.  */
-
-static CORE_ADDR
-riscv_push_dummy_code (struct gdbarch *gdbarch, CORE_ADDR sp,
-		       CORE_ADDR funaddr, struct value **args, int nargs,
-		       struct type *value_type, CORE_ADDR *real_pc,
-		       CORE_ADDR *bp_addr, struct regcache *regcache)
-{
-  /* Allocate space for a breakpoint, and keep the stack correctly
-     aligned.  */
-  sp -= 16;
-  *bp_addr = sp;
-  *real_pc = funaddr;
-  return sp;
-}
-
 /* Compute the alignment of the type T.  Used while setting up the
    arguments for a dummy call.  */
 
@@ -3197,8 +3181,6 @@ riscv_gdbarch_init (struct gdbarch_info info,
   set_gdbarch_unwind_sp (gdbarch, riscv_unwind_sp);
 
   /* Functions handling dummy frames.  */
-  set_gdbarch_call_dummy_location (gdbarch, ON_STACK);
-  set_gdbarch_push_dummy_code (gdbarch, riscv_push_dummy_code);
   set_gdbarch_push_dummy_call (gdbarch, riscv_push_dummy_call);
   set_gdbarch_dummy_id (gdbarch, riscv_dummy_id);
 
