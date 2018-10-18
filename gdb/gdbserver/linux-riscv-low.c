@@ -25,13 +25,29 @@
 #include <elf.h>
 
 #if _LP64 != 1
+# ifndef __riscv_flen
 /* Defined in auto-generated file riscv32-linux.c.  */
 void init_registers_riscv32_linux (void);
 extern const struct target_desc *tdesc_riscv32_linux;
+# else
+#  if __riscv_flen == 64
+/* Defined in auto-generated file riscv32d-linux.c.  */
+void init_registers_riscv32d_linux (void);
+extern const struct target_desc *tdesc_riscv32d_linux;
+#  endif
+# endif
 #else
+# ifndef __riscv_flen
 /* Defined in auto-generated file riscv64-linux.c.  */
 void init_registers_riscv64_linux (void);
 extern const struct target_desc *tdesc_riscv64_linux;
+# else
+#  if __riscv_flen == 64
+/* Defined in auto-generated file riscv64d-linux.c.  */
+void init_registers_riscv64d_linux (void);
+extern const struct target_desc *tdesc_riscv64d_linux;
+#  endif
+# endif
 #endif
 
 #define riscv_num_regs 32
@@ -39,6 +55,8 @@ extern const struct target_desc *tdesc_riscv64_linux;
 #define RISCV_ZERO_REGNUM	0
 #define RISCV_RA_REGNUM		1
 #define RISCV_PC_REGNUM		32
+#define RISCV_F0_REGNUM		33
+#define RISCV_FPR_NUM		32
 
 static int riscv_regmap[] =
 {
@@ -126,11 +144,40 @@ riscv_store_gregset (struct regcache *regcache, const void *buf)
       supply_register (regcache, i, ((elf_greg_t *) buf) + riscv_regmap[i]);
 }
 
+#if __riscv_flen == 64
+static void
+riscv_fill_fpregset (struct regcache *regcache, void *buf)
+{
+  struct __riscv_d_ext_state *regset = (struct __riscv_d_ext_state*) buf;
+  int i;
+
+  for (i = 0; i < RISCV_FPR_NUM; i++)
+    collect_register (regcache, RISCV_F0_REGNUM + i, &regset->f[i]);
+  collect_register_by_name (regcache, "fcsr", &regset->fcsr);
+}
+
+static void
+riscv_store_fpregset (struct regcache *regcache, const void *buf)
+{
+  struct __riscv_d_ext_state *regset = (struct __riscv_d_ext_state*) buf;
+  int i;
+
+  for (i = 0; i < RISCV_FPR_NUM; i++)
+    supply_register (regcache, RISCV_F0_REGNUM + i, &regset->f[i]);
+  supply_register_by_name (regcache, "fcsr", &regset->fcsr);
+}
+#endif
+
 static struct regset_info riscv_regsets[] =
 {
   { PTRACE_GETREGSET, PTRACE_SETREGSET, NT_PRSTATUS,
     sizeof (struct user_regs_struct), GENERAL_REGS,
     riscv_fill_gregset, riscv_store_gregset },
+#if __riscv_flen == 64
+  { PTRACE_GETREGSET, PTRACE_SETREGSET, NT_PRFPREG,
+    sizeof (struct __riscv_d_ext_state), FP_REGS,
+    riscv_fill_fpregset, riscv_store_fpregset },
+#endif
   NULL_REGSET
 };
 
@@ -166,9 +213,21 @@ riscv_arch_setup (void)
       error (_("Can't debug 64-bit process with 32-bit GDBserver"));
 
 #if _LP64 != 1
+# ifndef __riscv_flen
   current_process ()->tdesc = tdesc_riscv32_linux;
+# else
+#  if __riscv_flen == 64
+  current_process ()->tdesc = tdesc_riscv32d_linux;
+#  endif
+# endif
 #else
+# ifndef __riscv_flen
   current_process ()->tdesc = tdesc_riscv64_linux;
+# else
+#  if __riscv_flen == 64
+  current_process ()->tdesc = tdesc_riscv64d_linux;
+#  endif
+# endif
 #endif
 }
 
@@ -222,9 +281,21 @@ void
 initialize_low_arch (void)
 {
 #if _LP64 != 1
+# ifndef __riscv_flen
   init_registers_riscv32_linux ();
+# else
+#  if __riscv_flen == 64
+  init_registers_riscv32d_linux ();
+#  endif
+# endif
 #else
+# ifndef __riscv_flen
   init_registers_riscv64_linux ();
+# else
+#  if __riscv_flen == 64
+  init_registers_riscv64d_linux ();
+#  endif
+# endif
 #endif
 
   initialize_regsets_info (&riscv_regsets_info);
