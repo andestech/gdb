@@ -157,11 +157,6 @@ riscv_arch_setup (void)
   if (sizeof (void *) == 4)
     if (is_elf64 > 0)
       error (_("Can't debug 64-bit process with 32-bit GDBserver"));
-
-  if (!is_elf64)
-    current_process ()->tdesc = tdesc_riscvgx32;
-  else
-    current_process ()->tdesc = tdesc_riscvgx;
 }
 
 /* Support for hardware single step.  */
