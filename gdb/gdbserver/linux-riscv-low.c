@@ -34,6 +34,10 @@ extern const struct target_desc *tdesc_riscv32_linux;
 /* Defined in auto-generated file riscv32d-linux.c.  */
 void init_registers_riscv32d_linux (void);
 extern const struct target_desc *tdesc_riscv32d_linux;
+#  elif __riscv_flen == 32
+/* Defined in auto-generated file riscv32f-linux.c.  */
+void init_registers_riscv32f_linux (void);
+extern const struct target_desc *tdesc_riscv32f_linux;
 #  endif
 # endif
 #else
@@ -46,6 +50,10 @@ extern const struct target_desc *tdesc_riscv64_linux;
 /* Defined in auto-generated file riscv64d-linux.c.  */
 void init_registers_riscv64d_linux (void);
 extern const struct target_desc *tdesc_riscv64d_linux;
+#  elif __riscv_flen == 32
+/* Defined in auto-generated file riscv64f-linux.c.  */
+void init_registers_riscv64f_linux (void);
+extern const struct target_desc *tdesc_riscv64f_linux;
 #  endif
 # endif
 #endif
@@ -218,6 +226,8 @@ riscv_arch_setup (void)
 # else
 #  if __riscv_flen == 64
   current_process ()->tdesc = tdesc_riscv32d_linux;
+#  elif __riscv_flen == 32
+  current_process ()->tdesc = tdesc_riscv32f_linux;
 #  endif
 # endif
 #else
@@ -226,6 +236,8 @@ riscv_arch_setup (void)
 # else
 #  if __riscv_flen == 64
   current_process ()->tdesc = tdesc_riscv64d_linux;
+#  elif __riscv_flen == 32
+  current_process ()->tdesc = tdesc_riscv64f_linux;
 #  endif
 # endif
 #endif
@@ -286,6 +298,8 @@ initialize_low_arch (void)
 # else
 #  if __riscv_flen == 64
   init_registers_riscv32d_linux ();
+#  elif __riscv_flen == 32
+  init_registers_riscv32f_linux ();
 #  endif
 # endif
 #else
@@ -294,6 +308,8 @@ initialize_low_arch (void)
 # else
 #  if __riscv_flen == 64
   init_registers_riscv64d_linux ();
+#  elif __riscv_flen == 32
+  init_registers_riscv64f_linux ();
 #  endif
 # endif
 #endif
