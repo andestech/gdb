@@ -3448,6 +3448,26 @@ riscv_skip_trampoline_code (struct frame_info *frame, CORE_ADDR pc)
   return 0;
 }
 
+/* Implement the "get_longjmp_target" gdbarch method.  */
+
+static int
+riscv_get_longjmp_target (struct frame_info *frame, CORE_ADDR *pc)
+{
+  gdb_byte buf[8];
+  CORE_ADDR jb_addr;
+  struct gdbarch *gdbarch = get_frame_arch (frame);
+  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+  int regsize = riscv_isa_xlen (gdbarch);
+
+  jb_addr = get_frame_register_unsigned (frame, RISCV_A0_REGNUM);
+
+  if (target_read_memory (jb_addr, buf, regsize))
+    return 0;
+
+  *pc = extract_unsigned_integer (buf, regsize, byte_order);
+  return 1;
+}
+
 /* Extract a set of required target features out of ABFD.  If ABFD is
    nullptr then a RISCV_GDBARCH_FEATURES is returned in its default state.  */
 
@@ -3811,6 +3831,9 @@ riscv_gdbarch_init (struct gdbarch_info info,
   set_gdbarch_in_solib_return_trampoline
     (gdbarch, riscv_in_solib_return_trampoline);
   set_gdbarch_skip_trampoline_code (gdbarch, riscv_skip_trampoline_code);
+
+  /* Handle longjmp.  */
+  set_gdbarch_get_longjmp_target (gdbarch, riscv_get_longjmp_target);
 
   /* Frame unwinders.  Use DWARF debug info if available, otherwise use our own
      unwinder.  */
