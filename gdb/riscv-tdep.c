@@ -3468,6 +3468,29 @@ riscv_get_longjmp_target (struct frame_info *frame, CORE_ADDR *pc)
   return 1;
 }
 
+/* Implement the "print_insn" gdbarch method.  */
+
+static int
+gdb_print_insn_riscv (bfd_vma memaddr, disassemble_info *info)
+{
+  struct obj_section *s = find_pc_section (memaddr);
+
+  /* When disassembling exec.it instructions, annotating them with
+     the original instructions at the end of line.  For example,
+
+	0x00500122 <+82>:    exec.it #4		!neg    a0,a0
+
+     Disassembler uses .exec.itable section info to locate _ITB_BASE_ table
+     and extract the original instruction from it.  If the object file is
+     changed, reload symbol table.  */
+
+  if (s != NULL)
+    info->section = s->the_bfd_section;
+
+done:
+  return default_print_insn (memaddr, info);
+}
+
 /* Extract a set of required target features out of ABFD.  If ABFD is
    nullptr then a RISCV_GDBARCH_FEATURES is returned in its default state.  */
 
@@ -3818,6 +3841,7 @@ riscv_gdbarch_init (struct gdbarch_info info,
   set_gdbarch_breakpoint_kind_from_pc (gdbarch, riscv_breakpoint_kind_from_pc);
   set_gdbarch_sw_breakpoint_from_kind (gdbarch, riscv_sw_breakpoint_from_kind);
   set_gdbarch_have_nonsteppable_watchpoint (gdbarch, 1);
+  set_gdbarch_print_insn (gdbarch, gdb_print_insn_riscv);
 
   /* Functions to analyze frames.  */
   set_gdbarch_skip_prologue (gdbarch, riscv_skip_prologue);
