@@ -1023,6 +1023,54 @@ riscv_register_type (struct gdbarch *gdbarch, int regnum)
   return type;
 }
 
+/* This is a helper function to print register which is of type struct.
+   Currently, register is of type struct only when the passed target
+   description has bitfield description.
+
+   This function is implemented based on generic function
+   default_print_registers_info() and
+   default_print_one_register_info().
+
+   default_print_registers_info() cannot be used, because it does not display
+   alias name.
+   default_print_one_register_info() cannot be used, becuase it is static.  */
+
+static void
+riscv_print_register_struct (struct ui_file *file, struct frame_info *frame,
+			     int regnum)
+{
+  struct gdbarch *gdbarch = get_frame_arch (frame);
+  struct value_print_options opts;
+  const char *regname;
+  struct value *val = NULL;
+  struct type *regtype = NULL;
+
+  /* Use alias (symbolic) name.  */
+  regname = riscv_register_name (gdbarch, regnum);
+  if (regname == NULL || *regname == '\0')
+    return;
+
+  val = value_of_register (regnum, frame);
+  regtype = value_type (val);
+
+  if (regtype->code () != TYPE_CODE_STRUCT)
+    return;
+
+  fputs_filtered (regname, file);
+  print_spaces_filtered (15 - strlen (regname), file);
+
+  /* Print the register in hex.  */
+  get_formatted_print_options (&opts, 'x');
+  opts.deref_ref = 1;
+  common_val_print (val, file, 0, &opts, current_language);
+
+  /* Always print raw format.  */
+  get_user_print_options (&opts);
+  opts.deref_ref = 1;
+  fprintf_filtered (file, "\t");
+  common_val_print (val, file, 0, &opts, current_language);
+}
+
 /* Helper for riscv_print_registers_info, prints info for a single register
    REGNUM.  */
 
@@ -1085,6 +1133,8 @@ riscv_print_one_register_info (struct gdbarch *gdbarch,
 	  fprintf_filtered (file, ")");
 	}
     }
+  else if (regtype->code () == TYPE_CODE_STRUCT)
+    riscv_print_register_struct (file, frame, regnum);
   else
     {
       struct value_print_options opts;
