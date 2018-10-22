@@ -58,6 +58,8 @@
 #include "arch/riscv.h"
 #include "riscv-ravenscar-thread.h"
 #include "stack.h"
+#include "common-utils.h"
+#include "vec.h"
 
 /* The stack must be 16-byte aligned.  */
 #define SP_ALIGNMENT 16
@@ -980,6 +982,58 @@ riscv_fpreg_d_type (struct gdbarch *gdbarch)
   return tdep->riscv_fpreg_d_type;
 }
 
+typedef struct acr_type
+{
+  int adj_bitsize;
+  struct type *type;
+} acr_type;
+DEF_VEC_O(acr_type);
+
+/* This vector is shared between different gdbarch, and it is used to contain
+   information about dynamically created acr type.  */
+static VEC (acr_type) *acr_type_vec;
+
+/* Find the dynamically created acr_type for given @BITSIZE in the vector
+   acr_type_vec, if the acr_type is not found, create it and insert it into
+   vector acr_type_vec.  */
+
+static struct type *
+nds_acr_type (struct gdbarch *gdbarch, int bitsize)
+{
+  char buf[20];
+  struct type *bit_int_type;
+  acr_type new_acr_type;
+  acr_type *p_acr_type = NULL;
+  int adj_bitsize = align_up (bitsize, 8);
+  unsigned len;
+  int ix;
+
+  len = VEC_length (acr_type, acr_type_vec);
+  for (ix = 0; ix < len; ix++)
+    {
+      p_acr_type = VEC_index (acr_type, acr_type_vec, ix);
+      if (p_acr_type->adj_bitsize == adj_bitsize)
+	break;
+    }
+
+  if (ix == len)
+    {
+      /* Not found, so create it.  */
+      sprintf (buf, "acr_%d_t", adj_bitsize);
+      bit_int_type = arch_integer_type(gdbarch, adj_bitsize, 1, buf);
+
+      new_acr_type.adj_bitsize = adj_bitsize;
+      new_acr_type.type = bit_int_type;
+      VEC_safe_push (acr_type, acr_type_vec, &new_acr_type);
+      return bit_int_type;
+    }
+  else
+    {
+      /* Found, so use it.  */
+      return p_acr_type->type;
+    }
+}
+
 /* Implement the register_type gdbarch method.  This is installed as an
    for the override setup by TDESC_USE_REGISTERS, for most registers we
    delegate the type choice to the target description, but for a few
@@ -989,8 +1043,11 @@ riscv_fpreg_d_type (struct gdbarch *gdbarch)
 static struct type *
 riscv_register_type (struct gdbarch *gdbarch, int regnum)
 {
+  /* type temporarily used to identify acr register.  */
+  struct type *acr_temp_type = builtin_type (gdbarch)->builtin_uint8;
   struct type *type = tdesc_register_type (gdbarch, regnum);
   int xlen = riscv_isa_xlen (gdbarch);
+  const struct tdesc_feature *feature = NULL;
 
   /* We want to perform some specific type "fixes" in cases where we feel
      that we really can do better than the target description.  For all
@@ -1030,6 +1087,19 @@ riscv_register_type (struct gdbarch *gdbarch, int regnum)
 	       || regnum == RISCV_GP_REGNUM
 	       || regnum == RISCV_TP_REGNUM)
 	type = builtin_type (gdbarch)->builtin_data_ptr;
+    }
+
+  if (regnum > RISCV_LAST_REGNUM && type == acr_temp_type)
+    {
+      feature = tdesc_find_feature (target_current_description (),
+				    "org.gnu.gdb.riscv.ace");
+      if (feature != NULL)
+	{
+	  /* This may be ace register.  */
+	  const char *regname = gdbarch_register_name (gdbarch, regnum);
+	  type = nds_acr_type (gdbarch,
+			       tdesc_register_bitsize (feature, regname));
+	}
     }
 
   return type;
