@@ -390,22 +390,19 @@ nds_target_type_make_value (struct gdbarch *gdbarch, struct internalvar *var,
 }
 
 static int
-nds_issue_qrcmd (const char *cmd, struct ui_file *res,
-		 struct ui_file_buffer *ui_buf)
+nds_issue_qrcmd (const char *cmd, string_file &str)
 {
-  int len;
-
-  ui_file_rewind (res);
+  std::string whitespaces (" \t\f\v\n\r");
 
   /* make_cleanup outside TRY_CACHE,
      because it save and reset cleanup-chain.  */
-  scoped_restore save_stdtarg = make_scoped_restore (&gdb_stdtarg, res);
+  scoped_restore save_stdtarg = make_scoped_restore (&gdb_stdtarg, &str);
   /* Supress error messages from gdbserver
      if gdbserver doesn't support the monitor command.  */
 
   TRY
     {
-      target_rcmd (cmd, res);
+      target_rcmd (cmd, &str);
     }
   CATCH (except, RETURN_MASK_ERROR)
     {
@@ -413,15 +410,10 @@ nds_issue_qrcmd (const char *cmd, struct ui_file *res,
     }
   END_CATCH
 
-  /* Read data in ui_file.  */
-  memset (ui_buf->buf, 0, ui_buf->buf_size);
-  ui_file_put (res, do_ui_file_put_memcpy, ui_buf);
-
   /* Trim trailing newline characters.  */
-  len = strlen ((char *) ui_buf->buf);
-  while (isspace (ui_buf->buf[len - 1]) && len > 0)
-    len--;
-  ui_buf->buf[len] = '\0';
+  std::size_t found = str.string ().find_last_not_of (whitespaces);
+  if (found != std::string::npos)
+    str.string ().erase (found + 1);
 
   return 0;
 }
@@ -429,58 +421,48 @@ nds_issue_qrcmd (const char *cmd, struct ui_file *res,
 static int
 nds_query_target_using_qrcmd (void)
 {
-  struct cleanup *back_to;
-  struct ui_file *res;
-  struct ui_file_buffer ui_buf;
-  char buf[64];
-  int ret = 0;
-  int len;
-  const char *str = NULL;
+  string_file str;
+  const char *buf;
+  const char *sstr = NULL;
 
-  /* ui_file for qRcmd.  */
-  res = mem_fileopen ();
-  back_to = make_cleanup_ui_file_delete (res);
+  if (nds_issue_qrcmd ("nds query target", str) == -1)
+    return -1;
 
-  /* ui_file_buffer for reading ui_file.  */
-  ui_buf.buf_size = 64;
-  ui_buf.buf = (unsigned char *) xmalloc (ui_buf.buf_size);
-  make_cleanup (free_current_contents, &ui_buf.buf);
-
-  if (nds_issue_qrcmd ("nds query target", res, &ui_buf) == -1)
-    goto out;
-
-  if (strcmp ((char *) ui_buf.buf, "SID") == 0)
+  buf = str.c_str ();
+  if (strcmp (buf, "SID") == 0)
     nds_remote_info.type = nds_rt_sid;
-  else if (strcmp ((char *) ui_buf.buf, "OCD") == 0)
+  else if (strcmp (buf, "OCD") == 0)
     nds_remote_info.type = nds_rt_ocd;
   else
     {
-      printf_unfiltered (_("Unknown remote target %s\n"),
-			 ui_buf.buf);
-      goto out;
+      printf_unfiltered (_("Unknown remote target %s\n"), buf);
+      return -1;
     }
 
-  if (nds_issue_qrcmd ("nds query endian", res, &ui_buf) == -1)
-    goto out;
+  if (nds_issue_qrcmd ("nds query endian", str) == -1)
+    return -1;
 
+  buf = str.c_str ();
   /* to match target_name: LE or target_name: BE.  */
-  str = strstr ((char *) ui_buf.buf, ":");
-  str += 2;
-  if (strcmp (str , "LE") == 0)
+  sstr = strstr (buf, ":");
+  if (sstr == NULL)
     nds_remote_info.endian = BFD_ENDIAN_LITTLE;
-  else if (strcmp (str, "BE") == 0)
-    nds_remote_info.endian = BFD_ENDIAN_BIG;
+  else
+    {
+      sstr += 2;
+      if (strcmp (sstr , "LE") == 0)
+	nds_remote_info.endian = BFD_ENDIAN_LITTLE;
+      else if (strcmp (sstr, "BE") == 0)
+	nds_remote_info.endian = BFD_ENDIAN_BIG;
+    }
 
-  if (nds_issue_qrcmd ("nds query cpuid", res, &ui_buf) == -1)
-    goto out;
+  if (nds_issue_qrcmd ("nds query cpuid", str) == -1)
+    return -1;
 
-  strncpy (nds_remote_info.cpuid, &ui_buf.buf,
-	   sizeof (nds_remote_info.cpuid) - 1);
+  buf = str.c_str ();
+  strncpy (nds_remote_info.cpuid, buf, sizeof (nds_remote_info.cpuid) - 1);
 
-  ret = 1;
-out:
-  do_cleanups (back_to);
-  return ret;
+  return 0;
 }
 
 static void
