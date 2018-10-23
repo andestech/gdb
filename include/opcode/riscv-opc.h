@@ -2551,7 +2551,7 @@ funct6 VM  VS2  VS1/RS1/IMM funct3 VD   opcode
 #define MASK_KSLLI 0xfe00707f
 #define MATCH_KSLL8 0x6c00007f
 #define MASK_KSLL8 0xfe00707f
-#define MATCH_KSLLI8 0x7480007f
+#define MATCH_KSLLI8 0x7c80007f
 #define MASK_KSLLI8 0xff80707f
 #define MATCH_KSLL16 0x6400007f
 #define MASK_KSLL16 0xfe00707f
