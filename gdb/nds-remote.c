@@ -255,7 +255,6 @@ nds_query_profiling_command (const char *args, int from_tty)
   char *arg_cpu = "cpu";
   int arg_human = 1;
   struct cleanup *back_to = NULL;
-  char **argv = NULL;
   char *p;
 
   /* Initial size. It may be resized by getpkt.  */
@@ -272,28 +271,18 @@ nds_query_profiling_command (const char *args, int from_tty)
   make_cleanup (free_current_contents, &pkt_buf);
   scoped_restore save_stdtarg = make_scoped_restore (&gdb_stdtarg, res);
 
-  if (args != NULL)
+  gdb_argv argv (args);
+
+  if (argv != NULL)
     {
-      /* Parse arguments.  */
-      argv = gdb_buildargv (args);
-      make_cleanup_freeargv (argv);
+      if (argv[0] != NULL && argv[0] != '\0')
+	arg_cpu = argv[0];
+
+      if (argv[1] != NULL && strcmp (argv[1], "ide") == 0)
+	arg_human = FALSE;
     }
 
-  for (i = 0; argv && argv[i]; i++)
-    {
-      switch (i)
-	{
-	case 0:
-	  arg_cpu = argv[i];
-	  break;
-	case 1:
-	  arg_human = strcmp (argv[i], "ide");	/* default human */
-	  break;
-	}
-    }
-
-  xsnprintf (cmd, sizeof (cmd),
-	     "set %s profiling ide-query", args == NULL ? "cpu" : arg_cpu);
+  xsnprintf (cmd, sizeof (cmd), "set %s profiling ide-query", arg_cpu);
   target_rcmd (cmd, res);
   memset (ui_buf.buf, 0, ui_buf.buf_size);
   ui_file_put (res, do_ui_file_put_memcpy, &ui_buf);
