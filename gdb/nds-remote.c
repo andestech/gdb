@@ -696,9 +696,7 @@ nds_print_acr_command (const char *args, int from_tty)
   struct regcache *regcache = get_current_regcache ();
   struct gdbarch *gdbarch = regcache->arch ();
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
-  struct cleanup *back_to;
   int regnum;
-  char **argv = NULL;
   char *name = NULL;
   int len, i;
   /* Flag used to trim leading-zero.  */
@@ -715,22 +713,20 @@ nds_print_acr_command (const char *args, int from_tty)
     }
 
   /* Parse arguments.  */
-  argv = gdb_buildargv (args);
-  back_to = make_cleanup_freeargv (argv);
+  gdb_argv argv (args);
 
-  if (argv[0] == NULL)
+  if (argv == NULL || argv[0] == NULL)
     {
       fprintf_unfiltered (gdb_stdout, "<usage>: nds print <acr_name>\n");
-      goto out;
+      return;
     }
 
   name = argv[0];
   if (nds_get_acr_info (gdbarch, name, &regnum, &len) == -1)
-    goto out;
+    return;
 
   /* Allocate space for ACR.  */
   acr_content = (gdb_byte *) xcalloc (1, len);
-  make_cleanup (xfree, acr_content);
 
   get_frame_register (get_selected_frame (NULL), regnum, acr_content);
 
@@ -786,8 +782,7 @@ nds_print_acr_command (const char *args, int from_tty)
 
   fprintf_filtered (gdb_stdout, "The value of %s is 0x%s\n", name, str_p);
 
-out:
-  do_cleanups (back_to);
+  xfree (acr_content);
 }
 
 /* Convert hex digit A to a number.  */
@@ -814,9 +809,7 @@ nds_set_acr_command (const char *args, int from_tty)
   struct regcache *regcache = get_current_regcache ();
   struct gdbarch *gdbarch = regcache->arch ();
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
-  struct cleanup *back_to;
   int regnum;
-  char **argv = NULL;
   char *name = NULL;
   int len, i;
   const char *val_str, *str_p;
@@ -830,26 +823,24 @@ nds_set_acr_command (const char *args, int from_tty)
     }
 
   /* Parse arguments.  */
-  argv = gdb_buildargv (args);
-  back_to = make_cleanup_freeargv (argv);
+  gdb_argv argv (args);
 
-  if (argv[0] == NULL || argv[1] == NULL)
+  if (argv == NULL || argv[0] == NULL || argv[1] == NULL)
     {
       fprintf_unfiltered (gdb_stdout,
 			  "<usage>: nds set <acr_name> <hex_str>\n");
-      goto out;
+      return;
     }
 
   name = argv[0];
   if (nds_get_acr_info (gdbarch, name, &regnum, &len) == -1)
-    goto out;
+    return;
 
   val_str = argv[1];
   if (val_str[0] == '0' && (val_str[1] == 'x' || val_str[1] == 'X'))
     val_str += 2;
 
   acr_content = (gdb_byte *) xcalloc (1, len);
-  make_cleanup (xfree, acr_content);
 
   /* Construct ACR byte buffer from val_str, and start from the LSB of
      val_str, so that the leading zero case can be handled more easily.  */
@@ -888,8 +879,7 @@ nds_set_acr_command (const char *args, int from_tty)
      regcache invalidation is necessary.  */
   regcache->invalidate (regnum);
 
-out:
-  do_cleanups (back_to);
+  xfree (acr_content);
 }
 
 /* Bug 6654 - Multiple watchpoints was be hit, GDB only shows one of them.
