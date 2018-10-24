@@ -166,6 +166,8 @@ enum
 
 /* Object attributes.  */
 
+#define NUM_KNOWN_OBJ_ATTRIBUTES_V5     0x2
+#define TAG_VALUE_BEGIN_V5		0x8000
 enum
 {
   /* 0-3 are generic.  */
@@ -176,6 +178,9 @@ enum
   Tag_strict_align,
   Tag_stack_align,
   Tag_shfit = 0x100,
+  /* For NDS v5.  */
+  Tag_ict_version = TAG_VALUE_BEGIN_V5,
+  Tag_ict_model
 };
 
 #endif /* _ELF_RISCV_H */
