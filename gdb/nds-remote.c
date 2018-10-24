@@ -121,10 +121,6 @@ nds_print_human_table (int col, int row, const char *scsv)
 {
   int i;
   char *buf = NULL;
-  char **col_fldname;
-  char **col_hdrtext;
-  int *col_width;
-  enum ui_align *col_align;
   struct bound_minimal_symbol msymbol;
   CORE_ADDR addr;
   char symbol_text[256];
@@ -134,15 +130,14 @@ nds_print_human_table (int col, int row, const char *scsv)
   cleanup = make_cleanup (xfree, buf);
 
   /* Allocate header structures.  */
-  col_fldname = (char **) xmalloc (sizeof (col_fldname[0]) * col);
-  col_hdrtext = (char **) xmalloc (sizeof (col_hdrtext[0]) * col);
-  col_width = (int *) xmalloc (sizeof (col_width[0]) * col);
-  col_align = (enum ui_align *) xmalloc (sizeof (col_align[0]) * col);
-
-  make_cleanup (xfree, col_fldname);
-  make_cleanup (xfree, col_hdrtext);
-  make_cleanup (xfree, col_width);
-  make_cleanup (xfree, col_align);
+  gdb::unique_xmalloc_ptr<char *[]> col_fldname
+    ((char **) xmalloc (sizeof (char *) * col));
+  gdb::unique_xmalloc_ptr<char *[]> col_hdrtext
+    ((char **) xmalloc (sizeof (char *) * col));
+  gdb::unique_xmalloc_ptr<int[]> col_width
+    ((int *) xmalloc (sizeof (int) * col));
+  gdb::unique_xmalloc_ptr<enum ui_align[]> col_align
+    ((enum ui_align *) xmalloc (sizeof (enum ui_align) * col));
 
   /* Parsing column header.  */
   i = 0;
