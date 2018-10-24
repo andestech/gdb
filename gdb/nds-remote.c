@@ -120,7 +120,6 @@ static void
 nds_print_human_table (int col, int row, const char *scsv)
 {
   int i;
-  struct cleanup *table_cleanup = NULL;
   struct cleanup *row_cleanup = NULL;
   char *buf = NULL;
   char **col_fldname;
@@ -169,8 +168,7 @@ nds_print_human_table (int col, int row, const char *scsv)
   gdb_assert (col == i);
 
   /* Output table.  */
-  table_cleanup = make_cleanup_ui_out_table_begin_end
-    (current_uiout, col, row - 1, "ProfilingTable");
+  ui_out_emit_table table_emitter (current_uiout, col, row - 1, "ProfilingTable");
   for (i = 0; i < col; i++)
     current_uiout->table_header (col_width[i], col_align[i],
 				 col_fldname[i], col_hdrtext[i]);
@@ -220,8 +218,6 @@ nds_print_human_table (int col, int row, const char *scsv)
 	    (current_uiout, "row");
 	}
     }
-
-  do_cleanups (table_cleanup);
 }
 
 /* Callback for "nds query profiling" command.  */
