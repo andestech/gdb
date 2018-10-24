@@ -151,6 +151,8 @@ enum CMODEL_TYPES {
 static int optimize = 0;
 /* Save option -Os for code size.  */
 static int optimize_for_space = 0;
+/* Save option -mict-model for ICT model setting.  */
+static const char *m_ict_model = NULL;
 /* } Andes  */
 
 /* Set the default_isa_spec.  Return 0 if the spec isn't supported.
@@ -3718,6 +3720,7 @@ enum options
   OPTION_OPTIMIZE,
   OPTION_OPTIMIZE_SPACE,
   OPTION_MCMODEL,
+  OPTION_MICT_MODEL,
   /* } Andes  */
   OPTION_END_OF_ENUM
 };
@@ -3744,6 +3747,7 @@ struct option md_longopts[] =
   {"O1", no_argument, NULL, OPTION_OPTIMIZE},
   {"Os", no_argument, NULL, OPTION_OPTIMIZE_SPACE},
   {"mcmodel", required_argument, NULL, OPTION_MCMODEL},
+  {"mict-model", required_argument, NULL, OPTION_MICT_MODEL},
   /* } Andes  */
 
   {NULL, no_argument, NULL, 0}
@@ -3851,6 +3855,15 @@ md_parse_option (int c, const char *arg)
 	return 0;
       break;
     /* } Andes  */
+
+    case OPTION_MICT_MODEL:
+      if (strcmp ("tiny", arg) == 0
+	  || strcmp ("small", arg) == 0
+	  || strcmp ("large", arg) == 0)
+	m_ict_model = arg;
+      else
+	as_bad (_("invalid ICT model setting -mict-model=%s"), arg);
+      break;
 
     default:
       return 0;
@@ -4913,6 +4926,16 @@ riscv_write_out_attrs (void)
   bfd_elf_add_proc_attr_int (stdoutput, Tag_RISCV_priv_spec, versions[0]);
   bfd_elf_add_proc_attr_int (stdoutput, Tag_RISCV_priv_spec_minor, versions[1]);
   bfd_elf_add_proc_attr_int (stdoutput, Tag_RISCV_priv_spec_revision, versions[2]);
+
+  /* { Andes */
+  if (m_ict_model)
+    {
+      bfd_elf_add_proc_attr_int (stdoutput, Tag_RISCV_ict_version,
+				 DEFAULT_ICT_VERSION);
+      bfd_elf_add_proc_attr_string (stdoutput, Tag_RISCV_ict_model,
+				    m_ict_model);
+    }
+  /* } Andes */
 }
 
 /* Add the default contents for the .riscv.attributes section.  */
@@ -5262,6 +5285,8 @@ riscv_convert_symbolic_attribute (const char *name)
     T(priv_spec_revision),
     T(unaligned_access),
     T(stack_align),
+    T(ict_version),
+    T(ict_model),
 #undef T
   };
 

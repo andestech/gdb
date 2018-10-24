@@ -158,6 +158,9 @@ END_RELOC_NUMBERS (R_RISCV_max)
 /* Location of RISC-V ELF attribute section. */
 #define PT_RISCV_ATTRIBUTES 0x70000003
 
+/* the begin index of user tags for Andes.  */
+#define TAG_USER_BEGIN_ANDES 0x8000
+
 /* Object attributes.  */
 enum
 {
@@ -167,7 +170,11 @@ enum
   Tag_RISCV_unaligned_access = 6,
   Tag_RISCV_priv_spec = 8,
   Tag_RISCV_priv_spec_minor = 10,
-  Tag_RISCV_priv_spec_revision = 12
+  Tag_RISCV_priv_spec_revision = 12,
+  /* { Andes */
+  Tag_RISCV_ict_version = TAG_USER_BEGIN_ANDES,
+  Tag_RISCV_ict_model,
+  /* } Andes */
 };
 
 #endif /* _ELF_RISCV_H */

@@ -165,6 +165,8 @@ void riscv_elf_copy_symbol_attributes (symbolS *, symbolS *);
   riscv_elf_copy_symbol_attributes (DEST, SRC)
 
 /* { Andes */
+#define DEFAULT_ICT_VERSION 1
+
 /* expression  */
 extern int riscv_parse_name (char const *, expressionS *, enum expr_mode, char *);
 #define md_parse_name(name, exprP, mode, nextcharP) \
