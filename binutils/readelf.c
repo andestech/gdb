@@ -15412,6 +15412,8 @@ static struct riscv_attr_tag_t riscv_attr_tag[] =
   T(priv_spec_revision),
   T(strict_align),
   T(stack_align),
+  T(ict_version),
+  T(ict_model),
 #undef T
 };
 
@@ -15475,6 +15477,7 @@ display_riscv_attribute (unsigned char *p,
       break;
 
     case Tag_priv_spec + Tag_shfit:
+    case Tag_ict_version + Tag_shfit:
       val = read_uleb128 (p, &len, end);
       p += len;
       printf (_("%d\n"), val);
@@ -15498,6 +15501,7 @@ display_riscv_attribute (unsigned char *p,
       printf (_("%d-bytes\n"), val);
       break;
     case Tag_arch + Tag_shfit:
+    case Tag_ict_model + Tag_shfit:
       p = display_tag_value (-1, p, end);
       break;
     default:

@@ -77,13 +77,15 @@ static bfd_boolean rve_abi = FALSE;
 #define ADD32_INSN (xlen == 64 ? "addiw" : "addi")
 
 /* Record this attribute is set explicitly by .attribute directive.  */
-static int attributes_set_explicitly[NUM_KNOWN_OBJ_ATTRIBUTES];
+static int attributes_set_explicitly[NUM_KNOWN_OBJ_ATTRIBUTES + NUM_KNOWN_OBJ_ATTRIBUTES_V5];
 
 static unsigned elf_flags = 0;
 /* Save option -O1 for perfomance.  */
 static int optimize = 0;
 /* Save option -Os for code size.  */
 static int optimize_for_space = 0;
+/* Save option -mict-model for ICT model setting.  */
+static const char *ict_model = NULL;
 
 /* This is the set of options which the .option pseudo-op may modify.  */
 
@@ -1216,6 +1218,7 @@ static struct hash_control *arch_info_hash = NULL;
 #define DEFAULT_PRIV_SPEC_REVISION 0
 #define DEFAULT_STRICT_ALIGN 0
 #define DEFAULT_STACK_ALIGN 0
+#define DEFAULT_ICT_VERSION 1
 
 static void
 arch_info_hash_init (void)
@@ -3778,6 +3781,7 @@ enum options
   OPTION_OPTIMIZE,
   OPTION_OPTIMIZE_SPACE,
   OPTION_MEXT_DSP,
+  OPTION_MICT_MODEL,
   OPTION_END_OF_ENUM
 };
 
@@ -3798,6 +3802,7 @@ struct option md_longopts[] =
   {"O1", no_argument, NULL, OPTION_OPTIMIZE},
   {"Os", no_argument, NULL, OPTION_OPTIMIZE_SPACE},
   {"mext-dsp", no_argument, NULL, OPTION_MEXT_DSP},
+  {"mict-model", required_argument, NULL, OPTION_MICT_MODEL},
 
   {NULL, no_argument, NULL, 0}
 };
@@ -3934,6 +3939,15 @@ md_parse_option (int c, const char *arg)
 
     case OPTION_MEXT_DSP:
       riscv_opts.dsp = TRUE;
+      break;
+
+    case OPTION_MICT_MODEL:
+      if (strcmp ("tiny", arg) == 0
+	  || strcmp ("small", arg) == 0
+	  || strcmp ("large", arg) == 0)
+	ict_model = arg;
+      else
+	as_bad (_("invalid ICT model setting -mict-model=%s"), arg);
       break;
 
     default:
@@ -5490,6 +5504,17 @@ riscv_set_public_attributes (void)
   if (!attributes_set_explicitly[Tag_stack_align])
     bfd_elf_add_proc_attr_int (stdoutput, Tag_stack_align,
 			       DEFAULT_STACK_ALIGN);
+  if (!attributes_set_explicitly[Tag_ict_version
+      + NUM_KNOWN_OBJ_ATTRIBUTES
+      - TAG_VALUE_BEGIN_V5])
+    bfd_elf_add_proc_attr_int (stdoutput, Tag_ict_version,
+				  DEFAULT_ICT_VERSION);
+  if (ict_model
+      && !attributes_set_explicitly[Tag_ict_model
+      + NUM_KNOWN_OBJ_ATTRIBUTES
+      - TAG_VALUE_BEGIN_V5])
+    bfd_elf_add_proc_attr_string (stdoutput, Tag_ict_model,
+				  ict_model);
 }
 
 /* Add the default contents for the .riscv.attributes section.  */
@@ -5519,6 +5544,8 @@ andes_riscv_convert_symbolic_attribute (const char *name)
       T(priv_spec_revision),
       T(strict_align),
       T(stack_align),
+      T(ict_version),
+      T(ict_model),
 #undef T
     };
 
@@ -5548,6 +5575,11 @@ riscv_attribute (int ignored ATTRIBUTE_UNUSED)
 
   if (tag < NUM_KNOWN_OBJ_ATTRIBUTES)
     attributes_set_explicitly[tag] = 1;
+  else if(tag >= TAG_VALUE_BEGIN_V5
+	  && tag < (TAG_VALUE_BEGIN_V5 + NUM_KNOWN_OBJ_ATTRIBUTES_V5))
+    attributes_set_explicitly[tag
+      + NUM_KNOWN_OBJ_ATTRIBUTES
+      - TAG_VALUE_BEGIN_V5] = 1;
 }
 
 /* Pseudo-op table.  */
