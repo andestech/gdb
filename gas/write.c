@@ -294,6 +294,14 @@ fix_new_exp (fragS *frag,		/* Which frag?  */
       break;
     }
 
+#ifdef TC_RISCV
+  /* We need to set the ict flag of fixup from X_md of expression.  */
+  fixS *fix_new = fix_new_internal (frag, where, size, add, sub, off, pcrel,
+				    r_type, FALSE);
+  fix_new->tc_fix_data.ict = exp->X_md;
+  return fix_new;
+#endif
+
   return fix_new_internal (frag, where, size, add, sub, off, pcrel,
 			   r_type, false);
 }

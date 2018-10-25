@@ -1433,12 +1433,14 @@ riscv_apply_const_reloc (bfd_reloc_code_real_type reloc_type, bfd_vma value)
       return value;
 
     case BFD_RELOC_RISCV_HI20:
+    case BFD_RELOC_RISCV_ICT_HI20:
       return ENCODE_UTYPE_IMM (RISCV_CONST_HIGH_PART (value));
 
     case BFD_RELOC_RISCV_LO12_S:
       return ENCODE_STYPE_IMM (value);
 
     case BFD_RELOC_RISCV_LO12_I:
+    case BFD_RELOC_RISCV_ICT_LO12_I:
       return ENCODE_ITYPE_IMM (value);
 
     default:
@@ -3893,6 +3895,35 @@ md_pcrel_from (fixS *fixP)
   return fixP->fx_where + fixP->fx_frag->fr_address;
 }
 
+static void
+riscv_convert_ict_relocs (fixS ** fix)
+{
+  if ((*fix)->tc_fix_data.ict == BFD_RELOC_RISCV_ICT_HI20)
+    switch ((*fix)->fx_r_type)
+      {
+      case BFD_RELOC_RISCV_HI20:
+	(*fix)->fx_r_type = BFD_RELOC_RISCV_ICT_HI20;
+	break;
+      case BFD_RELOC_RISCV_LO12_I:
+	(*fix)->fx_r_type = BFD_RELOC_RISCV_ICT_LO12_I;
+	break;
+      case BFD_RELOC_RISCV_PCREL_HI20:
+	(*fix)->fx_r_type = BFD_RELOC_RISCV_PCREL_ICT_HI20;
+	break;
+      case BFD_RELOC_RISCV_CALL:
+	(*fix)->fx_r_type = BFD_RELOC_RISCV_CALL_ICT;
+	break;
+      case BFD_RELOC_64:
+	(*fix)->fx_r_type = BFD_RELOC_RISCV_ICT_64;
+	break;
+      default:
+	as_fatal (_("internal error: ICT suffix for #%d "
+		    "is not supported"),
+		  (*fix)->fx_r_type);
+	break;
+      }
+}
+
 /* Apply a fixup to the object file.  */
 
 void
@@ -3907,11 +3938,17 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
   /* Remember value for tc_gen_reloc.  */
   fixP->fx_addnumber = *valP;
 
+  /* Convert the correct ICT relocs according to the ict
+     flag in the fixup.  */
+  riscv_convert_ict_relocs (&fixP);
+
   switch (fixP->fx_r_type)
     {
     case BFD_RELOC_RISCV_HI20:
     case BFD_RELOC_RISCV_LO12_I:
     case BFD_RELOC_RISCV_LO12_S:
+    case BFD_RELOC_RISCV_ICT_HI20:
+    case BFD_RELOC_RISCV_ICT_LO12_I:
       bfd_putl32 (riscv_apply_const_reloc (fixP->fx_r_type, *valP)
 		  | bfd_getl32 (buf), buf);
       if (fixP->fx_addsy == NULL)
@@ -4109,12 +4146,14 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 
     case BFD_RELOC_RISCV_CALL:
     case BFD_RELOC_RISCV_CALL_PLT:
+    case BFD_RELOC_RISCV_CALL_ICT:
       relaxable = true;
       break;
 
     case BFD_RELOC_RISCV_PCREL_HI20:
     case BFD_RELOC_RISCV_PCREL_LO12_S:
     case BFD_RELOC_RISCV_PCREL_LO12_I:
+    case BFD_RELOC_RISCV_PCREL_ICT_HI20:
       relaxable = riscv_opts.relax;
       break;
 
@@ -4133,6 +4172,7 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
       break;
 
     case BFD_RELOC_RISCV_RELAX_ENTRY:
+    case BFD_RELOC_RISCV_ICT_64:
     case BFD_RELOC_RISCV_RELAX_REGION_BEGIN:
     case BFD_RELOC_RISCV_RELAX_REGION_END:
     case BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN:
@@ -4156,6 +4196,8 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
       fixP->fx_next->fx_addsy = fixP->fx_next->fx_subsy = NULL;
       fixP->fx_next->fx_r_type = BFD_RELOC_RISCV_RELAX;
       fixP->fx_next->fx_size = 0;
+      /* Clean up the ict flag for R_RISCV_RELAX.  */
+      fixP->fx_next->tc_fix_data.ict = 0;
     }
 }
 
@@ -5368,4 +5410,46 @@ riscv_pop_insert (void)
   extern void pop_insert (const pseudo_typeS *);
 
   pop_insert (riscv_pseudo_table);
+}
+
+/* Implement md_parse_name for parsing SYNBOL@ICT.  */
+
+int
+riscv_parse_name (char const *name, expressionS *exprP,
+                  enum expr_mode mode ATTRIBUTE_UNUSED,
+                  char *nextcharP)
+{
+  segT segment;
+  char *next;
+
+  /* We only deal with the case that includes `@ICT'.  */
+  if (*nextcharP != '@'
+      || (strncasecmp (input_line_pointer + 1, "ICT", 3) != 0
+	  && strncasecmp (input_line_pointer + 1, "ict", 3) != 0))
+    return 0;
+
+  exprP->X_op_symbol = NULL;
+  exprP->X_md = BFD_RELOC_UNUSED;
+
+  exprP->X_add_symbol = symbol_find_or_make (name);
+  exprP->X_op = O_symbol;
+  exprP->X_add_number = 0;
+
+  /* Check the specail name if a symbol.  */
+  segment = S_GET_SEGMENT (exprP->X_add_symbol);
+  if ((segment != undefined_section) && (*nextcharP != '@'))
+    return 0;
+
+  next = input_line_pointer + 1 + 3;	/* strlen (ict/ICT) is 3.  */
+
+  if (!is_part_of_name (*next))
+    {
+      exprP->X_md = BFD_RELOC_RISCV_ICT_HI20;
+      *input_line_pointer = *nextcharP;
+      input_line_pointer = next;
+      *nextcharP = *input_line_pointer;
+      *input_line_pointer = '\0';
+    }
+
+  return 1;
 }
