@@ -156,4 +156,23 @@ struct riscv_frag_type
   int rvc;
 };
 
+/* expression  */
+extern int riscv_parse_name (char const *, expressionS *, enum expr_mode, char *);
+#define md_parse_name(name, exprP, mode, nextcharP) \
+  riscv_parse_name (name, exprP, mode, nextcharP)
+
+/* fixup  */
+struct riscv_fix_info
+{
+  int ict;
+};
+#define TC_FIX_TYPE struct riscv_fix_info
+
+#define TC_INIT_FIX_DATA(f)			\
+  do						\
+    {						\
+      (f)->tc_fix_data.ict = 0;			\
+    }						\
+  while (0)
+
 #endif /* TC_RISCV */

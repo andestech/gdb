@@ -899,10 +899,87 @@ static reloc_howto_type howto_table[] =
   EMPTY_HOWTO (218), EMPTY_HOWTO (219), EMPTY_HOWTO (220), EMPTY_HOWTO (221),
   EMPTY_HOWTO (222), EMPTY_HOWTO (223), EMPTY_HOWTO (224), EMPTY_HOWTO (225),
   EMPTY_HOWTO (226), EMPTY_HOWTO (227), EMPTY_HOWTO (228), EMPTY_HOWTO (229),
-  EMPTY_HOWTO (230), EMPTY_HOWTO (231), EMPTY_HOWTO (232), EMPTY_HOWTO (233),
-  EMPTY_HOWTO (234), EMPTY_HOWTO (235), EMPTY_HOWTO (236),
+  EMPTY_HOWTO (230), EMPTY_HOWTO (231),
 
   /* Relocations for NDS V5.  */
+
+  /* Jump-patch table relocations.  */
+  /* High 20 bits of 32-bit 32-bit absolute address for jump-patch table.  */
+  HOWTO (R_RISCV_ICT_HI20,		/* type */
+	 0,				/* rightshift */
+	 2,				/* size */
+	 32,				/* bitsize */
+	 FALSE,				/* pc_relative */
+	 0,				/* bitpos */
+	 complain_overflow_dont,	/* complain_on_overflow */
+	 bfd_elf_generic_reloc,		/* special_function */
+	 "R_RISCV_ICT_HI20",		/* name */
+	 FALSE,				/* partial_inplace */
+	 0,				/* src_mask */
+	 ENCODE_UTYPE_IMM (-1U),	/* dst_mask */
+	 FALSE),			/* pcrel_offset */
+
+  /* High 12 bits of 32-bit load or add for jump-patch table.  */
+  HOWTO (R_RISCV_ICT_LO12_I,		/* type */
+	 0,				/* rightshift */
+	 2,				/* size */
+	 32,				/* bitsize */
+	 FALSE,				/* pc_relative */
+	 0,				/* bitpos */
+	 complain_overflow_dont,	/* complain_on_overflow */
+	 bfd_elf_generic_reloc,		/* special_function */
+	 "R_RISCV_ICT_LO12_I",		/* name */
+	 FALSE,				/* partial_inplace */
+	 0,				/* src_mask */
+	 ENCODE_ITYPE_IMM (-1U),	/* dst_mask */
+	 FALSE),			/* pcrel_offset */
+
+  /* High 20 bits of 32-bit PC-relative reference for jump-patch table.  */
+  HOWTO (R_RISCV_PCREL_ICT_HI20,	/* type */
+	 0,				/* rightshift */
+	 2,				/* size */
+	 32,				/* bitsize */
+	 TRUE,				/* pc_relative */
+	 0,				/* bitpos */
+	 complain_overflow_dont,	/* complain_on_overflow */
+	 bfd_elf_generic_reloc,		/* special_function */
+	 "R_RISCV_PCREL_ICT_HI20",	/* name */
+	 FALSE,				/* partial_inplace */
+	 0,				/* src_mask */
+	 ENCODE_UTYPE_IMM (-1U),	/* dst_mask */
+	 TRUE),				/* pcrel_offset */
+
+  /* 32-bit PC-relative function call (AUIPC/JALR) for jump-patch table.  */
+  HOWTO (R_RISCV_CALL_ICT,		/* type */
+	 0,				/* rightshift */
+	 2,				/* size */
+	 64,				/* bitsize */
+	 TRUE,				/* pc_relative */
+	 0,				/* bitpos */
+	 complain_overflow_dont,	/* complain_on_overflow */
+	 bfd_elf_generic_reloc,		/* special_function */
+	 "R_RISCV_CALL_ICT",		/* name */
+	 FALSE,				/* partial_inplace */
+	 0,				/* src_mask */
+	 ENCODE_UTYPE_IMM (-1U) | ((bfd_vma) ENCODE_ITYPE_IMM (-1U) << 32),
+	 /* dst_mask */
+	 TRUE),				/* pcrel_offset */
+
+  /* 64 bit relocation for jump-patch table.  */
+  HOWTO (R_RISCV_ICT_64,		/* type */
+	 0,				/* rightshift */
+	 4,				/* size */
+	 64,				/* bitsize */
+	 FALSE,				/* pc_relative */
+	 0,				/* bitpos */
+	 complain_overflow_dont,	/* complain_on_overflow */
+	 bfd_elf_generic_reloc,		/* special_function */
+	 "R_RISCV_ICT_64",		/* name */
+	 FALSE,				/* partial_inplace */
+	 0,				/* src_mask */
+	 MINUS_ONE,			/* dst_mask */
+	 FALSE),			/* pcrel_offset */
+
   /* Mark the begin of the region that can not do RVC relaxations.  */
   HOWTO (R_RISCV_NO_RVC_REGION_BEGIN,	/* type */
 	 0,				/* rightshift */
@@ -1252,6 +1329,11 @@ static const struct elf_reloc_map riscv_reloc_map[] =
   { BFD_RELOC_RISCV_SET16, R_RISCV_SET16 },
   { BFD_RELOC_RISCV_SET32, R_RISCV_SET32 },
   { BFD_RELOC_RISCV_32_PCREL, R_RISCV_32_PCREL },
+  { BFD_RELOC_RISCV_ICT_HI20, R_RISCV_ICT_HI20 },
+  { BFD_RELOC_RISCV_ICT_LO12_I, R_RISCV_ICT_LO12_I },
+  { BFD_RELOC_RISCV_PCREL_ICT_HI20, R_RISCV_PCREL_ICT_HI20 },
+  { BFD_RELOC_RISCV_CALL_ICT, R_RISCV_CALL_ICT },
+  { BFD_RELOC_RISCV_ICT_64, R_RISCV_ICT_64 },
   { BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN, R_RISCV_NO_RVC_REGION_BEGIN },
   { BFD_RELOC_RISCV_NO_RVC_REGION_END, R_RISCV_NO_RVC_REGION_END },
   { BFD_RELOC_RISCV_DELETE, R_RISCV_DELETE },
