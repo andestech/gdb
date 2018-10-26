@@ -5731,11 +5731,12 @@ riscv_set_public_attributes (void)
   if (!attributes_set_explicitly[Tag_stack_align])
     bfd_elf_add_proc_attr_int (stdoutput, Tag_stack_align,
 			       DEFAULT_STACK_ALIGN);
-  if (!attributes_set_explicitly[Tag_ict_version
+  if (ict_model
+      && !attributes_set_explicitly[Tag_ict_version
       + NUM_KNOWN_OBJ_ATTRIBUTES
       - TAG_VALUE_BEGIN_V5])
     bfd_elf_add_proc_attr_int (stdoutput, Tag_ict_version,
-				  DEFAULT_ICT_VERSION);
+			       DEFAULT_ICT_VERSION);
   if (ict_model
       && !attributes_set_explicitly[Tag_ict_model
       + NUM_KNOWN_OBJ_ATTRIBUTES
