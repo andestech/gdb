@@ -227,29 +227,13 @@ nds_query_profiling_command (const char *args, int from_tty)
   /* For profiling, there will be multiple responses.  */
   char cmd[256];
   int row, col;
-  struct ui_file *res;
+  string_file res;
   int i;
-  long int pkt_size;
-  char *pkt_buf = NULL;
-  struct ui_file_buffer ui_buf;
-  char *arg_cpu = "cpu";
+  const char *arg_cpu = "cpu";
   int arg_human = 1;
-  struct cleanup *back_to = NULL;
-  char *p;
+  const char *p;
 
-  /* Initial size. It may be resized by getpkt.  */
-  pkt_size = 1024;
-
-  res = mem_fileopen ();
-  back_to = make_cleanup_ui_file_delete (res);
-
-  ui_buf.buf_size = 2048;
-  ui_buf.buf = (unsigned char *) xmalloc (ui_buf.buf_size);
-  pkt_buf = (char *) xmalloc (pkt_size);
-
-  make_cleanup (free_current_contents, &ui_buf.buf);
-  make_cleanup (free_current_contents, &pkt_buf);
-  scoped_restore save_stdtarg = make_scoped_restore (&gdb_stdtarg, res);
+  scoped_restore save_stdtarg = make_scoped_restore (&gdb_stdtarg, &res);
 
   gdb_argv argv (args);
 
@@ -260,29 +244,27 @@ nds_query_profiling_command (const char *args, int from_tty)
 	arg_cpu = argv[0];
 
       if (argv[1] != NULL && strcmp (argv[1], "ide") == 0)
-	arg_human = FALSE;
+	arg_human = 0;
     }
 
   xsnprintf (cmd, sizeof (cmd), "set %s profiling ide-query", arg_cpu);
-  target_rcmd (cmd, res);
-  memset (ui_buf.buf, 0, ui_buf.buf_size);
-  ui_file_put (res, do_ui_file_put_memcpy, &ui_buf);
+  target_rcmd (cmd, &res);
 
   if (arg_human == 0)
     {
       fprintf_unfiltered (gdb_stdtarg,
 			  "=profiling,reason=\"fast_l1_profiling\",data=\"%s\"\n",
-			  ui_buf.buf);
-      goto bye;
+			  res.c_str() );
+      return;
     }
 
   /* The first response is Row=%d;Column=%d;
      and then comes 'Row' rows, including head row */
-  i = sscanf ((char *) ui_buf.buf, "Row=%d;Column=%d;", &row, &col);
+  i = sscanf (res.c_str (), "Row=%d;Column=%d;", &row, &col);
   if (i != 2)
     error (_("Failed to query profiling data"));
 
-  p = (char *) ui_buf.buf;
+  p = res.c_str ();
 
   /* Skip "Row=r;Column=c;".  */
   for (i = 0; i < 2 && p; i++)
@@ -291,9 +273,6 @@ nds_query_profiling_command (const char *args, int from_tty)
 
   /* Print human-mode table here.  */
   nds_print_human_table (col, row, p);
-
-bye:
-  do_cleanups (back_to);
 }
 
 /* Callback for "nds query perfmeter" command.  */
