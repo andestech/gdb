@@ -8338,6 +8338,15 @@ riscv_elf_obj_attrs_arg_type (int tag)
     }
 }
 
+static bfd_boolean
+riscv_elf_obj_attrs_handle_unknown (bfd *abfd, int tag)
+{
+  _bfd_error_handler
+    (_("Warning: %B: Unknown RISC-V object attribute %d"),
+       abfd, tag);
+  return TRUE;
+}
+
 /* Add a PT_RISCV_ATTRIBUTES program header.  */
 
 static bfd_boolean
@@ -8441,6 +8450,8 @@ riscv_elf_additional_program_headers (bfd *abfd,
 #define elf_backend_obj_attrs_section_type      SHT_RISCV_ATTRIBUTES
 #undef  elf_backend_obj_attrs_section
 #define elf_backend_obj_attrs_section           ".riscv.attributes"
+#define elf_backend_obj_attrs_handle_unknown \
+  riscv_elf_obj_attrs_handle_unknown
 #define elf_backend_additional_program_headers \
   riscv_elf_additional_program_headers
 #define elf_backend_modify_segment_map		riscv_elf_modify_segment_map
