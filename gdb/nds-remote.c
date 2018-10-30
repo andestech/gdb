@@ -183,6 +183,10 @@ nds_print_human_table (int col, int row, const char *scsv)
       char *sc = strchr (buf, ';');
       int offset;
 
+      if (sc == NULL)
+	/* Expected ';' is not found, finish display.  */
+	return;
+
       *sc = '\0';
       current_uiout->field_string (col_fldname[i], buf);
 
