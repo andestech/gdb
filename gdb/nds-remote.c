@@ -128,9 +128,10 @@ nds_print_human_table (int col, int row, const char *scsv)
   struct bound_minimal_symbol msymbol;
   CORE_ADDR addr;
   char symbol_text[256];
+  struct cleanup *cleanup = NULL;
 
   buf = xstrdup (scsv);
-  make_cleanup (xfree, buf);
+  cleanup = make_cleanup (xfree, buf);
 
   /* Allocate header structures.  */
   col_fldname = (char **) xmalloc (sizeof (col_fldname[0]) * col);
@@ -186,7 +187,7 @@ nds_print_human_table (int col, int row, const char *scsv)
 
 	  if (sc == NULL)
 	    /* Expected ';' is not found, finish display.  */
-	    return;
+	    goto bye;
 
 	  *sc = '\0';
 	  current_uiout->field_string (col_fldname[i], buf);
@@ -218,6 +219,9 @@ nds_print_human_table (int col, int row, const char *scsv)
 	}
       current_uiout->text (symbol_text);
     }
+
+bye:
+  do_cleanups (cleanup);
 }
 
 /* Callback for "nds query profiling" command.  */
