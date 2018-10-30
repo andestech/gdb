@@ -120,7 +120,6 @@ static void
 nds_print_human_table (int col, int row, const char *scsv)
 {
   int i;
-  struct cleanup *row_cleanup = NULL;
   char *buf = NULL;
   char **col_fldname;
   char **col_hdrtext;
@@ -176,51 +175,48 @@ nds_print_human_table (int col, int row, const char *scsv)
   current_uiout->table_body ();
 
   /* Parse buf into col/row.  */
-  i = 0;
-  row_cleanup = make_cleanup_ui_out_tuple_begin_end (current_uiout, "row");
   while (*buf != '\0')
     {
-      char *sc = strchr (buf, ';');
-      int offset;
+      ui_out_emit_tuple tuple_emitter (current_uiout, "row");
+      char *sc = NULL;
 
-      if (sc == NULL)
-	/* Expected ';' is not found, finish display.  */
-	return;
-
-      *sc = '\0';
-      current_uiout->field_string (col_fldname[i], buf);
-
-      if (i == 0)
+      for (i = 0; i < col; i++, buf = sc + 1)
 	{
-	  /* Assume first column is address.  */
-	  addr = strtol (buf, NULL, 16);
-	  msymbol = lookup_minimal_symbol_by_pc (addr);
-	  if (!msymbol.minsym)
+	  sc = strchr (buf, ';');
+
+	  if (sc == NULL)
+	    /* Expected ';' is not found, finish display.  */
+	    return;
+
+	  *sc = '\0';
+	  current_uiout->field_string (col_fldname[i], buf);
+
+	  if (i == 0)
 	    {
-	      strcpy (symbol_text, "\n");
+	      /* Assume first column is address.  */
+	      addr = strtol (buf, NULL, 16);
+	      msymbol = lookup_minimal_symbol_by_pc (addr);
 	    }
+	}
+
+      /* Output msymbol name at end of row.  */
+      if (!msymbol.minsym)
+	{
+	  strcpy (symbol_text, "\n");
+	}
+      else
+	{
+	  const char *name = MSYMBOL_PRINT_NAME (msymbol.minsym);
+	  int offset = addr - BMSYMBOL_VALUE_ADDRESS (msymbol);
+
+	  if (offset)
+	    xsnprintf (symbol_text, sizeof (symbol_text),
+		       "%s + 0x%x\n", name, offset);
 	  else
-	    {
-	      offset = addr - BMSYMBOL_VALUE_ADDRESS (msymbol);
-	      if (offset)
-		xsnprintf (symbol_text, sizeof (symbol_text), "%s + 0x%x\n",
-			   MSYMBOL_PRINT_NAME (msymbol.minsym), offset);
-	      else
-		xsnprintf (symbol_text, sizeof (symbol_text), "%s\n",
-			   MSYMBOL_PRINT_NAME (msymbol.minsym));
-	    }
+	    xsnprintf (symbol_text, sizeof (symbol_text), "%s\n",
+		       name);
 	}
-
-      i++;
-      buf = sc + 1;
-      if (i == col)
-	{
-	  current_uiout->text (symbol_text);
-	  do_cleanups (row_cleanup);
-	  i = 0;
-	  row_cleanup = make_cleanup_ui_out_tuple_begin_end
-	    (current_uiout, "row");
-	}
+      current_uiout->text (symbol_text);
     }
 }
 
