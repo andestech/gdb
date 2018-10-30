@@ -186,29 +186,27 @@ nds_print_human_table (int col, int row, const char *scsv)
       int offset;
 
       *sc = '\0';
-      switch (i)
-	{
-	case 0:
-	  current_uiout->field_string (col_fldname[i], buf);
+      current_uiout->field_string (col_fldname[i], buf);
 
+      if (i == 0)
+	{
 	  /* Assume first column is address.  */
-	  strcpy (symbol_text, "\n");
 	  addr = strtol (buf, NULL, 16);
 	  msymbol = lookup_minimal_symbol_by_pc (addr);
 	  if (!msymbol.minsym)
-	    break;
-
-	  offset = addr - BMSYMBOL_VALUE_ADDRESS (msymbol);
-	  if (offset)
-	    xsnprintf (symbol_text, sizeof (symbol_text), "%s + 0x%x\n",
-		       MSYMBOL_PRINT_NAME (msymbol.minsym), offset);
+	    {
+	      strcpy (symbol_text, "\n");
+	    }
 	  else
-	    xsnprintf (symbol_text, sizeof (symbol_text), "%s\n",
-		       MSYMBOL_PRINT_NAME (msymbol.minsym));
-	  break;
-	case 1: case 2: case 3: case 4: case 5: case 6:
-	  current_uiout->field_string (col_fldname[i], buf);
-	  break;
+	    {
+	      offset = addr - BMSYMBOL_VALUE_ADDRESS (msymbol);
+	      if (offset)
+		xsnprintf (symbol_text, sizeof (symbol_text), "%s + 0x%x\n",
+			   MSYMBOL_PRINT_NAME (msymbol.minsym), offset);
+	      else
+		xsnprintf (symbol_text, sizeof (symbol_text), "%s\n",
+			   MSYMBOL_PRINT_NAME (msymbol.minsym));
+	    }
 	}
 
       i++;
