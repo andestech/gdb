@@ -55,15 +55,7 @@ static struct
   enum bfd_endian endian;
 } nds_remote_info;
 
-/* UI buffer for output redirection.  */
 
-struct ui_file_buffer
-{
-  unsigned char *buf;
-  long buf_size;
-};
-
-
 /* Callback for "nds query" command.  */
 
 static void
