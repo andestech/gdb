@@ -460,12 +460,10 @@ static void
 nds_set_gloss_command (const char *args, int from_tty)
 {
   int i;
-  struct ui_file *out;
   const char *arg0;
   const char *inferior_args;
   const char *f;
   char cmdline[0x1000];		/* 4K for max command line.  */
-  struct cleanup *back_to;
   asection *s = NULL;
   const char *sectnames[] = { ".text", "code", ".bss", "bss" };
 
@@ -473,14 +471,9 @@ nds_set_gloss_command (const char *args, int from_tty)
   if (nds_remote_info.type != nds_rt_sid)
     return;
 
-  back_to = make_cleanup (null_cleanup, 0);
   if (exec_bfd == NULL)
     error (_("Cannot set gloss without executable.\n"
 	     "Use the \"file\" or \"exec-file\" command."));
-
-  /* ui_file for target_rcmd.  */
-  out = stdio_fileopen (stdout);
-  make_cleanup_ui_file_delete (out);
 
   /* start_code, end_code, start_bss, end_bss,
      brk, command-line.  */
@@ -502,10 +495,10 @@ nds_set_gloss_command (const char *args, int from_tty)
       /* Set gloss (start|end)_XXX.  */
       xsnprintf (cmdline, sizeof (cmdline), "set gloss start_%s %u",
 		 sectnames[i + 1], (unsigned int) start);
-      target_rcmd (cmdline, out);
+      target_rcmd (cmdline, gdb_stdout);
       xsnprintf (cmdline, sizeof (cmdline), "set gloss end_%s %u",
 		 sectnames[i + 1], (unsigned int) (start + size));
-      target_rcmd (cmdline, out);
+      target_rcmd (cmdline, gdb_stdout);
     }
 
   /* Set gloss command-line for "set args".  */
@@ -523,9 +516,7 @@ nds_set_gloss_command (const char *args, int from_tty)
 
   xsnprintf (cmdline, sizeof (cmdline),
 	     "set gloss command-line \"%s %s\"", f, inferior_args);
-  target_rcmd (cmdline, out);
-
-  do_cleanups (back_to);
+  target_rcmd (cmdline, gdb_stdout);
 }
 
 
