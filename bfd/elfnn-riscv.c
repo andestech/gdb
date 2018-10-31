@@ -8321,9 +8321,12 @@ riscv_elf_obj_attrs_arg_type (int tag)
 static bfd_boolean
 riscv_elf_obj_attrs_handle_unknown (bfd *abfd, int tag)
 {
+  /* Suppress this warning message temporarily.  */
+#if 0
   _bfd_error_handler
     (_("Warning: %B: Unknown RISC-V object attribute %d"),
        abfd, tag);
+#endif
   return TRUE;
 }
 
