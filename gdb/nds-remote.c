@@ -599,32 +599,15 @@ nds_read_ace_desc_command (const char *args, int from_tty)
   /* What kind of platform am I running at?  */
   if (uname (&os) == 0)
     {
-      struct cleanup *back_to;
-      struct ui_file *res;
-      struct ui_file_buffer ui_buf;
+      string_file str;
       char qrcmd[80];
       const char *filename = NULL;
 
-      /* ui_file for qRcmd.  */
-      res = mem_fileopen ();
-      back_to = make_cleanup_ui_file_delete (res);
-
-      /* ui_file_buffer for reading ui_file.  */
-      ui_buf.buf_size = 2048;
-      ui_buf.buf = (unsigned char *) xmalloc (ui_buf.buf_size);
-      make_cleanup (free_current_contents, &ui_buf.buf);
-
-      /* make_cleanup outside TRY_CACHE,
-	 because it save and reset cleanup-chain.  */
-      scoped_restore save_stdtarg = make_scoped_restore (&gdb_stdtarg, res);
-      /* Supress error messages from gdbserver
-	 if gdbserver doesn't support the monitor command.  */
-
       sprintf (qrcmd, "nds ace %s", os.sysname);
-      if (nds_issue_qrcmd (qrcmd, res, &ui_buf) == -1)
-	goto out;
+      if (nds_issue_qrcmd (qrcmd, str) == -1)
+	return;
 
-      filename = (char *) ui_buf.buf;
+      filename = str.c_str ();
       if (strlen (filename) != 0)
 	{
 	  const char *lib = "./libace.so";
@@ -633,8 +616,6 @@ nds_read_ace_desc_command (const char *args, int from_tty)
 	  nds_handle_ace (lib);
 	  unlink (lib);
 	}
-out:
-      do_cleanups (back_to);
     }
 }
 
