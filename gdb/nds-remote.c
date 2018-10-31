@@ -451,80 +451,6 @@ nds_endian_check_command (const char *args, int from_tty)
     warning ("Target and elf have different endian");
 }
 
-/* This is only used for SID.  Set command-line string.  */
-
-static void
-nds_set_gloss_command (const char *args, int from_tty)
-{
-  int i;
-  struct ui_file *out;
-  const char *arg0;
-  const char *inferior_args;
-  const char *f;
-  char cmdline[0x1000];		/* 4K for max command line.  */
-  struct cleanup *back_to;
-  asection *s = NULL;
-  const char *sectnames[] = { ".text", "code", ".bss", "bss" };
-
-  /* set gloss for SID only. */
-  if (nds_remote_info.type != nds_rt_sid)
-    return;
-
-  back_to = make_cleanup (null_cleanup, 0);
-  if (exec_bfd == NULL)
-    error (_("Cannot set gloss without executable.\n"
-	     "Use the \"file\" or \"exec-file\" command."));
-
-  /* ui_file for target_rcmd.  */
-  out = stdio_fileopen (stdout);
-  make_cleanup_ui_file_delete (out);
-
-  /* start_code, end_code, start_bss, end_bss,
-     brk, command-line.  */
-  for (s = exec_bfd->sections; s; s = s->next)
-    {
-      bfd_vma start, size;
-      const char *attr;
-
-      for (i = 0; i < ARRAY_SIZE (sectnames); i += 2)
-	if (strcmp (bfd_get_section_name (exec_bfd, s), sectnames[i]) == 0)
-	  break;
-
-      if (i >= ARRAY_SIZE (sectnames))
-	continue;
-
-      start = bfd_get_section_vma (exec_bfd, s);
-      size = bfd_section_size (exec_bfd, s);
-
-      /* Set gloss (start|end)_XXX.  */
-      xsnprintf (cmdline, sizeof (cmdline), "set gloss start_%s %u",
-		 sectnames[i + 1], (unsigned int) start);
-      target_rcmd (cmdline, out);
-      xsnprintf (cmdline, sizeof (cmdline), "set gloss end_%s %u",
-		 sectnames[i + 1], (unsigned int) (start + size));
-      target_rcmd (cmdline, out);
-    }
-
-  /* Set gloss command-line for "set args".  */
-  arg0 = bfd_get_filename(exec_bfd);
-  inferior_args = get_inferior_args ();
-
-  f = strrchr (arg0, '/');
-  if (f == NULL)
-    f = strrchr (arg0, '\\');
-
-  if (f == NULL)
-    f = "a.out";
-  else
-    f++; /* skip separator.  */
-
-  xsnprintf (cmdline, sizeof (cmdline),
-	     "set gloss command-line \"%s %s\"", f, inferior_args);
-  target_rcmd (cmdline, out);
-
-  do_cleanups (back_to);
-}
-
 static int
 nds_get_acr_info (struct gdbarch *gdbarch, const char *name,
 		  int *regnum, int *len)
@@ -861,10 +787,6 @@ nds_init_remote_cmds (void)
 	   _("Check endian consistency between elf and target. "
 	     "Throwing warning if failed."),
 	   &nds_cmdlist);
-
-  /* nds set-gloss */
-  add_cmd ("set-gloss", class_files, nds_set_gloss_command,
-	   _("Set gloss related environment."), &nds_cmdlist);
 
   /* nds query (profiling|perf-meter|target)  */
   add_prefix_cmd ("query", no_class, nds_query_command,
