@@ -472,6 +472,12 @@ nds_issue_qrcmd (const char *cmd, struct ui_file *res,
 
   ui_file_rewind (res);
 
+  /* make_cleanup outside TRY_CACHE,
+     because it save and reset cleanup-chain.  */
+  scoped_restore save_stdtarg = make_scoped_restore (&gdb_stdtarg, res);
+  /* Supress error messages from gdbserver
+     if gdbserver doesn't support the monitor command.  */
+
   TRY
     {
       target_rcmd (cmd, res);
@@ -514,12 +520,6 @@ nds_query_target_using_qrcmd (void)
   ui_buf.buf_size = 64;
   ui_buf.buf = (unsigned char *) xmalloc (ui_buf.buf_size);
   make_cleanup (free_current_contents, &ui_buf.buf);
-
-  /* make_cleanup outside TRY_CACHE,
-     because it save and reset cleanup-chain.  */
-  scoped_restore save_stdtarg = make_scoped_restore (&gdb_stdtarg, res);
-  /* Supress error messages from gdbserver
-     if gdbserver doesn't support the monitor command.  */
 
   if (nds_issue_qrcmd ("nds query target", res, &ui_buf) == -1)
     goto out;
