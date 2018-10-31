@@ -80,6 +80,38 @@ nds_pipeline_command (const char *args, int from_tty)
   error (_("Usage: nds pipeline (on|off) [cpu]"));
 }
 
+static int
+nds_issue_qrcmd (const char *cmd, string_file &str)
+{
+  std::string whitespaces (" \t\f\v\n\r");
+
+  /* make_cleanup outside TRY_CACHE,
+     because it save and reset cleanup-chain.  */
+  scoped_restore save_stdtarg = make_scoped_restore (&gdb_stdtarg, &str);
+  /* Supress error messages from gdbserver
+     if gdbserver doesn't support the monitor command.  */
+
+  str.clear ();
+  TRY
+    {
+      target_rcmd (cmd, &str);
+    }
+  CATCH (except, RETURN_MASK_ERROR)
+    {
+      return -1;
+    }
+  END_CATCH
+
+  /* Trim trailing newline characters.  */
+  std::size_t found = str.string ().find_last_not_of (whitespaces);
+  if (found != std::string::npos)
+    str.string ().erase (found + 1);
+  else
+    // all whitespace
+    str.string ().clear ();
+
+  return 0;
+}
 
 /* Pretty-print for profiling data.  */
 
@@ -215,7 +247,8 @@ nds_query_profiling_command (const char *args, int from_tty)
     }
 
   xsnprintf (cmd, sizeof (cmd), "set %s profiling ide-query", arg_cpu);
-  target_rcmd (cmd, &res);
+  if (nds_issue_qrcmd (cmd, res) == -1)
+    return;
 
   if (arg_human == 0)
     {
@@ -327,39 +360,6 @@ nds_target_type_make_value (struct gdbarch *gdbarch, struct internalvar *var,
 
   return value_from_longest (builtin_type (gdbarch)->builtin_int,
 			     val);
-}
-
-static int
-nds_issue_qrcmd (const char *cmd, string_file &str)
-{
-  std::string whitespaces (" \t\f\v\n\r");
-
-  /* make_cleanup outside TRY_CACHE,
-     because it save and reset cleanup-chain.  */
-  scoped_restore save_stdtarg = make_scoped_restore (&gdb_stdtarg, &str);
-  /* Supress error messages from gdbserver
-     if gdbserver doesn't support the monitor command.  */
-
-  str.clear ();
-  TRY
-    {
-      target_rcmd (cmd, &str);
-    }
-  CATCH (except, RETURN_MASK_ERROR)
-    {
-      return -1;
-    }
-  END_CATCH
-
-  /* Trim trailing newline characters.  */
-  std::size_t found = str.string ().find_last_not_of (whitespaces);
-  if (found != std::string::npos)
-    str.string ().erase (found + 1);
-  else
-    // all whitespace
-    str.string ().clear ();
-
-  return 0;
 }
 
 static int
