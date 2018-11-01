@@ -65,7 +65,7 @@ enum nds_remote_type
 static struct
 {
   enum nds_remote_type type;
-  char cpu[16];
+  char cpuid[16];
   enum bfd_endian endian;
 } nds_remote_info;
 
@@ -393,7 +393,7 @@ nds_remote_info_init (void)
 {
   nds_remote_info.type = nds_rt_unknown;
   nds_remote_info.endian = BFD_ENDIAN_UNKNOWN;
-  strcpy (nds_remote_info.cpu, "cpu");
+  nds_remote_info.cpuid[0] = '\0';
 }
 
 /* Query target information.  */
@@ -544,6 +544,12 @@ nds_query_target_using_qrcmd (void)
   else if (strcmp (str, "BE") == 0)
     nds_remote_info.endian = BFD_ENDIAN_BIG;
 
+  if (nds_issue_qrcmd ("nds query cpuid", res, &ui_buf) == -1)
+    goto out;
+
+  strncpy (nds_remote_info.cpuid, &ui_buf.buf,
+	   sizeof (nds_remote_info.cpuid) - 1);
+
   ret = 1;
 out:
   do_cleanups (back_to);
@@ -563,12 +569,12 @@ nds_query_target_command (const char *args, int from_tty)
   if (!nds_query_target_using_qpart ())
     nds_query_target_using_qrcmd ();
 
-  /* Set cpu name if CPU!="cpu".  */
-  if (strcmp ("cpu", nds_remote_info.cpu) != 0)
+  /* single-core: v5_core, multi-core: v5_core0, v5_core1, ...  */
+  if (startswith (nds_remote_info.cpuid, "v5_core"))
     {
       char buf[64];
 
-      xsnprintf (buf, sizeof (buf), "%s(gdb) ", nds_remote_info.cpu);
+      xsnprintf (buf, sizeof (buf), "%s(gdb) ", nds_remote_info.cpuid);
       set_prompt (buf);
     }
   else
