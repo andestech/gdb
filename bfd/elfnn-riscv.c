@@ -7998,6 +7998,14 @@ riscv_relocation_check (struct bfd_link_info *info,
 		*off = sec->size;
 	      else
 		*off = (*irel)->r_offset;
+
+	      /* The final instruction in the region, regard this one as data.  */
+	      result |= DATA_EXIST;
+	      if ((*(contents + (*off)) & 0x3) != 0x3)
+		result |= (2 << 24);
+	      else
+		result |= (4 << 24);
+	      return result;
 	    }
 	  break;
 	case R_RISCV_ALIGN:
@@ -8131,7 +8139,8 @@ riscv_relocation_check (struct bfd_link_info *info,
 	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_SET16
 	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_SET32
 	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_NO_RVC_REGION_BEGIN
-	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_NO_RVC_REGION_END)
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_NO_RVC_REGION_END
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_RELAX_REGION_END)
 	    {
 	      /* Since we already consider all relocations above, this won't
 		 happen unless supporting new relocations. */
