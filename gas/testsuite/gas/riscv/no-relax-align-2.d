@@ -8,8 +8,8 @@ Disassembly of section .text:
 
 0+000 <.text>:
 [ 	]+0:[ 	]+0000[ 	]+unimp
-.*R_RISCV_DATA.*
 .*R_RISCV_RELAX_ENTRY.*
+.*R_RISCV_DATA.*
 [ 	]+2:[ 	]+0001[ 	]+c.nop
 [ 	]+4:[ 	]+00000013[ 	]+nop
 [ 	]+8:[ 	]+00000013[ 	]+nop

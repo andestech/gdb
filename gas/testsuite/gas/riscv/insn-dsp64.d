@@ -8,6 +8,7 @@ Disassembly of section .text:
 
 0+000 <dsp64>:
 [ 	]+.*:[ 	]+.*[ 	]+add32[ 	]+r1,r2,r3
+.*R_RISCV_RELAX_ENTRY.*
 [ 	]+.*:[ 	]+.*[ 	]+radd32[ 	]+r1,r2,r3
 [ 	]+.*:[ 	]+.*[ 	]+uradd32[ 	]+r1,r2,r3
 [ 	]+.*:[ 	]+.*[ 	]+kadd32[ 	]+r1,r2,r3
