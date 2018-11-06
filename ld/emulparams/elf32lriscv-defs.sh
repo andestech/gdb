@@ -32,7 +32,7 @@ COMMONPAGESIZE="CONSTANT (COMMONPAGESIZE)"
 
 DATA_START_SYMBOLS="${CREATE_SHLIB-__DATA_BEGIN__ = .;}"
 
-SDATA_START_SYMBOLS="${CREATE_SHLIB-__SDATA_BEGIN__ = .;}
+SDATA_START_SYMBOLS=". = ALIGN ($ELFSIZE / 8); ${CREATE_SHLIB-__SDATA_BEGIN__ = .;}
     *(.srodata.cst16) *(.srodata.cst8) *(.srodata.cst4) *(.srodata.cst2) *(.srodata .srodata.*)"
 DATA_START_SYMBOLS='__data_start = .;'
 OTHER_END_SYMBOLS='PROVIDE (_stack = 0x3000000);'
