@@ -847,17 +847,25 @@ gdb_disassembly (struct gdbarch *gdbarch, struct ui_out *uiout,
   struct symtab *symtab;
   int nlines = -1;
 
+  if (!(flags & (DISASSEMBLY_SOURCE_DEPRECATED | DISASSEMBLY_SOURCE)))
+    {
+      do_assembly_only (gdbarch, uiout, low, high, how_many, flags);
+      goto disassembly_done;
+    }
+
   /* Assume symtab is valid for whole PC range.  */
   symtab = find_pc_line_symtab (low);
 
   if (symtab != NULL && SYMTAB_LINETABLE (symtab) != NULL)
     nlines = SYMTAB_LINETABLE (symtab)->nitems;
 
-  if (!(flags & (DISASSEMBLY_SOURCE_DEPRECATED | DISASSEMBLY_SOURCE))
-      || nlines <= 0)
-    do_assembly_only (gdbarch, uiout, low, high, how_many, flags);
+  if (nlines <= 0)
+    {
+      do_assembly_only (gdbarch, uiout, low, high, how_many, flags);
+      goto disassembly_done;
+    }
 
-  else if (flags & DISASSEMBLY_SOURCE)
+  if (flags & DISASSEMBLY_SOURCE)
     do_mixed_source_and_assembly (gdbarch, uiout, symtab, low, high,
 				  how_many, flags);
 
@@ -865,6 +873,7 @@ gdb_disassembly (struct gdbarch *gdbarch, struct ui_out *uiout,
     do_mixed_source_and_assembly_deprecated (gdbarch, uiout, symtab,
 					     low, high, how_many, flags);
 
+disassembly_done:
   gdb_flush (gdb_stdout);
 }
 
