@@ -845,7 +845,7 @@ gdb_disassembly (struct gdbarch *gdbarch, struct ui_out *uiout,
 		 CORE_ADDR low, CORE_ADDR high)
 {
   struct symtab *symtab;
-  int nlines = -1;
+  CORE_ADDR pc;
 
   if (!(flags & (DISASSEMBLY_SOURCE_DEPRECATED | DISASSEMBLY_SOURCE)))
     {
@@ -853,17 +853,26 @@ gdb_disassembly (struct gdbarch *gdbarch, struct ui_out *uiout,
       goto disassembly_done;
     }
 
-  /* Assume symtab is valid for whole PC range.  */
-  symtab = find_pc_line_symtab (low);
-
-  if (symtab != NULL && SYMTAB_LINETABLE (symtab) != NULL)
-    nlines = SYMTAB_LINETABLE (symtab)->nitems;
-
-  if (nlines <= 0)
+  /* Between the given range, find the first address with valid line info.  */
+  pc = low;
+  while (pc < high)
     {
-      do_assembly_only (gdbarch, uiout, low, high, how_many, flags);
-      goto disassembly_done;
+      symtab = find_pc_line_symtab (pc);
+      if (symtab != NULL
+	  && SYMTAB_LINETABLE (symtab) != NULL
+	  && SYMTAB_LINETABLE (symtab)->nitems > 0)
+	break;
+      else
+	pc += gdb_insn_length (gdbarch, pc);
     }
+
+  if (pc > low)
+    do_assembly_only (gdbarch, uiout, low, pc, how_many, flags);
+
+  if (pc >= high)
+    goto disassembly_done;
+
+  low = pc;
 
   if (flags & DISASSEMBLY_SOURCE)
     do_mixed_source_and_assembly (gdbarch, uiout, symtab, low, high,
