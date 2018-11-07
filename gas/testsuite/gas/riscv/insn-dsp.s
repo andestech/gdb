@@ -198,7 +198,7 @@ dsp:
 	# Table 16. Signed 16-bit Multiply 64-bit Add/Subtract Instructions (1)
 	smal      r2, r4, r6
 
-	# Table 17. Partial-SIMD Miscellaneous Instructions (12)
+	# Table 17. Partial-SIMD Miscellaneous Instructions (14)
 	sclip32   r1, r2, 5
 	uclip32   r1, r2, 5
 	bitrev    r1, r2, r3
@@ -211,6 +211,8 @@ dsp:
 	clrs32    r1, r2
 	clz32     r1, r2
 	clo32     r1, r2
+	pbsad     r1, r2, r3
+	pbsada    r1, r2, r3
 
 	# Table 18. 8-bit Multiply with 32-bit Add Instructions (3)
 	smaqa     r1, r2, r3
