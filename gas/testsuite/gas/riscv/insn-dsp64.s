@@ -1,5 +1,5 @@
 dsp64:
-	# Table 26. (RV64 Only) SIMD 32-bit Add/Subtract Instructions (20)
+	# Table 26. (RV64 Only) SIMD 32-bit Add/Subtract Instructions (30)
 	add32     r1, r2, r3
 	radd32    r1, r2, r3
 	uradd32   r1, r2, r3
@@ -20,6 +20,16 @@ dsp64:
 	urcrsa32  r1, r2, r3
 	kcrsa32   r1, r2, r3
 	ukcrsa32  r1, r2, r3
+	stas32    r1, r2, r3
+	rstas32   r1, r2, r3
+	urstas32  r1, r2, r3
+	kstas32   r1, r2, r3
+	ukstas32  r1, r2, r3
+	stsa32    r1, r2, r3
+	rstsa32   r1, r2, r3
+	urstsa32  r1, r2, r3
+	kstsa32   r1, r2, r3
+	ukstsa32  r1, r2, r3
 
 	# Table 27. (RV64 Only) SIMD 32-bit Shift Instructions (14)
 	sra32     r1, r2, r3
