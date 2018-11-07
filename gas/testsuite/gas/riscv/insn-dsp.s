@@ -1,5 +1,5 @@
 dsp:
-	# Table 1. SIMD 16-bit Add/Subtract Instructions (20)
+	# Table 1. SIMD 16-bit Add/Subtract Instructions (30)
 	add16     r1, r2, r3
 	radd16    r1, r2, r3
 	uradd16   r1, r2, r3
@@ -20,6 +20,16 @@ dsp:
 	urcrsa16  r1, r2, r3
 	kcrsa16   r1, r2, r3
 	ukcrsa16  r1, r2, r3
+	stas16    r1, r2, r3
+	rstas16   r1, r2, r3
+	urstas16  r1, r2, r3
+	kstas16   r1, r2, r3
+	ukstas16  r1, r2, r3
+	stsa16    r1, r2, r3
+	rstsa16   r1, r2, r3
+	urstsa16  r1, r2, r3
+	kstsa16   r1, r2, r3
+	ukstsa16  r1, r2, r3
 
 	# Table 2. SIMD 8-bit Add/Subtract Instructions (10)
 	add8      r1, r2, r3
