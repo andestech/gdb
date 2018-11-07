@@ -129,25 +129,13 @@ dsp:
 	zunpkd831 r1, r2
 	zunpkd832 r1, r2
 
-	# Table 10. 32-bit Add/Sub Instructions (4)
-	raddw     r1, r2, r3
-	uraddw    r1, r2, r3
-	rsubw     r1, r2, r3
-	ursubw    r1, r2, r3
-
-	# Table 11. 32-bit Shift Instructions (4)
-	sra.u     r1, r2, r3
-	srai.u    r1, r2, 5
-	ksll      r1, r2, r3
-	kslli     r1, r2, 5
-
-	# Table 12. 16-bit Packing Instructions (4)
+	# Table 10. 16-bit Packing Instructions (4)
 	pkbb16    r1, r2, r3
 	pkbt16    r1, r2, r3
 	pktb16    r1, r2, r3
 	pktt16    r1, r2, r3
 
-	# Table 13. Signed MSW 32x32 Multiply and Add Instructions (8)
+	# Table 11. Signed MSW 32x32 Multiply and Add Instructions (8)
 	smmul     r1, r2, r3
 	smmul.u   r1, r2, r3
 	kmmac     r1, r2, r3
@@ -157,7 +145,7 @@ dsp:
 	kwmmul    r1, r2, r3
 	kwmmul.u  r1, r2, r3
 
-	# Table 14. Signed MSW 32x16 Multiply and Add Instructions (16)
+	# Table 12. Signed MSW 32x16 Multiply and Add Instructions (16)
 	smmwb     r1, r2, r3
 	smmwb.u   r1, r2, r3
 	smmwt     r1, r2, r3
@@ -175,7 +163,7 @@ dsp:
 	kmmawt2   r1, r2, r3
 	kmmawt2.u r1, r2, r3
 
-	# Table 15. Signed 16-bit Multiply 32-bit Add/Subtract Instructions (18)
+	# Table 13. Signed 16-bit Multiply 32-bit Add/Subtract Instructions (18)
 	smbb16    r1, r2, r3
 	smbt16    r1, r2, r3
 	smtt16    r1, r2, r3
@@ -195,10 +183,10 @@ dsp:
 	kmsda     r1, r2, r3
 	kmsxda    r1, r2, r3
 
-	# Table 16. Signed 16-bit Multiply 64-bit Add/Subtract Instructions (1)
+	# Table 14. Signed 16-bit Multiply 64-bit Add/Subtract Instructions (1)
 	smal      r2, r4, r6
 
-	# Table 17. Partial-SIMD Miscellaneous Instructions (14)
+	# Table 15. Partial-SIMD Miscellaneous Instructions (14)
 	sclip32   r1, r2, 5
 	uclip32   r1, r2, 5
 	bitrev    r1, r2, r3
@@ -214,12 +202,12 @@ dsp:
 	pbsad     r1, r2, r3
 	pbsada    r1, r2, r3
 
-	# Table 18. 8-bit Multiply with 32-bit Add Instructions (3)
+	# Table 16. 8-bit Multiply with 32-bit Add Instructions (3)
 	smaqa     r1, r2, r3
 	umaqa     r1, r2, r3
 	smaqa.su  r1, r2, r3
 
-	# Table 19. 64-bit Add/Subtract Instructions (10)
+	# Table 17. 64-bit Add/Subtract Instructions (10)
 	add64     r2, r4, r6
 	radd64    r2, r4, r6
 	uradd64   r2, r4, r6
@@ -231,7 +219,7 @@ dsp:
 	ksub64    r2, r4, r6
 	uksub64   r2, r4, r6
 
-	# Table 20. 32-bit Multiply 64-bit Add/Subtract Instructions (8)
+	# Table 18. 32-bit Multiply 64-bit Add/Subtract Instructions (8)
 	smar64    r2, r4, r6
 	smsr64    r2, r4, r6
 	umar64    r2, r4, r6
@@ -241,7 +229,7 @@ dsp:
 	ukmar64   r2, r4, r6
 	ukmsr64   r2, r4, r6
 
-	# Table 21. Signed 16-bit Multiply 64-bit Add/Subtract Instructions (10)
+	# Table 19. Signed 16-bit Multiply 64-bit Add/Subtract Instructions (10)
 	smalbb    r2, r4, r6
 	smalbt    r2, r4, r6
 	smaltt    r2, r4, r6
@@ -253,14 +241,14 @@ dsp:
 	smslda    r2, r4, r6
 	smslxda   r2, r4, r6
 
-	# Table 22. Non-SIMD Q15 saturation ALU Instructions (5)
+	# Table 20. Non-SIMD Q15 saturation ALU Instructions (5)
 	kaddh     r1, r2, r3
 	ksubh     r1, r2, r3
 	khmbb     r1, r2, r3
 	khmbt     r1, r2, r3
 	khmtt     r1, r2, r3
 
-	# Table 23. Non-SIMD Q31 saturation ALU Instructions (10)
+	# Table 21. Non-SIMD Q31 saturation ALU Instructions (12)
 	kaddw     r1, r2, r3
 	ksubw     r1, r2, r3
 	kdmbb     r1, r2, r3
@@ -268,13 +256,23 @@ dsp:
 	kdmtt     r1, r2, r3
 	kslraw    r1, r2, r3
 	kslraw.u  r1, r2, r3
+	ksllw     r1, r2, r3
+	kslliw    r1, r2, 5
 	kdmabb    r1, r2, r3
 	kdmabt    r1, r2, r3
 	kdmatt    r1, r2, r3
 
-	# Table 24. OV (Overflow) flag Set/Clear Instructions (2)
+	# Table 22. 32-bit Add/Sub Instructions (4)
+	raddw     r1, r2, r3
+	uraddw    r1, r2, r3
+	rsubw     r1, r2, r3
+	ursubw    r1, r2, r3
+
+	# Table 23. OV (Overflow) flag Set/Clear Instructions (2)
 	csrr      r1, satp	#rdov     r1
 	csrrci    r1, satp, 1	#clrov
 
-	# Table 25. Non-SIMD Miscellaneous Instructions (1)
+	# Table 24. Non-SIMD Miscellaneous Instructions (3)
 	ave       r1, r2, r3
+	sra.u     r1, r2, r3
+	srai.u    r1, r2, 5
