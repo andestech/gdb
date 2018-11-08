@@ -82,45 +82,6 @@ riscv_elf_set_target_option (struct bfd_link_info *info)
   table->execit_loop_aware = execit_loop_aware;
 }
 
-static void
-riscv_elf_append_section (struct bfd_link_info *info, bfd *abfd)
-{
-  asection *itable;
-  struct bfd_link_hash_entry *h;
-
-  if (target_optimize & RISCV_RELAX_EXECIT_ON
-      && (execit_import_file == NULL
-	  || keep_import_execit
-	  || update_execit_table))
-    {
-      /* Create section ".exec.itable".  */
-      itable = bfd_make_section_with_flags (abfd, ".exec.itable",
-					    SEC_CODE | SEC_ALLOC | SEC_LOAD
-					    | SEC_HAS_CONTENTS | SEC_READONLY
-					    | SEC_IN_MEMORY | SEC_KEEP
-					    | SEC_RELOC);
-      if (itable)
-	{
-	  itable->gc_mark = 1;
-	  itable->alignment_power = 2;
-	  /* Default size of .exec.itable can not be zero, so we can not set
-	     it according to execit_limit. Since we will adjust the table size
-	     in riscv_elf_execit_build_itable, it is okay to set the size to
-	     the maximum value here.  */
-	  itable->size = 0x1000;
-	  itable->contents = bfd_zalloc (abfd, itable->size);
-
-	  /* Add a symbol in the head of .exec.itable to objdump clearly.  */
-	  h = bfd_link_hash_lookup (info->hash, "_EXECIT_BASE_",
-				    FALSE, FALSE, FALSE);
-	  _bfd_generic_link_add_one_symbol
-	    (info, info->output_bfd, "_EXECIT_BASE_",
-	     BSF_GLOBAL | BSF_WEAK, itable, 0, (const char *) NULL, FALSE,
-	     get_elf_backend_data (info->output_bfd)->collect, &h);
-	}
-    }
-}
-
 /* Save the target options into output bfd to avoid using to many global
    variables. Do this after the output has been created, but before
    inputs are read.  */
@@ -211,19 +172,100 @@ riscv_create_output_section_statements (void)
     }
 }
 
+/* Create the target usage section for RISCV.  */
+
+static void
+riscv_elf_create_target_section (struct bfd_link_info *info, bfd *abfd,
+				 char *sec_name, char *sym_name,
+				 bfd_size_type sec_size,
+				 unsigned int sec_aligned_power,
+				 flagword flags)
+{
+  asection *itable;
+  struct bfd_link_hash_entry *h;
+
+  /* Create section.  */
+  itable = bfd_make_section_with_flags (abfd, sec_name, flags);
+  if (itable)
+    {
+      itable->size = sec_size;
+      itable->alignment_power = sec_aligned_power;
+      itable->contents = bfd_zalloc (abfd, itable->size);
+      itable->gc_mark = 1;
+
+      /* Add a symbol in the head of target section to objdump clearly.  */
+      h = bfd_link_hash_lookup (info->hash, sym_name,
+				FALSE, FALSE, FALSE);
+      _bfd_generic_link_add_one_symbol
+	(info, info->output_bfd, sym_name,
+	 BSF_GLOBAL | BSF_WEAK, itable, 0, (const char *) NULL, FALSE,
+	 get_elf_backend_data (info->output_bfd)->collect, &h);
+    }
+}
+
 static void
 riscv_elf_after_open (void)
 {
   bfd *abfd;
-  for (abfd = link_info.input_bfds; abfd != NULL; abfd = abfd->link.next)
+  flagword flags;
+
+  flags = (SEC_CODE | SEC_ALLOC | SEC_LOAD
+	   | SEC_HAS_CONTENTS | SEC_READONLY
+	   | SEC_IN_MEMORY | SEC_KEEP
+	   | SEC_RELOC);
+
+  if ((target_optimize & RISCV_RELAX_EXECIT_ON)
+      && (execit_import_file == NULL
+	  || keep_import_execit
+	  || update_execit_table))
     {
-      /* Append target needed section in the last input object file.  */
-      if (abfd->link.next == NULL)
-	riscv_elf_append_section (&link_info, abfd);
+      for (abfd = link_info.input_bfds; abfd != NULL; abfd = abfd->link.next)
+	{
+	  /* Create execit section in the last input object file.  */
+	  /* Default size of .exec.itable can not be zero, so we can not set
+	     it according to execit_limit. Since we will adjust the table size
+	     in riscv_elf_execit_build_itable, it is okay to set the size to
+	     the maximum value 0x1000 here.  */
+	  if (abfd->link.next == NULL)
+	    riscv_elf_create_target_section (&link_info, abfd, ".exec.itable",
+					     "_EXECIT_BASE_", 0x1000, 2, flags);
+	}
     }
 
   /* Call the standard elf routine.  */
   gld${EMULATION_NAME}_after_open ();
+}
+
+static void
+riscv_elf_after_check_relocs (void)
+{
+  bfd *abfd;
+  flagword flags;
+
+  if (ict_model == 2)
+    flags = (SEC_DATA | SEC_ALLOC | SEC_LOAD
+	     | SEC_HAS_CONTENTS | SEC_READONLY
+	     | SEC_IN_MEMORY | SEC_KEEP
+	     | SEC_RELOC);
+  else
+    flags = (SEC_CODE | SEC_ALLOC | SEC_LOAD
+	     | SEC_HAS_CONTENTS | SEC_READONLY
+	     | SEC_IN_MEMORY | SEC_KEEP
+	     | SEC_RELOC);
+
+  if (ict_table_entries > 0)
+    {
+      for (abfd = link_info.input_bfds; abfd != NULL; abfd = abfd->link.next)
+	{
+	  /* Create ict table section in the last input object file.  */
+	  /* The ict_table_entries has been set in the check_relocs.  */
+	  if (abfd->link.next == NULL)
+	    riscv_elf_create_target_section (&link_info, abfd, ".nds.ict",
+					     "_INDIRECT_CALL_TABLE_BASE_",
+					     ict_table_entries * 4 * 2, 2,
+					     flags);
+	}
+    }
 }
 EOF
 # Define some shell vars to insert bits of code into the standard elf
@@ -469,3 +511,4 @@ LDEMUL_BEFORE_ALLOCATION=riscv_elf_before_allocation
 LDEMUL_AFTER_ALLOCATION=gld${EMULATION_NAME}_after_allocation
 LDEMUL_AFTER_OPEN=riscv_elf_after_open
 LDEMUL_CREATE_OUTPUT_SECTION_STATEMENTS=riscv_create_output_section_statements
+LDEMUL_AFTER_CHECK_RELOCS=riscv_elf_after_check_relocs

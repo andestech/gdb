@@ -1356,6 +1356,8 @@ static const struct elf_reloc_map riscv_reloc_map[] =
 };
 
 unsigned int number_of_howto_table = (unsigned int) ARRAY_SIZE (howto_table);
+unsigned int ict_table_entries = 0;
+unsigned int ict_model = 0;	/* Default set ict to tiny model.  */
 
 /* Given a BFD reloc type, return a howto structure.  */
 
