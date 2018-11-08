@@ -169,3 +169,5 @@ struct riscv_elf_link_hash_table
 #define R_RISCV_RELAX_REGION_LOOP_FLAG		(1 << 4)
 
 extern unsigned int number_of_howto_table;
+extern unsigned int ict_table_entries;
+extern unsigned int ict_model;
