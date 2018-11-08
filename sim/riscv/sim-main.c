@@ -5840,8 +5840,8 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       {
 	if (RISCV_XLEN (cpu) == 32)
 	  {
-	    int64_t r = (int64_t) cpu->regs[ra].u
-			 * (int64_t) cpu->regs[rb].u;
+	    int64_t r = (int64_t) cpu->regs[ra].s
+			 * (int64_t) cpu->regs[rb].s;
 	    int d = rd & ~1;
 	    cpu->regs[d + 1].u = (r >> 32);
 	    cpu->regs[d].u = r;
