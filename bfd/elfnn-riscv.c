@@ -8854,7 +8854,7 @@ riscv_elf_obj_attrs_arg_type (int tag)
 	  return ATTR_TYPE_FLAG_INT_VAL | ATTR_TYPE_FLAG_NO_DEFAULT;
 	case Tag_arch:
 	case Tag_ict_model:
-	  return ATTR_TYPE_FLAG_STR_VAL | ATTR_TYPE_FLAG_NO_DEFAULT;
+	  return ATTR_TYPE_FLAG_STR_VAL;
 	default:
 	  return (tag & 1) != 0 ? ATTR_TYPE_FLAG_STR_VAL : ATTR_TYPE_FLAG_INT_VAL;
 	}
