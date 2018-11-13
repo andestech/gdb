@@ -1,0 +1,156 @@
+# Copyright 2002-2018 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+standard_testfile
+
+set int_num 1024
+set array_size [expr $int_num * 4]
+
+set options [list debug "additional_flags=-DNUM=$int_num"]
+
+if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable ${options}] != "" } {
+     untested "failed to compile"
+     return -1
+}
+
+# Start with a fresh gdb.
+
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+
+gdb_load ${binfile}
+
+
+# Clean up any stale output files from previous test runs
+
+set f_with_1space "f_\\ 1s"
+set f_with_2space "f_\\ 1s\\ 2s"
+set f_with_3space "f_\\ 1s\\ 2s\\ 3s"
+set f_with_1dquote "f_\\\"1q"
+set f_with_2dquote "f_\\\"1q\\\"2q"
+set f_with_3dquote "f_\\\"1q\\\"2q\\\"3q"
+set f_with_1squote "f_'1q"
+set f_with_2squote "f_'1q'2q"
+set f_with_3squote "f_'1q'2q'3q"
+set filenames {}
+set all_files [list \
+$f_with_1space $f_with_2space $f_with_3space \
+$f_with_1dquote $f_with_2dquote $f_with_3dquote \
+$f_with_1squote $f_with_2squote $f_with_3squote]
+
+foreach file $all_files {
+    if {[is_remote host]} {
+	set this_name $file
+    } else {
+	set this_name [standard_output_file $file]
+    }
+
+    lappend filenames $this_name
+}
+
+remote_exec host "rm -f $filenames"
+
+if ![runto_main] then { fail "filename tests suppressed" }
+
+proc test_dump_memory {filename} {
+    global gdb_prompt
+
+    set msg "dump memory into $filename"
+    gdb_test_multiple "dump memory $filename &int_array \(char *\) &int_array + sizeof int_array" "$msg" {
+	-re ".*\[Ee\]rror.*$gdb_prompt $"      { fail $msg }
+	-re ".*\[Ww\]arning.*$gdb_prompt $"    { fail $msg }
+	-re ".*\[Uu\]ndefined .*$gdb_prompt $" { fail $msg }
+	-re ".*No value to .*$gdb_prompt $"    { fail $msg }
+	-re ".*Missing .*$gdb_prompt $"        { fail $msg }
+	-re ".*$gdb_prompt $"                  { pass $msg }
+    }
+}
+
+proc test_dump_value {filename} {
+    global gdb_prompt
+
+    set msg "dump value into $filename"
+    gdb_test_multiple "dump value $filename int_array" "$msg" {
+	-re ".*\[Ee\]rror.*$gdb_prompt $"      { fail $msg }
+	-re ".*\[Ww\]arning.*$gdb_prompt $"    { fail $msg }
+	-re ".*\[Uu\]ndefined .*$gdb_prompt $" { fail $msg }
+	-re ".*No value to .*$gdb_prompt $"    { fail $msg }
+	-re ".*$gdb_prompt $"                  { pass $msg }
+    }
+}
+
+proc test_append_memory {filename} {
+    global gdb_prompt
+
+    set msg "append memory into $filename"
+    gdb_test_multiple "append memory $filename &int_array \(char *\) &int_array + sizeof int_array" "$msg" {
+	-re ".*\[Ee\]rror.*$gdb_prompt $"      { fail $msg }
+	-re ".*\[Ww\]arning.*$gdb_prompt $"    { fail $msg }
+	-re ".*\[Uu\]ndefined .*$gdb_prompt $" { fail $msg }
+	-re ".*No value to .*$gdb_prompt $"    { fail $msg }
+	-re ".*Missing .*$gdb_prompt $"        { fail $msg }
+	-re ".*$gdb_prompt $"                  { pass $msg }
+    }
+}
+
+proc test_append_value {filename} {
+    global gdb_prompt
+
+    set msg "append value into $filename"
+    gdb_test_multiple "append value $filename int_array" "$msg" {
+	-re ".*\[Ee\]rror.*$gdb_prompt $"      { fail $msg }
+	-re ".*\[Ww\]arning.*$gdb_prompt $"    { fail $msg }
+	-re ".*\[Uu\]ndefined .*$gdb_prompt $" { fail $msg }
+	-re ".*No value to .*$gdb_prompt $"    { fail $msg }
+	-re ".*$gdb_prompt $"                  { pass $msg }
+    }
+}
+
+proc test_restore {filename} {
+    global gdb_prompt
+    global array_size
+
+    set msg "restore from $filename"
+    gdb_test_multiple "restore $filename binary &int_array $array_size $array_size + $array_size" "$msg" {
+	-re ".*\[Ee\]rror.*$gdb_prompt $"      { fail $msg }
+	-re ".*\[Ww\]arning.*$gdb_prompt $"    { fail $msg }
+	-re ".*\[Uu\]ndefined .*$gdb_prompt $" { fail $msg }
+	-re "Restoring binary file .*$gdb_prompt $" { pass $msg }
+    }
+}
+
+foreach file $filenames {
+    # Use double quote as filename quote
+    set quote "\""
+    test_dump_memory "$quote$file$quote"
+    test_append_memory "$quote$file$quote"
+    test_restore "$quote$file$quote"
+    test_dump_value "$quote$file$quote"
+    test_append_value "$quote$file$quote"
+    test_restore "$quote$file$quote"
+
+    # Use single quote as filename quote
+    set quote "'"
+
+    # Escape single quote in filename
+    regsub -all "'" $file "\\'" file
+    test_dump_memory "$quote$file$quote"
+    test_append_memory "$quote$file$quote"
+    test_restore "$quote$file$quote"
+    test_dump_value "$quote$file$quote"
+    test_append_value "$quote$file$quote"
+    test_restore "$quote$file$quote"
+}
