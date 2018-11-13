@@ -104,8 +104,9 @@ enum
 /* Helper functions for Rom Patch and ICT.  */
 static void riscv_elf_ict_init (void);
 static void riscv_elf_relocate_ict_table (struct bfd_link_info *, bfd *);
+static void riscv_elf_ict_hash_to_exported_table (void);
 
-/* Indirect call symbol hash table.  */
+/* The entry of the ict hash table.  */
 struct elf_riscv_ict_hash_entry
 {
   struct bfd_hash_entry root;
@@ -113,11 +114,20 @@ struct elf_riscv_ict_hash_entry
   unsigned int order;
 };
 
-/* ICT model.  */
+/* The entry of the exported ict table.  */
+struct riscv_elf_ict_table_entry
+{
+  struct elf_link_hash_entry *h;
+  unsigned int order;
+  struct riscv_elf_ict_table_entry *next;
+};
+
 /* The exported indirect call table.  */
 static FILE *ict_table_file = NULL;
 /* Indirect call hash table.  */
 static struct bfd_hash_table indirect_call_table;
+/* The exported indirect call table.  */
+static struct riscv_elf_ict_table_entry *exported_ict_table_head = NULL;
 
 #define ARCH_SIZE NN
 
@@ -1964,8 +1974,11 @@ riscv_elf_relocate_section (bfd *output_bfd,
   if (htab->target_optimize & RISCV_RELAX_EXECIT_ON)
     riscv_elf_relocate_execit_table (info, input_bfd);
 
+  /* Before relocating the ict table, we should order the
+     ict hash entries according to the `entry->order'.  */
+  riscv_elf_ict_hash_to_exported_table ();
   /* Relocation for .nds.ict table.  */
-  if (indirect_call_table.count > 0)
+  if (exported_ict_table_head)
     riscv_elf_relocate_ict_table (info, output_bfd);
 
   relend = relocs + input_section->reloc_count;
@@ -8009,6 +8022,67 @@ riscv_elf_ict_init (void)
 }
 
 static void
+riscv_elf_insert_exported_ict_table (struct elf_riscv_ict_hash_entry *entry)
+{
+  struct riscv_elf_ict_table_entry *head, *new;
+
+  head = exported_ict_table_head;
+  while (head
+	 && strcmp (head->h->root.root.string,
+		    entry->h->root.root.string) != 0)
+    head = head->next;
+
+  if (head)
+    /* This symbol is already in the exported ict table.  */
+    return;
+  else
+    {
+      /* We need to insert the symbol into the exported ict table.  */
+      new = (struct riscv_elf_ict_table_entry *) bfd_malloc
+	(sizeof (struct riscv_elf_ict_table_entry));
+      new->h = entry->h;
+      new->order = entry->order;
+
+      head = exported_ict_table_head;
+      if (head == NULL
+	  || head->order >= new->order)
+	{
+	  new->next = head;
+	  exported_ict_table_head = new;
+	}
+      else
+	{
+	  while (head->next != NULL
+		 && head->next->order < new->order)
+	    head = head->next;
+	  new->next = head->next;
+	  head->next = new;
+	}
+    }
+}
+
+static void
+riscv_elf_ict_hash_to_exported_table (void)
+{
+  unsigned int i;
+
+  indirect_call_table.frozen = 1;
+  for (i = 0; i < indirect_call_table.size; i++)
+    {
+      struct bfd_hash_entry *p;
+
+      for (p = indirect_call_table.table[i]; p != NULL; p = p->next)
+	{
+	  struct elf_riscv_ict_hash_entry *entry;
+
+	  entry = (struct elf_riscv_ict_hash_entry *) p;
+	  riscv_elf_insert_exported_ict_table (entry);
+	}
+    }
+  indirect_call_table.frozen = 0;
+}
+
+static void
 riscv_elf_relocate_ict_table (struct bfd_link_info *info, bfd *output_bfd)
 {
   bfd *input_bfd;
@@ -8018,8 +8092,9 @@ riscv_elf_relocate_ict_table (struct bfd_link_info *info, bfd *output_bfd)
   struct bfd_link_hash_entry *ict_sym;
   bfd_vma relocation, ict_base;
   bfd_vma insn;
-  unsigned int i, ict_entry_size;
+  unsigned int ict_entry_size;
   static bfd_boolean done = FALSE;
+  struct riscv_elf_ict_table_entry *head;
 
   if (done)
     return;
@@ -8053,90 +8128,83 @@ riscv_elf_relocate_ict_table (struct bfd_link_info *info, bfd *output_bfd)
   else
     ict_entry_size = 4;
 
-  indirect_call_table.frozen = 1;
-  for (i = 0; i < indirect_call_table.size; i++)
+  head = exported_ict_table_head;
+  while (head)
     {
-      struct bfd_hash_entry *p;
+      int order, ict_table_reloc;
 
-      for (p = indirect_call_table.table[i]; p != NULL; p = p->next)
+      h = head->h;
+      order = head->order;
+      if ((h->root.type == bfd_link_hash_defined
+	   || h->root.type == bfd_link_hash_defweak)
+	  && h->root.u.def.section != NULL
+	  && h->root.u.def.section->output_section != NULL)
 	{
-	  struct elf_riscv_ict_hash_entry *entry;
-	  int order, ict_table_reloc;
+	  relocation = h->root.u.def.value
+	    + h->root.u.def.section->output_section->vma
+	    + h->root.u.def.section->output_offset;
 
-	  entry = (struct elf_riscv_ict_hash_entry *) p;
-	  h = entry->h;
-	  order = entry->order;
-
-	  if ((h->root.type == bfd_link_hash_defined
-	       || h->root.type == bfd_link_hash_defweak)
-	      && h->root.u.def.section != NULL
-	      && h->root.u.def.section->output_section != NULL)
+	  if (ict_model == 0)
 	    {
-	      relocation = h->root.u.def.value
-		+ h->root.u.def.section->output_section->vma
-		+ h->root.u.def.section->output_offset;
+	      /* Tiny model: jal ra, 0x0.  */
+	      bfd_put_32 (output_bfd, RISCV_UJTYPE (JAL, X_T1, 0x0),
+			  contents + (order * ict_entry_size));
+	      ict_table_reloc = R_RISCV_JAL;
 
-	      if (ict_model == 0)
+	      /* PC is the entry of ICT table.  */
+	      relocation -= ict_base + (order * ict_entry_size);
+	      if (!VALID_UJTYPE_IMM (relocation))
 		{
-		  /* Tiny model: jal ra, 0x0.  */
-		  bfd_put_32 (output_bfd, RISCV_UJTYPE (JAL, X_T1, 0x0),
-			      contents + (order * ict_entry_size));
-		  ict_table_reloc = R_RISCV_JAL;
-
-		  /* PC is the entry of ICT table.  */
-		  relocation -= ict_base + (order * ict_entry_size);
-		  if (!VALID_UJTYPE_IMM (relocation))
-		    {
-		      (*_bfd_error_handler)
-			(_("Linker: relocate ICT table failed with tiny model.\n"));
-		      return;
-		    }
-		  relocation = ENCODE_UJTYPE_IMM (relocation);
+		  (*_bfd_error_handler)
+		    (_("Linker: relocate ICT table failed with tiny model.\n"));
+		  return;
 		}
-	      else if (ict_model == 1)
-		{
-		  /* Small model: tail t1, 0x0.  */
-		  bfd_put_32 (output_bfd, RISCV_UTYPE (AUIPC, X_T1, 0x0),
-			      contents + (order * ict_entry_size));
-		  bfd_put_32 (output_bfd, RISCV_ITYPE (JALR, X_T1, X_T1, 0),
-			      contents + (order * ict_entry_size) + 4);
-		  ict_table_reloc = R_RISCV_CALL;
-
-		  /* PC is the entry of ICT table.  */
-		  relocation -= ict_base + (order * ict_entry_size);
-		  if (ARCH_SIZE > 32
-		      && !VALID_UTYPE_IMM (RISCV_CONST_HIGH_PART (relocation)))
-		    {
-		      (*_bfd_error_handler)
-			(_("Linker: relocate ICT table failed with small model.\n"));
-		      return;
-		    }
-		  relocation =
-		    ENCODE_UTYPE_IMM (RISCV_CONST_HIGH_PART (relocation))
-		    | (ENCODE_ITYPE_IMM (relocation) << 32);
-		}
-	      else if (ict_model == 2)
-		{
-		  /* Large model: .dword 0x0.  */
-		  ict_table_reloc =  R_RISCV_64;
-		}
-
-	      reloc_howto_type *howto =
-		riscv_elf_rtype_to_howto (ict_table_reloc);
-	      insn = bfd_get (howto->bitsize, output_bfd,
-			      contents + (order * ict_entry_size));
-	      insn = (insn & ~howto->dst_mask)
-		| (relocation & howto->dst_mask);
-	      bfd_put (howto->bitsize, output_bfd, insn,
-		       contents + (order * ict_entry_size));
+	      relocation = ENCODE_UJTYPE_IMM (relocation);
 	    }
-	  else
+	  else if (ict_model == 1)
 	    {
-	      /* Should we allow the case that the ict symbol is undefined?  */
+	      /* Small model: tail t1, 0x0.  */
+	      bfd_put_32 (output_bfd, RISCV_UTYPE (AUIPC, X_T1, 0x0),
+			  contents + (order * ict_entry_size));
+	      bfd_put_32 (output_bfd, RISCV_ITYPE (JALR, X_T1, X_T1, 0),
+			  contents + (order * ict_entry_size) + 4);
+	      ict_table_reloc = R_RISCV_CALL;
+
+	      /* PC is the entry of ICT table.  */
+	      relocation -= ict_base + (order * ict_entry_size);
+	      if (ARCH_SIZE > 32
+		  && !VALID_UTYPE_IMM (RISCV_CONST_HIGH_PART (relocation)))
+		{
+		  (*_bfd_error_handler)
+		    (_("Linker: relocate ICT table failed with small model.\n"));
+		  return;
+		}
+	      relocation =
+		ENCODE_UTYPE_IMM (RISCV_CONST_HIGH_PART (relocation))
+		| (ENCODE_ITYPE_IMM (relocation) << 32);
 	    }
+	  else if (ict_model == 2)
+	    {
+	      /* Large model: .dword 0x0.  */
+	      ict_table_reloc =  R_RISCV_64;
+	    }
+
+	  reloc_howto_type *howto =
+	    riscv_elf_rtype_to_howto (ict_table_reloc);
+	  insn = bfd_get (howto->bitsize, output_bfd,
+			  contents + (order * ict_entry_size));
+	  insn = (insn & ~howto->dst_mask)
+	    | (relocation & howto->dst_mask);
+	  bfd_put (howto->bitsize, output_bfd, insn,
+		   contents + (order * ict_entry_size));
 	}
+      else
+	{
+	  /* Should we allow the case that the ict symbol is undefined?  */
+	}
+
+      head = head->next;
     }
-  indirect_call_table.frozen = 0;
 }
 
 /* End of ROM Patch with Indirect Call Table (ICT).  */
@@ -8759,19 +8827,23 @@ static void
 riscv_elf_final_write_processing (bfd *abfd ATTRIBUTE_UNUSED,
 				  bfd_boolean linker ATTRIBUTE_UNUSED)
 {
-  unsigned int i;
+  struct riscv_elf_ict_table_entry *head;
 
   /* Export the ICT table if needed.  */
-  if (indirect_call_table.count > 0)
+  /* TODO: should we support new linker option to let user
+     can define their own ict table name.  */
+  if (exported_ict_table_head)
     {
       ict_table_file = fopen ("nds_ict.s", FOPEN_WT);
       if(ict_table_file == NULL)
 	{
-	  (*_bfd_error_handler) (_("Warning: Fail to genertare nds_ict.s."));
+	  (*_bfd_error_handler) (_("Error: Fail to genertare nds_ict.s."));
 	  return;
 	}
 
       fprintf (ict_table_file, "\t.section " RISCV_ICT_SECTION ", \"ax\"\n");
+      /* The exported ict table can not be linked with the patch code
+	 that use the different ict model.  */
       if (ict_model == 0)
 	fprintf (ict_table_file, "\t.attribute\tTag_ict_model, \"tiny\"\n");
       else if (ict_model == 1)
@@ -8781,28 +8853,31 @@ riscv_elf_final_write_processing (bfd *abfd ATTRIBUTE_UNUSED,
       fprintf (ict_table_file, ".global _INDIRECT_CALL_TABLE_BASE_\n"
 	       "_INDIRECT_CALL_TABLE_BASE_:\n");
 
-      /* Output each entries of ict table.  */
-      /* TODO: Should we output the ict table in order?  */
-      indirect_call_table.frozen = 1;
-      for (i = 0; i < indirect_call_table.size; i++)
+      /* Output each entry of ict table according to different
+	 ict models.  */
+      head = exported_ict_table_head;
+      while (head)
 	{
-	  struct bfd_hash_entry *p;
-	  struct elf_riscv_ict_hash_entry *entry;
-
-	  for (p = indirect_call_table.table[i]; p != NULL; p = p->next)
-	    {
-	      entry = (struct elf_riscv_ict_hash_entry *) p;
-	      if (ict_model == 2)
-		fprintf (ict_table_file, "\t.dword\t%s\n", entry->root.string);
-	      else if (ict_model == 1)
-		fprintf (ict_table_file, "\ttail\t%s\n", entry->root.string);
-	      else
-		fprintf (ict_table_file, "\tjal\tt1, %s\n", entry->root.string);
-	    }
+	  if (ict_model == 2)
+	    fprintf (ict_table_file, "\t.dword\t%s\n",
+		     head->h->root.root.string);
+	  else if (ict_model == 1)
+	    fprintf (ict_table_file, "\ttail\t%s\n",
+		     head->h->root.root.string);
+	  else
+	    fprintf (ict_table_file, "\tjal\tt1, %s\n",
+		     head->h->root.root.string);
+	  head = head->next;
 	}
-      indirect_call_table.frozen = 0;
 
-      /* Finish to export the ict table, close it.  */
+      /* Finish exporting the ict table, close it
+	 and free the unused data.  */
+      while (exported_ict_table_head)
+	{
+	  head = exported_ict_table_head;
+	  exported_ict_table_head = exported_ict_table_head->next;
+	  free (head);
+	}
       fclose (ict_table_file);
     }
 }
