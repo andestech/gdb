@@ -232,6 +232,18 @@ riscv_elf_after_open (void)
 	}
     }
 
+  /* The ict table is imported in this link time.  */
+  asection *sec;
+  for (abfd = link_info.input_bfds; abfd != NULL; abfd = abfd->link.next)
+    {
+      sec = bfd_get_section_by_name (abfd, ".nds.ict");
+      if (sec)
+	{
+	  find_imported_ict_table = TRUE;
+	  break;
+	}
+    }
+
   /* Call the standard elf routine.  */
   gld${EMULATION_NAME}_after_open ();
 }
@@ -253,7 +265,10 @@ riscv_elf_after_check_relocs (void)
 	     | SEC_IN_MEMORY | SEC_KEEP
 	     | SEC_RELOC);
 
-  if (ict_table_entries > 0)
+  /* We only create the ict table and _INDIRECT_CALL_TABLE_BASE_ symbol
+     when we compiling the main project at the first link-time.  */
+  if (!find_imported_ict_table
+      && ict_table_entries > 0)
     {
       for (abfd = link_info.input_bfds; abfd != NULL; abfd = abfd->link.next)
 	{
