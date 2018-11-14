@@ -86,8 +86,6 @@ static int optimize = 0;
 static int optimize_for_space = 0;
 /* Save option -mict-model for ICT model setting.  */
 static const char *ict_model = NULL;
-/* Set it to TRUE if we have parsed the symbol with ICT suffix.  */
-static bfd_boolean find_ict_suffix = FALSE;
 
 /* This is the set of options which the .option pseudo-op may modify.  */
 
@@ -5505,37 +5503,19 @@ riscv_set_public_attributes (void)
 			       DEFAULT_STRICT_ALIGN);
   if (!attributes_set_explicitly[Tag_stack_align])
     bfd_elf_add_proc_attr_int (stdoutput, Tag_stack_align,
-		       DEFAULT_STACK_ALIGN);
-
-  if (!find_ict_suffix)
-    {
-      /* Remove the ict attribute setting.  */
-      obj_attribute_list *attr_list;
-      for (attr_list = elf_other_obj_attributes (stdoutput)[OBJ_ATTR_PROC];
-	   attr_list;
-	   attr_list = attr_list->next)
-	{
-	  if (attr_list->tag == Tag_ict_version)
-	    attr_list->attr.i = 0;
-	  if (attr_list->tag == Tag_ict_model)
-	    attr_list->attr.s = NULL;
-	}
-    }
-  else
-    {
-      if (ict_model
-	  && !(attributes_set_explicitly[Tag_ict_version
-	       + NUM_KNOWN_OBJ_ATTRIBUTES
-	       - TAG_VALUE_BEGIN_V5]))
-	bfd_elf_add_proc_attr_int (stdoutput, Tag_ict_version,
-				   DEFAULT_ICT_VERSION);
-      if (ict_model
-	  && !(attributes_set_explicitly[Tag_ict_model
-	       + NUM_KNOWN_OBJ_ATTRIBUTES
-	       - TAG_VALUE_BEGIN_V5]))
-	bfd_elf_add_proc_attr_string (stdoutput, Tag_ict_model,
-				      ict_model);
-    }
+			       DEFAULT_STACK_ALIGN);
+  if (ict_model
+      && !attributes_set_explicitly[Tag_ict_version
+      + NUM_KNOWN_OBJ_ATTRIBUTES
+      - TAG_VALUE_BEGIN_V5])
+    bfd_elf_add_proc_attr_int (stdoutput, Tag_ict_version,
+			       DEFAULT_ICT_VERSION);
+  if (ict_model
+      && !attributes_set_explicitly[Tag_ict_model
+      + NUM_KNOWN_OBJ_ATTRIBUTES
+      - TAG_VALUE_BEGIN_V5])
+    bfd_elf_add_proc_attr_string (stdoutput, Tag_ict_model,
+				  ict_model);
 }
 
 /* Add the default contents for the .riscv.attributes section.  */
@@ -5683,7 +5663,6 @@ riscv_parse_name (char const *name, expressionS *exprP,
       input_line_pointer = next;
       *nextcharP = *input_line_pointer;
       *input_line_pointer = '\0';
-      find_ict_suffix = TRUE;
     }
 
   return 1;
