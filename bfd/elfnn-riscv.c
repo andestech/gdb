@@ -579,6 +579,59 @@ bad_static_reloc (bfd *abfd, unsigned r_type, struct elf_link_hash_entry *h)
   return FALSE;
 }
 
+static bfd_boolean
+riscv_elf_update_ict_hash_table (bfd *abfd, asection *sec,
+				 struct elf_link_hash_entry *h,
+				 const Elf_Internal_Rela *rel)
+{
+  /* I am not sure why the addend isn't allowed.  */
+  if (rel->r_addend != 0)
+    {
+      (*_bfd_error_handler)
+	(_("%B %s: Error: Rom-patch relocation offset: 0x%lx "
+	   "with addend 0x%lx\n"),
+	 abfd, sec->name, rel->r_offset, rel->r_addend);
+      return FALSE;
+    }
+
+  if (h)
+    {
+      struct elf_riscv_ict_hash_entry *entry;
+      /* First, just check whether the ICT symbol is the hash table.  */
+      entry = (struct elf_riscv_ict_hash_entry *)
+	bfd_hash_lookup (&indirect_call_table, h->root.root.string,
+			 FALSE, FALSE);
+      if (entry == NULL)
+	{
+	  /* Create new hash entry.  */
+	  entry = (struct elf_riscv_ict_hash_entry *)
+	    bfd_hash_lookup (&indirect_call_table, h->root.root.string,
+			     TRUE, TRUE);
+	  if (entry == NULL)
+	    {
+	      (*_bfd_error_handler)
+		(_("%B: failed to create indirect call %s hash table\n"),
+		 abfd, h->root.root.string);
+	      return FALSE;
+	    }
+
+	  riscv_elf_hash_entry (h)->indirect_call = TRUE;
+	  entry->h = h;
+	  entry->order = ict_table_entries;
+	  ict_table_entries++;
+	}
+    }
+  else
+    {
+      /* Rom-patch functions cannot be local.  */
+      (*_bfd_error_handler)
+	(_("%B: indirect call relocation with local symbol.\n"), abfd);
+      return FALSE;
+    }
+
+  return TRUE;
+}
+
 /* Look through the relocs for a section during the first phase, and
    allocate space in the global offset table or procedure linkage
    table.  */
@@ -592,6 +645,8 @@ riscv_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
   struct elf_link_hash_entry **sym_hashes;
   const Elf_Internal_Rela *rel;
   asection *sreloc = NULL;
+  bfd_boolean update_ict_hash_first = FALSE;
+  bfd_boolean update_ict_hash_second = FALSE;
 
   if (bfd_link_relocatable (info))
     return TRUE;
@@ -602,6 +657,20 @@ riscv_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 
   if (htab->elf.dynobj == NULL)
     htab->elf.dynobj = abfd;
+
+  /* We update the ict hash table when we encountering the
+     R_RISCV_XXX_ICT_XXX relocations at the first link-time.
+     Then we also need to update the ict hash table when we
+     compiling the patch code at the second link-time, but
+     the relocations in the imported ict table are not belonged
+     to the ICT.  Therefore, we handle the following relocations
+     specially at the second link-time: R_RISCV_JAL, R_RISCV_CALL,
+     and R_RISCV_64.  */
+  if (!find_imported_ict_table)
+    update_ict_hash_first = TRUE;
+  else if (find_imported_ict_table
+	   && sec == bfd_get_section_by_name (abfd, ".nds.ict"))
+    update_ict_hash_second = TRUE;
 
   for (rel = relocs; rel < relocs + sec->reloc_count; rel++)
     {
@@ -667,6 +736,11 @@ riscv_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 
 	case R_RISCV_CALL:
 	case R_RISCV_JAL:
+	  if (update_ict_hash_second
+	      && !riscv_elf_update_ict_hash_table (abfd, sec, h, rel))
+	    return FALSE;
+	  /* Fall through.  */
+
 	case R_RISCV_BRANCH:
 	case R_RISCV_RVC_BRANCH:
 	case R_RISCV_RVC_JUMP:
@@ -683,6 +757,12 @@ riscv_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	    riscv_elf_record_tls_type (abfd, h, r_symndx, GOT_TLS_LE);
 	  goto static_reloc;
 
+	case R_RISCV_64:
+	  if (update_ict_hash_second
+	      && !riscv_elf_update_ict_hash_table (abfd, sec, h, rel))
+	    return FALSE;
+	  /* Fall through.  */
+
 	case R_RISCV_HI20:
 	  if (bfd_link_pic (info))
 	    return bad_static_reloc (abfd, r_type, h);
@@ -691,7 +771,6 @@ riscv_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	case R_RISCV_COPY:
 	case R_RISCV_JUMP_SLOT:
 	case R_RISCV_RELATIVE:
-	case R_RISCV_64:
 	case R_RISCV_32:
 	  /* Fall through.  */
 
@@ -822,50 +901,9 @@ riscv_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	case R_RISCV_PCREL_ICT_HI20:
 	case R_RISCV_CALL_ICT:
 	case R_RISCV_ICT_64:
-	  /* I am not sure why the addend isn't allowed.  */
-	  if (rel->r_addend != 0)
-	    {
-	      (*_bfd_error_handler)
-		(_("%B %s: Error: Rom-patch relocation offset: 0x%lx "
-		   "with addend 0x%lx\n"),
-		 abfd, sec->name, rel->r_offset, rel->r_addend);
-	      return FALSE;
-	    }
-
-	  if (h)
-	    {
-	      struct elf_riscv_ict_hash_entry *entry;
-	      /* First, just check whether the ICT symbol is the hash table.  */
-	      entry = (struct elf_riscv_ict_hash_entry *)
-		bfd_hash_lookup (&indirect_call_table, h->root.root.string,
-				 FALSE, FALSE);
-	      if (entry == NULL)
-		{
-		  /* Create new hash entry.  */
-		  entry = (struct elf_riscv_ict_hash_entry *)
-		    bfd_hash_lookup (&indirect_call_table, h->root.root.string,
-				     TRUE, TRUE);
-		  if (entry == NULL)
-		    {
-		      (*_bfd_error_handler)
-			(_("%B: failed to create indirect call %s hash table\n"),
-			 abfd, h->root.root.string);
-		      return FALSE;
-		    }
-
-		  riscv_elf_hash_entry (h)->indirect_call = TRUE;
-		  entry->h = h;
-		  entry->order = ict_table_entries;
-		  ict_table_entries++;
-		}
-	    }
-	  else
-	    {
-	      /* Rom-patch functions cannot be local.  */
-	      (*_bfd_error_handler)
-		(_("%B: indirect call relocation with local symbol.\n"), abfd);
-	      return FALSE;
-	    }
+	  if (update_ict_hash_first
+	      && !riscv_elf_update_ict_hash_table (abfd, sec, h, rel))
+	    return FALSE;
 	  break;
 
 	default:
@@ -1978,7 +2016,11 @@ riscv_elf_relocate_section (bfd *output_bfd,
      ict hash entries according to the `entry->order'.  */
   riscv_elf_ict_hash_to_exported_table ();
   /* Relocation for .nds.ict table.  */
-  if (exported_ict_table_head)
+  /* When compiling the patch code, we don't need to relocate
+     the imported ict table in the riscv_elf_relocate_ict_table
+     since the imported ict table already have it's relocations.  */
+  if (!find_imported_ict_table
+      && exported_ict_table_head)
     riscv_elf_relocate_ict_table (info, output_bfd);
 
   relend = relocs + input_section->reloc_count;
@@ -2064,12 +2106,18 @@ riscv_elf_relocate_section (bfd *output_bfd,
 			  && UNDEFWEAK_NO_DYNAMIC_RELOC (info, h));
 
       /* We don't allow any mixed indirect call function.  */
-      if (h && riscv_elf_hash_entry (h)->indirect_call
-	  && r_type != R_RISCV_ICT_HI20
-	  && r_type != R_RISCV_ICT_LO12_I
-	  && r_type != R_RISCV_PCREL_ICT_HI20
-	  && r_type != R_RISCV_CALL_ICT
-	  && r_type != R_RISCV_ICT_64)
+      if (find_imported_ict_table
+	  && input_section == bfd_get_section_by_name (input_bfd, ".nds.ict"))
+	{
+	  /* Don't need to check the mixed ict cases for the
+	     imported ict table at the second link-time.  */
+	}
+      else if (h && riscv_elf_hash_entry (h)->indirect_call
+	       && r_type != R_RISCV_ICT_HI20
+	       && r_type != R_RISCV_ICT_LO12_I
+	       && r_type != R_RISCV_PCREL_ICT_HI20
+	       && r_type != R_RISCV_CALL_ICT
+	       && r_type != R_RISCV_ICT_64)
 	{
 	  (*_bfd_error_handler)
 	    (_("%B: Error: there are mixed indirect call function \'%s\' "
