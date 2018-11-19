@@ -761,7 +761,7 @@ riscv_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	  if (update_ict_hash_second
 	      && !riscv_elf_update_ict_hash_table (abfd, sec, h, rel))
 	    return FALSE;
-	  /* Fall through.  */
+	  goto static_reloc;
 
 	case R_RISCV_HI20:
 	  if (bfd_link_pic (info))
