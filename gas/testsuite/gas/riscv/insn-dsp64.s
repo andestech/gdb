@@ -1,5 +1,5 @@
 dsp64:
-	# Table 26. (RV64 Only) SIMD 32-bit Add/Subtract Instructions (30)
+	# Table 25. (RV64 Only) SIMD 32-bit Add/Subtract Instructions (30)
 	add32     r1, r2, r3
 	radd32    r1, r2, r3
 	uradd32   r1, r2, r3
@@ -31,7 +31,7 @@ dsp64:
 	kstsa32   r1, r2, r3
 	ukstsa32  r1, r2, r3
 
-	# Table 27. (RV64 Only) SIMD 32-bit Shift Instructions (14)
+	# Table 26. (RV64 Only) SIMD 32-bit Shift Instructions (14)
 	sra32     r1, r2, r3
 	srai32    r1, r2, 5
 	sra32.u   r1, r2, r3
@@ -47,14 +47,14 @@ dsp64:
 	kslra32   r1, r2, r3
 	kslra32.u r1, r2, r3
 
-	# Table 28. (RV64 Only) SIMD 32-bit Miscellaneous Instructions (5)
+	# Table 27. (RV64 Only) SIMD 32-bit Miscellaneous Instructions (5)
 	smin32    r1, r2, r3
 	umin32    r1, r2, r3
 	smax32    r1, r2, r3
 	umax32    r1, r2, r3
 	kabs32    r1, r2
 
-	# Table 29. (RV64 Only) SIMD Q15 saturating Multiply Instructions (9)
+	# Table 28. (RV64 Only) SIMD Q15 saturating Multiply Instructions (9)
 	khmbb16   r1, r2, r3
 	khmbt16   r1, r2, r3
 	khmtt16   r1, r2, r3
@@ -65,17 +65,17 @@ dsp64:
 	kdmabt16  r1, r2, r3
 	kdmatt16  r1, r2, r3
 
-	# Table 30. (RV64 Only) 32-bit Multiply Instructions (3)
+	# Table 29. (RV64 Only) 32-bit Multiply Instructions (3)
 	smbb32    r1, r2, r3
 	smbt32    r1, r2, r3
 	smtt32    r1, r2, r3
 
-	# Table 31. (RV64 Only) 32-bit Multiply & Add Instructions (3)
+	# Table 30. (RV64 Only) 32-bit Multiply & Add Instructions (3)
 	kmabb32   r1, r2, r3
 	kmabt32   r1, r2, r3
 	kmatt32   r1, r2, r3
 
-	# Table 32. (RV64 Only) 32-bit Parallel Multiply & Add Instructions (12)
+	# Table 31. (RV64 Only) 32-bit Parallel Multiply & Add Instructions (12)
 	kmda32    r1, r2, r3
 	kmxda32   r1, r2, r3
 	kmada32   r1, r2, r3
@@ -89,9 +89,11 @@ dsp64:
 	smdrs32   r1, r2, r3
 	smxds32   r1, r2, r3
 
-	# Table 33. (RV64 Only) Non-SIMD 32-bit Shift Instructions (1)
+	# Table 32. (RV64 Only) Non-SIMD 32-bit Shift Instructions (1)
 	sraiw.u   r1, r2, 5
 
-	# Table 34. ZOL Mechanism Instructions (2)
-	mtlbi     16
-	mtlei     16
+	# Table 33. 32-bit Packing Instructions (4)
+	pkbb32    r1, r2, r3
+	pkbt32    r1, r2, r3
+	pktt32    r1, r2, r3
+	pktb32    r1, r2, r3

@@ -186,16 +186,9 @@ dsp:
 	# Table 14. Signed 16-bit Multiply 64-bit Add/Subtract Instructions (1)
 	smal      r2, r4, r6
 
-	# Table 15. Partial-SIMD Miscellaneous Instructions (14)
+	# Table 15. Partial-SIMD Miscellaneous Instructions (7)
 	sclip32   r1, r2, 5
 	uclip32   r1, r2, 5
-	bitrev    r1, r2, r3
-	bitrevi   r1, r2, 5
-	wext      r1, r2, r3
-	wexti     r1, r2, 5
-	bpick     r1, r2, r3, r4
-	insb      r1, r2, 2
-	kabsw     r1, r2
 	clrs32    r1, r2
 	clz32     r1, r2
 	clo32     r1, r2
@@ -241,16 +234,20 @@ dsp:
 	smslda    r2, r4, r6
 	smslxda   r2, r4, r6
 
-	# Table 20. Non-SIMD Q15 saturation ALU Instructions (5)
+	# Table 20. Non-SIMD Q15 saturation ALU Instructions (7)
 	kaddh     r1, r2, r3
 	ksubh     r1, r2, r3
 	khmbb     r1, r2, r3
 	khmbt     r1, r2, r3
 	khmtt     r1, r2, r3
+	ukaddh    r1, r2, r3
+	uksubh    r1, r2, r3
 
-	# Table 21. Non-SIMD Q31 saturation ALU Instructions (12)
+	# Table 21. Non-SIMD Q31 saturation ALU Instructions (15)
 	kaddw     r1, r2, r3
+	ukaddw    r1, r2, r3
 	ksubw     r1, r2, r3
+	uksubw    r1, r2, r3
 	kdmbb     r1, r2, r3
 	kdmbt     r1, r2, r3
 	kdmtt     r1, r2, r3
@@ -261,6 +258,7 @@ dsp:
 	kdmabb    r1, r2, r3
 	kdmabt    r1, r2, r3
 	kdmatt    r1, r2, r3
+	kabsw     r1, r2
 
 	# Table 22. 32-bit Add/Sub Instructions (4)
 	raddw     r1, r2, r3
@@ -272,7 +270,17 @@ dsp:
 	csrr      r1, satp	#rdov     r1
 	csrrci    r1, satp, 1	#clrov
 
-	# Table 24. Non-SIMD Miscellaneous Instructions (3)
+	# Table 24. Non-SIMD Miscellaneous Instructions (9)
 	ave       r1, r2, r3
 	sra.u     r1, r2, r3
 	srai.u    r1, r2, 5
+	bitrev    r1, r2, r3
+	bitrevi   r1, r2, 5
+	wext      r1, r2, r3
+	wexti     r1, r2, 5
+	bpick     r1, r2, r3, r4
+	insb      r1, r2, 2
+
+	# Table 34. ZOL Mechanism Instructions (2)
+	mtlbi     16
+	mtlei     16
