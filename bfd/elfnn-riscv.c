@@ -4985,6 +4985,25 @@ riscv_convert_16_to_32 (uint16_t insn16, uint32_t *insn32)
   return 1;
 }
 
+static bfd_boolean
+riscv_convert_16_to_32_reloc (Elf_Internal_Rela **irel)
+{
+  if (*irel)
+    {
+      unsigned sym = ELFNN_R_SYM ((*irel)->r_info);
+      if (ELFNN_R_TYPE ((*irel)->r_info) == R_RISCV_RVC_BRANCH)
+	(*irel)->r_info = ELFNN_R_INFO (sym, R_RISCV_BRANCH);
+      else if (ELFNN_R_TYPE ((*irel)->r_info) == R_RISCV_RVC_JUMP)
+	(*irel)->r_info = ELFNN_R_INFO (sym, R_RISCV_JAL);
+      else if (ELFNN_R_TYPE ((*irel)->r_info) == R_RISCV_RVC_LUI)
+	(*irel)->r_info = ELFNN_R_INFO (sym, R_RISCV_HI20);
+      else
+	/* Unsupported reloc converting.  */
+	return FALSE;
+    }
+  return TRUE;
+}
+
 /* Check whether the ranges of 32-bit branch and jal is valid between
    the rvc candidate and alignment point after doing target aligned.  */
 
@@ -5187,9 +5206,14 @@ riscv_relax_avoid_BTB_miss (bfd *abfd, asection *sec, bfd_vma align_off,
 	  bfd_put_32 (abfd, insn, contents + align_off + insn16_off - count);
 
 	  /* Adjust the location of all of the relocs.  */
+	  /* Maybe we should enhance the error msg here.  */
 	  for (i = 0; i < sec->reloc_count; i++)
 	    if (data->relocs[i].r_offset == align_off + insn16_off)
-	      data->relocs[i].r_offset -= count;
+	      {
+		Elf_Internal_Rela *reloc = &(data->relocs[i]);
+		riscv_convert_16_to_32_reloc (&reloc);
+		data->relocs[i].r_offset -= count;
+	      }
 
 	  for (i = 0; i < symtab_hdr->sh_info; i++)
 	    {
@@ -5399,7 +5423,11 @@ _bfd_riscv_relax_align (bfd *abfd, asection *sec,
 	      if (riscv_convert_16_to_32 (insn16, &insn))
 		{
 		  insn16_off = where;
-		  irel_save = irel;
+		  if (irel->r_offset == where)
+		    irel_save = irel;
+		  else
+		    /* There is no relocation for the insn16.  */
+		    irel_save = NULL;
 		}
 	      /* This RVC can not be converted to RVI.  */
 	      where += 2;
@@ -5418,16 +5446,19 @@ _bfd_riscv_relax_align (bfd *abfd, asection *sec,
       && target_align_check_branch_range (abfd, sec, insn16_off, rel->r_offset,
 					  2, link_info))
     {
-      if (irel_save)
+	/* The rvc insn with relocs has been converted to 32-bit instruction
+           above, therefore, we modify it's reloc, too.  */
+      if (!riscv_convert_16_to_32_reloc (&irel_save))
 	{
-	  /* The rvc branch/jal has been converted to 32-bit instruction
-	     above, therefore, we modify it's relocation, too.  */
-	  unsigned sym = ELFNN_R_SYM (irel_save->r_info);
-	  if (ELFNN_R_TYPE (irel_save->r_info) == R_RISCV_RVC_BRANCH)
-	    irel_save->r_info = ELFNN_R_INFO (sym, R_RISCV_BRANCH);
-	  else if (ELFNN_R_TYPE (irel_save->r_info) == R_RISCV_RVC_JUMP)
-	    irel_save->r_info = ELFNN_R_INFO (sym, R_RISCV_JAL);
+	  (*_bfd_error_handler)
+	    (_("%B(%A+0x%lx): Unsupported reloc %d when converting "
+	       "insn from 16-bit to 32-bit for target aligned"),
+	     abfd, sym_sec, irel_save->r_offset,
+	     ELFNN_R_TYPE (irel_save->r_info));
+	  bfd_set_error (bfd_error_bad_value);
+	  return FALSE;
 	}
+
       riscv_relax_shift_bytes (abfd, sec, insn16_off, rel->r_offset, 2, insn);
 
       /* Check BTB miss after target aligned.  */
@@ -8610,10 +8641,10 @@ riscv_relocation_check (struct bfd_link_info *info,
 	  result |= DATA_EXIST;
 	  break;
 	case R_RISCV_SUB16:
-	case R_RISCV_RVC_LUI:
 	  result |= (2 << 24);
 	  result |= DATA_EXIST;
 	  break;
+	case R_RISCV_RVC_LUI:
 	case R_RISCV_RVC_JUMP:
 	case R_RISCV_RVC_BRANCH:
 	  if (!optimize)
