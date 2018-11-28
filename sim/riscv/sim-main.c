@@ -3555,7 +3555,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	TRACE_REG (cpu, rd);
       }
       break;
-    case MATCH_KSLL:
+    case MATCH_KSLLW:
       {
 	int64_t res;
 	int sa = cpu->regs[rb].u & 0xf;
@@ -3573,7 +3573,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       }
       break;
 
-    case MATCH_KSLLI:
+    case MATCH_KSLLIW:
       {
 	int64_t res;
 
