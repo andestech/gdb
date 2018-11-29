@@ -66,8 +66,8 @@ WHICH = aarch64 \
 	microblaze-with-stack-protect \
 	mips64-linux mips64-dsp-linux \
 	nios2-linux \
-	riscv/riscv32-linux \
-	riscv/riscv64-linux \
+	riscv/riscv32-linux riscv/riscv32d-linux \
+	riscv/riscv64-linux riscv/riscv64d-linux \
 	rs6000/powerpc-32 \
 	rs6000/powerpc-32l rs6000/powerpc-altivec32l rs6000/powerpc-e500l \
 	rs6000/powerpc-64l rs6000/powerpc-altivec64l rs6000/powerpc-vsx32l \
@@ -103,7 +103,9 @@ nios2-linux-expedite = sp,pc
 or1k-expedite = r1,npc
 powerpc-expedite = r1,pc
 riscv/riscv32-linux-expedite = fp,sp,pc
+riscv/riscv32d-linux-expedite = fp,sp,pc
 riscv/riscv64-linux-expedite = fp,sp,pc
+riscv/riscv64d-linux-expedite = fp,sp,pc
 rs6000/powerpc-cell32l-expedite = r1,pc,r0,orig_r3,r4
 rs6000/powerpc-cell64l-expedite = r1,pc,r0,orig_r3,r4
 s390-linux32-expedite = r14,r15,pswa
@@ -148,7 +150,9 @@ XMLTOC = \
 	nios2.xml \
 	or1k.xml \
 	riscv/riscv32-linux.xml \
+	riscv/riscv32d-linux.xml \
 	riscv/riscv64-linux.xml \
+	riscv/riscv64d-linux.xml \
 	rs6000/powerpc-32.xml \
 	rs6000/powerpc-32l.xml \
 	rs6000/powerpc-403.xml \
@@ -356,7 +360,11 @@ $(outdir)/i386/x32-avx-avx512-linux.dat: i386/x32-core.xml i386/64bit-avx.xml \
 riscv/32bit-csr.xml riscv/64bit-csr.xml: ../../include/opcode/riscv-opc.h
 	./riscv/rebuild-csr-xml.sh ../../include/opcode/riscv-opc.h ./riscv
 $(outdir)/riscv/riscv32-linux.dat: riscv/riscv32-linux.xml riscv/32bit-cpu.xml
+$(outdir)/riscv/riscv32d-linux.dat: riscv/riscv32d-linux.xml \
+				riscv/32bit-cpu.xml riscv/64bit-fpu.xml
 $(outdir)/riscv/riscv64-linux.dat: riscv/riscv64-linux.xml riscv/64bit-cpu.xml
+$(outdir)/riscv/riscv64d-linux.dat: riscv/riscv64d-linux.xml \
+				riscv/64bit-cpu.xml riscv/64bit-fpu.xml
 
 # 'all' doesn't build the C files, so don't delete them in 'clean'
 # either.
