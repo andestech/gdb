@@ -289,7 +289,10 @@ case "${target}" in
 			srv_xmlfiles="${srv_xmlfiles} rs6000/power-fpu.xml"
 			srv_lynxos=yes
 			;;
-  riscv*-*-linux*)	srv_tgtobj="$srv_linux_obj linux-riscv-low.o"
+  riscv*-*-linux*)	srv_regobj="riscv64-linux.o"
+			srv_tgtobj="$srv_linux_obj linux-riscv-low.o"
+			srv_xmlfiles="riscv/riscv64-linux.xml"
+			srv_xmlfiles="${srv_xmlfiles} riscv/64bit-cpu.xml"
 			srv_linux_regsets=yes
 			srv_linux_thread_db=yes
 			;;

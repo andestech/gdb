@@ -629,6 +629,9 @@ common/%.o: ../common/%.c
 %-generated.c: ../regformats/i386/%.dat | $(regdat_sh)
 	$(ECHO_REGDAT) $(SHELL) $(regdat_sh) $< $@
 
+%-generated.c: ../regformats/riscv/%.dat | $(regdat_sh)
+	$(SHELL) $(regdat_sh) $< $@
+
 %-generated.c: ../regformats/rs6000/%.dat | $(regdat_sh)
 	$(ECHO_REGDAT) $(SHELL) $(regdat_sh) $< $@
 
