@@ -5388,6 +5388,7 @@ riscv_write_out_arch_attr (void)
 {
   unsigned int i;
   obj_attribute *attr;
+  bfd_boolean e_ext;
 
   /* If we can't find any attribute directive, update the arch hash
      table according to the `all_subsets' set by the `-march' option
@@ -5443,6 +5444,7 @@ riscv_write_out_arch_attr (void)
     strncat (out_arch, "rv64", 4);
 
   /* Update standard arch attributes.  */
+  e_ext = FALSE;
   for (i = 0; arch_info[i].name; i++)
     {
       struct arch_info *info;
@@ -5451,6 +5453,15 @@ riscv_write_out_arch_attr (void)
 	(arch_info_hash, arch_info[i].name);
       if (info && info->valid)
 	{
+	  if (strcmp(info->name, "e") == 0)
+	    e_ext = TRUE;
+
+	  if ((strcmp(info->name, "i") == 0) && e_ext)
+	    {
+	      info->valid = 0;
+	      continue;
+	    }
+
 	  strncat(out_arch, info->name, strlen (info->name));
 	  strncat(out_arch, info->v_major, strlen (info->v_major));
 	  strncat(out_arch, "p", 1);
