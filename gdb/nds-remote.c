@@ -451,10 +451,10 @@ nds_elf_check_get_register (unsigned int csr_no)
   switch (csr_no)
     {
     case 0x301: /* misa */
-      regnum = user_reg_map_name_to_regnum (gdbarch, "csr769", -1);
+      regnum = user_reg_map_name_to_regnum (gdbarch, "misa", -1);
       break;
     case 0xfc2: /* mmsc_cfg */
-      regnum = user_reg_map_name_to_regnum (gdbarch, "csr4034", -1);
+      regnum = user_reg_map_name_to_regnum (gdbarch, "mmsc_cfg", -1);
       break;
     default:
       break;
