@@ -273,9 +273,10 @@ nds_query_profiling_command (const char *args, int from_tty)
 
   gdb_argv argv (args);
 
+  /* operator!= is overloading, so it can be used to check if args is NULL.  */
   if (argv != NULL)
     {
-      if (argv[0] != NULL && argv[0] != '\0')
+      if (argv[0] != NULL && *argv[0] != '\0')
 	arg_cpu = argv[0];
 
       if (argv[1] != NULL && strcmp (argv[1], "ide") == 0)
