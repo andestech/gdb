@@ -121,8 +121,6 @@ nds_print_human_table (int col, int row, const char *scsv)
 {
   int i;
   char *buf = NULL;
-  struct bound_minimal_symbol msymbol;
-  CORE_ADDR addr;
   char symbol_text[256];
   struct cleanup *cleanup = NULL;
 
@@ -143,7 +141,6 @@ nds_print_human_table (int col, int row, const char *scsv)
   i = 0;
   while (*buf != '\0' && i < col)
     {
-      CORE_ADDR addr = 0;
       char *sc = strchr (buf, ';');
 
       *sc = '\0';
@@ -176,6 +173,7 @@ nds_print_human_table (int col, int row, const char *scsv)
       ui_out_emit_tuple tuple_emitter (current_uiout, "row");
       char *sc = NULL;
 
+      symbol_text[0] = '\0';
       for (i = 0; i < col; i++, buf = sc + 1)
 	{
 	  sc = strchr (buf, ';');
@@ -190,28 +188,30 @@ nds_print_human_table (int col, int row, const char *scsv)
 	  if (i == 0)
 	    {
 	      /* Assume first column is address.  */
-	      addr = strtol (buf, NULL, 16);
-	      msymbol = lookup_minimal_symbol_by_pc (addr);
+	      CORE_ADDR addr = strtol (buf, NULL, 16);
+	      struct bound_minimal_symbol msymbol
+		= lookup_minimal_symbol_by_pc (addr);
+
+	      /* Get msymbol name to be output at end of row.  */
+	      if (!msymbol.minsym)
+		{
+		  strcpy (symbol_text, "\n");
+		}
+	      else
+		{
+		  const char *name = MSYMBOL_PRINT_NAME (msymbol.minsym);
+		  int offset = addr - BMSYMBOL_VALUE_ADDRESS (msymbol);
+
+		  if (offset)
+		    xsnprintf (symbol_text, sizeof (symbol_text),
+			       "%s + 0x%x\n", name, offset);
+		  else
+		    xsnprintf (symbol_text, sizeof (symbol_text), "%s\n",
+			       name);
+		}
 	    }
 	}
 
-      /* Output msymbol name at end of row.  */
-      if (!msymbol.minsym)
-	{
-	  strcpy (symbol_text, "\n");
-	}
-      else
-	{
-	  const char *name = MSYMBOL_PRINT_NAME (msymbol.minsym);
-	  int offset = addr - BMSYMBOL_VALUE_ADDRESS (msymbol);
-
-	  if (offset)
-	    xsnprintf (symbol_text, sizeof (symbol_text),
-		       "%s + 0x%x\n", name, offset);
-	  else
-	    xsnprintf (symbol_text, sizeof (symbol_text), "%s\n",
-		       name);
-	}
       current_uiout->text (symbol_text);
     }
 
