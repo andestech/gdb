@@ -706,15 +706,10 @@ nds_print_acr_command (const char *args, int from_tty)
   char *str_p;
   gdb_byte *acr_content;
 
-  if (args == NULL)
-    {
-      fprintf_unfiltered (gdb_stdout, "<usage>: nds print <acr_name>\n");
-      return;
-    }
-
   /* Parse arguments.  */
   gdb_argv argv (args);
 
+  /* operator== is overloading, so it can be used to check if args is NULL.  */
   if (argv == NULL || argv[0] == NULL)
     {
       fprintf_unfiltered (gdb_stdout, "<usage>: nds print <acr_name>\n");
@@ -815,16 +810,10 @@ nds_set_acr_command (const char *args, int from_tty)
   const char *val_str, *str_p;
   gdb_byte *acr_content = NULL;
 
-  if (args == NULL)
-    {
-      fprintf_unfiltered (gdb_stdout,
-			  "<usage>: nds set <acr_name> <hex_str>\n");
-      return;
-    }
-
   /* Parse arguments.  */
   gdb_argv argv (args);
 
+  /* operator== is overloading, so it can be used to check if args is NULL.  */
   if (argv == NULL || argv[0] == NULL || argv[1] == NULL)
     {
       fprintf_unfiltered (gdb_stdout,
