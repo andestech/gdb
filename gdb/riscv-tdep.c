@@ -3225,6 +3225,16 @@ riscv_setup_register_aliases (struct gdbarch *gdbarch,
 {
   for (auto &reg : reg_set->registers)
     {
+      /* info registers command will search register name space and
+	 user name space, so we cannot create an alias for the optional,
+	 but non-present register.  */
+      if (reg.required_p == false)
+	{
+	  /* Check the existence through TDESC_REGISTER_NAME.  */
+	  const char *name = tdesc_register_name (gdbarch, reg.regnum);
+	  if (name == NULL || name[0] == '\0')
+	    continue;
+	}
       /* The first item in the names list is the preferred name for the
          register, this is what RISCV_REGISTER_NAME returns, and so we
          don't need to create an alias with that name here.  */
