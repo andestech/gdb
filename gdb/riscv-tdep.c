@@ -3320,7 +3320,11 @@ riscv_gdbarch_init (struct gdbarch_info info,
       valid_p &= riscv_check_tdesc_feature (tdesc_data, feature_fpu,
                                             &riscv_freg_feature);
 
-      int bitsize = tdesc_register_bitsize (feature_fpu, "ft0");
+      int bitsize;
+      if (tdesc_unnumbered_register (feature_fpu, "ft0") == 1)
+	bitsize = tdesc_register_bitsize (feature_fpu, "ft0");
+      else
+	bitsize = tdesc_register_bitsize (feature_fpu, "f0");
       features.flen = (bitsize / 8);
 
       if (riscv_debug_gdbarch)
