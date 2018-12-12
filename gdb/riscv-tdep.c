@@ -211,9 +211,9 @@ static const struct riscv_register_feature riscv_freg_feature =
    { RISCV_FIRST_FP_REGNUM + 30, { "ft10", "f30" }, true },
    { RISCV_FIRST_FP_REGNUM + 31, { "ft11", "f31" }, true },
 
-   { RISCV_CSR_FFLAGS_REGNUM, { "fflags" }, true },
-   { RISCV_CSR_FRM_REGNUM, { "frm" }, true },
-   { RISCV_CSR_FCSR_REGNUM, { "fcsr" }, true },
+   { RISCV_CSR_FFLAGS_REGNUM, { "fflags", "csr1" }, true },
+   { RISCV_CSR_FRM_REGNUM, { "frm", "csr2" }, true },
+   { RISCV_CSR_FCSR_REGNUM, { "fcsr", "csr3" }, true },
 
  }
 };
