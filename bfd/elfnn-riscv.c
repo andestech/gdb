@@ -9027,7 +9027,8 @@ riscv_elf_modify_segment_map (bfd *abfd,
 	  m->count = 1;
 	  m->sections[0] = sec;
 	  /* Add it to the last.  */
-	  m_prev->next = m;
+	  if (m_prev)
+	    m_prev->next = m;
 	}
     }
 
