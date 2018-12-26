@@ -3474,7 +3474,7 @@ riscv_parse_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
 {
   const char *standard_arch = "imafdqcpx";
   char *name;
-  char ver[4];
+  char ver[32];
   struct arch_info *non_standard_arch = NULL;
   int version_i, version_o, find_arch_i, find_arch_o, first_X_arch;
 
