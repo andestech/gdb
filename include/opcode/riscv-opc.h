@@ -3349,6 +3349,17 @@ funct6 VM  VS2  VS1/RS1/IMM funct3 VD   opcode
 #define CSR_MSAVEEPC2 0x7d9
 #define CSR_MSAVECAUSE2 0x7da
 #define CSR_SCOUNTINHIBIT 0x9e0
+#define CSR_UDCAUSE 0x809
+#define CSR_WFE 0x810
+#define CSR_SLEEPVALUE 0x811
+#define CSR_TXEVT 0x812
+#define CSR_MPPIB 0x7f0
+#define CSR_MFIOB 0x7f1
+#define CSR_MTVT 0x307
+#define CSR_MNXTI 0x345
+#define CSR_MINTSTATUS 0x346
+#define CSR_MSCRATCHCSW 0x348
+#define CSR_MSCRATCHCSWL 0x349
 
 /* These registers are present in priv spec 1.9.1, dropped in 1.10.  */
 #define CSR_HSTATUS 0x200
@@ -4347,6 +4358,17 @@ DECLARE_CSR(msavecause1, CSR_MSAVECAUSE1)
 DECLARE_CSR(msaveepc2, CSR_MSAVEEPC2)
 DECLARE_CSR(msavecause2, CSR_MSAVECAUSE2)
 DECLARE_CSR(scountinhibit, CSR_SCOUNTINHIBIT)
+DECLARE_CSR(udcause, CSR_UDCAUSE)
+DECLARE_CSR(wfe, CSR_WFE)
+DECLARE_CSR(sleepvalue, CSR_SLEEPVALUE)
+DECLARE_CSR(txevt, CSR_TXEVT)
+DECLARE_CSR(mppib, CSR_MPPIB)
+DECLARE_CSR(mfiob, CSR_MFIOB)
+DECLARE_CSR(mtvt, CSR_MTVT)
+DECLARE_CSR(mnxti, CSR_MNXTI)
+DECLARE_CSR(mintstatus, CSR_MINTSTATUS)
+DECLARE_CSR(mscratchcsw, CSR_MSCRATCHCSW)
+DECLARE_CSR(mscratchcswl, CSR_MSCRATCHCSWL)
 #endif
 #ifdef DECLARE_CSR_ALIAS
 /* Ubadaddr is 0x043 in 1.9.1, but 0x043 is utval in 1.10.  */
