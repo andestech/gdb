@@ -8210,7 +8210,7 @@ riscv_elf_relocate_ict_table (struct bfd_link_info *info, bfd *output_bfd)
   head = exported_ict_table_head;
   while (head)
     {
-      int order, ict_table_reloc;
+      int order, ict_table_reloc = R_RISCV_NONE;
 
       h = head->h;
       order = head->order;
@@ -8267,7 +8267,14 @@ riscv_elf_relocate_ict_table (struct bfd_link_info *info, bfd *output_bfd)
 	      /* Large model: .dword 0x0.  */
 	      ict_table_reloc =  R_RISCV_64;
 	    }
+	  else
+	    {
+	      (*_bfd_error_handler)
+		(_("Linker: Unknown ICT model.\n"));
+	      return;
+	    }
 
+	  BFD_ASSERT (ict_table_reloc != R_RISCV_NONE);
 	  reloc_howto_type *howto =
 	    riscv_elf_rtype_to_howto (ict_table_reloc);
 	  insn = bfd_get (howto->bitsize, output_bfd,
