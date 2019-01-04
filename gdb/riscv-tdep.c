@@ -3147,27 +3147,6 @@ riscv_features_from_gdbarch_info (const struct gdbarch_info info)
   return features;
 }
 
-/* Find a suitable default target description.  Use the contents of INFO,
-   specifically the bfd object being executed, to guide the selection of a
-   suitable default target description.  */
-
-static const struct target_desc *
-riscv_find_default_target_description (const struct gdbarch_info info)
-{
-  /* Extract desired feature set from INFO.  */
-  struct riscv_gdbarch_features features
-    = riscv_features_from_gdbarch_info (info);
-
-  /* If the XLEN field is still 0 then we got nothing useful from INFO.  In
-     this case we fall back to a minimal useful target, 8-byte x-registers,
-     with no floating point.  */
-  if (features.xlen == 0)
-    features.xlen = 8;
-
-  /* Now build a target description based on the feature set.  */
-  return riscv_create_target_description (features);
-}
-
 /* All of the registers in REG_SET are checked for in FEATURE, TDESC_DATA
    is updated with the register numbers for each register as listed in
    REG_SET.  If any register marked as required in REG_SET is not found in
@@ -3274,9 +3253,24 @@ riscv_gdbarch_init (struct gdbarch_info info,
   struct riscv_gdbarch_features features;
   const struct target_desc *tdesc = info.target_desc;
 
+  /* Have a look at what the supplied (if any) bfd object requires of the
+     target, then check that this matches with what the target is
+     providing.  */
+  struct riscv_gdbarch_features abi_features
+    = riscv_features_from_gdbarch_info (info);
+
+  /* If the XLEN field is still 0 then we got nothing useful from INFO.  In
+     this case we fall back to a minimal useful target, 8-byte x-registers,
+     with no floating point.  */
+  if (abi_features.xlen == 0)
+    abi_features.xlen = 8;
+
   /* Ensure we always have a target description.  */
   if (!tdesc_has_registers (tdesc))
-    tdesc = riscv_find_default_target_description (info);
+    {
+      /* Now build a target description based on the feature set.  */
+      tdesc = riscv_create_target_description (abi_features);
+    }
   gdb_assert (tdesc);
 
   if (riscv_debug_gdbarch)
@@ -3358,11 +3352,6 @@ riscv_gdbarch_init (struct gdbarch_info info,
       return NULL;
     }
 
-  /* Have a look at what the supplied (if any) bfd object requires of the
-     target, then check that this matches with what the target is
-     providing.  */
-  struct riscv_gdbarch_features abi_features
-    = riscv_features_from_gdbarch_info (info);
   /* In theory a binary compiled for RV32 could run on an RV64 target,
      however, this has not been tested in GDB yet, so for now we require
      that the requested xlen match the targets xlen.  */
