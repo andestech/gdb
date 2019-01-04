@@ -1657,10 +1657,11 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_UKADD32:
       {
+	int64_t res1;
 	for (i = 0; i < vec32_num; i++)
 	  {
-	    res = *(uptr_a32 + i) + *(uptr_b32 + i);
-	    *(uptr32 + i) = insn_usat_helper (cpu, res, 32);
+	    res1 = (int64_t) *(uptr_a32 + i) + *(uptr_b32 + i);
+	    *(uptr32 + i) = insn_usat_helper (cpu, res1, 32);
 	  }
 	cpu->regs[rd].u = result.u;
 	TRACE_REG (cpu, rd);
@@ -1781,10 +1782,11 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_UKSUB32:
       {
+	int64_t res1;
 	for (i = 0; i < vec32_num; i++)
 	  {
-	    res = *(uptr_a32 + i) - *(uptr_b32 + i);
-	    *(uptr32 + i) = insn_usat_helper (cpu, res, 32);
+	    res1 = (int64_t) *(uptr_a32 + i) - *(uptr_b32 + i);
+	    *(uptr32 + i) = insn_usat_helper (cpu, res1, 32);
 	  }
 	cpu->regs[rd].u = result.u;
 	TRACE_REG (cpu, rd);
@@ -1874,8 +1876,8 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_CRAS32:
       {
 #if (WITH_TARGET_WORD_BITSIZE == 64)
-	result.b32.i0 = cpu->regs[ra].b32.i1 + cpu->regs[rb].b32.i0;
-	result.b32.i1 = cpu->regs[ra].b32.i0 - cpu->regs[rb].b32.i1;
+	result.b32.i1 = cpu->regs[ra].b32.i1 + cpu->regs[rb].b32.i0;
+	result.b32.i0 = cpu->regs[ra].b32.i0 - cpu->regs[rb].b32.i1;
 	cpu->regs[rd].s = result.s;
 	TRACE_REG (cpu, rd);
 #else
@@ -1887,9 +1889,9 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_RCRAS32:
       {
 #if (WITH_TARGET_WORD_BITSIZE == 64)
-	result.b32.i0 = (int32_t) (((int64_t) cpu->regs[ra].b32.i1
+	result.b32.i1 = (int32_t) (((int64_t) cpu->regs[ra].b32.i1
 				   + cpu->regs[rb].b32.i0) >> 1);
-	result.b32.i1 = (int32_t) (((int64_t) cpu->regs[ra].b32.i0
+	result.b32.i0 = (int32_t) (((int64_t) cpu->regs[ra].b32.i0
 				   - cpu->regs[rb].b32.i1) >> 1);
 	cpu->regs[rd].s = result.s;
 	TRACE_REG (cpu, rd);
@@ -1902,9 +1904,9 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_URCRAS32:
       {
 #if (WITH_TARGET_WORD_BITSIZE == 64)
-	result.ub32.i0 = (uint32_t) (((uint64_t) cpu->regs[ra].ub32.i1
+	result.ub32.i1 = (uint32_t) (((uint64_t) cpu->regs[ra].ub32.i1
 				     + cpu->regs[rb].ub32.i0) >> 1);
-	result.ub32.i1 = (uint32_t) (((uint64_t) cpu->regs[ra].ub32.i0
+	result.ub32.i0 = (uint32_t) (((uint64_t) cpu->regs[ra].ub32.i0
 				     - cpu->regs[rb].ub32.i1) >> 1);
 	cpu->regs[rd].u = result.u;
 	TRACE_REG (cpu, rd);
@@ -1917,10 +1919,10 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_KCRAS32:
       {
 #if (WITH_TARGET_WORD_BITSIZE == 64)
-	result.b32.i0 = cpu->regs[ra].b32.i1 + cpu->regs[rb].b32.i0;
-	result.b32.i1 = cpu->regs[ra].b32.i0 - cpu->regs[rb].b32.i1;
-	cpu->regs[rd].b32.i0 = insn_sat_helper (cpu, result.b32.i0, 31);
-	cpu->regs[rd].b32.i1 = insn_sat_helper (cpu, result.b32.i1, 31);
+	int64_t res1 = (int64_t) cpu->regs[ra].b32.i1 + cpu->regs[rb].b32.i0;
+	int64_t res2 = (int64_t) cpu->regs[ra].b32.i0 - cpu->regs[rb].b32.i1;
+	cpu->regs[rd].b32.i0 = insn_sat_helper (cpu, res2, 31);
+	cpu->regs[rd].b32.i1 = insn_sat_helper (cpu, res1, 31);
 	TRACE_REG (cpu, rd);
 #else
 	TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
@@ -1931,10 +1933,10 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_UKCRAS32:
       {
 #if (WITH_TARGET_WORD_BITSIZE == 64)
-	result.ub32.i0 = cpu->regs[ra].ub32.i1 + cpu->regs[rb].ub32.i0;
-	result.ub32.i1 = cpu->regs[ra].ub32.i0 - cpu->regs[rb].ub32.i1;
-	cpu->regs[rd].ub32.i0 = insn_sat_helper (cpu, result.ub32.i0, 32);
-	cpu->regs[rd].ub32.i1 = insn_sat_helper (cpu, result.ub32.i1, 32);
+	int64_t res1 = (int64_t) cpu->regs[ra].ub32.i1 + cpu->regs[rb].ub32.i0;
+	int64_t res2 = (int64_t) cpu->regs[ra].ub32.i0 - cpu->regs[rb].ub32.i1;
+	cpu->regs[rd].ub32.i0 = insn_sat_helper (cpu, res2, 32);
+	cpu->regs[rd].ub32.i1 = insn_sat_helper (cpu, res1, 32);
 	TRACE_REG (cpu, rd);
 #else
 	TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
@@ -2026,8 +2028,8 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_CRSA32:
       {
 #if (WITH_TARGET_WORD_BITSIZE == 64)
-	result.b32.i0 = cpu->regs[ra].b32.i1 - cpu->regs[rb].b32.i0;
-	result.b32.i1 = cpu->regs[ra].b32.i0 + cpu->regs[rb].b32.i1;
+	result.b32.i1 = cpu->regs[ra].b32.i1 - cpu->regs[rb].b32.i0;
+	result.b32.i0 = cpu->regs[ra].b32.i0 + cpu->regs[rb].b32.i1;
 	cpu->regs[rd].s = result.s;
 	TRACE_REG (cpu, rd);
 #else
@@ -2039,9 +2041,9 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_RCRSA32:
       {
 #if (WITH_TARGET_WORD_BITSIZE == 64)
-	result.b32.i0 = (int32_t) (((int64_t) cpu->regs[ra].b32.i1
+	result.b32.i1 = (int32_t) (((int64_t) cpu->regs[ra].b32.i1
 				   - cpu->regs[rb].b32.i0) >> 1);
-	result.b32.i1 = (int32_t) (((int64_t) cpu->regs[ra].b32.i0
+	result.b32.i0 = (int32_t) (((int64_t) cpu->regs[ra].b32.i0
 				   + cpu->regs[rb].b32.i1) >> 1);
 	cpu->regs[rd].s = result.s;
 	TRACE_REG (cpu, rd);
@@ -2054,9 +2056,9 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_URCRSA32:
       {
 #if (WITH_TARGET_WORD_BITSIZE == 64)
-	result.ub32.i0 = (uint32_t) (((uint64_t) cpu->regs[ra].ub32.i1
+	result.ub32.i1 = (uint32_t) (((uint64_t) cpu->regs[ra].ub32.i1
 				     - cpu->regs[rb].ub32.i0) >> 1);
-	result.ub32.i1 = (uint32_t) (((uint64_t) cpu->regs[ra].ub32.i0
+	result.ub32.i0 = (uint32_t) (((uint64_t) cpu->regs[ra].ub32.i0
 				     + cpu->regs[rb].ub32.i1) >> 1);
 	cpu->regs[rd].u = result.u;
 	TRACE_REG (cpu, rd);
@@ -2069,10 +2071,10 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_KCRSA32:
       {
 #if (WITH_TARGET_WORD_BITSIZE == 64)
-	result.b32.i0 = cpu->regs[ra].b32.i1 - cpu->regs[rb].b32.i0;
-	result.b32.i1 = cpu->regs[ra].b32.i0 + cpu->regs[rb].b32.i1;
-	cpu->regs[rd].b32.i0 = insn_sat_helper (cpu, result.b32.i0, 31);
-	cpu->regs[rd].b32.i1 = insn_sat_helper (cpu, result.b32.i1, 31);
+	int64_t res1 = (int64_t) cpu->regs[ra].b32.i1 - cpu->regs[rb].b32.i0;
+	int64_t res2 = (int64_t) cpu->regs[ra].b32.i0 + cpu->regs[rb].b32.i1;
+	cpu->regs[rd].b32.i0 = insn_sat_helper (cpu, res2, 31);
+	cpu->regs[rd].b32.i1 = insn_sat_helper (cpu, res1, 31);
 	TRACE_REG (cpu, rd);
 #else
 	TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
@@ -2083,10 +2085,10 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_UKCRSA32:
       {
 #if (WITH_TARGET_WORD_BITSIZE == 64)
-	result.ub32.i0 = cpu->regs[ra].ub32.i1 - cpu->regs[rb].ub32.i0;
-	result.ub32.i1 = cpu->regs[ra].ub32.i0 + cpu->regs[rb].ub32.i1;
-	cpu->regs[rd].ub32.i0 = insn_sat_helper (cpu, result.ub32.i0, 32);
-	cpu->regs[rd].ub32.i1 = insn_sat_helper (cpu, result.ub32.i1, 32);
+	int64_t res1 = (int64_t) cpu->regs[ra].ub32.i1 - cpu->regs[rb].ub32.i0;
+	int64_t res2 = (int64_t) cpu->regs[ra].ub32.i0 + cpu->regs[rb].ub32.i1;
+	cpu->regs[rd].ub32.i0 = insn_sat_helper (cpu, res2, 32);
+	cpu->regs[rd].ub32.i1 = insn_sat_helper (cpu, res1, 32);
 	TRACE_REG (cpu, rd);
 #else
 	TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
@@ -2700,13 +2702,13 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_KSLL32:
       {
-	int32_t res1, res2;
 	int32_t sa = cpu->regs[rb].u & 0x1f;
 	if (sa != 0)
 	  {
+	    int64_t res;
 	    for (i = 0; i < vec32_num; i++)
 	      {
-		res = (int32_t) *(ptr_a32 + i) << sa;
+		res = (int64_t) *(ptr_a32 + i) << sa;
 		*(ptr32 + i) = insn_sat_helper (cpu, res, 31);
 	      }
 	    cpu->regs[rd].s = result.s;
@@ -2719,13 +2721,12 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_KSLLI32:
       {
-	int32_t res1, res2;
-
 	if (imm5u != 0)
 	  {
+	    int32_t res;
 	    for (i = 0; i < vec32_num; i++)
 	      {
-		res = (int32_t) *(ptr_a32 + i) << imm5u;
+		res = (int64_t) *(ptr_a32 + i) << imm5u;
 		*(ptr32 + i) = insn_sat_helper (cpu, res, 31);
 	      }
 	    cpu->regs[rd].s = result.s;
@@ -2767,23 +2768,29 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_KSLRA32:
       {
-	if (cpu->regs[rb].b16.h0 < 0)
+	uint8_t sh = (cpu->regs[rb].b8.b0 & 0x2f);
+
+	if ((cpu->regs[rb].b8.b0 >> 5) & 1)
 	  {
+	    int new_sh = - (int8_t) (sh | 0xc0);
+	    new_sh = (new_sh == 32) ? 31: new_sh;
+
 	    for (i = 0; i < vec32_num; i++)
 	      {
-		res = *(ptr_a32 + i) >> (-cpu->regs[rb].b16.h0);
+		res = *(ptr_a32 + i) >> new_sh;
 		*(ptr32 + i) = res;
 	      }
 	    cpu->regs[rd].s = result.s;
 	  }
 	else
 	  {
-	    if (cpu->regs[rb].b16.h0 != 0)
+	    if ((cpu->regs[rb].b8.b0 & 0x2f) != 0)
 	      {
+		int64_t res1;
 		for (i = 0; i < vec32_num; i++)
 		  {
-		    res = (int64_t) *(ptr_a32 + i) << (cpu->regs[rb].b16.h0);
-		    *(ptr32 + i) = insn_sat_helper (cpu, res, 31);
+		    res1 = (int64_t) *(ptr_a32 + i) << sh;
+		    *(ptr32 + i) = insn_sat_helper (cpu, res1, 31);
 		  }
 		cpu->regs[rd].s = result.s;
 	      }
@@ -2863,31 +2870,33 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_KSLRA32_U:
       {
-	if (cpu->regs[rb].b16.h0 < 0)
+	uint8_t sh = (cpu->regs[rb].b8.b0 & 0x2f);
+
+	if ((cpu->regs[rb].b8.b0 >> 5) & 1)
 	  {
 	    int rnd;
 	    uint32_t mask_sh;
-	    int sh = -cpu->regs[rb].b8.b0;
-	    sh = (sh == 32) ? 31: sh;
-	    mask_sh = 1UL << (sh - 1);
+	    int new_sh = - (int8_t) (sh | 0xc0);
+	    new_sh = (new_sh == 32) ? 31: new_sh;
+	    mask_sh = 1UL << (new_sh - 1);
 
 	    for (i = 0; i < vec32_num; i++)
 	      {
 		rnd = (*(ptr_a32 + i) & mask_sh) ? 1 : 0;
-		res = *(ptr_a32 + i) >> sh;
-		*(ptr16 + i) = res;
+		res = *(ptr_a32 + i) >> new_sh;
+		*(ptr16 + i) = res + rnd;
 	      }
 	    cpu->regs[rd].s = result.s;
 	  }
 	else
 	  {
-	    int32_t res1, res2;
-	    if (cpu->regs[rb].b16.h0 != 0)
+	    int64_t res1;
+	    if (sh != 0)
 	      {
 		for (i = 0; i < vec32_num; i++)
 		  {
-		    res = (int32_t) *(ptr_a32 + i) << cpu->regs[rb].b16.h0;
-		    *(ptr32 + i) = insn_sat_helper (cpu, res, 31);
+		    res1 = (int64_t) *(ptr_a32 + i) << sh;
+		    *(ptr32 + i) = insn_sat_helper (cpu, res1, 31);
 		  }
 		cpu->regs[rd].s = result.s;
 	      }
@@ -3266,10 +3275,10 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       {
 	for (i = 0; i < vec16_num; i+=2)
 	  {
-	    *(ptr16 + i) = insn_sat_khm_helper (cpu, *(ptr_a16 + (i + 1)),
-						*(ptr_b16 + i));
-	    *(ptr16 + (i + 1)) = insn_sat_khm_helper (cpu, *(ptr_a16 + i),
-						       *(ptr_b16 + (i + 1)));
+	    *(ptr16 + i) = insn_sat_khm_helper (cpu, *(ptr_a16 + i),
+						*(ptr_b16 + (i + 1)));
+	    *(ptr16 + (i + 1)) = insn_sat_khm_helper (cpu, *(ptr_a16 + (i + 1)),
+						       *(ptr_b16 + i));
 	  }
 	cpu->regs[rd].s = result.s;
 	TRACE_REG (cpu, rd);
@@ -3292,10 +3301,10 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       {
 	for (i = 0; i < vec8_num; i+=2)
 	  {
-	    *(ptr8 + i) = insn_sat_khm8_helper (cpu, *(ptr_a8 + (i + 1)),
-						*(ptr_b8 + i));
-	    *(ptr8 + (i + 1)) = insn_sat_khm8_helper (cpu, *(ptr_a8 + i),
-						      *(ptr_b8 + (i + 1)));
+	    *(ptr8 + i) = insn_sat_khm8_helper (cpu, *(ptr_a8 + i),
+						*(ptr_b8 + (i + 1)));
+	    *(ptr8 + (i + 1)) = insn_sat_khm8_helper (cpu, *(ptr_a8 + (i + 1)),
+						      *(ptr_b8 + i));
 	  }
 	cpu->regs[rd].s = result.s;
 	TRACE_REG (cpu, rd);
@@ -3533,6 +3542,10 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	uint32_t val1 = cpu->regs[ra].u;
 	uint32_t val2 = cpu->regs[rb].u;
 	cpu->regs[rd].u = (uint32_t) (((uint64_t) val1 + val2) >> 1);
+
+	if (RISCV_XLEN (cpu) == 64)
+	  cpu->regs[rd].u = ((int64_t)(int32_t) cpu->regs[rd].u);
+
 	TRACE_REG (cpu, rd);
       }
       break;
@@ -3541,6 +3554,10 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	uint32_t val1 = cpu->regs[ra].u;
 	uint32_t val2 = cpu->regs[rb].u;
 	cpu->regs[rd].u = (uint32_t) (((uint64_t) val1 - val2) >> 1);
+
+	if (RISCV_XLEN (cpu) == 64)
+	  cpu->regs[rd].u = ((int64_t)(int32_t) cpu->regs[rd].u);
+
 	TRACE_REG (cpu, rd);
       }
       break;
@@ -3931,7 +3948,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	for (i = 0; i < vec32_num; i++)
 	  {
 	    if ((*(ptr_a32 + i) == 0x80000000)
-		&& (*(ptr_b16 + b16_offset) == 0x8000))
+		&& (*(ptr_b16 + b16_offset) == (int16_t) 0x8000))
 	      {
 		*(ptr32 + i) = 0x7fffffff;
 		CCPU_SR_SET (PSW, PSW_OV);
@@ -3975,7 +3992,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	for (i = 0; i < vec32_num; i++)
 	  {
 	    if ((*(ptr_a32 + i) == 0x80000000)
-		&& (*(ptr_b16 + b16_offset) == 0x8000))
+		&& (*(ptr_b16 + b16_offset) == (int16_t) 0x8000))
 	      {
 		*(ptr32 + i) = 0x7fffffff;
 		CCPU_SR_SET (PSW, PSW_OV);
@@ -4087,9 +4104,18 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int b16_offset = 1;
 	for (i = 0; i < vec32_num; i++)
 	  {
-	    temp.d0 = (int64_t) *(ptr_a32 + i) * *(ptr_b16 + b16_offset);
-	    res = (int64_t) *(ptr_d32 + i) + (int32_t) (temp.d0 >> 15);
-	    *(ptr32 + i) = insn_sat_helper (cpu, res, 31);
+	    if ((*(ptr_a32 + i) == 0x80000000)
+		&& (*(ptr_b16 + b16_offset) == (int16_t) 0x8000))
+	      {
+		*(ptr32 + i) = 0x7fffffff;
+		CCPU_SR_SET (PSW, PSW_OV);
+	      }
+	    else
+	      {
+		temp.d0 = (int64_t) *(ptr_a32 + i) * *(ptr_b16 + b16_offset);
+		res = (int64_t) *(ptr_d32 + i) + (int32_t) (temp.d0 >> 15);
+		*(ptr32 + i) = insn_sat_helper (cpu, res, 31);
+	      }
 	    b16_offset += 2;
 	  }
 	cpu->regs[rd].s = result.s;
@@ -4122,11 +4148,20 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int b16_offset = 1;
 	for (i = 0; i < vec32_num; i++)
 	  {
-	    temp.d0 = (int64_t) *(ptr_a32 + i) * *(ptr_b16 + b16_offset);
-	    rnd_val = (temp.b32.w0 & (1UL << 14)) ? (1L << 15) : 0;
-	    temp.d0 += rnd_val;
-	    res = (int64_t) *(ptr_d32 + i) + (int32_t) (temp.d0 >> 15);
-	    *(ptr32 + i) = insn_sat_helper (cpu, res, 31);
+	    if ((*(ptr_a32 + i) == 0x80000000)
+		&& (*(ptr_b16 + b16_offset) == (int16_t) 0x8000))
+	      {
+		*(ptr32 + i) = 0x7fffffff;
+		CCPU_SR_SET (PSW, PSW_OV);
+	      }
+	    else
+	      {
+		temp.d0 = (int64_t) *(ptr_a32 + i) * *(ptr_b16 + b16_offset);
+		rnd_val = (temp.b32.w0 & (1UL << 14)) ? (1L << 15) : 0;
+		temp.d0 += rnd_val;
+		res = (int64_t) *(ptr_d32 + i) + (int32_t) (temp.d0 >> 15);
+		*(ptr32 + i) = insn_sat_helper (cpu, res, 31);
+	      }
 	  }
 	cpu->regs[rd].s = result.s;
 	TRACE_REG (cpu, rd);
@@ -4147,7 +4182,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_SMBB32:
       {
 #if (WITH_TARGET_WORD_BITSIZE == 64)
-	cpu->regs[rd].s = cpu->regs[ra].b32.i0 * cpu->regs[rb].b32.i0;
+	cpu->regs[rd].s = (int64_t) cpu->regs[ra].b32.i0 * cpu->regs[rb].b32.i0;
 	TRACE_REG (cpu, rd);
 #else
 	TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
@@ -4170,7 +4205,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_SMBT32:
       {
 #if (WITH_TARGET_WORD_BITSIZE == 64)
-	cpu->regs[rd].s = cpu->regs[ra].b32.i0 * cpu->regs[rb].b32.i1;
+	cpu->regs[rd].s = (int64_t) cpu->regs[ra].b32.i0 * cpu->regs[rb].b32.i1;
 	TRACE_REG (cpu, rd);
 #else
 	TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
@@ -4193,7 +4228,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_SMTT32:
       {
 #if (WITH_TARGET_WORD_BITSIZE == 64)
-	cpu->regs[rd].s = cpu->regs[ra].b32.i1 * cpu->regs[rb].b32.i1;
+	cpu->regs[rd].s = (int64_t) cpu->regs[ra].b32.i1 * cpu->regs[rb].b32.i1;
 	TRACE_REG (cpu, rd);
 #else
 	TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
@@ -4630,9 +4665,9 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int64_t result;
 
 #if (WITH_TARGET_WORD_BITSIZE == 64)
-	mul_hi = cpu->regs[rb].b16.h3 * cpu->regs[rb].b16.h2;
+	mul_hi = (int64_t) cpu->regs[rb].b16.h3 * cpu->regs[rb].b16.h2;
 #endif
-	mul_lo = cpu->regs[rb].b16.h1 * cpu->regs[rb].b16.h0;
+	mul_lo = (int64_t) cpu->regs[rb].b16.h1 * cpu->regs[rb].b16.h0;
 
 	if (RISCV_XLEN (cpu) == 32)
 	  {
@@ -4641,7 +4676,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	  }
 	else
 	  {
-	    cpu->regs[rd].s = cpu->regs[rd].s + mul_lo + mul_hi;
+	    cpu->regs[rd].s = cpu->regs[ra].s + mul_lo + mul_hi;
 	  }
 
 	TRACE_REG (cpu, rd);
@@ -5532,13 +5567,17 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       {
 	for (i = 0; i <= vec32_num; i+=2)
 	  {
-	    int32_t res;
-	    *(ptr32 + (i / 2)) = (int32_t) *(ptr_a16 + i) + *(ptr_b16 + i);
-	    res = *(ptr32 + (i / 2)) << 1;
-	    if (*(ptr32 + (i / 2)) != (res >> 1))
+	    if ((*(ptr_a16 + i) == (int16_t) 0x8000)
+		&& (*(ptr_b16 + i) == (int16_t) 0x8000))
 	      {
 		*(ptr32 + (i / 2)) = 0x7fffffff;
 		CCPU_SR_SET (PSW, PSW_OV);
+	      }
+	    else
+	      {
+		int32_t res;
+		res = (int32_t) *(ptr_a16 + i) * *(ptr_b16 + i);
+		*(ptr32 + (i / 2)) =  res << 1;
 	      }
 	  }
 	cpu->regs[rd].s = result.s;
@@ -5566,14 +5605,17 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       {
 	for (i = 0; i <= vec32_num; i+=2)
 	  {
-	    int32_t res;
-	    *(ptr32 + (i / 2)) =
-	      (int32_t) *(ptr_a16 + i) + *(ptr_b16 + (i + 1));
-	    res = *(ptr32 + (i / 2)) << 1;
-	    if (*(ptr32 + (i / 2)) != (res >> 1))
+	    if ((*(ptr_a16 + i) == (int16_t) 0x8000)
+		&& (*(ptr_b16 + (i + 1)) == (int16_t) 0x8000))
 	      {
 		*(ptr32 + (i / 2)) = 0x7fffffff;
 		CCPU_SR_SET (PSW, PSW_OV);
+	      }
+	    else
+	      {
+		int32_t res;
+		res = (int32_t) *(ptr_a16 + i) * *(ptr_b16 + (i + 1));
+		*(ptr32 + (i / 2)) =  res << 1;
 	      }
 	  }
 	cpu->regs[rd].s = result.s;
@@ -5601,14 +5643,17 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       {
 	for (i = 0; i <= vec32_num; i+=2)
 	  {
-	    int32_t res;
-	    *(ptr32 + (i / 2)) =
-	      (int32_t) *(ptr_a16 + (i + 1)) + *(ptr_b16 + (i + 1));
-	    res = *(ptr32 + (i / 2)) << 1;
-	    if (*(ptr32 + (i / 2)) != (res >> 1))
+	    if ((*(ptr_a16 + (i + 1)) == (int16_t) 0x8000)
+		&& (*(ptr_b16 + (i + 1)) == (int16_t) 0x8000))
 	      {
 		*(ptr32 + (i / 2)) = 0x7fffffff;
 		CCPU_SR_SET (PSW, PSW_OV);
+	      }
+	    else
+	      {
+		int32_t res;
+		res = (int32_t) *(ptr_a16 + (i + 1)) * *(ptr_b16 + (i + 1));
+		*(ptr32 + (i / 2)) =  res << 1;
 	      }
 	  }
 	cpu->regs[rd].s = result.s;
