@@ -3360,6 +3360,13 @@ funct6 VM  VS2  VS1/RS1/IMM funct3 VD   opcode
 #define CSR_MINTSTATUS 0x346
 #define CSR_MSCRATCHCSW 0x348
 #define CSR_MSCRATCHCSWL 0x349
+#define CSR_MSAVEDCAUSE1 0x7db
+#define CSR_MSAVEDCAUSE2 0x7dc
+#define CSR_MIRQ_ENTRY 0x7ec
+#define CSR_MINTSEL_JAL 0x7ed
+#define CSR_PUSHMCAUSE 0x7ee
+#define CSR_PUSHMEPC 0x7ef
+#define CSR_UCODE 0x801
 
 /* These registers are present in priv spec 1.9.1, dropped in 1.10.  */
 #define CSR_HSTATUS 0x200
@@ -4369,6 +4376,13 @@ DECLARE_CSR(mnxti, CSR_MNXTI)
 DECLARE_CSR(mintstatus, CSR_MINTSTATUS)
 DECLARE_CSR(mscratchcsw, CSR_MSCRATCHCSW)
 DECLARE_CSR(mscratchcswl, CSR_MSCRATCHCSWL)
+DECLARE_CSR(msavedcause1, CSR_MSAVEDCAUSE1)
+DECLARE_CSR(msavedcause2, CSR_MSAVEDCAUSE2)
+DECLARE_CSR(mirq_entry,CSR_MIRQ_ENTRY)
+DECLARE_CSR(mintsel_jal,CSR_MINTSEL_JAL)
+DECLARE_CSR(pushmcause,CSR_PUSHMCAUSE)
+DECLARE_CSR(pushmepc,CSR_PUSHMEPC)
+DECLARE_CSR(ucode,CSR_UCODE)
 #endif
 #ifdef DECLARE_CSR_ALIAS
 /* Ubadaddr is 0x043 in 1.9.1, but 0x043 is utval in 1.10.  */
