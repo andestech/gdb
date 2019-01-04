@@ -152,22 +152,22 @@ static const struct riscv_register_feature riscv_xreg_feature =
    { RISCV_ZERO_REGNUM + 13, { "a3", "x13" }, true },
    { RISCV_ZERO_REGNUM + 14, { "a4", "x14" }, true },
    { RISCV_ZERO_REGNUM + 15, { "a5", "x15" }, true },
-   { RISCV_ZERO_REGNUM + 16, { "a6", "x16" }, true },
-   { RISCV_ZERO_REGNUM + 17, { "a7", "x17" }, true },
-   { RISCV_ZERO_REGNUM + 18, { "s2", "x18" }, true },
-   { RISCV_ZERO_REGNUM + 19, { "s3", "x19" }, true },
-   { RISCV_ZERO_REGNUM + 20, { "s4", "x20" }, true },
-   { RISCV_ZERO_REGNUM + 21, { "s5", "x21" }, true },
-   { RISCV_ZERO_REGNUM + 22, { "s6", "x22" }, true },
-   { RISCV_ZERO_REGNUM + 23, { "s7", "x23" }, true },
-   { RISCV_ZERO_REGNUM + 24, { "s8", "x24" }, true },
-   { RISCV_ZERO_REGNUM + 25, { "s9", "x25" }, true },
-   { RISCV_ZERO_REGNUM + 26, { "s10", "x26" }, true },
-   { RISCV_ZERO_REGNUM + 27, { "s11", "x27" }, true },
-   { RISCV_ZERO_REGNUM + 28, { "t3", "x28" }, true },
-   { RISCV_ZERO_REGNUM + 29, { "t4", "x29" }, true },
-   { RISCV_ZERO_REGNUM + 30, { "t5", "x30" }, true },
-   { RISCV_ZERO_REGNUM + 31, { "t6", "x31" }, true },
+   { RISCV_ZERO_REGNUM + 16, { "a6", "x16" }, false },
+   { RISCV_ZERO_REGNUM + 17, { "a7", "x17" }, false },
+   { RISCV_ZERO_REGNUM + 18, { "s2", "x18" }, false },
+   { RISCV_ZERO_REGNUM + 19, { "s3", "x19" }, false },
+   { RISCV_ZERO_REGNUM + 20, { "s4", "x20" }, false },
+   { RISCV_ZERO_REGNUM + 21, { "s5", "x21" }, false },
+   { RISCV_ZERO_REGNUM + 22, { "s6", "x22" }, false },
+   { RISCV_ZERO_REGNUM + 23, { "s7", "x23" }, false },
+   { RISCV_ZERO_REGNUM + 24, { "s8", "x24" }, false },
+   { RISCV_ZERO_REGNUM + 25, { "s9", "x25" }, false },
+   { RISCV_ZERO_REGNUM + 26, { "s10", "x26" }, false },
+   { RISCV_ZERO_REGNUM + 27, { "s11", "x27" }, false },
+   { RISCV_ZERO_REGNUM + 28, { "t3", "x28" }, false },
+   { RISCV_ZERO_REGNUM + 29, { "t4", "x29" }, false },
+   { RISCV_ZERO_REGNUM + 30, { "t5", "x30" }, false },
+   { RISCV_ZERO_REGNUM + 31, { "t6", "x31" }, false },
    { RISCV_ZERO_REGNUM + 32, { "pc" }, true }
  }
 };
@@ -415,6 +415,28 @@ static bool
 riscv_has_fp_abi (struct gdbarch *gdbarch)
 {
   return gdbarch_tdep (gdbarch)->abi_features.flen > 0;
+}
+
+enum REG_TYPE
+{
+  GPR,
+  FPR
+};
+
+/* Return the max number of registers usable for given TYPE.  */
+
+static int
+riscv_abi_max_args (struct gdbarch *gdbarch, enum REG_TYPE type)
+{
+  if (type == GPR)
+    {
+      if (gdbarch_tdep (gdbarch)->abi_features.reduced_gpr)
+	return 6;
+      else
+	return 8;
+    }
+  else
+    return 8;
 }
 
 /* Return true if REGNO is a floating pointer register.  */
@@ -1916,8 +1938,10 @@ struct riscv_memory_offsets
 struct riscv_call_info
 {
   riscv_call_info (struct gdbarch *gdbarch)
-    : int_regs (RISCV_A0_REGNUM, RISCV_A0_REGNUM + 7),
-      float_regs (RISCV_FA0_REGNUM, RISCV_FA0_REGNUM + 7)
+    : int_regs (RISCV_A0_REGNUM,
+		RISCV_A0_REGNUM + riscv_abi_max_args (gdbarch, GPR) - 1),
+      float_regs (RISCV_FA0_REGNUM,
+		  RISCV_FA0_REGNUM + riscv_abi_max_args (gdbarch, FPR) - 1)
   {
     xlen = riscv_abi_xlen (gdbarch);
     flen = riscv_abi_flen (gdbarch);
@@ -3130,6 +3154,9 @@ riscv_features_from_gdbarch_info (const struct gdbarch_info info)
 	features.flen = 8;
       else if (e_flags & EF_RISCV_FLOAT_ABI_SINGLE)
 	features.flen = 4;
+
+      if (e_flags & EF_RISCV_RVE)
+	features.reduced_gpr = true;
     }
   else
     {
@@ -3370,6 +3397,12 @@ riscv_gdbarch_init (struct gdbarch_info info,
      abi matches the hardware.  */
   if (abi_features.xlen == 0)
     abi_features.xlen = features.xlen;
+
+  /* ELF that uses full gprs cannot run on target that only supports
+     reduced gprs.  */
+  if (abi_features.reduced_gpr == false && features.reduced_gpr == true)
+    error (_("bfd requires full general registers, "
+	     "but target has only reduced general registers"));
 
   /* Find a candidate among the list of pre-declared architectures.  */
   for (arches = gdbarch_list_lookup_by_info (arches, &info);
