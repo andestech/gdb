@@ -1088,7 +1088,7 @@ ace_ip (char **args, char **str, struct riscv_cl_insn *ip)
      There is an "|" token in discrete format */
   bfd_boolean is_discrete = FALSE;
   char *por = strchr (op_name, '|');
-  char *op_name_discrete;
+  char *op_name_discrete = NULL;
   if (por != NULL)
     {
       is_discrete = TRUE;
@@ -2162,7 +2162,7 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
   char c = 0;
   struct riscv_opcode *insn;
   char *argsStart;
-  unsigned int regno, save_regno;
+  unsigned int regno, save_regno = 0;
   char save_c = 0;
   int argnum;
   const struct percent_op_match *p;
