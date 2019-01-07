@@ -3678,7 +3678,7 @@ riscv_update_arch_info_hash (const char *arch, int version,
 {
   const char *key;
   struct arch_info *info;
-  char str[4];
+  char str[32];
 
   if (!update)
     return;
