@@ -1167,6 +1167,10 @@ public:
       BGE,
       BLTU,
       BGEU,
+      BBC,
+      BBS,
+      BEQC,
+      BNEC,
       /* These are needed for stepping over atomic sequences.  */
       LR,
       SC,
@@ -1331,6 +1335,26 @@ private:
     m_imm.s = EXTRACT_SBTYPE_IMM (ival);
   }
 
+  void decode_b_b_type_insn (enum opcode opcode, ULONGEST ival)
+  {
+    /* For andes insn to branch on bit testing.  */
+    m_opcode = opcode;
+    m_rs1 = decode_register_index (ival, OP_SH_RS1);
+    /* The field rs2 is borrowed to record the necessary cimm.  */
+    m_rs2 = EXTRACT_TYPE_CIMM6 (ival);
+    m_imm.s = EXTRACT_STYPE_IMM10 (ival);
+  }
+
+  void decode_b_c_type_insn (enum opcode opcode, ULONGEST ival)
+  {
+    /* For andes insn to branch on constant comparison.  */
+    m_opcode = opcode;
+    m_rs1 = decode_register_index (ival, OP_SH_RS1);
+    /* The field rs2 is borrowed to record the necessary cimm.  */
+    m_rs2 = EXTRACT_STYPE_IMM7 (ival);
+    m_imm.s = EXTRACT_STYPE_IMM10 (ival);
+  }
+
   void decode_cb_type_insn (enum opcode opcode, ULONGEST ival)
   {
     m_opcode = opcode;
@@ -1452,6 +1476,14 @@ riscv_insn::decode (struct gdbarch *gdbarch, CORE_ADDR pc)
 	decode_b_type_insn (BLTU, ival);
       else if (is_bgeu_insn (ival))
 	decode_b_type_insn (BGEU, ival);
+      else if (is_bbc_insn (ival))
+	decode_b_b_type_insn (BBC, ival);
+      else if (is_bbs_insn (ival))
+	decode_b_b_type_insn (BBS, ival);
+      else if (is_beqc_insn (ival))
+	decode_b_c_type_insn (BEQC, ival);
+      else if (is_bnec_insn (ival))
+	decode_b_c_type_insn (BNEC, ival);
       else if (is_lr_w_insn (ival))
 	decode_r_type_insn (LR, ival);
       else if (is_lr_d_insn (ival))
@@ -3598,6 +3630,38 @@ riscv_next_pc (struct regcache *regcache, CORE_ADDR pc)
       regcache->cooked_read (insn.rs1 (), &src1);
       regcache->cooked_read (insn.rs2 (), &src2);
       if (src1 >= src2)
+	next_pc = pc + insn.imm_signed ();
+    }
+  else if (insn.opcode () == riscv_insn::BBC)
+    {
+      ULONGEST src1, bit;
+      regcache->cooked_read (insn.rs1 (), &src1);
+      bit = insn.rs2 ();
+      if ((src1 & (1 << bit)) == 0)
+	next_pc = pc + insn.imm_signed ();
+    }
+  else if (insn.opcode () == riscv_insn::BBS)
+    {
+      ULONGEST src1, bit;
+      regcache->cooked_read (insn.rs1 (), &src1);
+      bit = insn.rs2 ();
+      if ((src1 & (1 << bit)) != 0)
+	next_pc = pc + insn.imm_signed ();
+    }
+  else if (insn.opcode () == riscv_insn::BEQC)
+    {
+      ULONGEST src1, cimm;
+      regcache->cooked_read (insn.rs1 (), &src1);
+      cimm = insn.rs2 ();
+      if (src1 == cimm)
+	next_pc = pc + insn.imm_signed ();
+    }
+  else if (insn.opcode () == riscv_insn::BNEC)
+    {
+      ULONGEST src1, cimm;
+      regcache->cooked_read (insn.rs1 (), &src1);
+      cimm = insn.rs2 ();
+      if (src1 != cimm)
 	next_pc = pc + insn.imm_signed ();
     }
 
