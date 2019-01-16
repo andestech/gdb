@@ -1712,6 +1712,7 @@ pcrel_access (int destreg, int tempreg, expressionS *ep,
   ep2.X_op = O_symbol;
   ep2.X_add_symbol = make_internal_label ();
   ep2.X_add_number = 0;
+  ep2.X_md = 0; /* for ICT logic within fix_new_exp */
 
   macro_build (ep, "auipc", "d,u", tempreg, hi_reloc);
   macro_build (&ep2, lo_insn, lo_pattern, destreg, tempreg, lo_reloc);
