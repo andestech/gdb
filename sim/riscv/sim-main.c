@@ -3656,8 +3656,10 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_PKTT32:
       {
 #if (WITH_TARGET_WORD_BITSIZE == 64)
-	cpu->regs[rd].b32.i0 = cpu->regs[rb].b32.i1;
-	cpu->regs[rd].b32.i1 = cpu->regs[ra].b32.i1;
+	reg_t result;
+	result.b32.i0 = cpu->regs[rb].b32.i1;
+	result.b32.i1 = cpu->regs[ra].b32.i1;
+	cpu->regs[rd].s = result.s;
 	TRACE_REG (cpu, rd);
 #else
 	TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
@@ -3683,8 +3685,10 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_PKTB32:
       {
 #if (WITH_TARGET_WORD_BITSIZE == 64)
-	cpu->regs[rd].b32.i0 = cpu->regs[rb].b32.i0;
-	cpu->regs[rd].b32.i1 = cpu->regs[ra].b32.i1;
+	reg_t result;
+	result.b32.i0 = cpu->regs[rb].b32.i0;
+	result.b32.i1 = cpu->regs[ra].b32.i1;
+	cpu->regs[rd].s = result.s;
 	TRACE_REG (cpu, rd);
 #else
 	TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
@@ -3710,8 +3714,10 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_PKBT32:
       {
 #if (WITH_TARGET_WORD_BITSIZE == 64)
-	cpu->regs[rd].b32.i0 = cpu->regs[rb].b32.i1;
-	cpu->regs[rd].b32.i1 = cpu->regs[ra].b32.i0;
+	reg_t result;
+	result.b32.i0 = cpu->regs[rb].b32.i1;
+	result.b32.i1 = cpu->regs[ra].b32.i0;
+	cpu->regs[rd].s = result.s;
 	TRACE_REG (cpu, rd);
 #else
 	TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
@@ -3737,8 +3743,10 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_PKBB32:
       {
 #if (WITH_TARGET_WORD_BITSIZE == 64)
-	cpu->regs[rd].b32.i0 = cpu->regs[rb].b32.i0;
-	cpu->regs[rd].b32.i1 = cpu->regs[ra].b32.i0;
+	reg_t result;
+	result.b32.i0 = cpu->regs[rb].b32.i0;
+	result.b32.i1 = cpu->regs[ra].b32.i0;
+	cpu->regs[rd].s = result.s;
 	TRACE_REG (cpu, rd);
 #else
 	TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
