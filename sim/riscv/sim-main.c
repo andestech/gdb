@@ -40,6 +40,9 @@
 #include "gdb/sim-riscv.h"
 
 #include "targ-vals.h"
+#ifdef __MINGW32__
+#include "windows.h"
+#endif
 
 
 #define TRACE_REG(cpu, reg) TRACE_REGISTER (cpu, "wrote %s = %#"PRIxTW, riscv_gpr_names_abi[reg], cpu->regs[reg].u)
@@ -7163,7 +7166,11 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 		char oldpath[1024], newpath[1024];
 		cb_get_string (cb, &sc, oldpath, sizeof (oldpath), sc.arg1);
 		cb_get_string (cb, &sc, newpath, sizeof (newpath), sc.arg2);
+#ifdef __MINGW32__
+		cpu->a0.u = CreateHardLink(newpath, oldpath, NULL);
+#else
 		cpu->a0.u = link (oldpath, newpath);
+#endif
 		break;
 	      }
 #endif
