@@ -21,7 +21,10 @@
 #include "defs.h"
 #include <string.h>
 #include <sys/stat.h>
+#ifndef __MINGW32__
 #include <sys/utsname.h>
+#include <dlfcn.h>
+#endif
 #include <unistd.h>
 #include "gdbcore.h"
 #include "gdbcmd.h"
@@ -35,7 +38,6 @@
 #include "ui-out.h"		/* current_uiout */
 #include "exceptions.h"
 #include <ctype.h>
-#include <dlfcn.h>
 
 #include "elf-bfd.h"		/* elf_elfheader () */
 #include "objfiles.h"
@@ -563,6 +565,7 @@ extern bfd_boolean ace_lib_load_success;
 static void
 nds_handle_ace(const char *ace_lib_path)
 {
+#ifndef __MINGW32__
   chmod(ace_lib_path, S_IRWXU);
   void *dlc = dlopen (ace_lib_path, RTLD_NOW | RTLD_LOCAL);
   char *err;
@@ -584,6 +587,7 @@ nds_handle_ace(const char *ace_lib_path)
     ace_lib_load_success = TRUE;
   else
     fprintf (stderr, _("Fault to load ACE shared library: %s\n"), err);
+#endif
 }
 
 /* Callback for "nds read_acedesc" command.  */
@@ -591,6 +595,7 @@ nds_handle_ace(const char *ace_lib_path)
 static void
 nds_read_ace_desc_command (const char *args, int from_tty)
 {
+#ifndef __MINGW32__
   struct utsname os;
 
   /* What kind of platform am I running at?  */
@@ -614,6 +619,7 @@ nds_read_ace_desc_command (const char *args, int from_tty)
 	  unlink (lib);
 	}
     }
+#endif
 }
 
 
