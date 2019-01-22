@@ -39,7 +39,9 @@
 
 #include "elf-bfd.h"		/* elf_elfheader () */
 #include "objfiles.h"
+#ifndef __MINGW32__
 #include "nds-elf.h"
+#endif
 #include "dis-asm.h"
 
 void nds_init_remote_cmds (void);
@@ -434,6 +436,7 @@ nds_query_target_command (const char *args, int from_tty)
   set_prompt (buf);
 }
 
+#ifndef __MINGW32__
 /* Callback for elf-check.  */
 
 static reg_t
@@ -473,12 +476,14 @@ nds_elf_check_get_register (unsigned int csr_no)
 
   return regval;
 }
+#endif
 
 /* Callback for "nds32 elf-check" command.  */
 
 static void
 nds_elf_check_command (const char *args, int from_tty)
 {
+#ifndef __MINGW32__
   const char *filename = NULL;
   struct stat st;
   int fd;
@@ -521,6 +526,7 @@ nds_elf_check_command (const char *args, int from_tty)
       else
 	error ("%s", check_msg);
     }
+#endif
 }
 
 static void
