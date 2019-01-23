@@ -1021,6 +1021,8 @@ const struct riscv_opcode riscv_opcodes[] =
 {"zunpkd830",   0, {"XDSP", 0}, "d,s",       MATCH_ZUNPKD830, MASK_ZUNPKD830, match_opcode, 0 },
 {"zunpkd831",   0, {"XDSP", 0}, "d,s",       MATCH_ZUNPKD831, MASK_ZUNPKD831, match_opcode, 0 },
 {"zunpkd832",   0, {"XDSP", 0}, "d,s",       MATCH_ZUNPKD832, MASK_ZUNPKD832, match_opcode, 0 },
+{"rdov",        0, {"XDSP", 0}, "d",         MATCH_RDOV, MASK_RDOV, match_opcode, INSN_ALIAS },
+{"clrov",       0, {"XDSP", 0}, "",          MATCH_CLROV, MASK_CLROV, match_opcode, INSN_ALIAS },
 
 /* NDS V5 DSP Extension (RV64 only).  */
 {"add32",       0, {"64XDSP", 0}, "d,s,t",     MATCH_ADD32, MASK_ADD32, match_opcode, 0 },
