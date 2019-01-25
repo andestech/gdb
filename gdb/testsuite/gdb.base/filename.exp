@@ -124,7 +124,7 @@ proc test_restore {filename} {
     global array_size
 
     set msg "restore from $filename"
-    gdb_test_multiple "restore $filename binary &int_array $array_size $array_size + $array_size" "$msg" {
+    gdb_test_multiple "restore $filename binary &int_array 0 $array_size" "$msg" {
 	-re ".*\[Ee\]rror.*$gdb_prompt $"      { fail $msg }
 	-re ".*\[Ww\]arning.*$gdb_prompt $"    { fail $msg }
 	-re ".*\[Uu\]ndefined .*$gdb_prompt $" { fail $msg }
