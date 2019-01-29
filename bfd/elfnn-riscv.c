@@ -4711,7 +4711,7 @@ _bfd_riscv_relax_tls_le (bfd *abfd ATTRIBUTE_UNUSED,
       /* We can delete the unnecessary instruction and reloc.  */
       rel->r_info = ELFNN_R_INFO (0, R_RISCV_NONE);
       *again = TRUE;
-      return TRUE;
+      return riscv_relax_delete_bytes (abfd, sec, rel->r_offset, 4);
 
     default:
       abort ();
