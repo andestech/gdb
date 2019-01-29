@@ -1564,11 +1564,6 @@ riscv_insn::decode (struct gdbarch *gdbarch, CORE_ADDR pc)
 	/* None of the other fields of INSN are valid in this case.  */
 	m_opcode = OTHER;
     }
-  else
-    internal_error (__FILE__, __LINE__,
-		    _("unable to decode %d byte instructions in "
-		      "prologue at %s"), m_length,
-		    core_addr_to_string (pc));
 }
 
 /* The prologue scanner.  This is currently only used for skipping the
