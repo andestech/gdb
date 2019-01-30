@@ -492,7 +492,7 @@ nds_elf_check_command (const char *args, int from_tty)
     error (_("Cannot check ELF without SID/ICE.\n"));
 
   filename = current_program_space->exec_bfd ()->filename;
-  fd = open (filename, O_RDWR, 0);
+  fd = open (filename, O_RDONLY, 0);
 
   if (fd < 0)
     error (_("Cannot open `%s': %s"), filename, strerror (errno));
