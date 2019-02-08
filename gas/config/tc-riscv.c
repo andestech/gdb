@@ -977,7 +977,7 @@ validate_riscv_insn (const struct riscv_opcode *opc, int length)
 	  case 'v': used_bits |= ENCODE_RVC_IMM (-1U); break;
 	  case 'w': break; /* RS1S, constrained to equal RD */
 	  case 'x': break; /* RS2S, constrained to equal RD */
-	  case 'z': break; /* RS1, constrained to equal zero. */
+	  case 'z': break; /* RS2S, contrained to be x0 */
 	  case 'K': used_bits |= ENCODE_RVC_ADDI4SPN_IMM (-1U); break;
 	  case 'L': used_bits |= ENCODE_RVC_ADDI16SP_IMM (-1U); break;
 	  case 'M': used_bits |= ENCODE_RVC_SWSP_IMM (-1U); break;
@@ -2869,12 +2869,11 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 		      || regno != X_SP)
 		    break;
 		  continue;
-		case 'z': /* RS1, constrained to equal zero. */
+		case 'z': /* RS2, contrained to equal x0.  */
 		  if (!reg_lookup (&s, RCLASS_GPR, &regno)
-		      || (regno != 0))
+		      || regno != 0)
 		    break;
 		  continue;
-
 		case '>':
 		  if (my_getSmallExpression (imm_expr, imm_reloc, s, p)
 		      || imm_expr->X_op != O_constant
