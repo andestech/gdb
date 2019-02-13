@@ -3058,7 +3058,7 @@ riscv_in_solib_return_trampoline (struct gdbarch *gdbarch,
    code that should be skipped.  */
 
 #define RISCV_T0_REGNUM 5
-static CORE_ADDR
+CORE_ADDR
 riscv_skip_trampoline_code (struct frame_info *frame, CORE_ADDR pc)
 {
   struct gdbarch *gdbarch = get_frame_arch (frame);

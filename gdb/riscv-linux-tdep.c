@@ -134,6 +134,20 @@ riscv_linux_sigframe_init (const struct tramp_frame *self,
   trad_frame_set_id (this_cache, frame_id_build (frame_sp, func));
 }
 
+extern CORE_ADDR
+riscv_skip_trampoline_code (struct frame_info *frame, CORE_ADDR pc);
+
+static CORE_ADDR
+riscv_linux_skip_trampoline_code (struct frame_info *frame, CORE_ADDR pc)
+{
+  CORE_ADDR target = riscv_skip_trampoline_code (frame, pc);
+
+  if (target != 0)
+    return target;
+
+  return find_solib_trampoline_target (frame, pc);
+}
+
 /* Initialize RISC-V Linux ABI info.  */
 
 static void
@@ -147,7 +161,7 @@ riscv_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 					  : svr4_lp64_fetch_link_map_offsets));
 
   /* GNU/Linux uses SVR4-style shared libraries.  */
-  set_gdbarch_skip_trampoline_code (gdbarch, find_solib_trampoline_target);
+  set_gdbarch_skip_trampoline_code (gdbarch, riscv_linux_skip_trampoline_code);
 
   /* GNU/Linux uses the dynamic linker included in the GNU C Library.  */
   set_gdbarch_skip_solib_resolver (gdbarch, glibc_skip_solib_resolver);
