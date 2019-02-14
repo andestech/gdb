@@ -3568,7 +3568,7 @@ prof_out_read(const char *filename)
     }
 
 
-    // read in total counts to intialize header record
+    // read in total counts to initialize header record
     if (fread(&tcghdr.insn_cnt, sizeof(unsigned long long), 3, ifp) != 3)
     {   fprintf(stderr, _("%s: file too short to be a gmon file\n"),
 	        filename);
@@ -3654,6 +3654,11 @@ prof_out_read(const char *filename)
 		    tcghdr.timeline_level = (unsigned int)(tag - 2);
 		    gmon_input |= INPUT_TIMELINE9;
 		    tag = tl9_read_rec(ifp, filename);
+		    break;
+		case GMON_TAG_BB_COUNT:
+		    bb_read_rec (ifp, filename);
+		    if (fread(&tag, sizeof(tag), 1, ifp) != 1)
+			tag=0x00; // can only be end-of-file
 		    break;
 		case 0xff:
 			return -1;
