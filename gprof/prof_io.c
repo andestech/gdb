@@ -36,6 +36,9 @@
 #include "timeline.h"
 #include "utils.h"
 
+#undef GMON_VERSION
+#define GMON_VERSION 2
+
 extern time_t TotalProfileTime, ReadProfOutDataTime, ParsingProfileDataTime, WriteTemplateFileTime, ReadTemplateFileTime, ProcessDataTime, WriteTimelineBinFileTime, StartTime, EndTime;
 enum{
 	LOW_NIBBLE,
