@@ -77,9 +77,9 @@
 
 // control record types: type is written out
 #define PROFTYPE_OFF 0xC0 // profiling off
-#define PROFDLEN_OFF 13
+#define PROFDLEN_OFF 17
 #define PROFTYPE_ON  0xC0 // profiling on
-#define PROFDLEN_ON  14
+#define PROFDLEN_ON  18
 #define PROFTYPE_ON1 0xC1 // function coverage profiling on
 #define PROFTYPE_ON2 0xC2 // branch coverage profiling on
 #define PROFTYPE_ON3 0xC3 // instruction coverage profiling on
