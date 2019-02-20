@@ -466,7 +466,7 @@ riscv_breakpoint_kind_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr)
       else
 	{
 	  /* Read the opcode byte to determine the instruction length.  */
-	  read_code (*pcptr, buf, 1);
+	  target_read_code (*pcptr, buf, 1);
 	}
 
       if (riscv_debug_breakpoints)
