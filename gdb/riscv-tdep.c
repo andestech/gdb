@@ -579,40 +579,6 @@ riscv_register_name (struct gdbarch *gdbarch, int regnum)
   return name;
 }
 
-/* Construct a type for 64-bit FP registers.  */
-
-static struct type *
-riscv_fpreg_d_type (struct gdbarch *gdbarch)
-{
-  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-
-  if (tdep->riscv_fpreg_d_type == nullptr)
-    {
-      const struct builtin_type *bt = builtin_type (gdbarch);
-
-      /* The type we're building is this: */
-#if 0
-      union __gdb_builtin_type_fpreg_d
-      {
-	float f;
-	double d;
-      };
-#endif
-
-      struct type *t;
-
-      t = arch_composite_type (gdbarch,
-			       "__gdb_builtin_type_fpreg_d", TYPE_CODE_UNION);
-      append_composite_type_field (t, "float", bt->builtin_float);
-      append_composite_type_field (t, "double", bt->builtin_double);
-      TYPE_VECTOR (t) = 1;
-      TYPE_NAME (t) = "builtin_type_fpreg_d";
-      tdep->riscv_fpreg_d_type = t;
-    }
-
-  return tdep->riscv_fpreg_d_type;
-}
-
 typedef struct acr_type
 {
   int adj_bitsize;
@@ -683,21 +649,6 @@ riscv_register_type (struct gdbarch *gdbarch, int regnum)
   /* We want to perform some specific type "fixes" in cases where we feel
      that we really can do better than the target description.  For all
      other cases we just return what the target description says.  */
-  if (riscv_is_fp_regno_p (regnum))
-    {
-      /* This spots the case for RV64 where the double is defined as
-         either 'ieee_double' or 'float' (which is the generic name that
-         converts to 'double' on 64-bit).  In these cases its better to
-         present the registers using a union type.  */
-      int flen = riscv_isa_flen (gdbarch);
-      if (flen == 8
-          && TYPE_CODE (type) == TYPE_CODE_FLT
-          && TYPE_LENGTH (type) == flen
-          && (strcmp (TYPE_NAME (type), "builtin_type_ieee_double") == 0
-              || strcmp (TYPE_NAME (type), "double") == 0))
-        type = riscv_fpreg_d_type (gdbarch);
-    }
-
   if ((regnum == gdbarch_pc_regnum (gdbarch)
        || regnum == RISCV_RA_REGNUM
        || regnum == RISCV_FP_REGNUM
