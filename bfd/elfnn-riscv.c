@@ -3625,6 +3625,12 @@ riscv_parse_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
 /* Merge object attributes from IBFD into output_bfd of INFO.
    Raise an error if there are conflicting attributes.  */
 
+struct priv_spec_version {
+  int major;
+  int minor;
+  int revision;
+};
+
 static bfd_boolean
 riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
 {
@@ -3636,6 +3642,9 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
   bfd_boolean result = TRUE;
   const char *sec_name = get_elf_backend_data (ibfd)->obj_attrs_section;
   unsigned int i;
+  struct priv_spec_version in_priv, out_priv;
+  memset (&in_priv, 0, sizeof (in_priv));
+  memset (&out_priv, 0, sizeof (out_priv));
 
   /* Skip linker created files.  */
   if (ibfd->flags & BFD_LINKER_CREATED)
@@ -3753,15 +3762,16 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
 	  }
 	break;
       case Tag_priv_spec:
+	in_priv.major = in_attr[i].i;
+	out_priv.major = out_attr[i].i;
+	break;
       case Tag_priv_spec_minor:
+	in_priv.minor = in_attr[i].i;
+	out_priv.minor = out_attr[i].i;
+	break;
       case Tag_priv_spec_revision:
-	if (out_attr[i].i != in_attr[i].i)
-	  {
-	    _bfd_error_handler
-	      (_("error: %B: conflicting priv spec version "
-		 "(major/minor/revision)."), ibfd);
-	    result = FALSE;
-	  }
+	in_priv.revision = in_attr[i].i;
+	out_priv.revision = out_attr[i].i;
 	break;
       case Tag_strict_align:
 	out_attr[i].i |= in_attr[i].i;
@@ -3784,6 +3794,30 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
 	result &= _bfd_elf_merge_unknown_attribute_low (ibfd, obfd, i);
       }
     }
+
+    if ((out_priv.major == 0)
+	&& (out_priv.minor == 0)
+	&& (out_priv.revision == 0))
+      {
+	out_attr[Tag_priv_spec].i = in_priv.major;
+	out_attr[Tag_priv_spec_minor].i = in_priv.minor;
+	out_attr[Tag_priv_spec_revision].i = in_priv.revision;
+      }
+    else
+      {
+	if ((!((in_priv.major == 0)
+	       && (in_priv.minor == 0)
+	       && (in_priv.revision == 0)))
+	    && ((in_priv.major != out_priv.major)
+		|| (in_priv.minor != out_priv.minor)
+		|| (in_priv.revision != out_priv.revision)))
+	  {
+	    _bfd_error_handler
+	      (_("error: %B: conflicting priv spec version "
+		 "(major/minor/revision)."), ibfd);
+	    result = FALSE;
+	  }
+      }
 
     /* If out_attr was copied from in_attr then it won't have a type yet.  */
     if (i >= LEAST_KNOWN_OBJ_ATTRIBUTE
