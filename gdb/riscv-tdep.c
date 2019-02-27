@@ -2638,7 +2638,7 @@ riscv_push_dummy_call (struct gdbarch *gdbarch,
 	    gdb_assert (info->argloc[0].c_length <= info->length);
 	    /* FP values in FP registers must be NaN-boxed.  */
 	    if (riscv_is_fp_regno_p (info->argloc[0].loc_data.regno)
-		&& info->argloc[0].c_length < call_info.flen)
+		&& info->argloc[0].c_length == 4)
 	      memset (tmp, -1, sizeof (tmp));
 	    else
 	      memset (tmp, 0, sizeof (tmp));
@@ -2682,7 +2682,7 @@ riscv_push_dummy_call (struct gdbarch *gdbarch,
 			    || second_arg_length <= call_info.xlen);
 		/* FP values in FP registers must be NaN-boxed.  */
 		if (riscv_is_fp_regno_p (info->argloc[1].loc_data.regno)
-		    && second_arg_length < call_info.flen)
+		    && second_arg_length == 4)
 		  memset (tmp, -1, sizeof (tmp));
 		else
 		  memset (tmp, 0, sizeof (tmp));
