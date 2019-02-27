@@ -2795,16 +2795,24 @@ riscv_return_value (struct gdbarch  *gdbarch,
               gdb_assert (info.argloc[0].c_length <= arg_len);
               gdb_assert (info.argloc[0].c_length
 			  <= register_size (gdbarch, regnum));
-
 	      if (readbuf)
 		regcache->cooked_read_part (regnum, 0,
 					    info.argloc[0].c_length,
 					    readbuf);
 
 	      if (writebuf)
-		regcache->cooked_write_part (regnum, 0,
-					     info.argloc[0].c_length,
-					     writebuf);
+		{
+		  gdb_byte tmp [sizeof (ULONGEST)];
+
+		  /* FP values in FP registers must be NaN-boxed.  */
+		  if (riscv_is_fp_regno_p (regnum)
+		      && info.argloc[0].c_length == 4)
+		    memset (tmp, -1, sizeof (tmp));
+		  else
+		    memset (tmp, 0, sizeof (tmp));
+		  memcpy (tmp, writebuf, info.argloc[0].c_length);
+		  regcache->cooked_write (regnum, tmp);
+		}
 
 	      /* A return value in register can have a second part in a
 		 second register.  */
@@ -2831,9 +2839,16 @@ riscv_return_value (struct gdbarch  *gdbarch,
 		      if (writebuf)
 			{
 			  writebuf += info.argloc[1].c_offset;
-			  regcache->cooked_write_part (regnum, 0,
-						       info.argloc[1].c_length,
-						       writebuf);
+			  gdb_byte tmp [sizeof (ULONGEST)];
+
+			  /* FP values in FP registers must be NaN-boxed.  */
+			  if (riscv_is_fp_regno_p (regnum)
+			      && info.argloc[1].c_length == 4)
+			    memset (tmp, -1, sizeof (tmp));
+			  else
+			    memset (tmp, 0, sizeof (tmp));
+			  memcpy (tmp, writebuf, info.argloc[1].c_length);
+			  regcache->cooked_write (regnum, tmp);
 			}
 		      break;
 
