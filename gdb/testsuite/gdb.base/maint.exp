@@ -53,6 +53,8 @@ if {[prepare_for_testing "failed to prepare" $testfile \
     return -1
 }
 
+match_max -i $gdb_spawn_id 200000
+
 # The commands we test here produce many lines of output; disable "press
 # <return> to continue" prompts.
 gdb_test_no_output "set height 0"
