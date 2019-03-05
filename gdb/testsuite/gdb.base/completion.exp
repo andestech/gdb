@@ -61,6 +61,8 @@ if {[prepare_for_testing "failed to prepare" $testfile \
     return -1
 }
 
+match_max -i $gdb_spawn_id 200000
+
 if ![runto_main] then {
         perror "tests suppressed"
 }
