@@ -534,7 +534,7 @@ riscv_register_name (struct gdbarch *gdbarch, int regnum)
      look up the registers preferred name below.  */
   const char *name = tdesc_register_name (gdbarch, regnum);
   if (name == NULL || name[0] == '\0')
-    return NULL;
+    return "";
 
   if (regnum >= RISCV_ZERO_REGNUM && regnum < RISCV_FIRST_FP_REGNUM)
     {
@@ -551,7 +551,7 @@ riscv_register_name (struct gdbarch *gdbarch, int regnum)
           return riscv_freg_feature.registers[regnum].names[0];
         }
       else
-        return NULL;
+        return "";
     }
 
   /* Check that there's no gap between the set of registers handled above,
