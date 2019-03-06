@@ -3270,7 +3270,7 @@ funct6 VM  VS2  VS1/RS1/IMM funct3 VD   opcode
 #define MASK_ZUNPKD832 0xfff0707f
 #define MATCH_RDOV 0x80102073
 #define MASK_RDOV 0xfffff07f
-#define MATCH_CLROV 0x8010f0f3
+#define MATCH_CLROV 0x8010f073
 #define MASK_CLROV 0xffffffff
 /* NDS V5 DSP Extension (RV64 only).  */
 #define MATCH_ADD32 0x4000207f
