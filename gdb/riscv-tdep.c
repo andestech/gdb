@@ -884,7 +884,7 @@ riscv_register_name (struct gdbarch *gdbarch, int regnum)
      look up the registers preferred name below.  */
   const char *name = tdesc_register_name (gdbarch, regnum);
   if (name == NULL || name[0] == '\0')
-    return NULL;
+    return "";
 
   /* We want GDB to use the ABI names for registers even if the target
      gives us a target description with the architectural name.  For
@@ -900,7 +900,7 @@ riscv_register_name (struct gdbarch *gdbarch, int regnum)
       if (riscv_has_fp_regs (gdbarch))
 	return riscv_freg_feature.register_name (regnum);
       else
-	return NULL;
+	return "";
     }
 
   /* Some targets (QEMU) are reporting these three registers twice, once
@@ -913,11 +913,11 @@ riscv_register_name (struct gdbarch *gdbarch, int regnum)
      then hide the registers here by giving them no name.  */
   riscv_gdbarch_tdep *tdep = (riscv_gdbarch_tdep *) gdbarch_tdep (gdbarch);
   if (tdep->duplicate_fflags_regnum == regnum)
-    return NULL;
+    return "";
   if (tdep->duplicate_frm_regnum == regnum)
-    return NULL;
+    return "";
   if (tdep->duplicate_fcsr_regnum == regnum)
-    return NULL;
+    return "";
 
   /* The remaining registers are different.  For all other registers on the
      machine we prefer to see the names that the target description
