@@ -1875,6 +1875,7 @@ nds_ld_list_options (FILE *file)
   fprintf (file, _("\
 \nNDS specific command line options:\n\
   --mexport-symbols=FILE      Exporting global symbols into linker script\n\
+  --m[no-]relax-cross-section-call Disable/enable cross-section relaxations\n\
   --m[no-]execit              Disable/enable link-time EXECIT relaxation\n\
   --mexport-execit=FILE       Export .exec.itable after linking\n\
   --mimport-execit=FILE       Import .exec.itable for EXECIT relaxation\n\
