@@ -38,6 +38,7 @@ static int set_relax_lui = 1;		/* Defalut do relax lui.  */
 static int set_relax_pc = 1;		/* Defalut do relax pc.  */
 static int set_relax_call = 1;		/* Defalut do relax call.  */
 static int set_relax_tls_le = 1;	/* Defalut do relax tls le.  */
+static int set_relax_cross_section_call = 1;	/* Defalut do relax cross section call.  */
 
 #define RISCV_EXECIT_EXT
 static int target_optimize = 0;		/* Switch optimization.  */
@@ -71,6 +72,7 @@ riscv_elf_set_target_option (struct bfd_link_info *info)
   table->set_relax_pc = set_relax_pc;
   table->set_relax_call = set_relax_call;
   table->set_relax_tls_le = set_relax_tls_le;
+  table->set_relax_cross_section_call = set_relax_cross_section_call;
 
   table->target_optimize = target_optimize;
   table->relax_status = relax_status;
@@ -305,6 +307,8 @@ PARSE_AND_LIST_PROLOGUE='
 #define OPTION_NO_RELAX_PC		(OPTION_INTERNAL_BASELINE + 8)
 #define OPTION_NO_RELAX_CALL		(OPTION_INTERNAL_BASELINE + 9)
 #define OPTION_NO_RELAX_TLS_LE		(OPTION_INTERNAL_BASELINE + 10)
+#define OPTION_RELAX_CROSS_SECTION_CALL		(OPTION_INTERNAL_BASELINE + 11)
+#define OPTION_NO_RELAX_CROSS_SECTION_CALL		(OPTION_INTERNAL_BASELINE + 12)
 
 /* These are only available to EXECIT.  */
 #if defined RISCV_EXECIT_EXT
@@ -327,7 +331,7 @@ PARSE_AND_LIST_PROLOGUE='
 #define OPTION_EXECIT_OPT_RODATA	(OPTION_LLD_COMPATIBLE_BASELINE + 3)
 #define OPTION_EXECIT_SEPERATE_CALL	(OPTION_LLD_COMPATIBLE_BASELINE + 4)
 #define OPTION_RELAX_GP_TO_RODATA	(OPTION_LLD_COMPATIBLE_BASELINE + 5)
-#define OPTION_RELAX_CROSS_SECTION_CALL	(OPTION_LLD_COMPATIBLE_BASELINE + 6)
+/*#define OPTION_RELAX_CROSS_SECTION_CALL	(OPTION_LLD_COMPATIBLE_BASELINE + 6) implemented */
 #define OPTION_DEBUG_EXECIT_LIMIT	(OPTION_LLD_COMPATIBLE_BASELINE + 7)
 #define OPTION_NO_EXECIT_AUIPC		(OPTION_LLD_COMPATIBLE_BASELINE + 8)
 #define OPTION_NO_EXECIT_LUI		(OPTION_LLD_COMPATIBLE_BASELINE + 9)
@@ -348,6 +352,8 @@ PARSE_AND_LIST_LONGOPTS='
   { "mno-relax-pcrel", no_argument, NULL, OPTION_NO_RELAX_PC},
   { "mno-relax-call", no_argument, NULL, OPTION_NO_RELAX_CALL},
   { "mno-relax-tls", no_argument, NULL, OPTION_NO_RELAX_TLS_LE},
+  { "mrelax-cross-section-call", no_argument, NULL, OPTION_RELAX_CROSS_SECTION_CALL},
+  { "mno-relax-cross-section-call", no_argument, NULL, OPTION_NO_RELAX_CROSS_SECTION_CALL},
 
 /* These are specific optioins for EXECIT support.  */
 #if defined RISCV_EXECIT_EXT
@@ -376,7 +382,6 @@ PARSE_AND_LIST_LONGOPTS='
   { "mexecit_opt_rodata", no_argument, NULL, OPTION_EXECIT_OPT_RODATA},
   { "mexecit_opt_seperate_call", no_argument, NULL, OPTION_EXECIT_SEPERATE_CALL},
   { "mrelax-gp-to-rodata", no_argument, NULL, OPTION_RELAX_GP_TO_RODATA},
-  { "mrelax_cross_section_call", no_argument, NULL, OPTION_RELAX_CROSS_SECTION_CALL},
   { "mdebug-execit-limit", required_argument, NULL, OPTION_DEBUG_EXECIT_LIMIT},
   { "mno-execit-auipc", no_argument, NULL, OPTION_NO_EXECIT_AUIPC},
   { "mno-execit-lui", no_argument, NULL, OPTION_NO_EXECIT_LUI},
@@ -386,6 +391,7 @@ PARSE_AND_LIST_LONGOPTS='
 PARSE_AND_LIST_OPTIONS='
 fprintf (file, _("\
     --mexport-symbols=FILE      Exporting global symbols into linker script\n\
+    --m[no-]relax-cross-section-call Disable/enable cross-section relaxations\n\
 "));
 
 #if defined RISCV_EXECIT_EXT
@@ -444,6 +450,12 @@ PARSE_AND_LIST_ARGS_CASES='
     break;
   case OPTION_NO_RELAX_TLS_LE:
     set_relax_tls_le = 0;
+    break;
+  case OPTION_RELAX_CROSS_SECTION_CALL:
+    set_relax_cross_section_call = 1;
+    break;
+  case OPTION_NO_RELAX_CROSS_SECTION_CALL:
+    set_relax_cross_section_call = 0;
     break;
 
 #if defined RISCV_EXECIT_EXT
@@ -513,7 +525,6 @@ PARSE_AND_LIST_ARGS_CASES='
   case OPTION_EXECIT_OPT_RODATA:
   case OPTION_EXECIT_SEPERATE_CALL:
   case OPTION_RELAX_GP_TO_RODATA:
-  case OPTION_RELAX_CROSS_SECTION_CALL:
   case OPTION_NO_EXECIT_AUIPC:
   case OPTION_NO_EXECIT_LUI:
   case OPTION_ALLOW_INCOMPATIBLE_ATTR:

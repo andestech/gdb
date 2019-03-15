@@ -4265,6 +4265,8 @@ _bfd_riscv_relax_call (bfd *abfd, asection *sec, asection *sym_sec,
 		       riscv_pcgp_relocs *pcgp_relocs ATTRIBUTE_UNUSED,
 		       bfd_boolean rvc)
 {
+  struct riscv_elf_link_hash_table *table;
+  table = riscv_elf_hash_table (link_info);
   bfd_byte *contents = elf_section_data (sec)->this_hdr.contents;
   bfd_signed_vma foff = symval - (sec_addr (sec) + rel->r_offset);
   bfd_boolean near_zero = (symval + RISCV_IMM_REACH/2) < RISCV_IMM_REACH;
@@ -4274,7 +4276,8 @@ _bfd_riscv_relax_call (bfd *abfd, asection *sec, asection *sym_sec,
   /* FIXME: If the call crosses section boundaries and some sections
      are fixed, ex9 and later relaxations may increase the PC-relative
      offset.  */
-  if (sym_sec->output_section != sec->output_section)
+  if ((sym_sec->output_section != sec->output_section) &&
+      (!table->set_relax_cross_section_call))
     return TRUE;
 
   /* If the call crosses section boundaries, an alignment directive could
