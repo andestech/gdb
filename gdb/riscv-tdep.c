@@ -3339,6 +3339,15 @@ riscv_frame_cache (struct frame_info *this_frame, void **this_cache)
   /* Scan the prologue, filling in the cache.  */
   start_addr = get_frame_func (this_frame);
   pc = get_frame_pc (this_frame);
+
+  /* When pc does not fall in a valid function, not to scan prologue
+     to avoid extra useless memory access.  */
+  if (find_pc_partial_function (pc, NULL, NULL, NULL) == 0)
+    {
+      cache->this_id = outer_frame_id;
+      return cache;
+    }
+
   riscv_scan_prologue (gdbarch, start_addr, pc, cache);
 
   /* We can now calculate the frame base address.  */
