@@ -6003,11 +6003,13 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	break;
       }
     case MATCH_MADDR32:
-      cpu->regs[rd].u += (cpu->regs[ra].u * cpu->regs[rb].u);
+      cpu->regs[rd].u = EXTEND32 (cpu->regs[rd].u + (cpu->regs[ra].u
+				                     * cpu->regs[rb].u));
       TRACE_REG (cpu, rd);
       break;
     case MATCH_MSUBR32:
-      cpu->regs[rd].u -= (cpu->regs[ra].u * cpu->regs[rb].u);
+      cpu->regs[rd].u = EXTEND32 (cpu->regs[rd].u - (cpu->regs[ra].u
+				                     * cpu->regs[rb].u));
       TRACE_REG (cpu, rd);
       break;
     case MATCH_SWAP8:
