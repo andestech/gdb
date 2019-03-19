@@ -112,6 +112,7 @@ nds_pipeline_command (const char *args, int from_tty)
 {
   error (_("Usage: nds pipeline (on|off) [cpu]"));
 }
+
 
 /* Pretty-print for profiling data.  */
 
@@ -400,6 +401,7 @@ nds_issue_qrcmd (const char *cmd, string_file &str)
   /* Supress error messages from gdbserver
      if gdbserver doesn't support the monitor command.  */
 
+  str.clear ();
   TRY
     {
       target_rcmd (cmd, &str);
