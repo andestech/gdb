@@ -18,6 +18,11 @@
 # Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
 # MA 02110-1301, USA.
 
+# default value for set_relax_cross_section_call: 0/elf, 1/linux
+# hack: by referring GENERATE_SHLIB_SCRIPT within
+#       ld/emulparams/elf32lriscv-defs.sh
+D4_RCSC=$(test -n "$GENERATE_SHLIB_SCRIPT" && echo 1 || echo 0)
+
 fragment <<EOF
 
 #include "ldmain.h"
@@ -38,7 +43,7 @@ static int set_relax_lui = 1;		/* Defalut do relax lui.  */
 static int set_relax_pc = 1;		/* Defalut do relax pc.  */
 static int set_relax_call = 1;		/* Defalut do relax call.  */
 static int set_relax_tls_le = 1;	/* Defalut do relax tls le.  */
-static int set_relax_cross_section_call = 1;	/* Defalut do relax cross section call.  */
+static int set_relax_cross_section_call = $D4_RCSC;	/* Defalut do relax cross section call.  */
 
 #define RISCV_EXECIT_EXT
 static int target_optimize = 0;		/* Switch optimization.  */
