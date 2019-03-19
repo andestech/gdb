@@ -559,6 +559,8 @@ out:
 static void
 nds_query_target_command (const char *args, int from_tty)
 {
+  char buf[64];
+
   nds_remote_info_init ();
 
   if (strcmp (target_shortname, "remote") != 0
@@ -569,19 +571,9 @@ nds_query_target_command (const char *args, int from_tty)
   if (!nds_query_target_using_qpart ())
     nds_query_target_using_qrcmd ();
 
-  /* single-core: v5_core, multi-core: v5_core0, v5_core1, ...  */
-  if (startswith (nds_remote_info.cpuid, "v5_core"))
-    {
-      char buf[64];
-
-      xsnprintf (buf, sizeof (buf), "%s(gdb) ", nds_remote_info.cpuid);
-      set_prompt (buf);
-    }
-  else
-    {
-      /* Restore to DEFAULT_PROMPT.  */
-      set_prompt ("(gdb) ");
-    }
+  /* Prepend anything target return to prompt.  */
+  xsnprintf (buf, sizeof (buf), "%s(gdb) ", nds_remote_info.cpuid);
+  set_prompt (buf);
 }
 
 static void
