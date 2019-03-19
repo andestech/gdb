@@ -101,4 +101,10 @@ define hook-load
   end
 end
 
+define hook-restore
+  if $_nds_target_type
+    monitor nds mem_access cpu
+  end
+end
+
 echo [info] .Andesgdbinit loaded.\n
