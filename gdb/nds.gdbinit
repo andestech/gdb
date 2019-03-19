@@ -96,6 +96,8 @@ define hook-load
     if $nds_elf_check
       nds elf-check
     end
+
+    monitor nds mem_access cpu
   end
 end
 
