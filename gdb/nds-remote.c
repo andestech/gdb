@@ -416,6 +416,9 @@ nds_issue_qrcmd (const char *cmd, string_file &str)
   std::size_t found = str.string ().find_last_not_of (whitespaces);
   if (found != std::string::npos)
     str.string ().erase (found + 1);
+  else
+    // all whitespace
+    str.string ().clear ();
 
   return 0;
 }
