@@ -3849,11 +3849,7 @@ riscv_parse_arch_attribute (const char *in_arch, bfd_boolean update)
 	}
     }
 
-  /* We must keep the extension for ACE and those set by the
-     options if needed.  */
-  if (ace_lib_load_success)
-    riscv_add_subset ("x");
-
+  /* We must keep the extension set by the options if needed.  */
   if (riscv_opts.atomic)
     riscv_add_subset ("a");
 
