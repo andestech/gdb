@@ -331,6 +331,7 @@ PARSE_AND_LIST_PROLOGUE='
 
 /* These are only for lld internal usage and not affected for bfd.  */
 #define OPTION_LLD_COMPATIBLE_BASELINE	360
+#define OPTION_LLD_COMPATIBLE		360
 #define OPTION_BEST_GP			(OPTION_LLD_COMPATIBLE_BASELINE + 1)
 #define OPTION_EXECIT_OPT_DATA		(OPTION_LLD_COMPATIBLE_BASELINE + 2)
 #define OPTION_EXECIT_OPT_RODATA	(OPTION_LLD_COMPATIBLE_BASELINE + 3)
@@ -345,6 +346,8 @@ PARSE_AND_LIST_PROLOGUE='
 '
 PARSE_AND_LIST_LONGOPTS='
   { "mexport-symbols", required_argument, NULL, OPTION_EXPORT_SYMBOLS},
+  { "no-integrated-as", no_argument, NULL, OPTION_LLD_COMPATIBLE},
+  { "as-opt", required_argument, NULL, OPTION_LLD_COMPATIBLE},
 
 /* Generally, user does not need to set these options by themselves.  */
   { "mgp-insn-relax", no_argument, NULL, OPTION_GP_RELATIVE_INSN},
@@ -525,6 +528,7 @@ PARSE_AND_LIST_ARGS_CASES='
 	/* Do nothing.  */
       }
     break;
+  case OPTION_LLD_COMPATIBLE:
   case OPTION_BEST_GP:
   case OPTION_EXECIT_OPT_DATA:
   case OPTION_EXECIT_OPT_RODATA:
