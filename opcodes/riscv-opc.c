@@ -951,7 +951,7 @@ const struct riscv_opcode riscv_opcodes[] =
 {"kmabb32",     0, {"64XDSP", 0}, "d,s,t",     MATCH_KMABB32, MASK_KMABB32, match_opcode, 0 },
 {"kmabt32",     0, {"64XDSP", 0}, "d,s,t",     MATCH_KMABT32, MASK_KMABT32, match_opcode, 0 },
 {"kmatt32",     0, {"64XDSP", 0}, "d,s,t",     MATCH_KMATT32, MASK_KMATT32, match_opcode, 0 },
-{"kmada32",     0, {"64XDSP", 0}, "d,s,t",     MATCH_KMADA32, MASK_KMADA32, match_opcode, 0 },
+{"kmada32",     0, {"64XDSP", 0}, "d,s,t",     MATCH_KMADA32, MASK_KMADA32, match_opcode, INSN_ALIAS },
 {"kmaxda32",    0, {"64XDSP", 0}, "d,s,t",     MATCH_KMAXDA32, MASK_KMAXDA32, match_opcode, 0 },
 {"kmda32",      0, {"64XDSP", 0}, "d,s,t",     MATCH_KMDA32, MASK_KMDA32, match_opcode, 0 },
 {"kmxda32",     0, {"64XDSP", 0}, "d,s,t",     MATCH_KMXDA32, MASK_KMXDA32, match_opcode, 0 },
