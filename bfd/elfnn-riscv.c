@@ -3761,22 +3761,22 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
 	      }
 	  }
 	break;
-      case Tag_priv_spec:
+      case Tag_priv_spec + Tag_shfit:
 	in_priv.major = in_attr[i].i;
 	out_priv.major = out_attr[i].i;
 	break;
-      case Tag_priv_spec_minor:
+      case Tag_priv_spec_minor + Tag_shfit:
 	in_priv.minor = in_attr[i].i;
 	out_priv.minor = out_attr[i].i;
 	break;
-      case Tag_priv_spec_revision:
+      case Tag_priv_spec_revision + Tag_shfit:
 	in_priv.revision = in_attr[i].i;
 	out_priv.revision = out_attr[i].i;
 	break;
-      case Tag_strict_align:
+      case Tag_strict_align + Tag_shfit:
 	out_attr[i].i |= in_attr[i].i;
 	break;
-      case Tag_stack_align:
+      case Tag_stack_align + Tag_shfit:
 	if (out_attr[i].i == 0)
 	  out_attr[i].i = in_attr[i].i;
 	else if (in_attr[i].i != 0
@@ -3793,6 +3793,13 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
       default:
 	result &= _bfd_elf_merge_unknown_attribute_low (ibfd, obfd, i);
       }
+
+      /* If out_attr was copied from in_attr then it won't have a type yet.  */
+      if (i >= LEAST_KNOWN_OBJ_ATTRIBUTE
+	  && i < NUM_KNOWN_OBJ_ATTRIBUTES
+	  && in_attr[i].type
+	  && !out_attr[i].type)
+	out_attr[i].type = in_attr[i].type;
     }
 
     if ((out_priv.major == 0)
@@ -3818,14 +3825,6 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
 	    result = FALSE;
 	  }
       }
-
-    /* If out_attr was copied from in_attr then it won't have a type yet.  */
-    if (i >= LEAST_KNOWN_OBJ_ATTRIBUTE
-	&& i < NUM_KNOWN_OBJ_ATTRIBUTES
-	&& in_attr[i].type
-	&& !out_attr[i].type)
-      out_attr[i].type = in_attr[i].type;
-    }
 
   /* Handle our v5 attributes (unknown attributes).  */
   /* I recommend that don't use the riscv_elf_obj_attrs_handle_unknown
@@ -4419,7 +4418,8 @@ riscv_relax_lui_to_rvc (bfd *abfd,
 			Elf_Internal_Rela *rel,
 			bfd_vma symval,
 			bfd_boolean *again,
-			bfd_boolean rvc)
+			bfd_boolean rvc,
+			struct bfd_link_info *link_info)
 {
   bfd_byte *contents = elf_section_data (sec)->this_hdr.contents;
 
@@ -4449,7 +4449,7 @@ riscv_relax_lui_to_rvc (bfd *abfd,
       rel->r_info = ELFNN_R_INFO (ELFNN_R_SYM (rel->r_info), R_RISCV_RVC_LUI);
 
       *again = TRUE;
-      return riscv_relax_delete_bytes (abfd, sec, rel->r_offset + 2, 2);
+      return riscv_relax_delete_bytes (abfd, sec, rel->r_offset + 2, 2, link_info);
     }
 
   return TRUE;
@@ -4723,14 +4723,14 @@ _bfd_riscv_relax_lui (bfd *abfd,
 	  /* We can delete the unnecessary LUI and reloc.  */
 	  rel->r_info = ELFNN_R_INFO (0, R_RISCV_NONE);
 	  *again = TRUE;
-	  return riscv_relax_delete_bytes (abfd, sec, rel->r_offset, 4);
+	  return riscv_relax_delete_bytes (abfd, sec, rel->r_offset, 4, link_info);
 
 	default:
 	  abort ();
 	}
     }
 
-  return riscv_relax_lui_to_rvc (abfd, sec, rel, symval, again, rvc);
+  return riscv_relax_lui_to_rvc (abfd, sec, rel, symval, again, rvc, link_info);
 }
 
 /* Relax non-PIC TLS references.  */
@@ -4768,7 +4768,7 @@ _bfd_riscv_relax_tls_le (bfd *abfd ATTRIBUTE_UNUSED,
       /* We can delete the unnecessary instruction and reloc.  */
       rel->r_info = ELFNN_R_INFO (0, R_RISCV_NONE);
       *again = TRUE;
-      return riscv_relax_delete_bytes (abfd, sec, rel->r_offset, 4);
+      return riscv_relax_delete_bytes (abfd, sec, rel->r_offset, 4, link_info);
 
     default:
       abort ();
@@ -8333,7 +8333,7 @@ riscv_elf_relocate_ict_table (struct bfd_link_info *info, bfd *output_bfd)
 
 	  BFD_ASSERT (ict_table_reloc != R_RISCV_NONE);
 	  reloc_howto_type *howto =
-	    riscv_elf_rtype_to_howto (ict_table_reloc);
+	    riscv_elf_rtype_to_howto (input_bfd, ict_table_reloc);
 	  insn = bfd_get (howto->bitsize, output_bfd,
 			  contents + (order * ict_entry_size));
 	  insn = (insn & ~howto->dst_mask)

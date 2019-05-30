@@ -85,7 +85,7 @@ static int optimize = 0;
 /* Save option -Os for code size.  */
 static int optimize_for_space = 0;
 /* Save option -mict-model for ICT model setting.  */
-static const char *ict_model = NULL;
+static const char *m_ict_model = NULL;
 
 /* This is the set of options which the .option pseudo-op may modify.  */
 
@@ -3727,7 +3727,8 @@ riscv_parse_arch_attribute (const char *in_arch, bfd_boolean update)
   const char *in_arch_p = in_arch;
 
   /* Clear the subsets set by -march option.  */
-  riscv_clear_subsets();
+  riscv_release_subset_list (&riscv_subsets);
+
   /* Clear the riscv_opts.rvc if priority is higher.  */
   int rvc_mode = update ? 2 : 1;
   riscv_set_rvc (FALSE, rvc_mode);
@@ -3753,8 +3754,9 @@ riscv_parse_arch_attribute (const char *in_arch, bfd_boolean update)
       in_arch_p++;
       version = riscv_parse_arch_version (&in_arch_p);
       riscv_update_arch_info_hash ("e", version, update);
-      riscv_add_subset ("e");
-      riscv_add_subset ("i");
+      riscv_add_subset (&riscv_subsets, "e", 0, 0);
+      riscv_add_subset (&riscv_subsets, "i", 0, 0);
+
       riscv_set_rve (TRUE);
       break;
     case 'g':
@@ -3764,7 +3766,7 @@ riscv_parse_arch_attribute (const char *in_arch, bfd_boolean update)
 	{
 	  const char subset[] = {*all_subsets, '\0'};
 	  riscv_update_arch_info_hash (subset, version, update);
-	  riscv_add_subset (subset);
+	  riscv_add_subset (&riscv_subsets, subset, 0, 0);
 	}
       /* Addition.  */
       if (!riscv_opts.no_16_bit)
@@ -3810,7 +3812,7 @@ riscv_parse_arch_attribute (const char *in_arch, bfd_boolean update)
 	      riscv_parse_arch_name (&in_arch_p, 1, &name);
 	      version = riscv_parse_arch_version (&in_arch_p);
 	      riscv_update_arch_info_hash (name, version, update);
-	      riscv_add_subset (name);
+	      riscv_add_subset (&riscv_subsets, name, 0, 0);
 
 	      free ((char *) name);
 	    }
@@ -3830,12 +3832,12 @@ riscv_parse_arch_attribute (const char *in_arch, bfd_boolean update)
 	  if (strcmp (name, "xv5") == 0)
 	    {
 	      riscv_update_arch_info_hash ("xv5-", version, update);
-	      riscv_add_subset ("xv5-");
+	      riscv_add_subset (&riscv_subsets, "xv5-", 0, 0);
 	    }
 	  else
 	    {
 	      riscv_update_arch_info_hash (name, version, update);
-	      riscv_add_subset (name);
+	      riscv_add_subset (&riscv_subsets, name, 0, 0);
 	    }
 
 	  if (*in_arch_p == '_')
@@ -3851,13 +3853,13 @@ riscv_parse_arch_attribute (const char *in_arch, bfd_boolean update)
 
   /* We must keep the extension set by the options if needed.  */
   if (riscv_opts.atomic)
-    riscv_add_subset ("a");
+    riscv_add_subset (&riscv_subsets, "a", 0, 0);
 
   if (riscv_opts.dsp)
-    riscv_add_subset ("xdsp");
+    riscv_add_subset (&riscv_subsets, "xdsp", 0, 0);
 
   /* Always add `c' into `all_subsets' for the `riscv_opcodes' table.  */
-  riscv_add_subset ("c");
+  riscv_add_subset (&riscv_subsets, "c", 0, 0);
 
   return TRUE;
 }
@@ -4161,7 +4163,7 @@ md_parse_option (int c, const char *arg)
       if (strcmp ("tiny", arg) == 0
 	  || strcmp ("small", arg) == 0
 	  || strcmp ("large", arg) == 0)
-	ict_model = arg;
+	m_ict_model = arg;
       else
 	as_bad (_("invalid ICT model setting -mict-model=%s"), arg);
       break;
@@ -4176,38 +4178,13 @@ md_parse_option (int c, const char *arg)
 void
 riscv_after_parse_args (void)
 {
-  if (xlen == 0)
-    {
-      if (strcmp (default_arch, "riscv32") == 0)
-	xlen = 32;
-      else if (strcmp (default_arch, "riscv64") == 0)
-	xlen = 64;
-      else
-	as_bad ("unknown default architecture `%s'", default_arch);
-    }
+  /* Call riscv_set_arch_attributes rather than riscv_set_arch.  */
+  if (save_arch == NULL)
+    save_arch = default_arch;
+  riscv_set_arch_attributes (save_arch);
 
-  if (riscv_subsets.head == NULL)
-    riscv_set_arch (xlen == 64 ? "rv64g" : "rv32g");
-
-  /* Add the RVC extension, regardless of -march, to support .option rvc.  */
-  riscv_set_rvc (FALSE);
-  if (!riscv_opts.no_16_bit)
-    {
-      if (riscv_subset_supports ("c"))
-	riscv_set_rvc (TRUE);
-      else
-	riscv_add_subset (&riscv_subsets, "c", 0, 0);
-
-    }
-
-  /* Enable RVE if specified by the -march option.  */
-  riscv_set_rve (FALSE);
-  if (riscv_subset_supports ("e"))
-    riscv_set_rve (TRUE);
-
-  /* TODO: Support complete checking mechanism for all architectures.  */
-  if (riscv_subsets.head == NULL)
-    riscv_set_arch (default_arch);
+  /* No need to set other ubsets here since riscv_parse_arch_attribute
+     have handled them.  */
 
   /* Infer ABI from ISA if not specified on command line.  */
   if (abi_xlen == 0)
@@ -4232,6 +4209,9 @@ riscv_after_parse_args (void)
 	    float_abi = FLOAT_ABI_QUAD;
 	}
     }
+
+  if (rve_abi)
+    elf_flags |= EF_RISCV_RVE;
 
   /* Insert float_abi into the EF_RISCV_FLOAT_ABI field of elf_flags.  */
   elf_flags |= float_abi * (EF_RISCV_FLOAT_ABI & ~(EF_RISCV_FLOAT_ABI << 1));
@@ -5607,8 +5587,9 @@ riscv_update_non_standard_arch_attr (const char *key ATTRIBUTE_UNUSED,
     }
 }
 
+#if 0
 static void
-riscv_write_out_arch_attr (void)
+andes_riscv_write_out_arch_attr (void)
 {
   unsigned int i;
   obj_attribute *attr;
@@ -5707,9 +5688,10 @@ riscv_write_out_arch_attr (void)
   free (out_arch);
   out_arch = NULL;
 }
+#endif
 
 static void
-riscv_set_public_attributes (void)
+andes_riscv_set_public_attributes (void)
 {
   /* Write out arch attribute according to the arch_info_hash.  */
 #ifdef DEBUG
@@ -5739,27 +5721,21 @@ riscv_set_public_attributes (void)
   if (!attributes_set_explicitly[Tag_stack_align])
     bfd_elf_add_proc_attr_int (stdoutput, Tag_stack_align,
 			       DEFAULT_STACK_ALIGN);
-  if (ict_model
+  if (m_ict_model
       && !attributes_set_explicitly[Tag_ict_version
       + NUM_KNOWN_OBJ_ATTRIBUTES
       - TAG_VALUE_BEGIN_V5])
     bfd_elf_add_proc_attr_int (stdoutput, Tag_ict_version,
 			       DEFAULT_ICT_VERSION);
-  if (ict_model
+  if (m_ict_model
       && !attributes_set_explicitly[Tag_ict_model
       + NUM_KNOWN_OBJ_ATTRIBUTES
       - TAG_VALUE_BEGIN_V5])
     bfd_elf_add_proc_attr_string (stdoutput, Tag_ict_model,
-				  ict_model);
+				  m_ict_model);
 }
 
 /* Add the default contents for the .riscv.attributes section.  */
-
-void
-riscv_md_end (void)
-{
-  riscv_set_public_attributes ();
-}
 
 int
 andes_riscv_convert_symbolic_attribute (const char *name)
@@ -5848,7 +5824,7 @@ static const pseudo_typeS riscv_pseudo_table[] =
   {"no_execit_end", riscv_no_execit, 0},
   {"innermost_loop_begin", riscv_innermost_loop, 1},
   {"innermost_loop_end", riscv_innermost_loop, 0},
-  {"attribute", riscv_attribute, 0,},
+  {"nds_attribute", riscv_attribute, 0,},
 
   { NULL, NULL, 0 },
 };
