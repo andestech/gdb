@@ -155,7 +155,9 @@ enum
   Tag_RISCV_unaligned_access = 6,
   Tag_RISCV_priv_spec = 8,
   Tag_RISCV_priv_spec_minor = 10,
-  Tag_RISCV_priv_spec_revision = 12
+  Tag_RISCV_priv_spec_revision = 12,
+  /* Andes backward compatible */
+  Tag_RISCV_strict_align = 0x8000 - 2,
 };
 
 /* Processor specific program header types */

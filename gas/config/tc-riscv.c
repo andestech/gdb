@@ -5437,6 +5437,8 @@ riscv_convert_symbolic_attribute (const char *name)
       T(priv_spec_revision),
       T(unaligned_access),
       T(stack_align),
+      /* Andes backward compatible */
+      T(strict_align),
 #undef T
     };
 
