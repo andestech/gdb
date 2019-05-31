@@ -576,7 +576,7 @@ print_insn_args (const char *d, insn_t l, bfd_vma pc,
 	    {
 	      /* Check if decode .exec.itable.  */
 	      info->target = EXTRACT_UJTYPE_IMM_EXECIT_TAB (l);
-	      print (info->stream, "PC(31,21)|#0x%lx", info->target);
+	      print (info->stream, "PC(31,21)|#0x%lx", (long) info->target);
 	    }
 	  else
 	    {
@@ -903,7 +903,7 @@ riscv_parse_opcode (bfd_vma memaddr, insn_t word, disassemble_info *info,
 	  if (no_aliases && (op->pinfo & INSN_ALIAS))
 	    continue;
 	  /* Is this instruction restricted to a certain value of XLEN?  */
-	  if (isdigit (op->subset[0]) && atoi (op->subset) != xlen)
+	  if (isdigit (op->subset[0][0]) && atoi (op->subset[0]) != xlen)
 	    continue;
 
 	  /* It's a match.  */
