@@ -128,25 +128,16 @@ static struct riscv_set_options riscv_opts =
    mode 3: .option directive.  */
 
 static void
-riscv_set_rvc (bfd_boolean rvc_value, int mode)
+riscv_set_rvc (bfd_boolean rvc_value)
 {
-  static int save_mode = -1;
-
   /* Always close the rvc when -mno-16-bit option is set.  */
-  if (riscv_opts.no_16_bit
-      || mode < save_mode)
+  if (riscv_opts.no_16_bit)
     return;
 
   if (rvc_value)
     elf_flags |= EF_RISCV_RVC;
-  /* Can we turn off the rvc flags here? Is it safe enough?  */
-/*
-  else if (save_mode <= 2)
-    elf_flags &= ~EF_RISCV_RVC;
-*/
 
   riscv_opts.rvc = rvc_value;
-  save_mode = mode;
 }
 
 static void
@@ -2187,18 +2178,7 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 	continue;
 
       if (!riscv_multi_subset_supports (insn->subset))
-	{
-	  if (strchr (insn->subset, 'A'))
-	    error = _("Please change the toolchain or use the options "
-		      "(-march=ISA or -matomic) to enable the extension");
-	  else if (strchr (insn->subset, 'P'))
-	    error = _("Please change the toolchain or use the options "
-		      "(-march=ISA or -mext-dsp) to enable the extension");
-	  else
-	    error = _("Please change the toolchain or use the option "
-		      "-march=ISA to enable the extension");
-	  continue;
-	}
+	continue;
 
       create_insn (ip, insn);
       argnum = 1;
@@ -3525,11 +3505,11 @@ riscv_parse_arch_attribute (const char *in_arch, bfd_boolean update)
   const char *in_arch_p = in_arch;
 
   /* Clear the subsets set by -march option.  */
-  riscv_release_subset_list (&riscv_subsets);
+  /* riscv_release_subset_list (&riscv_subsets); */
 
   /* Clear the riscv_opts.rvc if priority is higher.  */
   int rvc_mode = update ? 2 : 1;
-  riscv_set_rvc (FALSE, rvc_mode);
+  riscv_set_rvc (FALSE);
 
   if (strncmp (in_arch_p, "rv32", 4) == 0)
     {
@@ -3570,7 +3550,7 @@ riscv_parse_arch_attribute (const char *in_arch, bfd_boolean update)
       if (!riscv_opts.no_16_bit)
 	{
 	  riscv_update_arch_info_hash ("c", version, update);
-	  riscv_set_rvc (TRUE, rvc_mode);
+	  riscv_set_rvc (TRUE);
 	}
       break;
     case 'i':
@@ -3595,7 +3575,7 @@ riscv_parse_arch_attribute (const char *in_arch, bfd_boolean update)
 	      free ((char *) name);
 	      break;
 	    }
-	  riscv_set_rvc (TRUE, rvc_mode);
+	  riscv_set_rvc (TRUE);
 	case 'i':
 	case 'm':
 	case 'a':
@@ -3823,8 +3803,7 @@ md_parse_option (int c, const char *arg)
   switch (c)
     {
     case OPTION_MARCH:
-      /* Save the arch name for riscv_set_arch_attributes.  */
-      save_arch = arg;
+      riscv_set_arch (arg);
       break;
 
     case OPTION_NO_PIC:
@@ -3952,13 +3931,50 @@ md_parse_option (int c, const char *arg)
 void
 riscv_after_parse_args (void)
 {
-  /* Call riscv_set_arch_attributes rather than riscv_set_arch.  */
-  if (save_arch == NULL)
-    save_arch = default_arch;
-  riscv_set_arch_attributes (save_arch);
+  int d4_arch_type = 0;
+  if (xlen == 0)
+    {
+      if (strncmp (default_arch, "rv32", 4) == 0)
+	{
+	  xlen = 32;
+	  d4_arch_type = 1;
+	}
+      else if (strncmp (default_arch, "rv64", 4) == 0)
+	{
+	  xlen = 64;
+	  d4_arch_type = 1;
+	}
+      else if (strcmp (default_arch, "riscv32") == 0)
+	xlen = 32;
+      else if (strcmp (default_arch, "riscv64") == 0)
+	xlen = 64;
+      else
+	as_bad ("unknown default architecture `%s'", default_arch);
+    }
 
-  /* No need to set other ubsets here since riscv_parse_arch_attribute
-     have handled them.  */
+  if (riscv_subsets.head == NULL)
+    riscv_set_arch(d4_arch_type == 1 ? default_arch
+				     : xlen == 64 ? "rv64g" : "rv32g");
+
+  /* We must keep the extension set by the options if needed.  */
+  if (riscv_opts.atomic)
+    riscv_add_subset (&riscv_subsets, "a", 2, 0);
+
+  if (riscv_opts.dsp)
+    riscv_add_subset (&riscv_subsets, "xdsp", 2, 0);
+
+  /* Always add `c' into `all_subsets' for the `riscv_opcodes' table.  */
+//   riscv_add_subset (&riscv_subsets, "c", 2, 0);
+
+  /* Add the RVC extension, regardless of -march, to support .option rvc.  */
+  riscv_set_rvc (FALSE);
+  if (riscv_subset_supports ("c"))
+    riscv_set_rvc (TRUE);
+
+  /* Enable RVE if specified by the -march option.  */
+  riscv_set_rve (FALSE);
+  if (riscv_subset_supports ("e"))
+    riscv_set_rve (TRUE);
 
   /* Infer ABI from ISA if not specified on command line.  */
   if (abi_xlen == 0)
@@ -4389,7 +4405,7 @@ s_riscv_option (int x ATTRIBUTE_UNUSED)
 
   if (strcmp (name, "rvc") == 0)
     {
-      riscv_set_rvc (TRUE, 3);
+      riscv_set_rvc (TRUE);
       riscv_rvc_reloc_setting (1);
     }
   else if (strcmp (name, "norvc") == 0)
@@ -4399,7 +4415,7 @@ s_riscv_option (int x ATTRIBUTE_UNUSED)
 	 fine since linker will remove the redundant nops.  */
       if (riscv_opts.rvc)
 	riscv_frag_align_code (2);
-      riscv_set_rvc (FALSE, 3);
+      riscv_set_rvc (FALSE);
       riscv_rvc_reloc_setting (0);
     }
   else if (strcmp (name, "pic") == 0)
