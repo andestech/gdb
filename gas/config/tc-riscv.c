@@ -717,7 +717,6 @@ validate_riscv_insn (const struct riscv_opcode *opc, int length)
 	  case 'w': break; /* RS1S, constrained to equal RD */
 	  case 'x': break; /* RS2S, constrained to equal RD */
 	  case 'z': break; /* RS1, constrained to equal zero. */
-	  case 'Z': break; /* Constrained to equal zero. */
 	  case 'K': used_bits |= ENCODE_RVC_ADDI4SPN_IMM (-1U); break;
 	  case 'L': used_bits |= ENCODE_RVC_ADDI16SP_IMM (-1U); break;
 	  case 'M': used_bits |= ENCODE_RVC_SWSP_IMM (-1U); break;
@@ -2322,12 +2321,6 @@ rvc_imm_done:
 		      || !VALID_RVC_IMM (imm_expr->X_add_number))
 		    break;
 		  ip->insn_opcode |= ENCODE_RVC_IMM (imm_expr->X_add_number);
-		  goto rvc_imm_done;
-		case 'Z':
-		  if (my_getSmallExpression (imm_expr, imm_reloc, s, p)
-		      || imm_expr->X_op != O_constant
-		      || imm_expr->X_add_number != 0)
-		    break;
 		  goto rvc_imm_done;
 		case 'e': /* exec.it imm  */
 		  switch (*++args)
