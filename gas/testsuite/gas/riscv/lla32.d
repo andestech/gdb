@@ -1,4 +1,4 @@
-#as: -march=rv32i -mabi=ilp32
+#as: -march=rv32ic -mabi=ilp32
 #objdump: -dr
 
 .*:     file format elf32-littleriscv
@@ -8,6 +8,7 @@ Disassembly of section .text:
 
 0+000 <.text>:
    0:	00100513          	li	a0,1
+.*R_RISCV_RELAX_ENTRY.*
    4:	00001537          	lui	a0,0x1
    8:	00001537          	lui	a0,0x1
    c:	00150513          	addi	a0,a0,1 # 1001 <c>
