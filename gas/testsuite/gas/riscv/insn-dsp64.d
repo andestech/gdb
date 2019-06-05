@@ -1,4 +1,4 @@
-#as: -mext-dsp -march=rv64g
+#as: -mext-dsp -march=rv64gc
 #objdump: -dr -Mstandard
 
 .*:[ 	]+file format .*
@@ -74,7 +74,7 @@ Disassembly of section .text:
 [ 	]+.*:[ 	]+.*[ 	]+kmatt32[ 	]+r1,r2,r3
 [ 	]+.*:[ 	]+.*[ 	]+kmda32[ 	]+r1,r2,r3
 [ 	]+.*:[ 	]+.*[ 	]+kmxda32[ 	]+r1,r2,r3
-[ 	]+.*:[ 	]+.*[ 	]+kmada32[ 	]+r1,r2,r3
+[ 	]+.*:[ 	]+.*[ 	]+kmar64[ 	]+r1,r2,r3
 [ 	]+.*:[ 	]+.*[ 	]+kmaxda32[ 	]+r1,r2,r3
 [ 	]+.*:[ 	]+.*[ 	]+kmads32[ 	]+r1,r2,r3
 [ 	]+.*:[ 	]+.*[ 	]+kmadrs32[ 	]+r1,r2,r3

@@ -1,4 +1,4 @@
-#as: -march=rv64i -mabi=lp64
+#as: -march=rv64ic -mabi=lp64
 #objdump: -dr
 
 .*:     file format elf64-littleriscv
@@ -8,6 +8,7 @@ Disassembly of section .text:
 
 0+000 <.text>:
    0:	0010051b          	addiw	a0,zero,1
+.*R_RISCV_RELAX_ENTRY.*
    4:	00001537          	lui	a0,0x1
    8:	00001537          	lui	a0,0x1
    c:	0015051b          	addiw	a0,a0,1
