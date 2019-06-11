@@ -1743,6 +1743,19 @@ riscv_parse_prefixed_ext (riscv_parse_subset_t *rps,
       if (class != config->class)
 	break;
 
+      /* look ahead for xv5{-XpY} */
+      if (strncmp(p, "xv5", 3) == 0)
+	{
+	  if (p[3] == '-')
+	    {
+	      /* FEED ME, parse versions */
+	    }
+	  riscv_add_subset (rps->subset_list, "xv5-", 0, 0);
+	  p += 3;
+	  continue;
+	}
+
+      /* general non-standard extensions */
       char *subset = xstrdup (p);
       char *q = subset;
       const char *end_of_version;
