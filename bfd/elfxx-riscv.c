@@ -1717,6 +1717,19 @@ riscv_parse_sv_or_non_std_ext (riscv_parse_subset_t *rps,
 	  && (*(p + 1) == 'x'))
 	break;
 
+      /* look ahead for xv5{-XpY} */
+      if (strncmp(p, "xv5", 3) == 0)
+	{
+	  if (p[3] == '-')
+	    {
+	      /* FEED ME, parse versions */
+	    }
+	  riscv_add_subset (rps->subset_list, "xv5-", 0, 0);
+	  p += 3;
+	  continue;
+	}
+
+      /* general non-standard extensions */
       char *subset = xstrdup (p);
       char *q = subset;
       const char *end_of_version;
