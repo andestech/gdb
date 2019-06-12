@@ -1746,12 +1746,18 @@ riscv_parse_prefixed_ext (riscv_parse_subset_t *rps,
       /* look ahead for xv5{-XpY} */
       if (strncmp(p, "xv5", 3) == 0)
 	{
-	  if (p[3] == '-')
-	    {
-	      /* FEED ME, parse versions */
-	    }
-	  riscv_add_subset (rps->subset_list, "xv5-", 0, 0);
 	  p += 3;
+	  if (*p == '-')
+	    {
+	      p = riscv_parsing_subset_version (
+		    rps,
+		    march,
+		    p + 1, &major_version, &minor_version,
+		    /* default_major_version= */ 0,
+		    /* default_minor_version= */ 0,
+		    /* std_ext_p= */FALSE);
+	    }
+	  riscv_add_subset (rps->subset_list, "xv5-", major_version, minor_version);
 	  continue;
 	}
 
