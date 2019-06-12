@@ -5464,10 +5464,14 @@ riscv_convert_symbolic_attribute (const char *name)
 }
 
 /* Parse a .attribute directive.  */
+static void andes_pre_s_riscv_attribute (void);
+static void andes_post_s_riscv_attribute (int tag);
 
 static void
 s_riscv_attribute (int ignored ATTRIBUTE_UNUSED)
 {
+  andes_pre_s_riscv_attribute();
+
   int tag = obj_elf_vendor_attribute (OBJ_ATTR_PROC);
 
   if (tag == Tag_RISCV_arch)
@@ -5492,6 +5496,8 @@ s_riscv_attribute (int ignored ATTRIBUTE_UNUSED)
 	    as_warn (_("Could not set architecture and machine"));
 	}
     }
+
+  andes_post_s_riscv_attribute(tag);
 }
 
 /* Insert relocations to mark the region that can not do EXECIT relaxation.  */
@@ -5784,25 +5790,32 @@ andes_riscv_convert_symbolic_attribute (const char *name)
   return -1;
 }
 
-/* Parse a .attribute directive.  */
+/* Andes .attribute directive extensions.  */
 
 static void
-riscv_attribute (int ignored ATTRIBUTE_UNUSED)
+andes_pre_s_riscv_attribute (void)
 {
-  int tag = obj_elf_vendor_attribute (OBJ_ATTR_PROC);
+  /* patch .attribute strict_align, X
+   *   to  .attribute unaligned_access, !X
+   */
+  char *s = input_line_pointer;
+  if (strncmp(s, "strict_align,", 13) != 0)
+    return;
 
-  if (tag == 4
-      && start_assemble_insn)
-    as_fatal ("The target architecture attribute must "
-	      "be set before assembling instructions");
+  /* FEED ME! what if X is an expression? */
+  s = input_line_pointer + 13;
+  *s ^= 1; /* '0' <-> '1' */
+}
 
+static void
+andes_post_s_riscv_attribute (int tag)
+{
   if (tag < NUM_KNOWN_OBJ_ATTRIBUTES)
     attributes_set_explicitly[tag] = 1;
-  else if(tag >= TAG_VALUE_BEGIN_V5
-	  && tag < (TAG_VALUE_BEGIN_V5 + NUM_KNOWN_OBJ_ATTRIBUTES_V5))
-    attributes_set_explicitly[tag
-      + NUM_KNOWN_OBJ_ATTRIBUTES
-      - TAG_VALUE_BEGIN_V5] = 1;
+  else if (tag >= TAG_VALUE_BEGIN_V5 &&
+	   tag < (TAG_VALUE_BEGIN_V5 + NUM_KNOWN_OBJ_ATTRIBUTES_V5))
+    attributes_set_explicitly[tag + NUM_KNOWN_OBJ_ATTRIBUTES -
+			      TAG_VALUE_BEGIN_V5] = 1;
 }
 
 /* Pseudo-op table.  */
@@ -5835,7 +5848,6 @@ static const pseudo_typeS riscv_pseudo_table[] =
   {"no_execit_end", riscv_no_execit, 0},
   {"innermost_loop_begin", riscv_innermost_loop, 1},
   {"innermost_loop_end", riscv_innermost_loop, 0},
-  {"nds_attribute", riscv_attribute, 0,},
 
   { NULL, NULL, 0 },
 };
