@@ -5448,6 +5448,8 @@ riscv_convert_symbolic_attribute (const char *name)
       T(stack_align),
       /* Andes backward compatible */
       T(strict_align),
+      T(ict_version),
+      T(ict_model),
 #undef T
     };
 
