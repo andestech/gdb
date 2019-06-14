@@ -1573,14 +1573,14 @@ riscv_global_pointer_value (struct bfd_link_info *info)
   return h->u.def.value + sec_addr (h->u.def.section);
 }
 
-/* Return the symbol '__data_start' value, or 0 if it is not in use.  */
+/* Return the symbol DATA_START_SYMBOLS value, or 0 if it is not in use.  */
 
 static bfd_vma
 riscv_data_start_value (struct bfd_link_info *info)
 {
   struct bfd_link_hash_entry *h;
 
-  h = bfd_link_hash_lookup (info->hash, "__data_start", FALSE, FALSE, TRUE);
+  h = bfd_link_hash_lookup (info->hash, "__DATA_BEGIN__", FALSE, FALSE, TRUE);
   if (h == NULL || h->type != bfd_link_hash_defined)
     return 0;
 
