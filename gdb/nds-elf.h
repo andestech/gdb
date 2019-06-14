@@ -103,9 +103,9 @@ NEC_buf_init (char *buf, unsigned int len)
 #define NEC_output(fmt, ...) \
 do \
 { \
-  char temp[OUTPUT_MSG_MAX_LEN]; \
-  NEC_snprintf (temp, sizeof (temp), fmt, ##__VA_ARGS__); \
-  NEC_strcat_safety (nec_buf, nec_buf_len, temp); \
+  char _temp[OUTPUT_MSG_MAX_LEN]; \
+  NEC_snprintf (_temp, sizeof (_temp), fmt, ##__VA_ARGS__); \
+  NEC_strcat_safety (nec_buf, nec_buf_len, _temp); \
 } \
 while (0)
 
