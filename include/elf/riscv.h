@@ -147,6 +147,8 @@ END_RELOC_NUMBERS (R_RISCV_max)
 
 /* Object attributes.  */
 
+#define TAG_VALUE_BEGIN_V5     0x8000
+
 enum
 {
   /* 0-3 are generic.  */
@@ -158,6 +160,8 @@ enum
   Tag_RISCV_priv_spec_revision = 12,
   /* Andes backward compatible */
   Tag_RISCV_strict_align = Tag_RISCV_unaligned_access,
+  Tag_RISCV_ict_version = 0 + TAG_VALUE_BEGIN_V5,
+  Tag_RISCV_ict_model = 1 + TAG_VALUE_BEGIN_V5,
 };
 
 /* Processor specific program header types */
@@ -169,8 +173,7 @@ enum
 /* Object attributes.  */
 
 #define NUM_KNOWN_OBJ_ATTRIBUTES_V5     0x2
-#define TAG_VALUE_BEGIN_V5		0x8000
-enum
+enum andes_old_attributes
 {
   /* 0-3 are generic.  */
   Tag_arch = 4,

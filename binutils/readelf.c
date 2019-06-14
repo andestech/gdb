@@ -15450,6 +15450,7 @@ display_riscv_attribute (unsigned char *p,
     case Tag_RISCV_priv_spec:
     case Tag_RISCV_priv_spec_minor:
     case Tag_RISCV_priv_spec_revision:
+    case Tag_RISCV_ict_version:
       val = read_uleb128 (p, &len, end);
       p += len;
       printf (_("%d\n"), val);
@@ -15473,6 +15474,7 @@ display_riscv_attribute (unsigned char *p,
       printf (_("%d-bytes\n"), val);
       break;
     case Tag_RISCV_arch:
+    case Tag_RISCV_ict_model:
       p = display_tag_value (-1, p, end);
       break;
 
