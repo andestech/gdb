@@ -5407,6 +5407,8 @@ riscv_write_out_arch_attr (void)
 }
 
 /* Add the default contents for the .riscv.attributes section.  */
+static void
+andes_riscv_set_public_attributes (void);
 
 static void
 riscv_set_public_attributes (void)
@@ -5421,7 +5423,8 @@ riscv_set_public_attributes (void)
 void
 riscv_md_end (void)
 {
-  riscv_set_public_attributes ();
+/*riscv_set_public_attributes (); */
+  andes_riscv_set_public_attributes ();
 }
 
 /* Given a symbolic attribute NAME, return the proper integer value.
@@ -5725,32 +5728,32 @@ andes_riscv_set_public_attributes (void)
 
   riscv_write_out_arch_attr ();
 
-  if (!attributes_set_explicitly[Tag_priv_spec])
-    bfd_elf_add_proc_attr_int (stdoutput, Tag_priv_spec,
+  if (!attributes_set_explicitly[Tag_RISCV_priv_spec])
+    bfd_elf_add_proc_attr_int (stdoutput, Tag_RISCV_priv_spec,
 			       DEFAULT_PRIV_SPEC);
-  if (!attributes_set_explicitly[Tag_priv_spec_minor])
-    bfd_elf_add_proc_attr_int (stdoutput, Tag_priv_spec_minor,
+  if (!attributes_set_explicitly[Tag_RISCV_priv_spec_minor])
+    bfd_elf_add_proc_attr_int (stdoutput, Tag_RISCV_priv_spec_minor,
 			       DEFAULT_PRIV_SPEC_MINOR);
-  if (!attributes_set_explicitly[Tag_priv_spec_revision])
-    bfd_elf_add_proc_attr_int (stdoutput, Tag_priv_spec_revision,
+  if (!attributes_set_explicitly[Tag_RISCV_priv_spec_revision])
+    bfd_elf_add_proc_attr_int (stdoutput, Tag_RISCV_priv_spec_revision,
 			       DEFAULT_PRIV_SPEC_REVISION);
-  if (!attributes_set_explicitly[Tag_strict_align])
-    bfd_elf_add_proc_attr_int (stdoutput, Tag_strict_align,
+  if (!attributes_set_explicitly[Tag_RISCV_strict_align])
+    bfd_elf_add_proc_attr_int (stdoutput, Tag_RISCV_strict_align,
 			       DEFAULT_STRICT_ALIGN);
-  if (!attributes_set_explicitly[Tag_stack_align])
-    bfd_elf_add_proc_attr_int (stdoutput, Tag_stack_align,
+  if (!attributes_set_explicitly[Tag_RISCV_stack_align])
+    bfd_elf_add_proc_attr_int (stdoutput, Tag_RISCV_stack_align,
 			       DEFAULT_STACK_ALIGN);
   if (m_ict_model
-      && !attributes_set_explicitly[Tag_ict_version
+      && !attributes_set_explicitly[Tag_RISCV_ict_version
       + NUM_KNOWN_OBJ_ATTRIBUTES
       - TAG_VALUE_BEGIN_V5])
-    bfd_elf_add_proc_attr_int (stdoutput, Tag_ict_version,
+    bfd_elf_add_proc_attr_int (stdoutput, Tag_RISCV_ict_version,
 			       DEFAULT_ICT_VERSION);
   if (m_ict_model
-      && !attributes_set_explicitly[Tag_ict_model
+      && !attributes_set_explicitly[Tag_RISCV_ict_model
       + NUM_KNOWN_OBJ_ATTRIBUTES
       - TAG_VALUE_BEGIN_V5])
-    bfd_elf_add_proc_attr_string (stdoutput, Tag_ict_model,
+    bfd_elf_add_proc_attr_string (stdoutput, Tag_RISCV_ict_model,
 				  m_ict_model);
 }
 
