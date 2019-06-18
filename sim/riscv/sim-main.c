@@ -7489,7 +7489,7 @@ execute_a (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
   /* Handle the rest of the atomic insns with common code paths.  */
   TRACE_INSN (cpu, "%s %s, %s, (%s);",
 	      op->name, rd_name, rs2_name, rs1_name);
-  if (op->subset[0] == '6')
+  if (op->xlen_requirement == 64)
     tmp = sim_core_read_unaligned_8 (cpu, cpu->pc, read_map, cpu->regs[rs1].u);
   else
     tmp = EXTEND32 (sim_core_read_unaligned_4 (cpu, cpu->pc,
@@ -7540,7 +7540,7 @@ execute_a (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
     }
 
-  if (op->subset[0] == '6')
+  if (op->xlen_requirement == 64)
     sim_core_write_unaligned_8 (cpu, cpu->pc, write_map, cpu->regs[rs1].u, tmp);
   else
     sim_core_write_unaligned_4 (cpu, cpu->pc, write_map, cpu->regs[rs1].u, tmp);
@@ -7553,7 +7553,7 @@ static sim_cia
 execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex9)
 {
   SIM_DESC sd = CPU_STATE (cpu);
-  const char *subset = op->subset;
+  const char *subset = op->subset[0];
 
  rescan:
   switch (subset[0])
@@ -7592,7 +7592,7 @@ execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int 
       goto case_default;
     case_default:
     default:
-      TRACE_INSN (cpu, "UNHANDLED EXTENSION: %s", op->subset);
+      TRACE_INSN (cpu, "UNHANDLED EXTENSION: %s", op->subset[0]);
       sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
     }
 
@@ -7836,7 +7836,7 @@ void initialize_cpu (SIM_DESC sd, SIM_CPU *cpu, int mhartid)
 	continue;
 
       /* Skip all instructions which is not valid for current XLEN.  */
-      if (isdigit (op->subset[0]) && atoi (op->subset) != RISCV_XLEN (cpu))
+      if (op->xlen_requirement != 0 && op->xlen_requirement != RISCV_XLEN (cpu))
 	continue;
 
       ++n;
@@ -7853,7 +7853,7 @@ void initialize_cpu (SIM_DESC sd, SIM_CPU *cpu, int mhartid)
 	continue;
 
       /* Skip all instructions which is not valid for current XLEN.  */
-      if (isdigit (op->subset[0]) && atoi (op->subset) != RISCV_XLEN (cpu))
+      if (op->xlen_requirement != 0 && op->xlen_requirement != RISCV_XLEN (cpu))
 	continue;
 
       sim_riscv_opcodes[n++] = *op;
