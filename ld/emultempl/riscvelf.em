@@ -177,6 +177,8 @@ riscv_create_output_section_statements (void)
 	       " whilst linking %s binaries\n"), "RISC-V");
       return;
     }
+
+  riscv_elf_create_output_section_statements ();
 }
 
 /* Create the target usage section for RISCV.  */
