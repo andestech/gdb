@@ -32,9 +32,6 @@
 #include "elf/riscv.h"
 #include "opcode/riscv.h"
 
-/* Internal relocations used exclusively by the relaxation pass.  */
-#define R_RISCV_DELETE (R_RISCV_max + 1)
-
 #define ARCH_SIZE NN
 
 #define MINUS_ONE ((bfd_vma)0 - 1)
@@ -1597,6 +1594,8 @@ perform_relocation (const reloc_howto_type *howto,
 		    bfd *input_bfd,
 		    bfd_byte *contents)
 {
+  int _sym = ELFNN_R_SYM (rel->r_info);
+  int _typ = ELFNN_R_TYPE (rel->r_info);
   if (howto->pc_relative)
     value -= sec_addr (input_section) + rel->r_offset;
   value += rel->r_addend;
@@ -5937,6 +5936,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
       Elf_Internal_Rela *rel = relocs + i;
       relax_func_t relax_func;
       int type = ELFNN_R_TYPE (rel->r_info);
+      int sym = ELFNN_R_SYM (rel->r_info);
       bfd_vma symval;
 
       switch (riscv_enable_rvc (rel))
