@@ -5715,6 +5715,9 @@ andes_riscv_write_out_arch_attr (void)
 static void
 andes_riscv_set_public_attributes (void)
 {
+  if (!riscv_opts.arch_attr && !explicit_arch_attr)
+    return;
+
   /* Write out arch attribute according to the arch_info_hash.  */
 #ifdef DEBUG
   printf ("===== Contents of arch attribute hash table =====\n");
