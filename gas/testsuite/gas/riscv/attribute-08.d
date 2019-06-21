@@ -4,3 +4,5 @@
 Attribute Section: riscv
 File Attributes
   Tag_RISCV_arch: "rv32e1p9"
+  Tag_RISCV_priv_spec: 1
+  Tag_RISCV_priv_spec_minor: 10
