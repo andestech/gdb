@@ -164,7 +164,7 @@ NEC_snprintf (char *buf, size_t size, const char *str, ...)
 {
 #define TEMP_SZ	100
   int width;
-  size_t len = 0 ;
+  size_t len = 0;
   va_list ap;
   char token, temp[TEMP_SZ];
   buf[0] = '\0';
@@ -408,7 +408,8 @@ cpu_support_std_ext (reg_t misa, char ext)
   // I-Extension allow E-Extension
   if (ext == 'E')
     {
-      return ((misa & (1 << ('E' - 'A'))) != 0) || ((misa & (1 << ('I' - 'A'))) != 0);
+      return ((misa & (1 << ('E' - 'A'))) != 0)
+	|| ((misa & (1 << ('I' - 'A'))) != 0);
     }
 
   int i = ext - 'A';
@@ -522,7 +523,6 @@ define_elfnn_get_riscv_attribute_section
 #undef Elf_Ehdr
 #undef Elf_Shdr
 #undef elfnn_get_riscv_attribute_section
-
 // Case-insensitive strchr
 static char *
 strcasechr (const char *s, int c)
@@ -792,7 +792,8 @@ parse_riscv_attributes (const uint8_t * buf, const uint8_t * end)
 	  TAG_CASE (Tag_priv_spec)
 	  TAG_CASE (Tag_priv_spec_minor)
 	  TAG_CASE (Tag_priv_spec_revision)
-	  TAG_CASE (Tag_strict_align) TAG_CASE (Tag_stack_align)
+	  TAG_CASE (Tag_strict_align)
+	  TAG_CASE (Tag_stack_align)
 #undef TAG_CASE
 	default:
 	  die ("Unknown RISCV attribute tag %" PRIu64, tag);
