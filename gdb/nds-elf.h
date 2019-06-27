@@ -68,13 +68,29 @@ extern "C"
 #define SHT_RISCV_ATTRIBUTES	0x70000003
 #endif
 
-#define Tag_File		1
-#define Tag_arch		4
-#define Tag_priv_spec		5
-#define Tag_priv_spec_minor	6
-#define Tag_priv_spec_revision	7
-#define Tag_strict_align	8
-#define Tag_stack_align		9
+
+#define Tag_File                     1
+#define Tag_ict_version              0x8000
+
+#define Tag_RISCV_stack_align        4
+#define Tag_RISCV_arch               5
+#define Tag_RISCV_unaligned_access   6
+#define Tag_RISCV_priv_spec          8
+#define Tag_RISCV_priv_spec_minor    10
+#define Tag_RISCV_priv_spec_revision 12
+#define Tag_ict_model                0x8002
+
+#define Tag_arch_legacy               4
+#define Tag_priv_spec_legacy          5
+#define Tag_priv_spec_minor_legacy    6
+#define Tag_priv_spec_revision_legacy 7
+#define Tag_strict_align_legacy       8
+#define Tag_stack_align_legacy        9
+#define Tag_ict_model_legacy          0x8001
+
+#define ict_model_tiny  1
+#define ict_model_small 2
+#define ict_model_large 3
 
 /* type from gdb for both rv32 and rv64. */
 typedef unsigned long long reg_t;
@@ -227,14 +243,14 @@ NEC_print (ELF_Fail_Type type, const char *name,
   switch (type)
     {
     case EFT_NONE:
-      NEC_output ("\t | %9s | %9s | %14s\n", cpu, elf, name);
+      NEC_output ("\t | %9s | %9s | %18s\n", cpu, elf, name);
       break;
     case EFT_WARNING:
-      NEC_output ("\t?| %9s | %9s | %14s Warning: %s\n", cpu, elf,
+      NEC_output ("\t?| %9s | %9s | %18s Warning: %s\n", cpu, elf,
 		  name, error_message);
       break;
     case EFT_ERROR:
-      NEC_output ("\t!| %9s | %9s | %14s Error: %s\n", cpu, elf, name,
+      NEC_output ("\t!| %9s | %9s | %18s Error: %s\n", cpu, elf, name,
 		  error_message);
       break;
     }
@@ -280,7 +296,9 @@ static const char *base_isas[BASE_ISA_COUNT] =
 static const char *riscv_extensions = "MAFDQLCBJTPVNX";
 
 // RISC-V Non-standard extensions
-static const char *riscv_x_extensions[] = { "Xv5-" };
+static const char *riscv_x_extensions[] = { "Xv5-", "xdsp" };
+
+
 
 enum RISCV_EXT
 {
@@ -291,6 +309,7 @@ enum RISCV_EXT
 enum RISCV_X_EXT
 {
   X_EXT_V5,
+  X_EXT_DSP,
   X_EXT_COUNT
 };
 
@@ -366,6 +385,12 @@ set_riscv_x_ext_info (const char *ext, int major, int minor)
       nds_info.x_ext_major[X_EXT_V5] = major;
       nds_info.x_ext_minor[X_EXT_V5] = minor;
     }
+  else if (strncmp (ext, riscv_x_extensions[X_EXT_DSP], 4) == 0)
+    {
+      nds_info.x_ext_use[X_EXT_DSP] = true;
+      nds_info.x_ext_major[X_EXT_DSP] = major;
+      nds_info.x_ext_minor[X_EXT_DSP] = minor;
+    }
 }
 
 /* Get non-standard extension info by index. */
@@ -424,6 +449,14 @@ cpu_support_v5_ext (reg_t mmsc_cfg)
   bool CPU_EV5PE = (mmsc_cfg & (1 << 13)) != 0;
 
   return CPU_ECD && CPU_EV5PE;
+}
+
+static bool
+cpu_support_v5dsp_ext (reg_t mmsc_cfg)
+{
+  bool CPU_EDSP = (mmsc_cfg & (1 << 29)) != 0;
+
+  return CPU_EDSP;
 }
 
 static void
@@ -519,7 +552,7 @@ define_elfnn_get_riscv_attribute_section
 #define Elf_Ehdr Elf64_Ehdr
 #define Elf_Shdr Elf64_Shdr
 #define elfnn_get_riscv_attribute_section elf64_get_riscv_attribute_section
-define_elfnn_get_riscv_attribute_section
+  define_elfnn_get_riscv_attribute_section
 #undef Elf_Ehdr
 #undef Elf_Shdr
 #undef elfnn_get_riscv_attribute_section
@@ -721,6 +754,12 @@ parse_riscv_isa_string (const char *s)
 	      s += 4;
 	      strncpy (x_ext, riscv_x_extensions[X_EXT_V5], 6);
 	    }
+	  else if (strncasecmp (s, "xdsp", 4) == 0)
+	    {
+	      print_indent ("%.4s ", s);
+	      s += 4;
+	      strncpy (x_ext, riscv_x_extensions[X_EXT_DSP], 6);
+	    }
 	  else
 	    {
 	      const char *end = s;
@@ -755,7 +794,7 @@ parse_riscv_isa_string (const char *s)
 }
 
 static int
-parse_riscv_attributes (const uint8_t * buf, const uint8_t * end)
+parse_legacy_riscv_attributes (const uint8_t * buf, const uint8_t * end)
 {
   while (buf < end)
     {
@@ -767,7 +806,7 @@ parse_riscv_attributes (const uint8_t * buf, const uint8_t * end)
 	return -1;
       switch (tag)
 	{
-	case Tag_arch:
+	case Tag_arch_legacy:
 	  {
 	    // For Tag_arch, parse the arch substring.
 	    const char *isa = NULL;
@@ -789,17 +828,147 @@ parse_riscv_attributes (const uint8_t * buf, const uint8_t * end)
 	    break; \
 	  }
 	  // For other tags, simply print out the integer.
-	  TAG_CASE (Tag_priv_spec)
-	  TAG_CASE (Tag_priv_spec_minor)
-	  TAG_CASE (Tag_priv_spec_revision)
-	  TAG_CASE (Tag_strict_align)
-	  TAG_CASE (Tag_stack_align)
+	  TAG_CASE (Tag_priv_spec_legacy)
+	  TAG_CASE (Tag_priv_spec_minor_legacy)
+	  TAG_CASE (Tag_priv_spec_revision_legacy)
+	  TAG_CASE (Tag_strict_align_legacy)
+	  TAG_CASE (Tag_stack_align_legacy)
+	  TAG_CASE (Tag_ict_version)
 #undef TAG_CASE
+	case Tag_ict_model_legacy:
+	  {
+	    print_indent ("Tag_ict_model_legacy: ");
+	    uint64_t val;
+	    if (parse_uleb128 (&buf, end, &val) == -1)
+	      return -1;
+	    switch (val)
+	      {
+	      case ict_model_tiny:
+		printf ("tiny");
+		break;
+	      case ict_model_small:
+		printf ("small");
+		break;
+	      case ict_model_large:
+		printf ("large");
+		break;
+	      default:
+		printf ("unknown %" PRIu64, val);
+		break;
+	      }
+	    printf ("\n");
+	    break;
+	  }
 	default:
 	  die ("Unknown RISCV attribute tag %" PRIu64, tag);
 	}
     }
   return 0;
+}
+
+static int
+parse_riscv_attributes (const uint8_t * buf, const uint8_t * end)
+{
+  while (buf < end)
+    {
+      // Each attribute is a pair of tag and value. The value can be either a
+      // null-terminated byte string or an ULEB128 encoded integer depending on
+      // the tag.
+      uint64_t tag;
+      const char *isa = NULL;
+      if (parse_uleb128 (&buf, end, &tag) == -1)
+	return -1;
+      switch (tag)
+	{
+	case Tag_RISCV_arch:
+	  {
+	    // For Tag_arch, parse the arch substring.
+	    if (parse_ntbs (&buf, end, &isa) == -1)
+	      return -1;
+	    print_indent ("Tag_RISCV_arch: %s\n", isa);
+	    ++indent;
+	    if (parse_riscv_isa_string (isa) == -1)
+	      return -1;
+	    --indent;
+	    break;
+	  }
+#define TAG_CASE(tagname) \
+	case tagname: \
+	  { \
+	    if (parse_uleb128(&buf, end, &tag) == -1) \
+	    return -1; \
+	    print_indent( #tagname ": %" PRIu64 "\n", tag); \
+	    break; \
+	  }
+	  // For other tags, simply print out the integer.
+	  TAG_CASE (Tag_RISCV_priv_spec)
+	  TAG_CASE (Tag_RISCV_priv_spec_minor)
+	  TAG_CASE (Tag_RISCV_priv_spec_revision)
+	  TAG_CASE (Tag_RISCV_unaligned_access)
+	  TAG_CASE (Tag_RISCV_stack_align)
+	  TAG_CASE (Tag_ict_version)
+#undef TAG_CASE
+	case Tag_ict_model:
+	  {
+	    print_indent ("Tag_ict_model: ");
+	    uint64_t val;
+	    if (parse_uleb128 (&buf, end, &val) == -1)
+	      return -1;
+	    switch (val)
+	      {
+	      case ict_model_tiny:
+		printf ("tiny");
+		break;
+	      case ict_model_small:
+		printf ("small");
+		break;
+	      case ict_model_large:
+		printf ("large");
+		break;
+	      default:
+		printf ("unknown %" PRIu64, val);
+		break;
+	      }
+	    printf ("\n");
+	    break;
+	  }
+	default:
+	  if (tag % 2 == 0)
+	    {
+	      uint64_t tag2;
+	      if (parse_uleb128 (&buf, end, &tag2) == -1)
+		return -1;
+	      print_indent ("Unknown tag (%" PRIu64 "): %" PRIu64 "\n", tag,
+			    tag2);
+	    }
+	  else
+	    {
+	      const char *isa2 = NULL;
+	      if (parse_ntbs (&buf, end, &isa2) == -1)
+		return -1;
+	      print_indent ("Unknown tag (%" PRIu64 "): %s\n", tag, isa2);
+	    }
+	}
+    }
+  return 0;
+}
+
+
+// Our toolchain previously used incompatible values for tags and there is no
+// good way to disambiguate them as there is no version information for the
+// attribute per se.
+
+// We "guess" the format by checking if the value for tag 4 is a string
+// that starts with "rv", in this case it must be the old Tag_arch. Otherwise,
+// we treat the whole attribute section as new.
+static int
+is_legacy_riscv_attributes (const uint8_t * buf, const uint8_t * end)
+{
+  uint64_t tag;
+  if (parse_uleb128 (&buf, end, &tag) == -1)
+    return -1;
+  return tag == 4 && end - buf >= 2
+    && strncasecmp ((const char *) buf, "rv", 2) == 0;
 }
 
 static int
@@ -828,7 +997,20 @@ parse_riscv_subsection (const uint8_t * buf, const uint8_t * end)
       const uint8_t *sub_end = sub_begin + len;
 
       // Followed by the actual RISC-V attributes.
-      parse_riscv_attributes (buf, sub_end);
+      // First, check if we are dealing with attributes with legacy tag values for
+      // compatibility.
+      int ret = is_legacy_riscv_attributes (buf, sub_end);
+      if (ret == -1)
+	return -1;
+      else if (ret == 1)
+	{
+	  print_indent ("Found legacy attribute subsection\n");
+	  parse_legacy_riscv_attributes (buf, sub_end);
+	}
+      else
+	{
+	  parse_riscv_attributes (buf, sub_end);
+	}
 
       --indent;
       print_indent ("}\n");
@@ -979,6 +1161,13 @@ elf_check (void *file_data, unsigned int file_size,
     {
       if (NEC_check_bool (EFT_ERROR, "V5 Extension",
 			  cpu_support_v5_ext (CSR_mmsc_cfg), true))
+	n_error++;
+    }
+
+  if (elf_use_ext_i (X_EXT_DSP, false))
+    {
+      if (NEC_check_bool (EFT_ERROR, "V5 DSP Extension",
+			  cpu_support_v5dsp_ext (CSR_mmsc_cfg), true))
 	n_error++;
     }
 
