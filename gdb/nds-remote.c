@@ -36,7 +36,6 @@
 #include <ctype.h>
 
 #include "elf-bfd.h"		/* elf_elfheader () */
-#include "observer.h"		/* observer_attach_inferior_created () */
 #include "objfiles.h"
 
 void nds_init_remote_cmds (void);
@@ -659,65 +658,6 @@ nds_set_acr_command (const char *args, int from_tty)
   xfree (acr_content);
 }
 
-/* Bug 6654 - Multiple watchpoints was be hit, GDB only shows one of them.
-
-   FIXME: This is a dirty hacking for hooking remote->to_stopped_data_address,
-   in order to handling multiple hit. This is not a bug at all.  */
-
-/* remote_stopped_data_address_p is used to record the to_stopped_data_address
-   callback of remote_ops and extended_remote_ops, and that should be
-   remote_stopped_data_address.
-
-   One variable is enough, because remote_ops and extended_remote_ops have
-   the same to_stopped_data_address callback.  */
-static int (*remote_stopped_data_address_p) (struct target_ops*, CORE_ADDR*);
-
-/* watchpoints check flow:
-   watchpoints_triggered -> target_stopped_data_address
-   -> delegate_stopped_data_address -> nds_remote_stopped_data_address.  */
-
-static int
-nds_remote_stopped_data_address (struct target_ops *target, CORE_ADDR *addr_p)
-{
-  /* When target is stopped by watchpoint, remote_stopped_data_address will
-     return 1 and *add_p will be updated to be watch data address.  */
-  if (!remote_stopped_data_address_p (target, addr_p))
-    return 0;
-
-  /* If the addr is 0x0, we assume SMW multiple hits.
-     Pretent data_address is unknown and let GDB figure it out.  */
-  return (*addr_p) != 0;
-}
-
-static void
-nds_remote_inferior_created_observer (struct target_ops *target, int from_tty)
-{
-  /* Hack the member to_stopped_data_address in remote_ops/extend_remote_ops
-     without modifying the generic code.
-
-     @TARGET is always &current_target, use beneath to get the value
-     of target_stack.  (See update_current_target @ target.c.)  */
-  struct target_ops *t = target->beneath;
-
-  /* remote_ops and extended_remote_ops have process_stratum, which is higher
-     than file_stratum, so they can be found via target_stack first.  */
-  if ((strcmp (t->to_shortname, "remote") == 0
-       || strcmp (t->to_shortname, "extended-remote") == 0)
-      && t->to_stopped_data_address != nds_remote_stopped_data_address)
-    {
-      remote_stopped_data_address_p = t->to_stopped_data_address;
-      t->to_stopped_data_address = nds_remote_stopped_data_address;
-
-      /* current_target is updated before inferior_created event, so the member
-	 to_stopped_data_address may be the original one at the first time.
-	 This issue can be avoided by always replacing this member.  */
-      if ((strcmp (target->to_shortname, "remote") == 0
-	   || strcmp (target->to_shortname, "extended-remote") == 0))
-	{
-	  target->to_stopped_data_address = nds_remote_stopped_data_address;
-	}
-    }
-}
 
 /* nds_insertion_sort sorts an array with nmemb elements of size size.
    This prototype is the same as qsort ().  */
@@ -779,7 +719,6 @@ void
 nds_init_remote_cmds (void)
 {
   /* Hook for query remote target information.  */
-  observer_attach_inferior_created (nds_remote_inferior_created_observer);
 
   nds_remote_info_init ();
 
