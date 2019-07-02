@@ -8,6 +8,9 @@ Disassembly of section .text:
 
 0+000 <.text>:
 [ 	]+[0-9a-f]+:[ 	]+80c5f557[ 	]+vsetvl[ 	]+a0,a1,a2
+.*R_RISCV_RELAX_ENTRY.*
+.*R_RISCV_NO_RVC_REGION_BEGIN.*
+.*R_RISCV_RELAX_REGION_BEGIN.*
 [ 	]+[0-9a-f]+:[ 	]+0005f557[ 	]+vsetvli[ 	]+a0,a1,e8,m1,d1
 [ 	]+[0-9a-f]+:[ 	]+7ff5f557[ 	]+vsetvli[ 	]+a0,a1,2047
 [ 	]+[0-9a-f]+:[ 	]+0455f557[ 	]+vsetvli[ 	]+a0,a1,e16,m2,d4
