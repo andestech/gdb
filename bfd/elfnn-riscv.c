@@ -3469,7 +3469,7 @@ riscv_insert_non_standard_arch_info (char *name, int version)
 static bfd_boolean
 riscv_parse_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
 {
-  const char *standard_arch = "imafdqcpx";
+  const char *standard_arch = "imafdqcvpx";
   char *name;
   char ver[32];
   struct arch_info *non_standard_arch = NULL;
