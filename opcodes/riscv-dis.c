@@ -925,6 +925,36 @@ riscv_parse_opcode (bfd_vma memaddr, insn_t word, disassemble_info *info,
   return 0;
 }
 
+/* get architecture attributes from input BFD to test if V + XV5  */
+
+/* TODO: share the struct with include file instead of copying it from
+         objdump.c  */
+struct objdump_disasm_info
+{
+  bfd *              abfd;
+  asection *         sec;
+  bfd_boolean        require_sec;
+  arelent **         dynrelbuf;
+  long               dynrelcount;
+  disassembler_ftype disassemble_fn;
+  arelent *          reloc;
+  const char *       symbol;
+};
+
+static bfd_boolean
+has_extension (char ext, disassemble_info *info)
+{
+  struct objdump_disasm_info *od_inf = info->application_data;
+  obj_attribute *attr = &elf_known_obj_attributes (od_inf->abfd)[OBJ_ATTR_PROC][Tag_RISCV_arch];
+  bfd_boolean has = FALSE;
+  char str[] = {'_', ext, '\0'};
+
+  if (attr != NULL)
+    has = !!strstr (attr->s, str);
+
+  return has;
+}
+
 /* Print the RISC-V instruction at address MEMADDR in debugged memory,
    on using INFO.  Returns length of the instruction, in bytes.
    BIGENDIAN must be 1 if this is big-endian code, 0 if
@@ -939,15 +969,31 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
   int insnlen;
   int match;
   static int execit_id = 0;
+  static struct riscv_opcode reordered_op[] =
+    {
+      {0, 0, {0}, 0, 0, 1, 0, 0},
+      {0, 0, {0}, 0, 0, 1, 0, 0},
+      {0, 0, {0}, 0, 0, 1, 0, 0},
+    };
 
 #define OP_HASH_IDX(i) ((i) & (riscv_insn_length (i) == 2 ? 0x3 : OP_MASK_OP))
 
   /* Build a hash table to shorten the search time.  */
   if (!init)
     {
+      bfd_boolean has_v = has_extension ('v', info);
       for (op = riscv_opcodes; op->name; op++)
 	if (!riscv_hash[OP_HASH_IDX (op->match)])
-	  riscv_hash[OP_HASH_IDX (op->match)] = op;
+	  {
+	    /* patch hash to favor vector instructions if has v-ext.  */
+	    if (has_v && (op->mask == 0x707f))
+	      if (!strcmp(op->name, "flhw") || !strcmp(op->name, "fshw"))
+		{
+		  reordered_op[init++] = *op;
+		  continue;
+		}
+	    riscv_hash[OP_HASH_IDX (op->match)] = op;
+	  }
 
       /* Insert ACE opcode attributes into hash table if exist */
       if (ace_lib_load_success && ace_opcs != NULL && ace_ops != NULL)
@@ -1009,7 +1055,11 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
 	{
 	  /* Does the opcode match?  */
 	  if (! (op->match_func) (op, word, 0))
-	    continue;
+	    {
+	      if (!op[1].name && !op[1].mask && reordered_op[0].name)
+	        op = reordered_op - 1;
+	      continue;
+	    }
 	  /* Is this a pseudo-instruction and may we print it as such?  */
 	  if (no_aliases && (op->pinfo & INSN_ALIAS))
 	    continue;
