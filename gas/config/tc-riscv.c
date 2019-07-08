@@ -67,7 +67,6 @@ struct riscv_cl_insn
 #endif
 
 static const char default_arch[] = DEFAULT_ARCH;
-static const char *save_arch = NULL;
 
 static unsigned xlen = 0; /* width of an x-register */
 static unsigned abi_xlen = 0; /* width of a pointer in the ABI */
@@ -3703,7 +3702,6 @@ riscv_parse_arch_attribute (const char *in_arch, bfd_boolean update)
   /* riscv_release_subset_list (&riscv_subsets); */
 
   /* Clear the riscv_opts.rvc if priority is higher.  */
-  int rvc_mode = update ? 2 : 1;
   riscv_set_rvc (FALSE);
 
   if (strncmp (in_arch_p, "rv32", 4) == 0)
@@ -5410,6 +5408,7 @@ riscv_write_out_arch_attr (void)
 static void
 andes_riscv_set_public_attributes (void);
 
+#if 0
 static void
 riscv_set_public_attributes (void)
 {
@@ -5417,6 +5416,7 @@ riscv_set_public_attributes (void)
     /* Re-write arch attribute to normalize the arch string.  */
     riscv_write_out_arch_attr ();
 }
+#endif
 
 /* Called after all assembly has been done.  */
 
@@ -5564,10 +5564,7 @@ riscv_print_arch_info_hash (const char *key, void *value)
 }
 #endif
 
-static unsigned int arch_attr_strlen = 0;
-static char *out_arch = NULL;
-static int first_X_arch = 1;
-
+#if 0
 static void
 riscv_count_arch_attr_strlen (const char *key ATTRIBUTE_UNUSED,
 			      void *value)
@@ -5586,9 +5583,11 @@ riscv_count_arch_attr_strlen (const char *key ATTRIBUTE_UNUSED,
 	}
     }
 }
+#endif
 
 /* Update standard arch attributes.  */
 
+#if 0
 static void
 riscv_update_non_standard_arch_attr (const char *key ATTRIBUTE_UNUSED,
 				     void *value)
@@ -5608,7 +5607,7 @@ riscv_update_non_standard_arch_attr (const char *key ATTRIBUTE_UNUSED,
       data->valid = 0;
     }
 }
-
+#endif
 #if 0
 static void
 andes_riscv_write_out_arch_attr (void)
@@ -5764,42 +5763,6 @@ andes_riscv_set_public_attributes (void)
 }
 
 /* Add the default contents for the .riscv.attributes section.  */
-
-int
-andes_riscv_convert_symbolic_attribute (const char *name)
-{
-  static const struct
-  {
-    const char * name;
-    const int    tag;
-  }
-  attribute_table[] =
-    {
-      /* When you modify this table you should
-         also modify the list in doc/c-riscv.texi.  */
-#define T(tag) {#tag, Tag_##tag},  {"Tag_" #tag, Tag_##tag}
-      T(arch),
-      T(priv_spec),
-      T(priv_spec_minor),
-      T(priv_spec_revision),
-      T(strict_align),
-      T(stack_align),
-      T(ict_version),
-      T(ict_model),
-#undef T
-    };
-
-  unsigned int i;
-
-  if (name == NULL)
-    return -1;
-
-  for (i = 0; i < ARRAY_SIZE (attribute_table); i++)
-    if (strcmp (name, attribute_table[i].name) == 0)
-      return attribute_table[i].tag;
-
-  return -1;
-}
 
 /* Andes .attribute directive extensions.  */
 

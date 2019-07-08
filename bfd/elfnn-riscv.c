@@ -585,7 +585,7 @@ riscv_elf_update_ict_hash_table (bfd *abfd, asection *sec,
   if (rel->r_addend != 0)
     {
       (*_bfd_error_handler)
-	(_("%B %s: Error: Rom-patch relocation offset: 0x%lx "
+	(_("%pB %s: Error: Rom-patch relocation offset: 0x%lx "
 	   "with addend 0x%lx\n"),
 	 abfd, sec->name, rel->r_offset, rel->r_addend);
       return FALSE;
@@ -607,7 +607,7 @@ riscv_elf_update_ict_hash_table (bfd *abfd, asection *sec,
 	  if (entry == NULL)
 	    {
 	      (*_bfd_error_handler)
-		(_("%B: failed to create indirect call %s hash table\n"),
+		(_("%pB: failed to create indirect call %s hash table\n"),
 		 abfd, h->root.root.string);
 	      return FALSE;
 	    }
@@ -622,7 +622,7 @@ riscv_elf_update_ict_hash_table (bfd *abfd, asection *sec,
     {
       /* Rom-patch functions cannot be local.  */
       (*_bfd_error_handler)
-	(_("%B: indirect call relocation with local symbol.\n"), abfd);
+	(_("%pB: indirect call relocation with local symbol.\n"), abfd);
       return FALSE;
     }
 
@@ -1594,8 +1594,6 @@ perform_relocation (const reloc_howto_type *howto,
 		    bfd *input_bfd,
 		    bfd_byte *contents)
 {
-  int _sym = ELFNN_R_SYM (rel->r_info);
-  int _typ = ELFNN_R_TYPE (rel->r_info);
   if (howto->pc_relative)
     value -= sec_addr (input_section) + rel->r_offset;
   value += rel->r_addend;
@@ -2119,7 +2117,7 @@ riscv_elf_relocate_section (bfd *output_bfd,
 	       && r_type != R_RISCV_ICT_64)
 	{
 	  (*_bfd_error_handler)
-	    (_("%B: Error: there are mixed indirect call function \'%s\' "
+	    (_("%pB: Error: there are mixed indirect call function \'%s\' "
 	       "in the ICT model\n"),
 	     input_bfd, h->root.root.string);
 	  return FALSE;
@@ -2616,7 +2614,7 @@ riscv_elf_relocate_section (bfd *output_bfd,
 	    if (entry == NULL)
 	      {
 		(*_bfd_error_handler)
-		  (_("%B %A: internal error indirect call relocation "
+		  (_("%pB %pA: internal error indirect call relocation "
 		     "0x%lx without hash.\n"),
 		     input_bfd, sec, rel->r_offset);
 		bfd_set_error (bfd_error_bad_value);
@@ -3447,7 +3445,7 @@ riscv_parse_arch_name (char **in_arch, int strlen, char **name)
       /* The first char 'x' is a keyword.  */
       if (i == 1)
 	_bfd_error_handler
-	  (_("error: empty non standard ISA extension?"),
+	  (_("error: empty non standard ISA extension? %s"),
 	   string);
       else
 	strlen = i;
@@ -3514,7 +3512,7 @@ riscv_parse_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
   else
     {
       _bfd_error_handler
-	(_("error: %B: ISA string of input (%s) is unmatched with "
+	(_("error: %pB: ISA string of input (%s) is unmatched with "
 	   "output (%s)."), ibfd, in_arch, out_arch);
       return FALSE;
     }
@@ -3552,7 +3550,7 @@ riscv_parse_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
 	  && version_i != version_o)
 	{
 	  _bfd_error_handler
-	    (_("error: %B: cannot mix the objects that have "
+	    (_("error: %pB: cannot mix the objects that have "
 	       "different versions of ISA '%c'."),
 	     ibfd, *standard_arch);
 	  return FALSE;
@@ -3787,7 +3785,7 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
 		 && out_attr[i].i != in_attr[i].i)
 	  {
 	    _bfd_error_handler
-	      (_("error: %B use %u-byte stack aligned but the output "
+	      (_("error: %pB use %u-byte stack aligned but the output "
 		 "use %u-byte stack aligned."),
 	       ibfd, in_attr[i].i, out_attr[i].i);
 	    result = FALSE;
@@ -3823,7 +3821,7 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
 		|| (in_priv.revision != out_priv.revision)))
 	  {
 	    _bfd_error_handler
-	      (_("error: %B: conflicting priv spec version "
+	      (_("error: %pB: conflicting priv spec version "
 		 "(major/minor/revision)."), ibfd);
 	    result = FALSE;
 	  }
@@ -3851,7 +3849,7 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
 		      != out_attr_list->attr.i)
 		    {
 		      _bfd_error_handler
-			(_("error: %B: conflicting ict version %d, "
+			(_("error: %pB: conflicting ict version %d, "
 			   "the output ict version is %d."),
 			 ibfd, in_attr_list->attr.i,
 			 out_attr_list->attr.i);
@@ -3863,7 +3861,7 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
 			      out_attr_list->attr.s) != 0)
 		    {
 		      _bfd_error_handler
-			(_("error: %B: conflicting ict model %s, "
+			(_("error: %pB: conflicting ict model %s, "
 			   "the output ict model is %s."),
 			 ibfd, in_attr_list->attr.s,
 			 out_attr_list->attr.s);
@@ -3874,7 +3872,7 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
 		  break;
 		default:
 		  _bfd_error_handler
-		    (_("Warning: %B: Unknown RISC-V object attribute %d"),
+		    (_("Warning: %pB: Unknown RISC-V object attribute %d"),
 		     ibfd, in_attr_list->tag);
 		  result = FALSE;
 		  break;
@@ -3908,7 +3906,7 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
 	      break;
 	    default:
 	      _bfd_error_handler
-		(_("Warning: %B: Unknown RISC-V object attribute %d"),
+		(_("Warning: %pB: Unknown RISC-V object attribute %d"),
 		 ibfd, in_attr_list->tag);
 	      result = FALSE;
 	      break;
@@ -5511,7 +5509,7 @@ _bfd_riscv_relax_align (bfd *abfd, asection *sec,
       if (!riscv_convert_16_to_32_reloc (&irel_save))
 	{
 	  (*_bfd_error_handler)
-	    (_("%B(%A+0x%lx): Unsupported reloc %d when converting "
+	    (_("%pB(%pA+0x%lx): Unsupported reloc %ld when converting "
 	       "insn from 16-bit to 32-bit for target aligned"),
 	     abfd, sym_sec, irel_save->r_offset,
 	     ELFNN_R_TYPE (irel_save->r_info));
@@ -5621,7 +5619,7 @@ _bfd_riscv_relax_pc  (bfd *abfd,
 	sym_sec = hi_reloc.sym_sec;
 	if (!riscv_use_pcgp_hi_reloc(pcgp_relocs, hi->hi_sec_off))
 	  (*_bfd_error_handler)
-	   (_("%B(%A+0x%lx): Unable to clear RISCV_PCREL_HI20 reloc"
+	   (_("%pB(%pA+0x%lx): Unable to clear RISCV_PCREL_HI20 reloc"
 	      "for cooresponding RISCV_PCREL_LO12 reloc"),
 	    abfd, sec, rel->r_offset);
       }
@@ -5960,7 +5958,6 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
       Elf_Internal_Rela *rel = relocs + i;
       relax_func_t relax_func;
       int type = ELFNN_R_TYPE (rel->r_info);
-      int sym = ELFNN_R_SYM (rel->r_info);
       bfd_vma symval;
 
       switch (riscv_enable_rvc (rel))
@@ -6879,7 +6876,7 @@ riscv_elf_execit_push_insn (bfd *abfd, uint16_t insn16,
 			    bfd_byte *contents, bfd_vma pre_off,
 			    struct elf_riscv_irel_entry *pre_irel_ptr,
 			    struct elf_riscv_irel_entry **irel_list,
-			    struct bfd_link_info *link_info)
+			    struct bfd_link_info *link_info ATTRIBUTE_UNUSED)
 {
   if (insn16 != 0)
     {
@@ -7944,7 +7941,7 @@ riscv_elf_execit_build_hash_table (bfd *abfd, asection *sec,
       if (entry == NULL)
 	{
 	  (*_bfd_error_handler)
-	    (_("%P%F: failed creating exec.it %s hash table: %E\n"), code);
+	    (_("Linker: failed creating exec.it %s hash table\n"), code);
 	  return FALSE;
 	}
       if (h)
