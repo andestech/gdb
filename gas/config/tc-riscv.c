@@ -5731,6 +5731,7 @@ andes_riscv_set_public_attributes (void)
 
   riscv_write_out_arch_attr ();
 
+#if 0
   if (!attributes_set_explicitly[Tag_RISCV_priv_spec])
     bfd_elf_add_proc_attr_int (stdoutput, Tag_RISCV_priv_spec,
 			       DEFAULT_PRIV_SPEC);
@@ -5746,6 +5747,8 @@ andes_riscv_set_public_attributes (void)
   if (!attributes_set_explicitly[Tag_RISCV_stack_align])
     bfd_elf_add_proc_attr_int (stdoutput, Tag_RISCV_stack_align,
 			       DEFAULT_STACK_ALIGN);
+#endif
+
   if (m_ict_model
       && !attributes_set_explicitly[Tag_RISCV_ict_version
       + NUM_KNOWN_OBJ_ATTRIBUTES

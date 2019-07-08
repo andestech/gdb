@@ -3716,7 +3716,11 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
       case Tag_RISCV_priv_spec:
       case Tag_RISCV_priv_spec_minor:
       case Tag_RISCV_priv_spec_revision:
-	if (out_attr[i].i != in_attr[i].i)
+	if (!out_attr[i].i) /* none to input one  */
+	  out_attr[i] = in_attr[i];
+	else if (!in_attr[i].i) /* merge none  */
+	  /* pass */;
+	else if (out_attr[i].i != in_attr[i].i)
 	  {
 	    _bfd_error_handler
 	      (_("error: %pB: conflicting priv spec version "
