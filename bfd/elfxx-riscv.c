@@ -1894,10 +1894,43 @@ riscv_add_subset (riscv_subset_list_t *subset_list,
   s->minor_version = minor;
   s->next = NULL;
 
-  if (subset_list->tail != NULL)
-    subset_list->tail->next = s;
+  /* standard extension before non-std ones  */
+  int is_non_std = (subset[0] == 'x') ||
+		   ((subset[0] == 's') && (subset[1] == 'x'));
 
-  subset_list->tail = s;
+  if (is_non_std)
+    { /* insert at tail  */
+      if (subset_list->tail != NULL)
+	subset_list->tail->next = s;
+      subset_list->tail = s;
+    }
+  else
+    { /* insert before non-std  */
+      if (subset_list->tail != NULL)
+        {
+	  riscv_subset_t dummy = {NULL, 0, 0, subset_list->head};
+	  riscv_subset_t *p = &dummy;
+	  while (p->next)
+	    {
+	      const char *name = p->next->name;
+	      is_non_std = (name[0] == 'x') ||
+		           ((name[0] == 's') && (name[1] == 'x'));
+	      if (is_non_std)
+	        break;
+
+	      p = p->next;
+	    }
+	  /* p -> last std */
+	  s->next = p->next;
+	  p->next = s;
+	  if (p->name == NULL)
+	    subset_list->head = s;
+	  if (s->next == NULL)
+	    subset_list->tail = s;
+	}
+      else
+	subset_list->tail = s;
+    }
 }
 
 /* Find subset in list without version checking, return NULL if not found.  */
