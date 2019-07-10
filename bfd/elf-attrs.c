@@ -545,8 +545,8 @@ _bfd_elf_parse_attributes (bfd *abfd, Elf_Internal_Shdr * hdr)
 		    4, /* 9 stack_align */
 		  };
 		  tag = _bfd_safe_read_leb128 (abfd, p, &n, FALSE, end);
-		  if (((tag == 4) && (p[1] != 'r')) ||
-		      ((tag == 5) && (p[1] == 'r')))
+		  if (((tag == 4) && (tolower(p[1]) != 'r')) ||
+		      ((tag == 5) && (tolower(p[1]) == 'r')))
 		    break; /* new style */
 
 		  /* old style  */
