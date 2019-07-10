@@ -947,10 +947,31 @@ has_extension (char ext, disassemble_info *info)
   struct objdump_disasm_info *od_inf = info->application_data;
   obj_attribute *attr = &elf_known_obj_attributes (od_inf->abfd)[OBJ_ATTR_PROC][Tag_RISCV_arch];
   bfd_boolean has = FALSE;
-  char str[] = {'_', ext, '\0'};
+  char extlo = tolower(ext);
 
-  if (attr != NULL)
-    has = !!strstr (attr->s, str);
+  if (attr && attr->s)
+    {
+      const char *p = attr;
+      if ((tolower(p[0]) == 'r') &&
+	  (tolower(p[1]) == 'v') &&
+	  (isdigit(p[2])) &&
+	  (isdigit(p[3])))
+	{
+	  p += 4;
+	  while (*p)
+	    {
+	      if (tolower(*p) == 'x') /* before non-std  */
+		break;
+	      if ((tolower(*p) == extlo) &&
+		  ((extlo != 'p') || !isdigit(p-1)))
+		{
+		  has = TRUE;
+		  break;
+		}
+	      ++p;;
+	    }
+	}
+    }
 
   return has;
 }
