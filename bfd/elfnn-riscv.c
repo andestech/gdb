@@ -5809,7 +5809,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
   riscv_init_pcgp_relocs (&pcgp_relocs);
 
   /* Check and init '__global_pointer$'.  */
-  if (!gp_init)
+  if (!gp_init && !bfd_link_pic (info))
     {
       if (!riscv_init_global_pointer (sec->output_section->owner, info))
 	{
