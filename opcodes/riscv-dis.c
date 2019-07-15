@@ -922,31 +922,19 @@ riscv_parse_opcode (bfd_vma memaddr, insn_t word, disassemble_info *info,
 
 /* get architecture attributes from input BFD to test if V + XV5  */
 
-/* TODO: share the struct with include file instead of copying it from
-         objdump.c  */
-struct objdump_disasm_info
-{
-  bfd *              abfd;
-  asection *         sec;
-  bfd_boolean        require_sec;
-  arelent **         dynrelbuf;
-  long               dynrelcount;
-  disassembler_ftype disassemble_fn;
-  arelent *          reloc;
-  const char *       symbol;
-};
-
 static bfd_boolean
 has_extension (char ext, disassemble_info *info)
 {
-  struct objdump_disasm_info *od_inf = info->application_data;
-  obj_attribute *attr = &elf_known_obj_attributes (od_inf->abfd)[OBJ_ATTR_PROC][Tag_RISCV_arch];
   bfd_boolean has = FALSE;
+  obj_attribute *attr = NULL;
   char extlo = tolower(ext);
+
+  if (info && info->section && info->section->owner)
+    attr = &elf_known_obj_attributes (info->section->owner)[OBJ_ATTR_PROC][Tag_RISCV_arch];
 
   if (attr && attr->s)
     {
-      const char *p = attr;
+      const char *p = attr->s;
       if ((tolower(p[0]) == 'r') &&
 	  (tolower(p[1]) == 'v') &&
 	  (isdigit(p[2])) &&
