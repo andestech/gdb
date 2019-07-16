@@ -951,7 +951,7 @@ has_extension (char ext, disassemble_info *info)
 	      if (tolower(*p) == 'x') /* before non-std  */
 		break;
 	      if ((tolower(*p) == extlo) &&
-		  ((extlo != 'p') || !isdigit(p-1)))
+		  ((extlo != 'p') || !isdigit(*(p-1))))
 		{
 		  has = TRUE;
 		  break;
