@@ -6085,6 +6085,16 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 
       symval += rel->r_addend;
 
+      /* if symbol value exceeds output section end, it would break current
+       * pcgp relaxation algorithm. skip it over by now.
+       */
+      if (relax_func == _bfd_riscv_relax_pc && sym_sec->output_section)
+	{
+	  bfd_vma secend = sec_addr (sym_sec) + sym_sec->output_section->rawsize;
+	  if (symval >= secend)
+	    continue;
+	}
+
       if (!relax_func (abfd, sec, sym_sec, info, rel, symval,
 		       max_alignment, reserve_size, again,
 		       &pcgp_relocs, rvc))
