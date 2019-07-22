@@ -1349,9 +1349,6 @@ md_begin (void)
   opcode_names_hash = hash_new ();
   init_opcode_names_hash ();
 
-  /* Initialization of arch attribute hash table.  */
-  arch_info_hash_init ();
-
   /* Set the default alignment for the text section.  */
   record_alignment (text_section, riscv_opts.rvc ? 1 : 2);
 
@@ -3672,6 +3669,8 @@ riscv_update_arch_info_hash (const char *arch, int version,
     }
   else
     {
+      if (version == -1)
+	version = 0;
       struct arch_info *new = malloc (sizeof (struct arch_info));
       key = xstrdup (arch);
       new->name = key;
@@ -3691,6 +3690,23 @@ riscv_update_arch_info_hash (const char *arch, int version,
     }
 }
 
+static int
+strincmp(char const *a, char const *b, size_t sz)
+{
+  size_t i;
+  if (!a || !b)
+    return -1;
+
+  for (i = 0; i < sz; a++, b++, i++)
+    {
+      int d = TOLOWER((unsigned char)*a) - TOLOWER((unsigned char)*b);
+      if (d != 0 || !*a || !*b)
+        return d;
+    }
+
+  return 0;
+}
+
 static bfd_boolean
 riscv_parse_arch_attribute (const char *in_arch, bfd_boolean update)
 {
@@ -3706,12 +3722,12 @@ riscv_parse_arch_attribute (const char *in_arch, bfd_boolean update)
   /* Clear the riscv_opts.rvc if priority is higher.  */
   riscv_set_rvc (FALSE);
 
-  if (strncmp (in_arch_p, "rv32", 4) == 0)
+  if (strincmp (in_arch_p, "rv32", 4) == 0)
     {
       xlen = 32;
       in_arch_p += 4;
     }
-  else if (strncmp (in_arch_p, "rv64", 4) == 0)
+  else if (strincmp (in_arch_p, "rv64", 4) == 0)
     {
       xlen = 64;
       in_arch_p += 4;
@@ -3720,7 +3736,7 @@ riscv_parse_arch_attribute (const char *in_arch, bfd_boolean update)
     as_fatal (".attribute %s: ISA string must begin with rv32/rv64",
 	      in_arch_p);
 
-  switch (*in_arch_p)
+  switch (TOLOWER(*in_arch_p))
     {
     case 'e':
       /* FIXME: the extensions after 'e' only can be M, A and C.  */
@@ -3757,7 +3773,7 @@ riscv_parse_arch_attribute (const char *in_arch, bfd_boolean update)
 
   while (*in_arch_p)
     {
-      switch (*in_arch_p)
+      switch (TOLOWER(*in_arch_p))
 	{
 	case 'c':
 	  if (riscv_opts.no_16_bit)
@@ -3800,10 +3816,12 @@ riscv_parse_arch_attribute (const char *in_arch, bfd_boolean update)
 	  name = NULL;
 	  riscv_parse_arch_name (&in_arch_p, 0, &name);
 	  version = riscv_parse_arch_version (&in_arch_p);
-	  if (version < 0)
-	    version = 0;
 	  if (strcmp (name, "xv5") == 0)
 	    {
+	      if (version == 0)
+		riscv_opts.efhw = TRUE; /* 0p0 imply X_efhw */
+	      if (version == -1)
+		version = 10001;        /* default version: 1p1 */
 	      riscv_update_arch_info_hash ("xv5-", version, update);
 	      riscv_add_subset (&riscv_subsets, "xv5-", 0, 0);
 	    }
@@ -3832,7 +3850,11 @@ riscv_parse_arch_attribute (const char *in_arch, bfd_boolean update)
     riscv_add_subset (&riscv_subsets, "xdsp", 0, 0);
 
   if (riscv_opts.efhw)
-    riscv_add_subset ("xefhw");
+    {
+      version = 10000; /* default version of "xefhw": 1p0  */
+      riscv_update_arch_info_hash ("xefhw", version, update);
+      riscv_add_subset ("xefhw");
+    }
 
   /* Always add `c' into `all_subsets' for the `riscv_opcodes' table.  */
   riscv_add_subset (&riscv_subsets, "c", 0, 0);
@@ -3870,7 +3892,7 @@ riscv_set_arch_attributes (const char *name)
   if (name)
     {
       string = name;
-      update = FALSE;
+      update = TRUE;
     }
   else
     {
@@ -5650,7 +5672,7 @@ andes_riscv_write_out_arch_attr (void)
 	  /* Can not find the matched standard arch, regard it as
 	     non-standard one.  */
 	  if (!arch_info[i].name)
-	    riscv_update_arch_info_hash (riscv_subsets->name, 0, TRUE);
+	    riscv_update_arch_info_hash (riscv_subsets->name, -1, TRUE);
 	  riscv_subsets = next;
 	}
     }
