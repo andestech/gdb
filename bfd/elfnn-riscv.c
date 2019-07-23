@@ -3413,7 +3413,7 @@ riscv_parse_arch_name (char **in_arch, int strlen, char **name)
   if (!strlen)
     {
       i = 0;
-      if (strncmp (string, "xv5-", 4) == 0)
+      if (strncasecmp (string, "xv5-", 4) == 0)
 	i += 4;
       else
 	while (string[i] != '\0'
@@ -3453,7 +3453,7 @@ riscv_insert_non_standard_arch_info (char *name, int version)
 
   while (arch)
     {
-      if (strcmp (arch->name, name) == 0)
+      if (strcasecmp (arch->name, name) == 0)
 	return;
       arch = arch->next;
     }
@@ -3481,9 +3481,9 @@ riscv_parse_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
   memset(output_arch_buffer, 0, 100);
 
   /* Skip rv32/rv64.  */
-  if (strncmp (in_arch, out_arch, 4) == 0
-      && (strncmp (in_arch, "rv32", 4) == 0
-	  || strncmp (in_arch, "rv64", 4) == 0))
+  if (strncasecmp (in_arch, out_arch, 4) == 0
+      && (strncasecmp (in_arch, "rv32", 4) == 0
+	  || strncasecmp (in_arch, "rv64", 4) == 0))
     {
       strncat(output_arch_buffer, out_arch, 4);
       in_arch += 4;

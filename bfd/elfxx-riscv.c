@@ -1481,6 +1481,7 @@ riscv_parsing_subset_version (riscv_parse_subset_t *rps,
 			      bfd_boolean std_ext_p)
 {
   bfd_boolean major_p = TRUE;
+  bfd_boolean version_p = FALSE;
   unsigned version = 0;
   unsigned major = 0;
   unsigned minor = 0;
@@ -1514,7 +1515,10 @@ riscv_parsing_subset_version (riscv_parse_subset_t *rps,
 	  version = 0;
 	}
       else if (ISDIGIT (*p))
-	version = (version * 10) + (*p - '0');
+	{
+	  version = (version * 10) + (*p - '0');
+	  version_p = TRUE;
+	}
       else
 	break;
     }
@@ -1524,7 +1528,7 @@ riscv_parsing_subset_version (riscv_parse_subset_t *rps,
   else
     minor = version;
 
-  if (major == 0 && minor == 0)
+  if (!version_p)
     {
       /* We don't found any version string, use default version.  */
       *major_version = default_major_version;
@@ -1569,7 +1573,7 @@ riscv_parse_std_ext (riscv_parse_subset_t *rps,
   char std_ext = '\0';
 
   /* First letter must start with i, e or g.  */
-  switch (*p)
+  switch (TOLOWER(*p))
     {
       case 'i':
 	p++;
@@ -1709,7 +1713,7 @@ riscv_parse_sv_or_non_std_ext (riscv_parse_subset_t *rps,
 	  continue;
 	}
 
-      if (strncmp (p, ext_type, ext_type_len) != 0)
+      if (strncasecmp (p, ext_type, ext_type_len) != 0)
 	break;
 
       /* It's non-standard supervisor extension if it prefix with sx.  */
@@ -1718,7 +1722,7 @@ riscv_parse_sv_or_non_std_ext (riscv_parse_subset_t *rps,
 	break;
 
       /* look ahead for xv5{-XpY} */
-      if (strncmp(p, "xv5", 3) == 0)
+      if (strncasecmp(p, "xv5", 3) == 0)
 	{
 	  p += 3;
 	  if (*p == '-')
@@ -1727,9 +1731,14 @@ riscv_parse_sv_or_non_std_ext (riscv_parse_subset_t *rps,
 		    rps,
 		    march,
 		    p + 1, &major_version, &minor_version,
-		    /* default_major_version= */ 0,
-		    /* default_minor_version= */ 0,
+		    /* default_major_version= */ 1,
+		    /* default_minor_version= */ 1,
 		    /* std_ext_p= */FALSE);
+	    }
+	  else
+	    {
+	      major_version = 1; /* default version 1p1  */
+	      minor_version = 1;
 	    }
 	  riscv_add_subset (rps->subset_list, "xv5-", major_version, minor_version);
 	  continue;
@@ -1784,12 +1793,12 @@ riscv_parse_subset (riscv_parse_subset_t *rps,
 {
   const char *p = arch;
 
-  if (strncmp (p, "rv32", 4) == 0)
+  if (strncasecmp (p, "rv32", 4) == 0)
     {
       *rps->xlen = 32;
       p += 4;
     }
-  else if (strncmp (p, "rv64", 4) == 0)
+  else if (strncasecmp (p, "rv64", 4) == 0)
     {
       *rps->xlen = 64;
       p += 4;

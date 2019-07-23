@@ -197,6 +197,20 @@ riscv_set_arch (const char *s)
     {
       riscv_set_rve (TRUE);
     }
+
+  if (riscv_lookup_subset_version (&riscv_subsets, "xv5-", 0, 0))
+    {
+      /* x_v5 imply x_efhw */
+      if (!riscv_lookup_subset (rps.subset_list, "xefhw"))
+        /* default version of "xefhw": 1p0  */
+        riscv_add_subset (&riscv_subsets, "xefhw", 1, 0);
+    }
+  else
+    {
+      if (riscv_lookup_subset (rps.subset_list, "xefhw"))
+	_bfd_error_handler
+	  (_("error: xEFHW extension setting conflict!"));
+    }
 }
 
 /* Handle of the OPCODE hash table.  */
@@ -1211,6 +1225,7 @@ static struct hash_control *arch_info_hash = NULL;
 #define DEFAULT_STACK_ALIGN 0
 #define DEFAULT_ICT_VERSION 1
 
+#if 0
 static void
 arch_info_hash_init (void)
 {
@@ -1231,6 +1246,7 @@ arch_info_hash_init (void)
 	}
     }
 }
+#endif
 
 /* This function is called once, at assembler startup time.  It should set up
    all the tables, etc. that the MD part of the assembler will need.  */
@@ -3628,12 +3644,12 @@ riscv_parse_arch_attribute (const char *in_arch, bfd_boolean update)
 	      if (version == -1)
 		version = 10001;        /* default version: 1p1 */
 	      riscv_update_arch_info_hash ("xv5-", version, update);
-	      riscv_add_subset (&riscv_subsets, "xv5-", 0, 0);
+	      riscv_add_subset (&riscv_subsets, "xv5-", version/10000, version%10000);
 	    }
 	  else
 	    {
 	      riscv_update_arch_info_hash (name, version, update);
-	      riscv_add_subset (&riscv_subsets, name, 0, 0);
+	      riscv_add_subset (&riscv_subsets, name, version/10000, version%10000);
 	    }
 
 	  if (*in_arch_p == '_')
@@ -3654,12 +3670,9 @@ riscv_parse_arch_attribute (const char *in_arch, bfd_boolean update)
   if (riscv_opts.dsp)
     riscv_add_subset (&riscv_subsets, "xdsp", 0, 0);
 
+  /* default version of "xefhw": 1p0  */
   if (riscv_opts.efhw)
-    {
-      version = 10000; /* default version of "xefhw": 1p0  */
-      riscv_update_arch_info_hash ("xefhw", version, update);
-      riscv_add_subset ("xefhw");
-    }
+    riscv_add_subset (&riscv_subsets, "xefhw", 1, 0);
 
   /* Always add `c' into `all_subsets' for the `riscv_opcodes' table.  */
   riscv_add_subset (&riscv_subsets, "c", 0, 0);
@@ -3993,6 +4006,10 @@ riscv_after_parse_args (void)
 
   if (riscv_opts.dsp)
     riscv_add_subset (&riscv_subsets, "xdsp", 2, 0);
+
+  /* default version of "xefhw": 1p0  */
+  if (riscv_opts.efhw)
+    riscv_add_subset (&riscv_subsets, "xefhw", 1, 0);
 
   /* Always add `c' into `all_subsets' for the `riscv_opcodes' table.  */
 //   riscv_add_subset (&riscv_subsets, "c", 2, 0);
