@@ -1636,6 +1636,7 @@ riscv_parse_std_ext (riscv_parse_subset_t *rps,
 
   while (*p)
     {
+      const char *start_of_version;
       char subset[2] = {0, 0};
 
       if (*p == 'x' || *p == 's')
@@ -1647,7 +1648,7 @@ riscv_parse_std_ext (riscv_parse_subset_t *rps,
 	  continue;
 	}
 
-      std_ext = *p;
+      std_ext = TOLOWER(*p);
 
       /* Checking canonical order.  */
       while (*std_exts && std_ext != *std_exts) std_exts++;
@@ -1667,6 +1668,7 @@ riscv_parse_std_ext (riscv_parse_subset_t *rps,
       std_exts++;
 
       p++;
+      start_of_version = p;
       p = riscv_parsing_subset_version (
 	    rps,
 	    march,
@@ -1676,6 +1678,13 @@ riscv_parse_std_ext (riscv_parse_subset_t *rps,
 	    /* std_ext_p= */TRUE);
 
       subset[0] = std_ext;
+
+      /* v extension default version is 0p7 */
+      if ((start_of_version == p) && !strcasecmp(subset, "v"))
+	{
+	  major_version = 0;
+	  minor_version = 7;
+	}
 
       riscv_add_subset (rps->subset_list, subset, major_version, minor_version);
     }
