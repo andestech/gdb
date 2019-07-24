@@ -1797,6 +1797,13 @@ riscv_parse_prefixed_ext (riscv_parse_subset_t *rps,
 
       *q = '\0';
 
+      /* x_efhw default version is 1p0 */
+      if ((end_of_version == q) && !strcasecmp(subset, "xefhw"))
+	{
+	  major_version = 1;
+	  minor_version = 0;
+	}
+
       /* Check that the name is valid.
 	 For 'x', anything goes but it cannot simply be 'x'.
 	 For 's', it must be known from a list and cannot simply be 's'.
