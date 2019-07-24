@@ -207,12 +207,6 @@ riscv_set_arch (const char *s)
         /* default version of "xefhw": 1p0  */
         riscv_add_subset (&riscv_subsets, "xefhw", 1, 0);
     }
-  else
-    {
-      if (riscv_lookup_subset (rps.subset_list, "xefhw"))
-	_bfd_error_handler
-	  (_("error: xEFHW extension setting conflict!"));
-    }
 }
 
 /* Handle of the OPCODE hash table.  */
