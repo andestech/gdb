@@ -1763,6 +1763,13 @@ riscv_parse_sv_or_non_std_ext (riscv_parse_subset_t *rps,
 
       *q = '\0';
 
+      /* x_efhw default version is 1p0 */
+      if ((end_of_version == q) && !strcasecmp(subset, "xefhw"))
+	{
+	  major_version = 1;
+	  minor_version = 0;
+	}
+
       riscv_add_subset (rps->subset_list, subset, major_version, minor_version);
       free (subset);
       p += end_of_version - subset;
