@@ -3354,6 +3354,16 @@ riscv_merge_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
       return NULL;
     }
 
+  /*  V and X_efhw are incompatible */
+  if (riscv_lookup_subset (&merged_subsets, "xefhw")
+      && riscv_lookup_subset (&merged_subsets, "v"))
+    {
+      _bfd_error_handler
+        (_("error: output arch \"%s\" is not compatible with \"%s\"."),
+	 out_arch, in_arch);
+      return NULL;
+    }
+
   merged_arch_str = riscv_arch_str (ARCH_SIZE, &merged_subsets);
 
   /* Release the subset lists.  */
