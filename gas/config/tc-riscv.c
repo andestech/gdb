@@ -4171,6 +4171,7 @@ md_parse_option (int c, const char *arg)
 
     case OPTION_MEXT_EFHW:
       riscv_opts.efhw = TRUE;
+      break;
 
     case OPTION_MEXT_VECTOR:
       riscv_opts.vector = TRUE;
