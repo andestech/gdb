@@ -253,7 +253,6 @@ static bfd_boolean do_notes = FALSE;
 static bfd_boolean do_archive_index = FALSE;
 static bfd_boolean is_32bit_elf = FALSE;
 static bfd_boolean decompress_dumps = FALSE;
-static nds_backward_compatible = 0;
 
 struct group_list
 {
