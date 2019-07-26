@@ -296,7 +296,7 @@ static const char *base_isas[BASE_ISA_COUNT] =
 static const char *riscv_extensions = "MAFDQLCBJTPVNX";
 
 // RISC-V Non-standard extensions
-static const char *riscv_x_extensions[] = { "Xv5-", "xdsp" };
+static const char *riscv_x_extensions[] = { "Xv5-", "xdsp", "xefhw" };
 
 
 
@@ -310,6 +310,7 @@ enum RISCV_X_EXT
 {
   X_EXT_V5,
   X_EXT_DSP,
+  X_EXT_FHW,
   X_EXT_COUNT
 };
 
@@ -391,6 +392,12 @@ set_riscv_x_ext_info (const char *ext, int major, int minor)
       nds_info.x_ext_major[X_EXT_DSP] = major;
       nds_info.x_ext_minor[X_EXT_DSP] = minor;
     }
+  else if (strncmp (ext, riscv_x_extensions[X_EXT_FHW], 5) == 0)
+    {
+      nds_info.x_ext_use[X_EXT_FHW] = true;
+      nds_info.x_ext_major[X_EXT_FHW] = major;
+      nds_info.x_ext_minor[X_EXT_FHW] = minor;
+    }
 }
 
 /* Get non-standard extension info by index. */
@@ -457,6 +464,15 @@ cpu_support_v5dsp_ext (reg_t mmsc_cfg)
   bool CPU_EDSP = (mmsc_cfg & (1 << 29)) != 0;
 
   return CPU_EDSP;
+}
+
+static bool
+cpu_support_v5efhw_ext (reg_t mmsc_cfg, reg_t misa)
+{
+  bool CPU_EFHW = (mmsc_cfg & (1 << 17)) != 0;
+  bool CPU_V_EXT = (misa & (1 << 21)) != 0;
+
+  return CPU_EFHW && !CPU_V_EXT;
 }
 
 static void
@@ -760,6 +776,12 @@ parse_riscv_isa_string (const char *s)
 	      s += 4;
 	      strncpy (x_ext, riscv_x_extensions[X_EXT_DSP], 6);
 	    }
+	  else if (strncasecmp (s, "xefhw", 5) == 0)
+	    {
+	      print_indent ("%.5s ", s);
+	      s += 5;
+	      strncpy (x_ext, riscv_x_extensions[X_EXT_FHW], 6);
+	    }
 	  else
 	    {
 	      const char *end = s;
@@ -772,6 +794,17 @@ parse_riscv_isa_string (const char *s)
 	    }
 	  if (parse_riscv_isa_version (&s, &major, &minor) == -1)
 	    return -1;
+
+	  if (strcmp (x_ext, "Xv5-") == 0 && major == 0 && minor == 0)
+	    {
+	      // xv5-0p0 is expanded to xv5-1p1_xefhw1p0 for
+	      // backward compatibility.
+	      set_riscv_x_ext_info (x_ext, 1, 1);
+	      print_indent ("%.5s ", s);
+	      strncpy (x_ext, riscv_x_extensions[X_EXT_FHW], 6);
+	      major = 1;
+	      minor = 0;
+	    }
 	  Debug_printf ("\n");
 
 	  set_riscv_x_ext_info (x_ext, major, minor);
@@ -1168,6 +1201,13 @@ elf_check (void *file_data, unsigned int file_size,
     {
       if (NEC_check_bool (EFT_ERROR, "V5 DSP Extension",
 			  cpu_support_v5dsp_ext (CSR_mmsc_cfg), true))
+	n_error++;
+    }
+
+  if (elf_use_ext_i (X_EXT_FHW, false))
+    {
+      if (NEC_check_bool (EFT_ERROR, "V5 EFHW Extension",
+			  cpu_support_v5efhw_ext (CSR_mmsc_cfg, CSR_misa), true))
 	n_error++;
     }
 
