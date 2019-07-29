@@ -8862,7 +8862,7 @@ riscv_init_global_pointer (bfd *output_bfd, struct bfd_link_info *info)
     {
       sdata_sec = bfd_get_section_by_name (output_bfd, ".sdata");
       if (!sdata_sec)
-	return FALSE;
+        sdata_sec = bfd_abs_section_ptr;
       gp_value = 0x800;
 
       if (!_bfd_generic_link_add_one_symbol
