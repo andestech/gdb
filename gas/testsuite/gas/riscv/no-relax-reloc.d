@@ -1,4 +1,4 @@
-#as: -mno-relax
+#as: -march=rv32ic -mno-relax
 #objdump: -r
 
 .*:[ 	]+file format .*
