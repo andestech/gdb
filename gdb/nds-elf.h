@@ -795,16 +795,6 @@ parse_riscv_isa_string (const char *s)
 	  if (parse_riscv_isa_version (&s, &major, &minor) == -1)
 	    return -1;
 
-	  if (strcmp (x_ext, "Xv5-") == 0 && major == 0 && minor == 0)
-	    {
-	      // xv5-0p0 is expanded to xv5-1p1_xefhw1p0 for
-	      // backward compatibility.
-	      set_riscv_x_ext_info (x_ext, 1, 1);
-	      print_indent ("%.5s ", s);
-	      strncpy (x_ext, riscv_x_extensions[X_EXT_FHW], 6);
-	      major = 1;
-	      minor = 0;
-	    }
 	  Debug_printf ("\n");
 
 	  set_riscv_x_ext_info (x_ext, major, minor);
