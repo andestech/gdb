@@ -2187,7 +2187,9 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
       if ((insn->xlen_requirement != 0) && (xlen != insn->xlen_requirement))
 	continue;
 
-      if (!riscv_multi_subset_supports (insn->subset))
+      if (ace_lib_load_success && !strcasecmp(insn->subset[0], "X"))
+	;
+      else if (!riscv_multi_subset_supports (insn->subset))
 	continue;
 
       create_insn (ip, insn);
