@@ -4451,7 +4451,9 @@ riscv_relax_lui_to_rvc (bfd *abfd,
   bfd_byte *contents = elf_section_data (sec)->this_hdr.contents;
 
   /* Can we relax LUI to C.LUI?  Alignment might move the section forward;
-     account for this assuming page alignment at worst.  */
+     account for this assuming page alignment at worst. In the presence of
+     RELRO segment the linker aligns it by one page size, therefore sections
+     after the segment can be moved more than one page. */
   /* The imm of lui may be changed to zero after relaxation. Even if we
      redefine the macro VALID_RVC_LUI_IMM(x) to limit the imm of c.lui
      can not be zero, linker may still convert the lui to illegal c.lui here.
@@ -4461,7 +4463,9 @@ riscv_relax_lui_to_rvc (bfd *abfd,
   if (rvc
       && ELFNN_R_TYPE (rel->r_info) == R_RISCV_HI20
       && VALID_RVC_LUI_IMM (RISCV_CONST_HIGH_PART (symval))
-      && VALID_RVC_LUI_IMM (RISCV_CONST_HIGH_PART (symval + ELF_MAXPAGESIZE)))
+      && VALID_RVC_LUI_IMM (RISCV_CONST_HIGH_PART (symval)
+			    + (link_info->relro ? 2 * ELF_MAXPAGESIZE
+			       : ELF_MAXPAGESIZE)))
     {
       /* Replace LUI with C.LUI if legal (i.e., rd != x0 and rd != x2/sp).  */
       bfd_vma lui = bfd_get_32 (abfd, contents + rel->r_offset);
