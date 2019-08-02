@@ -173,7 +173,7 @@ parse_riscv_dis_option (const char *option)
 	  err = (char *) dlerror ();
 	  if (err == NULL)
 	    {
-	      ace_opcs = (struct riscv_opcode *) dlsym (dlc, "ace_opcodes");
+	      ace_opcs = (struct riscv_opcode *) dlsym (dlc, "ace_opcodes_2");
 	      err = (char *) dlerror ();
 	    }
 	}

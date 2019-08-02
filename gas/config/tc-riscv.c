@@ -3904,7 +3904,7 @@ md_parse_option (int c, const char *arg)
 	  err = (char *) dlerror ();
 	else
 	  {
-	    ace_opcs = (struct riscv_opcode *) dlsym (dlc, "ace_opcodes");
+	    ace_opcs = (struct riscv_opcode *) dlsym (dlc, "ace_opcodes_2");
 	    err = (char *) dlerror ();
 	    if (err == NULL)
 	      {
