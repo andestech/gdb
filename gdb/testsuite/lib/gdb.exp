@@ -3851,7 +3851,7 @@ proc skip_compile_feature_tests {} {
 
     set result 0
     gdb_test_multiple "compile code -- ;" "check for working compile command" {
-	"Could not load libcc1.*\r\n$gdb_prompt $" {
+	-re "Could not load libcc1.*\r\n$gdb_prompt $" {
 	    set result 1
 	}
 	-re "Command not supported on this host\\..*\r\n$gdb_prompt $" {
