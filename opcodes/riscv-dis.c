@@ -112,7 +112,9 @@ enum
   HW_GPR,
   HW_UINT,
   HW_INT,
-  HW_ACR
+  HW_ACR,
+  HW_FPR,
+  HW_VR
 };
 
 /* Pointers for storing symbols from ACE shared library */
@@ -331,6 +333,14 @@ print_ace_args (const char **args, insn_t l, disassemble_info * info)
 	{
 	case HW_GPR:
 	  print (info->stream, "%s", riscv_gpr_names[bit_value]);
+	  break;
+
+	case HW_FPR:
+	  print (info->stream, "%s", riscv_fpr_names[bit_value]);
+	  break;
+
+	case HW_VR:
+	  print (info->stream, "%s", riscv_vecr_names[bit_value]);
 	  break;
 
 	case HW_UINT:

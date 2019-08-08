@@ -1071,7 +1071,9 @@ enum
   HW_GPR,
   HW_UINT,
   HW_INT,
-  HW_ACR
+  HW_ACR,
+  HW_FPR,
+  HW_VR
 };
 
 /* Hash table for storing symbols from shared library */
@@ -1189,6 +1191,34 @@ ace_ip (char **args, char **str, struct riscv_cl_insn *ip)
 	  unsigned int regno;
 	  /* Extract the GPR index string from assembly code (*str) */
 	  if (reg_lookup (str, RCLASS_GPR, &regno))
+	    /* Encode instruction */
+	    ace_encode_insn (regno, ace_op, ip);
+
+	  /* Update the address of pointer of assembly code (*str) */
+	  if (!found_asm_end)
+	    *str += 1;
+	}
+      break;
+
+    case HW_FPR:
+	{
+	  unsigned int regno;
+	  /* Extract the FPR index string from assembly code (*str) */
+	  if (reg_lookup (str, RCLASS_FPR, &regno))
+	    /* Encode instruction */
+	    ace_encode_insn (regno, ace_op, ip);
+
+	  /* Update the address of pointer of assembly code (*str) */
+	  if (!found_asm_end)
+	    *str += 1;
+	}
+      break;
+
+    case HW_VR:
+	{
+	  unsigned int regno;
+	  /* Extract the VR index string from assembly code (*str) */
+	  if (reg_lookup (str, RCLASS_VECR, &regno))
 	    /* Encode instruction */
 	    ace_encode_insn (regno, ace_op, ip);
 
