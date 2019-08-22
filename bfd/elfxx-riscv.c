@@ -1639,7 +1639,7 @@ riscv_parse_std_ext (riscv_parse_subset_t *rps,
       const char *start_of_version;
       char subset[2] = {0, 0};
 
-      if (*p == 'x' || *p == 's' || *p == 'z')
+      if (strchr("XxZzSs", *p))
 	break;
 
       if (*p == '_')
