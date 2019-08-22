@@ -1639,7 +1639,7 @@ riscv_parse_std_ext (riscv_parse_subset_t *rps,
       const char *start_of_version;
       char subset[2] = {0, 0};
 
-      if (*p == 'x' || *p == 's')
+      if (strchr("XxZzSs", *p))
 	break;
 
       if (*p == '_')
@@ -1828,6 +1828,13 @@ riscv_parse_subset (riscv_parse_subset_t *rps,
 
   /* Parsing standard extension.  */
   p = riscv_parse_std_ext (rps, arch, p);
+
+  if (p == NULL)
+    return FALSE;
+
+  /* Parsing standard Zx extension.  */
+  p = riscv_parse_sv_or_non_std_ext (
+	rps, arch, p, "z", "standard Zx extension");
 
   if (p == NULL)
     return FALSE;
