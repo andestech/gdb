@@ -1778,6 +1778,12 @@ riscv_parse_sv_or_non_std_ext (riscv_parse_subset_t *rps,
 	  major_version = 1;
 	  minor_version = 0;
 	}
+      /* z_fh default version is 0p0 */
+      else if ((end_of_version == q) && !strcasecmp(subset, "zfh"))
+	{
+	  major_version = 0;
+	  minor_version = 0;
+	}
 
       riscv_add_subset (rps->subset_list, subset, major_version, minor_version);
       free (subset);
