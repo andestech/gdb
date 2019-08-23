@@ -3054,6 +3054,12 @@ riscv_std_ext_p (const char *name)
   return (strlen (name) == 1) && (name[0] != 'x') && (name[0] != 's');
 }
 
+static bfd_boolean
+riscv_std_ext_long_p (const char *name)
+{
+  return (strlen (name) >= 2) && strchr("Zz", name[0]);
+}
+
 /* Predicator for non-standard extension.  */
 
 static bfd_boolean
@@ -3307,6 +3313,8 @@ riscv_merge_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
 
   /* Merge standard extension.  */
   if (!riscv_merge_std_ext (ibfd, in_arch, out_arch, &in, &out))
+    return NULL;
+  if (!riscv_merge_non_std_and_sv_ext (ibfd, &in, &out, riscv_std_ext_long_p))
     return NULL;
   /* Merge non-standard extension.  */
   if (!riscv_merge_non_std_and_sv_ext (ibfd, &in, &out, riscv_non_std_ext_p))
