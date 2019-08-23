@@ -2037,6 +2037,17 @@ riscv_parse_subset (riscv_parse_subset_t *rps,
 }
 
 /* Add new subset to list.  */
+static const char extension_subsets_order[] = "iemafdgqlcbjtpvnzshzx";
+
+static int riscv_subset_order(const char *subset)
+{
+  int order = -1;
+  char *p = strchr(extension_subsets_order, TOLOWER(subset[0]));
+  if (p)
+    order = (int)(p - extension_subsets_order);
+
+  return order;
+}
 
 void
 riscv_add_subset (riscv_subset_list_t *subset_list,
@@ -2069,6 +2080,7 @@ riscv_add_subset (riscv_subset_list_t *subset_list,
         {
 	  riscv_subset_t dummy = {NULL, 0, 0, subset_list->head};
 	  riscv_subset_t *p = &dummy;
+	  int insert_order = riscv_subset_order(subset);
 	  while (p->next)
 	    {
 	      const char *name = p->next->name;
@@ -2076,6 +2088,9 @@ riscv_add_subset (riscv_subset_list_t *subset_list,
 		           ((name[0] == 's') && (name[1] == 'x'));
 	      if (is_non_std)
 	        break;
+
+	      if (insert_order < riscv_subset_order(name))
+		break;
 
 	      p = p->next;
 	    }
