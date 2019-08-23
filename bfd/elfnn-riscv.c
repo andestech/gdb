@@ -3054,6 +3054,36 @@ riscv_std_ext_p (const char *name)
   return (strlen (name) == 1) && (name[0] != 'x') && (name[0] != 's');
 }
 
+static bfd_boolean
+riscv_std_ext_long_p (const char *name)
+{
+  return (strlen (name) >= 2) && strchr("Zz", name[0]);
+}
+
+/* Predicator for non-standard extension.  */
+
+static bfd_boolean
+riscv_non_std_ext_p (const char *name)
+{
+  return (strlen (name) >= 2) && (name[0] == 'x');
+}
+
+/* Predicator for standard supervisor extension.  */
+
+static bfd_boolean
+riscv_std_sv_ext_p (const char *name)
+{
+  return (strlen (name) >= 2) && (name[0] == 's') && (name[1] != 'x');
+}
+
+/* Predicator for non-standard supervisor extension.  */
+
+static bfd_boolean
+riscv_non_std_sv_ext_p (const char *name)
+{
+  return (strlen (name) >= 3) && (name[0] == 's') && (name[1] == 'x');
+}
+
 /* Error handler when version mis-match.  */
 
 static void
