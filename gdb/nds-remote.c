@@ -578,7 +578,7 @@ nds_handle_ace(const char *ace_lib_path)
       err = (char *) dlerror ();
       if (err == NULL)
 	{
-	  ace_opcs = (struct riscv_opcode *) dlsym (dlc, "ace_opcodes");
+	  ace_opcs = (struct riscv_opcode *) dlsym (dlc, "ace_opcodes_2");
 	  err = (char *) dlerror ();
 	}
     }
