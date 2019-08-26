@@ -2081,6 +2081,12 @@ riscv_arch_str1 (riscv_subset_t *subset,
   if (subset == NULL)
     return;
 
+  /* Skip 'i' extension before 'e'. accoring v2.2+ naming rule.  */
+  if ((strcasecmp (subset->name, "i") == 0)
+      && subset->next
+      && (strcasecmp (subset->next->name, "e") == 0))
+    subset = subset->next;
+
   /* No underline between rvXX and i/e.   */
   if ((strcasecmp (subset->name, "i") == 0)
       || (strcasecmp (subset->name, "e") == 0))
@@ -2094,13 +2100,7 @@ riscv_arch_str1 (riscv_subset_t *subset,
 
   strncat (attr_str, buf, bufsz);
 
-  /* Skip 'i' extension after 'e'.  */
-  if ((strcasecmp (subset->name, "e") == 0)
-      && subset->next
-      && (strcasecmp (subset->next->name, "i") == 0))
-    riscv_arch_str1 (subset->next->next, attr_str, buf, bufsz);
-  else
-    riscv_arch_str1 (subset->next, attr_str, buf, bufsz);
+  riscv_arch_str1 (subset->next, attr_str, buf, bufsz);
 }
 
 /* Convert subset info to string with explicit version info.  */
