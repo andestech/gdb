@@ -36,6 +36,33 @@ Dwarf::assemble $asm_file {
     declare_labels D41c21 D42025 D42045 D42038 D42045 D420b5
 
     cu {} {
+       D41c21: compile_unit {
+           {language @DW_LANG_C99}
+           {name "<artificial>"}
+       } {
+           D42025: subprogram {
+               {abstract_origin :$D245da}
+               {low_pc 0x80b60 addr}
+               {high_pc 0x6c data4}
+           } {
+	       D42038: formal_parameter {
+		   {abstract_origin :$D245e6}
+	       }
+
+	       D42045: inlined_subroutine {
+                   {abstract_origin :$D5ab2}
+                   {low_pc 0x8060 addr}
+                   {high_pc 0xc data4}
+               } {
+                   D420b5: formal_parameter {
+                       {abstract_origin :$D5ac2}
+                   }
+               }
+           }
+       }
+    }
+
+    cu {} {
 	D45d9: compile_unit {
 	    {language @DW_LANG_C_plus_plus}
 	    {name "SerialPortUtils.cpp"}
@@ -110,33 +137,6 @@ Dwarf::assemble $asm_file {
 		}
 	    }
 	}
-    }
-
-    cu {} {
-       D41c21: compile_unit {
-           {language @DW_LANG_C99}
-           {name "<artificial>"}
-       } {
-           D42025: subprogram {
-               {abstract_origin %$D245da}
-               {low_pc 0x80b60 addr}
-               {high_pc 0x6c data4}
-           } {
-	       D42038: formal_parameter {
-		   {abstract_origin %$D245e6}
-	       }
-
-	       D42045: inlined_subroutine {
-                   {abstract_origin %$D5ab2}
-                   {low_pc 0x8060 addr}
-                   {high_pc 0xc data4}
-               } {
-                   D420b5: formal_parameter {
-                       {abstract_origin %$D5ac2}
-                   }
-               }
-           }
-       }
     }
 }
 
