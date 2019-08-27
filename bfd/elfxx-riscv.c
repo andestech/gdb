@@ -1924,6 +1924,13 @@ riscv_add_subset (riscv_subset_list_t *subset_list,
 		  const char *subset,
 		  int major, int minor)
 {
+  /* duplication check */
+  if (riscv_lookup_subset (subset_list, subset))
+    {
+      (*_bfd_error_handler) (_("warning: duplicated extension \"%s\"!"), subset);
+      return;
+    }
+
   riscv_subset_t *s = xmalloc (sizeof *s);
 
   if (subset_list->head == NULL)
