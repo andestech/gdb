@@ -1927,7 +1927,9 @@ riscv_add_subset (riscv_subset_list_t *subset_list,
   /* duplication check */
   if (riscv_lookup_subset (subset_list, subset))
     {
+      #ifdef DEBUG
       (*_bfd_error_handler) (_("warning: duplicated extension \"%s\"!"), subset);
+      #endif
       return;
     }
 
