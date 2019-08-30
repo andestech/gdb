@@ -7087,9 +7087,6 @@ riscv_elf_execit_replace_instruction (struct bfd_link_info *link_info,
       execit_insn = execit_insn_head;
       insn = bfd_get_32 (abfd, contents + off);
       insn_with_reg = 0;
-      /* Insn with relocation.  Mask instruction.  */
-      if (irel != NULL && irel < irelend && irel->r_offset == off)
-	riscv_elf_get_insn_with_reg (abfd, irel, insn, &insn_with_reg);
 
       while (execit_insn)
 	{
@@ -7098,10 +7095,6 @@ riscv_elf_execit_replace_instruction (struct bfd_link_info *link_info,
 	  do_replace = 0;
 	  save_irel = 0;
 
-	  if (irel != NULL && irel < irelend && irel->r_offset == off
-	      && execit_insn->irel != NULL)
-	    riscv_elf_get_insn_with_reg (abfd, &execit_insn->rel_backup,
-					 it_insn, &it_insn_with_reg);
 
 	  if (insn_with_reg != 0 && it_insn_with_reg != 0
 	      && (ELFNN_R_TYPE (irel->r_info) ==
@@ -7255,7 +7248,7 @@ riscv_elf_execit_replace_instruction (struct bfd_link_info *link_info,
 		    }
 		}
 	    }
-	  else if ((irel == NULL || irel >= irelend || irel->r_offset != off)
+	  else if ((irel == NULL || irel >= irelend || irel->r_offset >= off)
 		   && insn == it_insn && execit_insn->irel == NULL)
 	    {
 	      /* Instruction without relocation, we only
@@ -8711,12 +8704,6 @@ riscv_relocation_check (struct bfd_link_info *info,
 	      else
 		*off = (*irel)->r_offset;
 
-	      /* The final instruction in the region, regard this one as data.  */
-	      result |= DATA_EXIST;
-	      if ((*(contents + (*off)) & 0x3) != 0x3)
-		result |= (2 << 24);
-	      else
-		result |= (4 << 24);
 	      return result;
 	    }
 	  break;
