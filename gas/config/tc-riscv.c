@@ -5298,6 +5298,9 @@ riscv_final_no_rvc_region (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
     }
 }
 
+/* final both .no_execit_[begin|end]
+ *        and .innermost_loop_[begin|end]
+ */
 static void
 riscv_final_no_execit_region (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
 			      void *xxx ATTRIBUTE_UNUSED)
@@ -5305,6 +5308,7 @@ riscv_final_no_execit_region (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
   segment_info_type *seginfo;
   fixS *fixp;
   int no_execit_count;
+  int innermost_loop_count;
 
   seginfo = seg_info (sec);
   if (!seginfo || !symbol_rootP || !subseg_text_p (sec) || sec->size == 0)
@@ -5330,29 +5334,53 @@ riscv_final_no_execit_region (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
   /* Assume the offset of the BFD_RELOC_RISCV_RELAX_REGION_BEGIN/END
      are in order.  */
   no_execit_count = 0;
+  innermost_loop_count = 0;
   fixp = seginfo->fix_root;
   for (; fixp; fixp = fixp->fx_next)
     {
-      if (fixp->fx_r_type == BFD_RELOC_RISCV_RELAX_REGION_BEGIN
-	  && fixp->fx_offset == R_RISCV_RELAX_REGION_NO_EXECIT_FLAG)
-
+      if (fixp->fx_r_type == BFD_RELOC_RISCV_RELAX_REGION_BEGIN)
 	{
-	  /* We must find the corresponding REGION_END later.  */
-	  if (no_execit_count > 0)
-	    fixp->fx_done = 1;
-	  no_execit_count++;
-	}
-      else if (fixp->fx_r_type == BFD_RELOC_RISCV_RELAX_REGION_END
-	       && fixp->fx_offset == R_RISCV_RELAX_REGION_NO_EXECIT_FLAG)
-	{
-	  no_execit_count--;
-	  if (no_execit_count > 0)
-	    fixp->fx_done = 1;
-	  else if (no_execit_count < 0)
+	  if (fixp->fx_offset == R_RISCV_RELAX_REGION_NO_EXECIT_FLAG)
 	    {
-	      /* Find the unmatched REGION_END, ignore it.  */
+	      /* We must find the corresponding REGION_END later.  */
+	      if (no_execit_count > 0)
+		fixp->fx_done = 1;
 	      no_execit_count++;
-	      fixp->fx_done = 1;
+	    }
+	  else if (fixp->fx_offset == R_RISCV_RELAX_REGION_INNERMOST_LOOP_FLAG)
+	    {
+	      /* eliminate nested ".innermost_loop_begin".  */
+	      if (innermost_loop_count > 0)
+		fixp->fx_done = 1;
+	      innermost_loop_count++;
+	    }
+	}
+      else if (fixp->fx_r_type == BFD_RELOC_RISCV_RELAX_REGION_END)
+        {
+	  if (fixp->fx_offset == R_RISCV_RELAX_REGION_NO_EXECIT_FLAG)
+	    {
+	      no_execit_count--;
+	      if (no_execit_count > 0)
+		fixp->fx_done = 1;
+	      else if (no_execit_count < 0)
+		{
+		  /* Find the unmatched REGION_END, ignore it.  */
+		  no_execit_count++;
+		  fixp->fx_done = 1;
+		}
+	    }
+	  else if (fixp->fx_offset == R_RISCV_RELAX_REGION_INNERMOST_LOOP_FLAG)
+	    {
+	      innermost_loop_count--;
+	      /* eliminate nested ".innermost_loop_end".  */
+	      if (innermost_loop_count > 0)
+		fixp->fx_done = 1;
+	      else if (innermost_loop_count < 0)
+		{
+		  /* unmatched ".innermost_loop_end", ignore it.  */
+		  innermost_loop_count++;
+		  fixp->fx_done = 1;
+		}
 	    }
 	}
     }
