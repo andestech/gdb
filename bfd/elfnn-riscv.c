@@ -7789,6 +7789,7 @@ riscv_elf_execit_build_hash_table (bfd *abfd, asection *sec,
   struct elf_link_hash_entry *h;
   int data_flag;
   bfd_vma relocation;
+  struct riscv_elf_link_hash_table *table;
 
   sym_hashes = elf_sym_hashes (abfd);
   /* Load the input section instructions, relocations, and symbol table.  */
@@ -7815,6 +7816,7 @@ riscv_elf_execit_build_hash_table (bfd *abfd, asection *sec,
     return TRUE;
 
   irel = internal_relocs;
+  table = riscv_elf_hash_table (link_info);
 
   /* Push each insn into the hash table.  */
   while (off < sec->size)
@@ -7860,14 +7862,15 @@ riscv_elf_execit_build_hash_table (bfd *abfd, asection *sec,
       if (irel != NULL && irel < irelend && irel->r_offset == off)
 	{
 	  riscv_elf_get_insn_with_reg (abfd, irel, insn, &insn_with_reg);
-	  if (ELFNN_R_TYPE (irel->r_info) == R_RISCV_JAL
-	      || ELFNN_R_TYPE (irel->r_info) == R_RISCV_HI20
-	      || ELFNN_R_TYPE (irel->r_info) == R_RISCV_LO12_I
-	      || ELFNN_R_TYPE (irel->r_info) == R_RISCV_LO12_S
-	      || ELFNN_R_TYPE (irel->r_info) == R_RISCV_GPREL_I
-	      || ELFNN_R_TYPE (irel->r_info) == R_RISCV_GPREL_S
-	      || (ELFNN_R_TYPE (irel->r_info) >= R_RISCV_LGP18S0
-		  && ELFNN_R_TYPE (irel->r_info) <= R_RISCV_SGP17S3))
+	  if ((!table->execit_noji && ELFNN_R_TYPE (irel->r_info) == R_RISCV_JAL)
+	      || (!table->execit_nols
+		&& (ELFNN_R_TYPE (irel->r_info) == R_RISCV_HI20
+		  || ELFNN_R_TYPE (irel->r_info) == R_RISCV_LO12_I
+		  || ELFNN_R_TYPE (irel->r_info) == R_RISCV_LO12_S
+		  || ELFNN_R_TYPE (irel->r_info) == R_RISCV_GPREL_I
+		  || ELFNN_R_TYPE (irel->r_info) == R_RISCV_GPREL_S
+		  || (ELFNN_R_TYPE (irel->r_info) >= R_RISCV_LGP18S0
+		    && ELFNN_R_TYPE (irel->r_info) <= R_RISCV_SGP17S3))))
 	    {
 	      r_symndx = ELFNN_R_SYM (irel->r_info);
 	      jrel = irel;
