@@ -7986,29 +7986,14 @@ riscv_elf_execit_build_hash_table (bfd *abfd, asection *sec,
 
 	      while (m_list)
 		{
-		  /* Build the different symbols that point to the same address.  */
+		  /* Only support the same address with the same symbol because
+		     overlay may cause different relaxation size.*/
 		  h_list = m_list->h_list;
-		  if ((h_list->h->root.u.def.value == h->root.u.def.value)
-		      && (h_list->h->root.u.def.section->output_section->vma
-			  == h->root.u.def.section->output_section->vma)
-		      && (h_list->h->root.u.def.section->output_offset
-			  == h->root.u.def.section->output_offset)
-		      && (m_list->rel_backup.r_addend == rel_backup.r_addend))
+		  if (h_list->h == h
+		      && m_list->rel_backup.r_addend == rel_backup.r_addend)
 		    {
 		      m_list->times++;
 		      m_list->irel = jrel;
-		      while (h_list->h != h && h_list->next)
-			h_list = h_list->next;
-		      if (h_list->h != h)
-			{
-			  struct elf_link_hash_entry_list *h_list_new;
-
-			  h_list_new = (struct elf_link_hash_entry_list *)
-			    bfd_malloc (sizeof (struct elf_link_hash_entry_list));
-			  h_list->next = h_list_new;
-			  h_list_new->h = h;
-			  h_list_new->next = NULL;
-			}
 		      break;
 		    }
 		  /* The lui case may have different address but
