@@ -55,6 +55,8 @@ static int keep_import_execit = 0;	/* Keep the imported .exec.itable.  */
 static int update_execit_table = 0;
 static int execit_limit = -1;		/* Default set it to 1024 entries.  */
 static int execit_loop_aware = 0;	/* --mexecit-loop-aware.  */
+static bfd_boolean execit_noji = 0;
+static bfd_boolean execit_nols = 0;
 
 /* Put target dependent option into info hash table.  */
 
@@ -87,6 +89,8 @@ riscv_elf_set_target_option (struct bfd_link_info *info)
   table->update_execit_table = update_execit_table;
   table->execit_limit = execit_limit;
   table->execit_loop_aware = execit_loop_aware;
+  table->execit_noji = execit_noji;
+  table->execit_nols = execit_nols;
 }
 
 /* Save the target options into output bfd to avoid using to many global
@@ -329,6 +333,9 @@ PARSE_AND_LIST_PROLOGUE='
 #define OPTION_UPDATE_EXECIT		(OPTION_EXECIT_BASELINE + 7)
 #define OPTION_EXECIT_LIMIT		(OPTION_EXECIT_BASELINE + 8)
 #define OPTION_EXECIT_LOOP		(OPTION_EXECIT_BASELINE + 9)
+#define OPTION_EXECIT_NO_JI		(OPTION_EXECIT_BASELINE + 10)
+#define OPTION_EXECIT_NO_LS		(OPTION_EXECIT_BASELINE + 11)
+#define OPTION_EXECIT_NO_REL		(OPTION_EXECIT_BASELINE + 12)
 #endif
 
 /* These are only for lld internal usage and not affected for bfd.  */
@@ -375,6 +382,9 @@ PARSE_AND_LIST_LONGOPTS='
   { "mupdate-execit", no_argument, NULL, OPTION_UPDATE_EXECIT},
   { "mexecit-limit", required_argument, NULL, OPTION_EXECIT_LIMIT},
   { "mexecit-loop-aware", no_argument, NULL, OPTION_EXECIT_LOOP},
+  { "mexecit-noji", no_argument, NULL, OPTION_EXECIT_NO_JI},
+  { "mexecit-nols", no_argument, NULL, OPTION_EXECIT_NO_LS},
+  { "mexecit-norel", no_argument, NULL, OPTION_EXECIT_NO_REL},
   /* Obsolete options for EXECIT.  */
   { "mex9", no_argument, NULL, OPTION_EX9_TABLE},
   { "mno-ex9", no_argument, NULL, OPTION_NO_EXECIT_TABLE},
@@ -522,6 +532,16 @@ PARSE_AND_LIST_ARGS_CASES='
     break;
   case OPTION_EXECIT_LOOP:
     execit_loop_aware = 1;
+    break;
+  case OPTION_EXECIT_NO_JI:
+    execit_noji = 1;
+    break;
+  case OPTION_EXECIT_NO_LS:
+    execit_nols = 1;
+    break;
+  case OPTION_EXECIT_NO_REL:
+    execit_noji = 1;
+    execit_nols = 1;
     break;
 #endif
   case OPTION_DEBUG_EXECIT_LIMIT:

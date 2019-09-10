@@ -5170,6 +5170,9 @@ RISC-V options:\n\
   -mext-dsp      enable dsp extension\n\
   -mext-efhw     enable efhw extension\n\
   -mext-vector   enable vector extension\n\
+  -mexecit-noji  disable execit relaxation for jump instructions\n\
+  -mexecit-nols  disable execit relaxation for load/store instructions\n\
+  -mexecit-norel disable execit relaxation for instructions with reloaction\n\
 "));
 }
 
