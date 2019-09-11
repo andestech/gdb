@@ -102,6 +102,12 @@ struct riscv_set_options
   int dsp; /* P-ext */
   int efhw; /* Xefhw-ext (flhw/fshw)  */
   int vector; /* V-ext */
+  int cmodel; /* cmodel type  */
+};
+
+enum CMODEL_TYPES {
+  CMODEL_DEFAULT,
+  CMODEL_LARGE,
 };
 
 static struct riscv_set_options riscv_opts =
@@ -118,6 +124,7 @@ static struct riscv_set_options riscv_opts =
   0,	/* dsp */
   0,	/* efhw */
   0,	/* vector */
+  CMODEL_DEFAULT,	/* cmodel */
 };
 
 /* The priority: `-mno-16-bit' option
@@ -1649,6 +1656,90 @@ make_internal_label (void)
 					(valueT) frag_now_fix (), frag_now);
 }
 
+#define CMODEL_SUBSECTION 8100
+#define CMODEL_SYMBOL_PREFIX ".Laddr"
+#define CMODEL_SECTION_ALIGN 3
+#define CMODEL_SECTION_ENTRY_SIZE (1u << CMODEL_SECTION_ALIGN)
+
+
+/* FEED:
+ * what kind of symbol is faraway? (would need to trampline)
+ *   all except local one in the same section
+ *   only main symbol of expression is considered by now
+ */
+
+static
+bfd_boolean is_nearby_symbol (expressionS *ep)
+{
+  bfd_boolean is = FALSE;
+
+  if ( (S_GET_SEGMENT (ep->X_add_symbol) == now_seg)
+//     && (!S_IS_EXTERNAL (ep->X_add_symbol))
+//     && (S_IS_LOCAL (ep->X_add_symbol))
+    )
+    is = TRUE;
+
+  return is;
+}
+
+static
+bfd_boolean is_faraway_symbol (expressionS *ep)
+{
+  bfd_boolean is = FALSE;
+
+  if ( (riscv_opts.cmodel == CMODEL_LARGE)
+    && ((O_symbol <= ep->X_op) && (ep->X_op <= O_index))
+    && !is_nearby_symbol (ep) )
+    is = TRUE;
+
+  return is;
+}
+
+static
+expressionS *make_indirect_symbol (expressionS *ep)
+{
+  char buf[0x1000];
+  char isym_name[0x100];
+  symbolS *isym;
+  const char *sym_name = S_GET_NAME (ep->X_add_symbol);
+  valueT sym_value = ep->X_add_number;
+
+  /* make indirect symbol once  */
+  sprintf (isym_name, "%s_%s_%lx", CMODEL_SYMBOL_PREFIX,
+	   sym_name, (unsigned long)sym_value);
+  isym = symbol_find (isym_name);
+  if (isym == NULL)
+    {
+  /* create indirect symbol now  */
+  const char *sec_name = segment_name (now_seg);
+  char *save_in;
+
+  sprintf (buf, "%s, %d", sec_name, CMODEL_SUBSECTION);
+  save_in = input_line_pointer;
+  input_line_pointer = buf;
+  obj_elf_section (1); /* .pushsection  */
+  input_line_pointer = save_in;
+
+  /* do create here  */
+  isym = colon (isym_name);
+  fix_new_exp (frag_now, frag_now_fix (),
+	       CMODEL_SECTION_ENTRY_SIZE, ep, 0,
+	       BFD_RELOC_64);
+
+  /* reserve space for indirect symbol  */
+  frag_more (CMODEL_SECTION_ENTRY_SIZE);
+
+  obj_elf_popsection (0); /* .popsection  */
+    }
+
+  ep->X_op = O_symbol;
+  ep->X_add_symbol = isym;
+  ep->X_add_number = 0;
+  ep->X_md = 0; /* for ICT logic within fix_new_exp */
+
+  return ep;
+}
+
 /* Load an entry from the GOT.  */
 static void
 pcrel_access (int destreg, int tempreg, expressionS *ep,
@@ -1656,14 +1747,31 @@ pcrel_access (int destreg, int tempreg, expressionS *ep,
 	      bfd_reloc_code_real_type hi_reloc,
 	      bfd_reloc_code_real_type lo_reloc)
 {
-  expressionS ep2;
-  ep2.X_op = O_symbol;
-  ep2.X_add_symbol = make_internal_label ();
-  ep2.X_add_number = 0;
-  ep2.X_md = 0; /* for ICT logic within fix_new_exp */
+  /* only L[BHWD]/S[BHWD support cmodel large  */
+  if (hi_reloc == BFD_RELOC_RISCV_PCREL_HI20 && is_faraway_symbol (ep))
+    {
+      bfd_boolean is_la = strcmp (lo_insn, "addi") == 0;
+      expressionS *iep = make_indirect_symbol (ep);
+      pcrel_access (tempreg, tempreg, iep, LOAD_ADDRESS_INSN, "d,s,j", BFD_RELOC_RISCV_PCREL_HI20, BFD_RELOC_RISCV_PCREL_LO12_I);
+      if (!is_la)
+	{
+	  char *pattern = xstrdup (lo_pattern);
+	  pattern[3] = 0;
+	  macro_build (NULL, lo_insn, pattern, destreg, tempreg);
+	  free (pattern);
+	}
+    }
+  else
+    {
+      expressionS ep2;
+      ep2.X_op = O_symbol;
+      ep2.X_add_symbol = make_internal_label ();
+      ep2.X_add_number = 0;
+      ep2.X_md = 0; /* for ICT logic within fix_new_exp */
 
-  macro_build (ep, "auipc", "d,u", tempreg, hi_reloc);
-  macro_build (&ep2, lo_insn, lo_pattern, destreg, tempreg, lo_reloc);
+      macro_build (ep, "auipc", "d,u", tempreg, hi_reloc);
+      macro_build (&ep2, lo_insn, lo_pattern, destreg, tempreg, lo_reloc);
+    }
 }
 
 static void
@@ -1687,6 +1795,15 @@ static void
 riscv_call (int destreg, int tempreg, expressionS *ep,
 	    bfd_reloc_code_real_type reloc)
 {
+  if (reloc == BFD_RELOC_RISCV_CALL && is_faraway_symbol (ep))
+    {
+      expressionS *iep = make_indirect_symbol (ep);
+      pcrel_load (tempreg, tempreg, iep, LOAD_ADDRESS_INSN,
+		  BFD_RELOC_RISCV_PCREL_HI20, BFD_RELOC_RISCV_PCREL_LO12_I);
+      macro_build (NULL, "jalr", "d,s", destreg, tempreg);
+      return;
+    }
+
   macro_build (ep, "auipc", "d,u", tempreg, reloc);
   macro_build (NULL, "jalr", "d,s", destreg, tempreg);
 }
@@ -3833,6 +3950,7 @@ enum options
   OPTION_MEXT_EFHW,
   OPTION_MEXT_VECTOR,
   OPTION_MICT_MODEL,
+  OPTION_MCMODEL,
   OPTION_END_OF_ENUM
 };
 
@@ -3856,6 +3974,7 @@ struct option md_longopts[] =
   {"mext-efhw", no_argument, NULL, OPTION_MEXT_EFHW},
   {"mext-vector", no_argument, NULL, OPTION_MEXT_VECTOR},
   {"mict-model", required_argument, NULL, OPTION_MICT_MODEL},
+  {"mcmodel", required_argument, NULL, OPTION_MCMODEL},
 
   {NULL, no_argument, NULL, 0}
 };
@@ -4010,6 +4129,17 @@ md_parse_option (int c, const char *arg)
 	as_bad (_("invalid ICT model setting -mict-model=%s"), arg);
       break;
 
+    case OPTION_MCMODEL:
+      if (strcmp (arg, "large") == 0)
+	riscv_opts.cmodel = CMODEL_LARGE;
+      else if (strcmp (arg, "medany") == 0)
+	riscv_opts.cmodel = CMODEL_DEFAULT;
+      else if (strcmp (arg, "medlow") == 0)
+	riscv_opts.cmodel = CMODEL_DEFAULT;
+      else
+	as_bad (_("invalid cmodel setting -mcmodel=%s"), arg);
+      break;
+
     default:
       return 0;
     }
@@ -4101,6 +4231,13 @@ riscv_after_parse_args (void)
 
   /* Insert float_abi into the EF_RISCV_FLOAT_ABI field of elf_flags.  */
   elf_flags |= float_abi * (EF_RISCV_FLOAT_ABI & ~(EF_RISCV_FLOAT_ABI << 1));
+
+  /* disable --cmodel=large if RV32  */
+  if (riscv_opts.cmodel == CMODEL_LARGE && xlen <= 32)
+	riscv_opts.cmodel = CMODEL_DEFAULT;
+#ifdef DEBUG_CMODEL
+  printf("%s: cmodel = %d\n", __func__, riscv_opts.cmodel);
+#endif
 }
 
 long
@@ -4565,6 +4702,18 @@ s_riscv_option (int x ATTRIBUTE_UNUSED)
     riscv_opts.execit = TRUE;
   else if (strcmp (name, "verbatim") == 0)
     riscv_opts.verbatim = TRUE;
+  else if (strncmp (name, "cmodel_[large|medany]", 6) == 0)
+    {
+      if (strcmp (name+6, "_large") == 0 && xlen > 32)
+	riscv_opts.cmodel = CMODEL_LARGE;
+      else if (strcmp (name+6, "_medany") == 0)
+	riscv_opts.cmodel = CMODEL_DEFAULT;
+      else if (strcmp (name+6, "_medlow") == 0)
+	riscv_opts.cmodel = CMODEL_DEFAULT;
+#ifdef DEBUG_CMODEL
+      printf("%s: cmodel = %d\n", __func__, riscv_opts.cmodel);
+#endif
+    }
   else
     {
       as_warn (_("Unrecognized .option directive: %s\n"), name);
@@ -4946,6 +5095,7 @@ RISC-V options:\n\
   -mexecit-noji  disable execit relaxation for jump instructions\n\
   -mexecit-nols  disable execit relaxation for load/store instructions\n\
   -mexecit-norel disable execit relaxation for instructions with reloaction\n\
+  -mcmodel=TYPE  set cmodel type\n\
 "));
 }
 
@@ -5458,12 +5608,12 @@ riscv_innermost_loop (int mode)
     }
 }
 
-#ifdef DEBUG
+#ifdef DEBUG_ARCH_INFO_HASH
 static void
 riscv_print_arch_info_hash (const char *key, void *value)
 {
   struct arch_info *data = (struct arch_info *) value;
-  printf ("(name, v_major, v_minor, valid): (%s, %s, %s, %d)\n",
+  printf ("(key, name, v_major, v_minor, valid): (%s, %s, %s, %s, %d)\n",
 	  key, data->name, data->v_major, data->v_minor, data->valid);
 }
 #endif
@@ -5622,7 +5772,7 @@ andes_riscv_set_public_attributes (void)
     return;
 
   /* Write out arch attribute according to the arch_info_hash.  */
-#ifdef DEBUG
+#ifdef DEBUG_ARCH_INFO_HASH
   printf ("===== Contents of arch attribute hash table =====\n");
   hash_traverse (arch_info_hash, riscv_print_arch_info_hash);
   printf ("\n");
@@ -5779,3 +5929,12 @@ riscv_parse_name (char const *name, expressionS *exprP,
 
   return 1;
 }
+
+/* insert cmodel=large indirect symbols */
+
+void riscv_andes_md_cleanup (void)
+{
+}
+
+// md_convert_frag
+// add_relaxed_insn

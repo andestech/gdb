@@ -129,6 +129,9 @@ extern int riscv_convert_symbolic_attribute (const char *);
 #define md_post_relax_hook riscv_post_relax_hook ()
 extern void riscv_post_relax_hook (void);
 
+#define md_cleanup riscv_andes_md_cleanup
+extern void riscv_andes_md_cleanup (void);
+
 /* Relocation flags for R_RISCV_ERLAX_ENTRY.  */
 
 /* Set if relax on this section is done or disabled.  */
