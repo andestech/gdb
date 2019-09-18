@@ -56,17 +56,17 @@ struct overload2_arg9 {};
 struct overload2_arga {};
 
 #define GEN_OVERLOAD2_FUNCTIONS(ARG1, ARG2)		\
-  void							\
-  overload2_function (ARG1)				\
+  void __attribute__ ((used))				\
+  overload2_function (ARG1) \
   {}							\
 							\
   struct struct_overload2_test				\
   {							\
-    void overload2_function (ARG2);			\
+    void overload2_function (ARG2) __attribute__ ((used)); \
   };							\
 							\
   void							\
-  struct_overload2_test::overload2_function (ARG2)	\
+  struct_overload2_test::overload2_function (ARG2) \
   {}
 
 /* In the global namespace.  */
@@ -99,17 +99,17 @@ namespace ns_overload2_test
 /* Code for the overload-3 test.  */
 
 #define GEN_OVERLOAD3_FUNCTIONS(ARG1, ARG2)		\
-  void							\
+  void __attribute__ ((used))				\
   overload3_function (ARG1)				\
   {}							\
-  void							\
+  void __attribute__ ((used))				\
   overload3_function (ARG2)				\
   {}							\
 							\
   struct struct_overload3_test				\
   {							\
-    void overload3_function (ARG1);			\
-    void overload3_function (ARG2);			\
+    void overload3_function (ARG1) __attribute__ ((used)); \
+    void overload3_function (ARG2) __attribute__ ((used)); \
   };							\
 							\
   void							\
@@ -236,12 +236,13 @@ namespace ns2_incomplete_scope_colon_test
 
 namespace
 {
-  void anon_ns_function ()
+  void __attribute__ ((used))
+  anon_ns_function ()
   {}
 
   struct anon_ns_struct
   {
-    void anon_ns_function ();
+    void anon_ns_function () __attribute__ ((used));
   };
 
   void
@@ -254,12 +255,13 @@ namespace the_anon_ns_wrapper_ns
 
 namespace
 {
-  void anon_ns_function ()
+  void __attribute__ ((used))
+  anon_ns_function ()
   {}
 
   struct anon_ns_struct
   {
-    void anon_ns_function ();
+    void anon_ns_function () __attribute__ ((used));
   };
 
   void
@@ -279,7 +281,8 @@ void global_ns_scope_op_function ()
    that "b ::global_ns_function" does NOT select it.  */
 namespace the_global_ns_scope_op_ns
 {
-  void global_ns_scope_op_function ()
+  void __attribute__ ((used))
+  global_ns_scope_op_function ()
   {
   }
 }
