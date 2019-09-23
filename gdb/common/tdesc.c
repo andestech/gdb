@@ -53,6 +53,7 @@ static tdesc_type_builtin tdesc_predefined_types[] =
   { "ieee_half", TDESC_TYPE_IEEE_HALF },
   { "ieee_single", TDESC_TYPE_IEEE_SINGLE },
   { "ieee_double", TDESC_TYPE_IEEE_DOUBLE },
+  { "bfloat16", TDESC_TYPE_BFLOAT16 },
   { "arm_fpa_ext", TDESC_TYPE_ARM_FPA_EXT },
   { "i387_ext", TDESC_TYPE_I387_EXT }
 };
