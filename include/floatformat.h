@@ -105,6 +105,8 @@ extern const struct floatformat floatformat_ieee_single_big;
 extern const struct floatformat floatformat_ieee_single_little;
 extern const struct floatformat floatformat_ieee_double_big;
 extern const struct floatformat floatformat_ieee_double_little;
+extern const struct floatformat floatformat_bfloat16_big;
+extern const struct floatformat floatformat_bfloat16_little;
 
 /* floatformat for ARM IEEE double, little endian bytes and big endian words */
 

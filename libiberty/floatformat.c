@@ -128,6 +128,23 @@ const struct floatformat floatformat_ieee_double_little =
   NULL
 };
 
+const struct floatformat floatformat_bfloat16_big =
+{
+  floatformat_big, 16, 0, 1, 8, 127, 255, 9, 7,
+  floatformat_intbit_no,
+  "floatformat_bfloat16_big",
+  floatformat_always_valid,
+  NULL
+};
+const struct floatformat floatformat_bfloat16_little =
+{
+  floatformat_little, 16, 0, 1, 8, 127, 255, 9, 7,
+  floatformat_intbit_no,
+  "floatformat_bfloat16_little",
+  floatformat_always_valid,
+  NULL
+};
+
 /* floatformat for IEEE double, little endian byte order, with big endian word
    ordering, as on the ARM.  */
 
