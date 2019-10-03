@@ -25,6 +25,10 @@ if { [use_gdb_stub] } {
     return
 }
 
+if { ![istarget "*-*-linux*"] } then {
+    continue
+}
+
 standard_testfile
 
 if { [prepare_for_testing "failed to prepare" $testfile $srcfile debug] } {
