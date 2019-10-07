@@ -772,6 +772,11 @@ const struct riscv_opcode riscv_opcodes[] =
 {"vfwcvt.s.bf16",0,{"V", "F", "XV5-", 0}, "Vd,Vt", MATCH_VFWCVT_S_BF16, MASK_VFWCVT_S_BF16, match_opcode, 0},
 {"vfncvt.bf16.s",0,{"V", "F", "XV5-", 0}, "Vd,Vt", MATCH_VFNCVT_BF16_S, MASK_VFNCVT_BF16_S, match_opcode, 0},
 
+{"vln.v",       0, {"V", "XV5-", 0}, "Vd,0(s)Vm",  MATCH_VLN_V, MASK_VLN_V, match_opcode, INSN_DREF },
+{"vlnu.v",      0, {"V", "XV5-", 0}, "Vd,0(s)Vm",  MATCH_VLNU_V, MASK_VLNU_V, match_opcode, INSN_DREF },
+{"vln8.v",      0, {"V", "XV5-", 0}, "Vd,0(s)Vm", MATCH_VLN8_V, MASK_VLN8_V, match_opcode, INSN_DREF},
+{"vlnu8.v",     0, {"V", "XV5-", 0}, "Vd,0(s)Vm", MATCH_VLNU8_V, MASK_VLNU8_V, match_opcode, INSN_DREF},
+
 /* NDS V5 DSP Extension.  */
 {"add8",        0, {"XDSP", 0}, "d,s,t",     MATCH_ADD8, MASK_ADD8, match_opcode, 0 },
 {"add16",       0, {"XDSP", 0}, "d,s,t",     MATCH_ADD16, MASK_ADD16, match_opcode, 0 },
