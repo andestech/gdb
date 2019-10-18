@@ -7563,6 +7563,14 @@ execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int 
 {
   SIM_DESC sd = CPU_STATE (cpu);
   const char *subset = op->subset[0];
+  int i;
+
+  for (i = 0; op->subset[i]; i++)
+    {
+      /* Use subset 'C' if it exists.  */
+      if (op->subset[i][0] == 'C')
+	subset = op->subset[i];
+    }
 
   if (op->xlen_requirement == 64)
     RISCV_ASSERT_RV64 (cpu, "insn: %s", op->name);
