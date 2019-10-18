@@ -7564,7 +7564,11 @@ execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int 
   SIM_DESC sd = CPU_STATE (cpu);
   const char *subset = op->subset[0];
 
- rescan:
+  if (op->xlen_requirement == 64)
+    RISCV_ASSERT_RV64 (cpu, "insn: %s", op->name);
+  else if (op->xlen_requirement == 32)
+    RISCV_ASSERT_RV32 (cpu, "insn: %s", op->name);
+
   switch (subset[0])
     {
     case 'A':
@@ -7583,23 +7587,6 @@ execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int 
       subset++;
       if (strncmp (subset, "DSP", 3) == 0)
 	return execute_p (cpu, iw, op, ex9);
-    case '3':
-      if (subset[1] == '2')
-	{
-	  RISCV_ASSERT_RV32 (cpu, "insn: %s", op->name);
-	  subset += 2;
-	  goto rescan;
-	}
-      goto case_default;
-    case '6':
-      if (subset[1] == '4')
-	{
-	  RISCV_ASSERT_RV64 (cpu, "insn: %s", op->name);
-	  subset += 2;
-	  goto rescan;
-	}
-      goto case_default;
-    case_default:
     default:
       TRACE_INSN (cpu, "UNHANDLED EXTENSION: %s", op->subset[0]);
       sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
