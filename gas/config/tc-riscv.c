@@ -1240,12 +1240,13 @@ ace_ip (char **args, char **str, struct riscv_cl_insn *ip)
 	  char *imm = malloc (imm_size + 1);
 	  memcpy (imm, *str, imm_size);
 	  memcpy (imm + imm_size, "\0", 1);
+	  unsigned int imm_value = strtoul (imm, (char **) NULL, 0);
 
 	  /* Encode instruction */
 	  if (is_discrete)
-	    ace_encode_insn_discrete ( strtoul (imm, (char **) NULL, 10), op_name_discrete, "imm",  ip);
+	    ace_encode_insn_discrete (imm_value, op_name_discrete, "imm",  ip);
 	  else
-	    ace_encode_insn ((unsigned int) atoi (imm), ace_op, ip);
+	    ace_encode_insn (imm_value, ace_op, ip);
 
 	  /* Update the address of pointer of assembly code (*str) */
 	  if (found_asm_end)
