@@ -7087,6 +7087,13 @@ riscv_elf_execit_replace_instruction (struct bfd_link_info *link_info,
       execit_insn = execit_insn_head;
       insn = bfd_get_32 (abfd, contents + off);
       insn_with_reg = 0;
+      int is_on_relocation = FALSE;
+
+      if (irel != NULL && irel < irelend && irel->r_offset == off)
+	is_on_relocation = TRUE;
+
+      if (is_on_relocation == TRUE)
+	riscv_elf_get_insn_with_reg (abfd, irel, insn, &insn_with_reg);
 
       while (execit_insn)
 	{
@@ -7095,8 +7102,10 @@ riscv_elf_execit_replace_instruction (struct bfd_link_info *link_info,
 	  do_replace = 0;
 	  save_irel = 0;
 
+      if (is_on_relocation == TRUE)
+	    riscv_elf_get_insn_with_reg (abfd, execit_insn->irel, it_insn, &it_insn_with_reg);
 
-	  if (insn_with_reg != 0 && it_insn_with_reg != 0
+	  if (is_on_relocation
 	      && (ELFNN_R_TYPE (irel->r_info) ==
 		  ELFNN_R_TYPE (execit_insn->rel_backup.r_info))
 	      && (insn_with_reg == it_insn_with_reg))
@@ -7248,7 +7257,7 @@ riscv_elf_execit_replace_instruction (struct bfd_link_info *link_info,
 		    }
 		}
 	    }
-	  else if ((irel == NULL || irel >= irelend || irel->r_offset >= off)
+	  else if (!is_on_relocation
 		   && insn == it_insn && execit_insn->irel == NULL)
 	    {
 	      /* Instruction without relocation, we only
