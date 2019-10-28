@@ -151,7 +151,7 @@ store_csr (SIM_CPU *cpu, const char *name, int csr, unsigned_word *reg,
 
     /* All the rest are immutable.  */
     default:
-      val = *reg;
+      *reg = val;
       break;
     }
 
