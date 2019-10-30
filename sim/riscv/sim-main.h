@@ -64,7 +64,6 @@ typedef union {
       uint32_t i0;
       uint32_t i1;
     } ub32;
-
   struct
     {
       uint16_t h0;
@@ -105,6 +104,10 @@ typedef union {
       int8_t b2;
       int8_t b3;
     } b8;
+  struct
+    {
+      uint32_t i0;
+    } ub32;
   struct
     {
       uint16_t h0;

@@ -5562,29 +5562,33 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_KADDW:
       {
-	int64_t tmp = (int64_t) cpu->regs[ra].s + (int64_t) cpu->regs[rb].s;
-	cpu->regs[rd].s = insn_sat_helper (cpu, tmp, 31);
+	int64_t tmp = (int64_t) cpu->regs[ra].b32.i0 +
+	              (int64_t) cpu->regs[rb].b32.i0;
+	cpu->regs[rd].s = EXTEND32 (insn_sat_helper (cpu, tmp, 31));
 	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KSUBW:
       {
-	int64_t tmp = (int64_t) cpu->regs[ra].s - (int64_t) cpu->regs[rb].s;
-	cpu->regs[rd].s = insn_sat_helper (cpu, tmp, 31);
+	int64_t tmp = (int64_t) cpu->regs[ra].b32.i0 -
+	              (int64_t) cpu->regs[rb].b32.i0;
+	cpu->regs[rd].s = EXTEND32 (insn_sat_helper (cpu, tmp, 31));
 	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_UKADDW:
       {
-	uint64_t tmp = (uint64_t) cpu->regs[ra].u + (uint64_t) cpu->regs[rb].u;
-	cpu->regs[rd].u = insn_usat_helper (cpu, tmp, 31);
+	uint64_t tmp = (uint64_t) cpu->regs[ra].ub32.i0 +
+	               (uint64_t) cpu->regs[rb].ub32.i0;
+	cpu->regs[rd].s = EXTEND32 (insn_usat_helper (cpu, tmp, 32));
 	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_UKSUBW:
       {
-	uint64_t tmp = (uint64_t) cpu->regs[ra].u - (uint64_t) cpu->regs[rb].u;
-	cpu->regs[rd].u = insn_usat_helper (cpu, tmp, 31);
+	uint64_t tmp = (uint64_t) cpu->regs[ra].ub32.i0 -
+	               (uint64_t) cpu->regs[rb].ub32.i0;
+	cpu->regs[rd].s = EXTEND32 (insn_usat_helper (cpu, tmp, 32));
 	TRACE_REG (cpu, rd);
       }
       break;
@@ -5888,29 +5892,33 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_KADDH:
       {
-	int32_t tmp = cpu->regs[ra].s + cpu->regs[rb].s;
-	cpu->regs[rd].s = insn_sat_helper (cpu, tmp, 15);
+	int64_t tmp = (int64_t) cpu->regs[ra].b32.i0 +
+	              (int64_t) cpu->regs[rb].b32.i0;
+	cpu->regs[rd].s = EXTEND16 (insn_sat_helper (cpu, tmp, 15));
 	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_KSUBH:
       {
-	int32_t tmp = cpu->regs[ra].s - cpu->regs[rb].s;
-	cpu->regs[rd].s = insn_sat_helper (cpu, tmp, 15);
+	int64_t tmp = (int64_t) cpu->regs[ra].b32.i0 -
+	              (int64_t) cpu->regs[rb].b32.i0;
+	cpu->regs[rd].s = EXTEND16 (insn_sat_helper (cpu, tmp, 15));
 	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_UKADDH:
       {
-	uint32_t tmp = cpu->regs[ra].u + cpu->regs[rb].u;
-	cpu->regs[rd].u = insn_usat_helper (cpu, tmp, 15);
+	uint64_t tmp = (uint64_t) cpu->regs[ra].ub32.i0 +
+	               (uint64_t) cpu->regs[rb].ub32.i0;
+	cpu->regs[rd].s = EXTEND16 (insn_usat_helper (cpu, tmp, 16));
 	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_UKSUBH:
       {
-	uint32_t tmp = cpu->regs[ra].u - cpu->regs[rb].u;
-	cpu->regs[rd].u = insn_usat_helper (cpu, tmp, 15);
+	uint64_t tmp = (uint64_t) cpu->regs[ra].ub32.i0 -
+	               (uint64_t) cpu->regs[rb].ub32.i0;
+	cpu->regs[rd].s = EXTEND16 (insn_usat_helper (cpu, tmp, 16));
 	TRACE_REG (cpu, rd);
       }
       break;
