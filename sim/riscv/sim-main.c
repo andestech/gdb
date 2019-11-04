@@ -1645,7 +1645,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       {
 	for (i = 0; i < vec32_num; i++)
 	  {
-	    res = *(ptr_a32 + i) + *(ptr_b32 + i);
+	    int64_t res = (int64_t) *(ptr_a32 + i) + *(ptr_b32 + i);
 	    res = insn_sat_helper (cpu, res, 31);
 	    *(ptr32 + i) = res;
 	  }
@@ -1770,7 +1770,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       {
 	for (i = 0; i < vec32_num; i++)
 	  {
-	    res = *(ptr_a32 + i) - *(ptr_b32 + i);
+	    int64_t res = (int64_t) *(ptr_a32 + i) - *(ptr_b32 + i);
 	    res = insn_sat_helper (cpu, res, 31);
 	    *(ptr32 + i) = res;
 	  }
