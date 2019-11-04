@@ -4228,6 +4228,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    temp.d0 += rnd_val;
 	    res = (int64_t) *(ptr_d32 + i) + (int32_t) (temp.d0 >> 16);
 	    *(ptr32 + i) = insn_sat_helper (cpu, res, 31);
+	    b16_offset += 2;
 	  }
 	cpu->regs[rd].s = result.s;
 	TRACE_REG (cpu, rd);
