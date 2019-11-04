@@ -4189,23 +4189,26 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_KMMAWT2:
       {
+	int32_t addop;
 	union64_t temp;
 	int64_t res;
 	int b16_offset = 1;
 	for (i = 0; i < vec32_num; i++)
 	  {
-	    if ((*(ptr_a32 + i) == 0x80000000)
-		&& (*(ptr_b16 + b16_offset) == (int16_t) 0x8000))
+	    if (*(ptr_a32 + i) == 0x80000000
+	        && (*(ptr_b16 + b16_offset)) == (int16_t) 0x8000)
 	      {
-		*(ptr32 + i) = 0x7fffffff;
-		CCPU_SR_SET (PSW, PSW_OV);
+	        addop = 0x7fffffff;
+	        CCPU_UCODE_OV_SET();
 	      }
 	    else
 	      {
-		temp.d0 = (int64_t) *(ptr_a32 + i) * *(ptr_b16 + b16_offset);
-		res = (int64_t) *(ptr_d32 + i) + (int32_t) (temp.d0 >> 15);
-		*(ptr32 + i) = insn_sat_helper (cpu, res, 31);
+	        temp.d0 = (int64_t) *(ptr_a32 + i) * *(ptr_b16 + b16_offset);
+	        addop = temp.d0 >> 15;
 	      }
+
+	    res = (int64_t) *(ptr_d32 + i) + addop;
+	    *(ptr32 + i) = insn_sat_helper (cpu, res, 31);
 	    b16_offset += 2;
 	  }
 	cpu->regs[rd].s = result.s;
@@ -4232,26 +4235,30 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_KMMAWT2_U:
       {
+	int addop;
 	union64_t temp;
 	int64_t res;
 	int32_t rnd_val;
 	int b16_offset = 1;
 	for (i = 0; i < vec32_num; i++)
 	  {
-	    if ((*(ptr_a32 + i) == 0x80000000)
-		&& (*(ptr_b16 + b16_offset) == (int16_t) 0x8000))
+	    if (*(ptr_a32 + i) == 0x80000000
+	        && (*(ptr_b16 + b16_offset)) == (int16_t) 0x8000)
 	      {
-		*(ptr32 + i) = 0x7fffffff;
-		CCPU_SR_SET (PSW, PSW_OV);
+	        addop = 0x7fffffff;
+	        CCPU_UCODE_OV_SET();
 	      }
 	    else
 	      {
-		temp.d0 = (int64_t) *(ptr_a32 + i) * *(ptr_b16 + b16_offset);
-		rnd_val = (temp.b32.w0 & (1UL << 14)) ? (1L << 15) : 0;
-		temp.d0 += rnd_val;
-		res = (int64_t) *(ptr_d32 + i) + (int32_t) (temp.d0 >> 15);
-		*(ptr32 + i) = insn_sat_helper (cpu, res, 31);
+	        temp.d0 = (int64_t) *(ptr_a32 + i) * *(ptr_b16 + b16_offset);
+	        rnd_val = (temp.b32.w0 & (1UL << 14)) ? (1L << 15) : 0;
+	        temp.d0 += rnd_val;
+	        addop = temp.d0 >> 15;
 	      }
+
+	    res = (int64_t) *(ptr_d32 + i) + addop;
+	    *(ptr32 + i) = insn_sat_helper (cpu, res, 31);
+	    b16_offset += 2;
 	  }
 	cpu->regs[rd].s = result.s;
 	TRACE_REG (cpu, rd);
