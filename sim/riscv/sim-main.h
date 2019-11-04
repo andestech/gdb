@@ -231,6 +231,9 @@ struct _sim_cpu {
 #define CCPU_FPCSR_GET(BIT)	__GET (cpu->reg_fpcsr.u, FPCSR_##BIT)
 #define CCPU_FPCSR_PUT(BIT,V)	__PUT (cpu->reg_fpcsr.u, FPCSR_##BIT, V)
 
+#define CCPU_UCODE_OV_SET()	__SET (cpu->csr.ucode, 0)
+#define CCPU_UCODE_OV_CLEAR()	__CLEAR (cpu->csr.ucode, 0)
+
 #define SRIDX(M,m,e)  ((M << 7) | (m << 3) | e)
 
 enum

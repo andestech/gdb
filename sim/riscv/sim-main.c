@@ -235,12 +235,12 @@ insn_usat_helper (sim_cpu *cpu, int64_t res, const short range)
   if (res > max)
     {
       res = max;
-      CCPU_SR_SET (PSW, PSW_OV);
+      CCPU_UCODE_OV_SET();
     }
   else if (res < 0)
     {
       res = 0;
-      CCPU_SR_SET (PSW, PSW_OV);
+      CCPU_UCODE_OV_SET();
     }
 
   return res;
@@ -255,12 +255,12 @@ insn_sat_helper (sim_cpu *cpu, int64_t res, const short range)
   if (res > max)
     {
       res = max;
-      CCPU_SR_SET (PSW, PSW_OV);
+      CCPU_UCODE_OV_SET();
     }
   else if (res < min)
     {
       res = min;
-      CCPU_SR_SET (PSW, PSW_OV);
+      CCPU_UCODE_OV_SET();
     }
 
   return res;
@@ -275,7 +275,7 @@ insn_sat_khm_helper (sim_cpu *cpu, int16_t aop, int16_t bop)
   else
     {
       res = 0x7fff;
-      CCPU_SR_SET (PSW, PSW_OV);
+      CCPU_UCODE_OV_SET();
     }
   return res;
 }
@@ -289,7 +289,7 @@ insn_sat_khm8_helper (sim_cpu *cpu, int8_t aop, int8_t bop)
   else
     {
       res = 0x7f;
-      CCPU_SR_SET (PSW, PSW_OV);
+      CCPU_UCODE_OV_SET();
     }
   return res;
 }
@@ -3335,7 +3335,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    if ((*ptr) == -0x8000)
 	      {
 		*ptr = 0x7fff;
-		CCPU_SR_SET (PSW, PSW_OV);
+	        CCPU_UCODE_OV_SET();
 	      }
 	    else if (*ptr & 0x8000)
 	      *ptr = -(*ptr);
@@ -3355,7 +3355,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    if ((*ptr) == -0x80000000)
 	      {
 		*ptr = 0x7fffffff;
-		CCPU_SR_SET (PSW, PSW_OV);
+	        CCPU_UCODE_OV_SET();
 	      }
 	    else if (*ptr & 0x80000000)
 	      *ptr = -(*ptr);
@@ -3375,7 +3375,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    if ((*ptr) == -0x80)
 	      {
 		*ptr = 0x7f;
-		CCPU_SR_SET (PSW, PSW_OV);
+	        CCPU_UCODE_OV_SET();
 	      }
 	    else if (*ptr & 0x80)
 	      *ptr = -(*ptr);
@@ -3837,7 +3837,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    else
 	      {
 		*(ptr32 + i) = 0x7fffffff;
-		CCPU_SR_SET (PSW, PSW_OV);
+		CCPU_UCODE_OV_SET();
 	      }
 	  }
 	cpu->regs[rd].s = result.s;
@@ -3860,7 +3860,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    else
 	      {
 		*(ptr32 + i) = 0x7fffffff;
-		CCPU_SR_SET (PSW, PSW_OV);
+		CCPU_UCODE_OV_SET();
 	      }
 	  }
 	cpu->regs[rd].s = result.s;
@@ -3891,7 +3891,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 		&& (*(ptr_b16 + b16_offset) == 0x8000))
 	      {
 		*(ptr32 + i) = 0x7fffffff;
-		CCPU_SR_SET (PSW, PSW_OV);
+	        CCPU_UCODE_OV_SET();
 	      }
 	    else
 	      {
@@ -3935,7 +3935,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 		&& (*(ptr_b16 + b16_offset) == 0x8000))
 	      {
 		*(ptr32 + i) = 0x7fffffff;
-		CCPU_SR_SET (PSW, PSW_OV);
+	        CCPU_UCODE_OV_SET();
 	      }
 	    else
 	      {
@@ -4010,7 +4010,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 		&& (*(ptr_b16 + b16_offset) == (int16_t) 0x8000))
 	      {
 		*(ptr32 + i) = 0x7fffffff;
-		CCPU_SR_SET (PSW, PSW_OV);
+	        CCPU_UCODE_OV_SET();
 	      }
 	    else
 	      {
@@ -4054,7 +4054,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 		&& (*(ptr_b16 + b16_offset) == (int16_t) 0x8000))
 	      {
 		*(ptr32 + i) = 0x7fffffff;
-		CCPU_SR_SET (PSW, PSW_OV);
+	        CCPU_UCODE_OV_SET();
 	      }
 	    else
 	      {
@@ -4424,7 +4424,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    else
 	      {
 		*(ptr32 + i) = 0x7fffffff;
-		CCPU_SR_SET (PSW, PSW_OV);
+		CCPU_UCODE_OV_SET();
 	      }
 	  }
 	cpu->regs[rd].s = result.s;
@@ -4444,7 +4444,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	else
 	  {
 	    cpu->regs[rd].s = 0x7fffffffffffffffLL;
-	    CCPU_SR_SET (PSW, PSW_OV);
+	    CCPU_UCODE_OV_SET();
 	  }
 	TRACE_REG (cpu, rd);
 #else
@@ -4467,7 +4467,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    else
 	      {
 		*(ptr32 + i) = 0x7fffffff;
-		CCPU_SR_SET (PSW, PSW_OV);
+		CCPU_UCODE_OV_SET();
 	      }
 	  }
 	cpu->regs[rd].s = result.s;
@@ -4487,7 +4487,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	else
 	  {
 	    cpu->regs[rd].s = 0x7fffffffffffffffLL;
-	    CCPU_SR_SET (PSW, PSW_OV);
+	    CCPU_UCODE_OV_SET();
 	  }
 	TRACE_REG (cpu, rd);
 #else
@@ -4969,7 +4969,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    if (res <= 0)
 	      {
 		res = 0x7fffffffffffffffLL;
-		CCPU_SR_SET (PSW, PSW_OV);
+	        CCPU_UCODE_OV_SET();
 	      }
 	  }
 	else if ((x < 0) && (y < 0))
@@ -4977,7 +4977,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    if (res >= 0)
 	      {
 		res = 0x8000000000000000LL;
-		CCPU_SR_SET (PSW, PSW_OV);
+	        CCPU_UCODE_OV_SET();
 	      }
 	  }
 
@@ -5006,7 +5006,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	if (res < x)
 	  {
 	    res = 0xffffffffffffffffULL;
-	    CCPU_SR_SET (PSW, PSW_OV);
+	    CCPU_UCODE_OV_SET();
 	  }
 
 	if (RISCV_XLEN (cpu) == 64)
@@ -5111,7 +5111,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    if (res <= 0)
 	      {
 		res = 0x7fffffffffffffffLL;
-		CCPU_SR_SET (PSW, PSW_OV);
+	        CCPU_UCODE_OV_SET();
 	      }
 	  }
 	else if ((x < 0) && (y > 0))
@@ -5119,7 +5119,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    if (res >= 0)
 	      {
 		res = 0x8000000000000000LL;
-		CCPU_SR_SET (PSW, PSW_OV);
+	        CCPU_UCODE_OV_SET();
 	      }
 	  }
 	if (RISCV_XLEN (cpu) == 64)
@@ -5147,7 +5147,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	if (x < y)
 	  {
 	    res = 0ULL;
-	    CCPU_SR_SET (PSW, PSW_OV);
+	    CCPU_UCODE_OV_SET();
 	  }
 
 	if (RISCV_XLEN (cpu) == 64)
@@ -5243,7 +5243,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    if (res <= 0)
 	      {
 		res = 0x7fffffffffffffffLL;
-		CCPU_SR_SET (PSW, PSW_OV);
+		CCPU_UCODE_OV_SET();
 	      }
 	  }
 	else if ((acc < 0) && (mul_val < 0))
@@ -5251,7 +5251,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    if (res >= 0)
 	      {
 		res = 0x8000000000000000LL;
-		CCPU_SR_SET (PSW, PSW_OV);
+		CCPU_UCODE_OV_SET();
 	      }
 	  }
 
@@ -5279,7 +5279,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	if (res < acc)
 	  {
 	    res = 0xffffffffffffffffULL;
-	    CCPU_SR_SET (PSW, PSW_OV);
+	    CCPU_UCODE_OV_SET();
 	  }
 
 	if (RISCV_XLEN (cpu) == 32)
@@ -5308,7 +5308,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    if (res <= 0)
 	      {
 		res = 0x7fffffffffffffffLL;
-		CCPU_SR_SET (PSW, PSW_OV);
+		CCPU_UCODE_OV_SET();
 	      }
 	  }
 	else if ((acc < 0) && (mul_val > 0))
@@ -5316,7 +5316,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    if (res >= 0)
 	      {
 		res = 0x8000000000000000LL;
-		CCPU_SR_SET (PSW, PSW_OV);
+		CCPU_UCODE_OV_SET();
 	      }
 	  }
 	if (RISCV_XLEN (cpu) == 32)
@@ -5344,7 +5344,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	if (acc < mul_val)
 	  {
 	    res = 0ULL;
-	    CCPU_SR_SET (PSW, PSW_OV);
+	    CCPU_UCODE_OV_SET();
 	  }
 
 	if (RISCV_XLEN (cpu) == 32)
@@ -5634,7 +5634,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 		&& (*(ptr_b16 + i) == (int16_t) 0x8000))
 	      {
 		*(ptr32 + (i / 2)) = 0x7fffffff;
-		CCPU_SR_SET (PSW, PSW_OV);
+		CCPU_UCODE_OV_SET();
 	      }
 	    else
 	      {
@@ -5672,7 +5672,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 		&& (*(ptr_b16 + (i + 1)) == (int16_t) 0x8000))
 	      {
 		*(ptr32 + (i / 2)) = 0x7fffffff;
-		CCPU_SR_SET (PSW, PSW_OV);
+		CCPU_UCODE_OV_SET();
 	      }
 	    else
 	      {
@@ -5710,7 +5710,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 		&& (*(ptr_b16 + (i + 1)) == (int16_t) 0x8000))
 	      {
 		*(ptr32 + (i / 2)) = 0x7fffffff;
-		CCPU_SR_SET (PSW, PSW_OV);
+		CCPU_UCODE_OV_SET();
 	      }
 	    else
 	      {
@@ -6042,12 +6042,12 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    if (val > ((1 << imm5u) - 1))
 	      {
 		*(ptr32 + i) = ((1 << imm5u) - 1);
-		CCPU_SR_SET (PSW, PSW_OV);
+		CCPU_UCODE_OV_SET();
 	      }
 	    else if (val < -(1 << imm5u))
 	      {
 		*(ptr32 + i) = -(1 << imm5u);
-		CCPU_SR_SET (PSW, PSW_OV);
+		CCPU_UCODE_OV_SET();
 	      }
 	    else
 	      *(ptr32 + i) = val;
@@ -6072,12 +6072,12 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    if (val > ((1 << imm5u) - 1))
 	      {
 		*(ptr32 + i) = ((1 << imm5u) - 1);
-		CCPU_SR_SET (PSW, PSW_OV);
+		CCPU_UCODE_OV_SET();
 	      }
 	    else if (val < 0)
 	      {
 		*(ptr32 + i) = 0;
-		CCPU_SR_SET (PSW, PSW_OV);
+		CCPU_UCODE_OV_SET();
 	      }
 	    else
 	      *(ptr32 + i) = val;
