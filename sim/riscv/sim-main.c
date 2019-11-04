@@ -4389,10 +4389,33 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_KMABB32:
       {
-	int64_t res= cpu->regs[rd].s
-		     + ((int64_t) cpu->regs[ra].b32.i0 * cpu->regs[rb].b32.i0);
-	cpu->regs[rd].s = insn_sat_helper (cpu, res, 63);
+#if (WITH_TARGET_WORD_BITSIZE == 64)
+	int64_t acc = cpu->regs[rd].s;
+	int64_t mul_val = (int64_t) cpu->regs[ra].b32.i0 * cpu->regs[rb].b32.i0;
+	int64_t res = acc + mul_val;
+	if ((acc > 0) && (mul_val > 0))
+	  {
+	    if (res <= 0)
+	      {
+		res = 0x7fffffffffffffffLL;
+		CCPU_UCODE_OV_SET();
+	      }
+	  }
+	else if ((acc < 0) && (mul_val < 0))
+	  {
+	    if (res >= 0)
+	      {
+		res = 0x8000000000000000LL;
+		CCPU_UCODE_OV_SET();
+	      }
+	  }
+
+	cpu->regs[rd].s = res;
 	TRACE_REG (cpu, rd);
+#else
+	TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
+	sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
+#endif
       }
       break;
     case MATCH_KMABT:
@@ -4412,9 +4435,27 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_KMABT32:
       {
 #if (WITH_TARGET_WORD_BITSIZE == 64)
-	int64_t res= cpu->regs[rd].s
-		     + ((int64_t) cpu->regs[ra].b32.i0 * cpu->regs[rb].b32.i1);
-	cpu->regs[rd].s = insn_sat_helper (cpu, res, 63);
+	int64_t acc = cpu->regs[rd].s;
+	int64_t mul_val = (int64_t) cpu->regs[ra].b32.i0 * cpu->regs[rb].b32.i1;
+	int64_t res = acc + mul_val;
+	if ((acc > 0) && (mul_val > 0))
+	  {
+	    if (res <= 0)
+	      {
+		res = 0x7fffffffffffffffLL;
+		CCPU_UCODE_OV_SET();
+	      }
+	  }
+	else if ((acc < 0) && (mul_val < 0))
+	  {
+	    if (res >= 0)
+	      {
+		res = 0x8000000000000000LL;
+		CCPU_UCODE_OV_SET();
+	      }
+	  }
+
+	cpu->regs[rd].s = res;
 	TRACE_REG (cpu, rd);
 #else
 	TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
@@ -4439,9 +4480,27 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_KMATT32:
       {
 #if (WITH_TARGET_WORD_BITSIZE == 64)
-	int64_t res= cpu->regs[rd].s
-		     + ((int64_t) cpu->regs[ra].b32.i1 * cpu->regs[rb].b32.i1);
-	cpu->regs[rd].s = insn_sat_helper (cpu, res, 63);
+	int64_t acc = cpu->regs[rd].s;
+	int64_t mul_val = (int64_t) cpu->regs[ra].b32.i1 * cpu->regs[rb].b32.i1;
+	int64_t res = acc + mul_val;
+	if ((acc > 0) && (mul_val > 0))
+	  {
+	    if (res <= 0)
+	      {
+		res = 0x7fffffffffffffffLL;
+		CCPU_UCODE_OV_SET();
+	      }
+	  }
+	else if ((acc < 0) && (mul_val < 0))
+	  {
+	    if (res >= 0)
+	      {
+		res = 0x8000000000000000LL;
+		CCPU_UCODE_OV_SET();
+	      }
+	  }
+
+	cpu->regs[rd].s = res;
 	TRACE_REG (cpu, rd);
 #else
 	TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
