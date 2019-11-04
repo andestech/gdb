@@ -3894,7 +3894,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	for (i = 0; i < vec32_num; i++)
 	  {
 	    if ((*(ptr_a32 + i) == 0x80000000)
-		&& (*(ptr_b16 + b16_offset) == 0x8000))
+		&& (*(ptr_b16 + b16_offset) == (int16_t) 0x8000))
 	      {
 		*(ptr32 + i) = 0x7fffffff;
 	        CCPU_UCODE_OV_SET();
@@ -3938,7 +3938,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	for (i = 0; i < vec32_num; i++)
 	  {
 	    if ((*(ptr_a32 + i) == 0x80000000)
-		&& (*(ptr_b16 + b16_offset) == 0x8000))
+		&& (*(ptr_b16 + b16_offset) == (int16_t) 0x8000))
 	      {
 		*(ptr32 + i) = 0x7fffffff;
 	        CCPU_UCODE_OV_SET();
