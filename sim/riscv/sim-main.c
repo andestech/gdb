@@ -5711,13 +5711,17 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       {
 	int16_t aop = cpu->regs[ra].b16.h0;
 	int16_t bop = cpu->regs[rb].b16.h0;
-	int32_t mul = (int32_t) aop * bop;
-	int32_t res = mul << 1;
+	int32_t res;
 
-	if (mul != (res >> 1))
+	if (aop == (int16_t) 0x8000 && bop == (int16_t) 0x8000)
 	  {
 	    res = 0x7fffffff;
-	    CCPU_SR_SET (PSW, PSW_OV);
+	    CCPU_UCODE_OV_SET();
+	  }
+	else
+	  {
+	    int32_t mul = (int32_t) aop * bop;
+	    res = mul << 1;
 	  }
 
 	cpu->regs[rd].s = res;
@@ -5749,13 +5753,17 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       {
 	int16_t aop = cpu->regs[ra].b16.h0;
 	int16_t bop = cpu->regs[rb].b16.h1;
-	int32_t mul = (int32_t) aop * bop;
-	int32_t res = mul << 1;
+	int32_t res;
 
-	if (mul != (res >> 1))
+	if (aop == (int16_t) 0x8000 && bop == (int16_t) 0x8000)
 	  {
 	    res = 0x7fffffff;
-	    CCPU_SR_SET (PSW, PSW_OV);
+	    CCPU_UCODE_OV_SET();
+	  }
+	else
+	  {
+	    int32_t mul = (int32_t) aop * bop;
+	    res = mul << 1;
 	  }
 
 	cpu->regs[rd].s = res;
@@ -5787,13 +5795,17 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       {
 	int16_t aop = cpu->regs[ra].b16.h1;
 	int16_t bop = cpu->regs[rb].b16.h1;
-	int32_t mul = (int32_t) aop * bop;
-	int32_t res = mul << 1;
+	int32_t res;
 
-	if (mul != (res >> 1))
+	if (aop == (int16_t) 0x8000 && bop == (int16_t) 0x8000)
 	  {
 	    res = 0x7fffffff;
-	    CCPU_SR_SET (PSW, PSW_OV);
+	    CCPU_UCODE_OV_SET();
+	  }
+	else
+	  {
+	    int32_t mul = (int32_t) aop * bop;
+	    res = mul << 1;
 	  }
 
 	cpu->regs[rd].s = res;
