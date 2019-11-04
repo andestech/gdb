@@ -3315,15 +3315,21 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_KABSW:
       {
-	if (cpu->regs[ra].s >= 0)
-	  cpu->regs[rd].s = cpu->regs[ra].s;
-	else if (((uint32_t) cpu->regs[ra].u) == 0x80000000)
-	  cpu->regs[rd].u = 0x7fffffff;
+	int64_t res;
+	if (*ptr_a32 >= 0)
+	  res = *ptr_a32;
+	else if (*ptr_a32 == 0x80000000)
+	  {
+	    res = 0x7fffffff;
+	    CCPU_UCODE_OV_SET();
+	  }
 	else
-	  cpu->regs[rd].s = -cpu->regs[ra].s;
+	  res = -*ptr_a32;
+
+	cpu->regs[rd].s = res;
 	TRACE_REG (cpu, rd);
-	break;
       }
+      break;
     case MATCH_KABS16:
       {
 	reg_t result;
