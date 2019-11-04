@@ -4786,7 +4786,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    for (i = 63; i >= 0; i--)
 	      r |= ((bits >> i) & 0x1L) << (63 - i);
 
-	    cpu->regs[rd].u = bits >> (64 - (imm6u + 1));
+	    cpu->regs[rd].u = r >> (64 - (imm6u + 1));
 	  }
 	TRACE_REG (cpu, rd);
       }
