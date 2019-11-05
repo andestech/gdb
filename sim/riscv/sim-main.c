@@ -1532,10 +1532,11 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
   uptr_a32 = (uint32_t *) & cpu->regs[ra].b32;
   uptr_b32 = (uint32_t *) & cpu->regs[rb].b32;
   uptr_d32 = (uint32_t *) & cpu->regs[rd].b32;
-  int16_t *ptr16, *ptr_a16, *ptr_b16;
+  int16_t *ptr16, *ptr_a16, *ptr_b16, *ptr_d16;
   ptr16 = (int16_t *) & result.b16;
   ptr_a16 = (int16_t *) & cpu->regs[ra].b16;
   ptr_b16 = (int16_t *) & cpu->regs[rb].b16;
+  ptr_d16 = (int16_t *) & cpu->regs[rd].b16;
   uint16_t *uptr16, *uptr_a16, *uptr_b16;
   uptr16 = (uint16_t *) & result.ub16;
   uptr_a16 = (uint16_t *) & cpu->regs[ra].ub16;
@@ -5943,6 +5944,52 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 		*(ptr32 + (i / 2)) =  res << 1;
 	      }
 	  }
+	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
+      }
+      break;
+    case MATCH_KDMABB:
+      {
+	int16_t aop = cpu->regs[ra].b16.h0;
+	int16_t bop = cpu->regs[rb].b16.h0;
+	int32_t mul = (int32_t) aop * bop;
+	int32_t res = mul << 1;
+
+	if (mul != (res >> 1))
+	  {
+	    res = 0x7fffffff;
+	    CCPU_UCODE_OV_SET();
+	  }
+
+	int64_t resadd = res + cpu->regs[rd].b32.i0;
+	resadd = insn_sat_helper (cpu, resadd, 31);
+
+	cpu->regs[rd].s = resadd;
+	TRACE_REG (cpu, rd);
+      }
+      break;
+    case MATCH_KDMABB16:
+      {
+	for (i = 0; i <= vec32_num; i+=2)
+	  {
+	    int32_t res;
+	    if ((*(ptr_a16 + i) == (int16_t) 0x8000)
+		&& (*(ptr_b16 + i) == (int16_t) 0x8000))
+	      {
+		res = 0x7fffffff;
+		CCPU_UCODE_OV_SET();
+	      }
+	    else
+	      {
+		res = (int32_t) *(ptr_a16 + i) * *(ptr_b16 + i);
+		res = res << 1;
+	      }
+
+	    int32_t resadd = res + *(ptr_d32 + (i / 2));
+	    resadd = insn_sat_helper (cpu, resadd, 31);
+	    *(ptr32 + (i / 2)) = resadd;
+	  }
+
 	cpu->regs[rd].s = result.s;
 	TRACE_REG (cpu, rd);
       }
