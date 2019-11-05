@@ -2179,6 +2179,77 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	TRACE_REG (cpu, rd);
       }
       break;
+    case MATCH_STAS32:
+      {
+#if (WITH_TARGET_WORD_BITSIZE == 64)
+	result.b32.i1 = cpu->regs[ra].b32.i1 + cpu->regs[rb].b32.i1;
+	result.b32.i0 = cpu->regs[ra].b32.i0 - cpu->regs[rb].b32.i0;
+	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
+#else
+	TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
+	sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
+#endif
+      }
+      break;
+    case MATCH_RSTAS32:
+      {
+#if (WITH_TARGET_WORD_BITSIZE == 64)
+	result.b32.i1 = (int32_t) (((int64_t) cpu->regs[ra].b32.i1
+				   + cpu->regs[rb].b32.i1) >> 1);
+	result.b32.i0 = (int32_t) (((int64_t) cpu->regs[ra].b32.i0
+				   - cpu->regs[rb].b32.i0) >> 1);
+	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
+#else
+	TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
+	sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
+#endif
+      }
+      break;
+    case MATCH_URSTAS32:
+      {
+#if (WITH_TARGET_WORD_BITSIZE == 64)
+	result.ub32.i1 = (uint32_t) (((uint64_t) cpu->regs[ra].ub32.i1
+				     + cpu->regs[rb].ub32.i1) >> 1);
+	result.ub32.i0 = (uint32_t) (((uint64_t) cpu->regs[ra].ub32.i0
+				     - cpu->regs[rb].ub32.i0) >> 1);
+	cpu->regs[rd].u = result.u;
+	TRACE_REG (cpu, rd);
+#else
+	TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
+	sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
+#endif
+      }
+      break;
+    case MATCH_KSTAS32:
+      {
+#if (WITH_TARGET_WORD_BITSIZE == 64)
+	int64_t res1 = (int64_t) cpu->regs[ra].b32.i1 + cpu->regs[rb].b32.i1;
+	int64_t res2 = (int64_t) cpu->regs[ra].b32.i0 - cpu->regs[rb].b32.i0;
+	cpu->regs[rd].b32.i0 = insn_sat_helper (cpu, res2, 31);
+	cpu->regs[rd].b32.i1 = insn_sat_helper (cpu, res1, 31);
+	TRACE_REG (cpu, rd);
+#else
+	TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
+	sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
+#endif
+      }
+      break;
+    case MATCH_UKSTAS32:
+      {
+#if (WITH_TARGET_WORD_BITSIZE == 64)
+	int64_t res1 = (int64_t) cpu->regs[ra].ub32.i1 + cpu->regs[rb].ub32.i1;
+	int64_t res2 = (int64_t) cpu->regs[ra].ub32.i0 - cpu->regs[rb].ub32.i0;
+	cpu->regs[rd].ub32.i0 = insn_sat_helper (cpu, res2, 32);
+	cpu->regs[rd].ub32.i1 = insn_sat_helper (cpu, res1, 32);
+	TRACE_REG (cpu, rd);
+#else
+	TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
+	sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
+#endif
+      }
+      break;
     case MATCH_ADD8:
       {
 	/* Rt[31:24] = Ra[31:24] + Rb[31:24]
