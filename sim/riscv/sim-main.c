@@ -6411,6 +6411,46 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	TRACE_REG (cpu, rd);
       }
       break;
+    case MATCH_CLZ8:
+      {
+	int j, cnt = 0;
+	for (i = 0; i < vec8_num; i++)
+	  {
+	    for (j = 7; j >= 0; j--)
+	      {
+		if (__TEST (*(ptr_a8 + i), j) == 0)
+		  cnt++;
+		else
+		  break;
+	      }
+	    *(ptr8 + i) = cnt;
+	    cnt = 0;
+	  }
+
+	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
+      }
+      break;
+    case MATCH_CLZ16:
+      {
+	int j, cnt = 0;
+	for (i = 0; i < vec16_num; i++)
+	  {
+	    for (j = 15; j >= 0; j--)
+	      {
+		if (__TEST (*(ptr_a16 + i), j) == 0)
+		  cnt++;
+		else
+		  break;
+	      }
+	    *(ptr16 + i) = cnt;
+	    cnt = 0;
+	  }
+
+	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
+      }
+      break;
     case MATCH_CLZ32:
       {
 	int j, cnt = 0;
