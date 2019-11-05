@@ -5947,31 +5947,39 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_SMUL8:
       {
-	int32_t low = ((int32_t) (cpu->regs[ra].b8.b1
-				  * cpu->regs[rb].b8.b1) << 16)
-		       | ((int32_t) (cpu->regs[ra].b8.b0
-				     * cpu->regs[rb].b8.b0) & 0xFFFF);
-	int32_t high = ((int32_t) (cpu->regs[ra].b8.b3
-				   * cpu->regs[rb].b8.b3) << 16)
-		       | ((int32_t) (cpu->regs[ra].b8.b2
-				     * cpu->regs[rb].b8.b2) & 0xFFFF);
-	cpu->regs[rd].s = low;
-	cpu->regs[rd + 1].s = high;
+	/* Rt[63:48] = Ra[31:24] * Rb[31:24]
+	 * Rt[47:32] = Ra[23:16] * Rb[23:16]
+	 * Rt[31:16] = Ra[15:8] * Rb[15:8]
+	   Rt[15:0] = Ra[7:0] * Rb[7:0] */
+	*ptr16 = (int16_t) *ptr_a8 * *ptr_b8;
+	*(ptr16 + 1) = (int16_t) *(ptr_a8 + 1) * *(ptr_b8 + 1);
+	*(ptr16 + 2) = (int16_t) *(ptr_a8 + 2) * *(ptr_b8 + 2);
+	*(ptr16 + 3) = (int16_t) *(ptr_a8 + 3) * *(ptr_b8 + 3);
+
+	if (RISCV_XLEN (cpu) == 64)
+	  cpu->regs[rd].s = result.s;
+	else
+	  set_double (cpu, rd, result.s);
+
 	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_SMULX8:
       {
-	int32_t low = ((int32_t) (cpu->regs[ra].b8.b1
-				  * cpu->regs[rb].b8.b0) << 16)
-		       | ((int32_t) (cpu->regs[ra].b8.b0
-				     * cpu->regs[rb].b8.b1) & 0xFFFF);
-	int32_t high = ((int32_t) (cpu->regs[ra].b8.b3
-				   * cpu->regs[rb].b8.b2) << 16)
-		       | ((int32_t) (cpu->regs[ra].b8.b2
-				     * cpu->regs[rb].b8.b3) & 0xFFFF);
-	cpu->regs[rd].s = low;
-	cpu->regs[rd + 1].s = high;
+	/* Rt[63:48] = Ra[31:24] * Rb[23:16]
+	 * Rt[47:32] = Ra[23:16] * Rb[31:24]
+	 * Rt[31:16] = Ra[15:8] * Rb[7:0]
+	   Rt[15:0] = Ra[7:0] * Rb[15:8] */
+	*ptr16 = (int16_t) *ptr_a8 * *(ptr_b8 + 1);
+	*(ptr16 + 1) = (int16_t) *(ptr_a8 + 1) * *ptr_b8;
+	*(ptr16 + 2) = (int16_t) *(ptr_a8 + 2) * *(ptr_b8 + 3);
+	*(ptr16 + 3) = (int16_t) *(ptr_a8 + 3) * *(ptr_b8 + 2);
+
+	if (RISCV_XLEN (cpu) == 64)
+	  cpu->regs[rd].s = result.s;
+	else
+	  set_double (cpu, rd, result.s);
+
 	TRACE_REG (cpu, rd);
       }
       break;
