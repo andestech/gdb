@@ -6126,26 +6126,23 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_PBSAD:
     case MATCH_PBSADA:
       {
-	int a, b, c, d;
 	/* The four unsigned 8-bit elements of Ra are subtracted from the four
 	   unsigned 8-bit elements of Rb.  */
-	a = (cpu->regs[ra].u & 0xff) - (cpu->regs[rb].u & 0xff);
-	b = ((cpu->regs[ra].u >> 8) & 0xff) - ((cpu->regs[rb].u >> 8) & 0xff);
-	c = ((cpu->regs[ra].u >> 16) & 0xff) - ((cpu->regs[rb].u >> 16) & 0xff);
-	d = ((cpu->regs[ra].u >> 24) & 0xff) - ((cpu->regs[rb].u >> 24) & 0xff);
-
-	/* Absolute difference of four unsigned 8-bit data elements.  */
-	a = (a >= 0) ? a : -a;
-	b = (b >= 0) ? b : -b;
-	c = (c >= 0) ? c : -c;
-	d = (d >= 0) ? d : -d;
+        int i;
+	int res = 0;
+	for (i = 0; i < vec8_num; i++)
+	  {
+	    int diff = *(uptr_a8 + i) - *(uptr_b8 + i);
+	    diff = (diff >= 0) ? diff : -diff;
+	    res += diff;
+	  }
 
 	if (op->match == MATCH_PBSAD)
 	  /* pbsad */
-	  cpu->regs[rd].u = a + b + c + d;
+	  cpu->regs[rd].u = res;
 	else
 	  /* pbsada */
-	  cpu->regs[rd].u = cpu->regs[rd].u + a + b + c + d;
+	  cpu->regs[rd].u = cpu->regs[rd].u + res;
 
 	TRACE_REG (cpu, rd);
 	break;
