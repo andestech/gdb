@@ -73,7 +73,7 @@ static struct riscv_opcode *sim_riscv_opcodes = NULL;
       } \
   } while (0)
 
-static INLINE void
+STATIC_INLINE void
 store_rd (SIM_CPU *cpu, int rd, unsigned_word val)
 {
   if (rd)
@@ -83,21 +83,21 @@ store_rd (SIM_CPU *cpu, int rd, unsigned_word val)
     }
 }
 
-static INLINE void
+STATIC_INLINE void
 store_frd (SIM_CPU *cpu, int rd, unsigned32 val)
 {
   cpu->fpregs[rd].w[0] = val;
   TRACE_FREG (cpu, rd);
 }
 
-static inline void
+STATIC_INLINE void
 store_frd64 (SIM_CPU *cpu, int rd, unsigned64 val)
 {
   cpu->fpregs[rd].v[0] = val;
   TRACE_FREG (cpu, rd);
 }
 
-static INLINE unsigned_word
+STATIC_INLINE unsigned_word
 fetch_csr (SIM_CPU *cpu, const char *name, int csr, unsigned_word *reg)
 {
   /* Handle pseudo registers.  */
@@ -114,7 +114,7 @@ fetch_csr (SIM_CPU *cpu, const char *name, int csr, unsigned_word *reg)
   return *reg;
 }
 
-static INLINE void
+STATIC_INLINE void
 store_csr (SIM_CPU *cpu, const char *name, int csr, unsigned_word *reg,
 	   unsigned_word val)
 {
@@ -156,14 +156,14 @@ store_csr (SIM_CPU *cpu, const char *name, int csr, unsigned_word *reg,
   TRACE_REGISTER (cpu, "wrote CSR %s = %#"PRIxTW, name, val);
 }
 
-static inline unsigned_word
+STATIC_INLINE unsigned_word
 ashiftrt (unsigned_word val, unsigned_word shift)
 {
   unsigned32 sign = (val & 0x80000000) ? ~(0xfffffffful >> shift) : 0;
   return (val >> shift) | sign;
 }
 
-static inline unsigned_word
+STATIC_INLINE unsigned_word
 ashiftrt64 (unsigned_word val, unsigned_word shift)
 {
   unsigned64 sign = (val & 0x8000000000000000ull) ? ~(0xffffffffffffffffull >> shift) : 0;
