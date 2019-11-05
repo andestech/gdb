@@ -5923,25 +5923,31 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_UMUL16:
       {
-	/* Rt[31:16] = Ra[31:16] * Rb[31:16]
-	   Rt[15:0] = Ra[15:0] * Rb[15:0] */
-	uint64_t result = ((uint64_t) (cpu->regs[ra].ub16.h1
-				       * cpu->regs[rb].ub16.h1) << 32)
-			   | ((uint64_t) (cpu->regs[ra].ub16.h0
-					  * cpu->regs[rb].ub16.h0) & 0xFFFFFFFF);
-	set_udouble (cpu, rd, result);
+	/* Rt[63:32] = Ra[31:16] * Rb[31:16]
+	   Rt[31:0] = Ra[15:0] * Rb[15:0] */
+	*uptr32 = (uint32_t) *uptr_a16 * *uptr_b16;
+	*(uptr32 + 1) = (uint32_t) *(uptr_a16 + 1) * *(uptr_b16 + 1);
+
+	if (RISCV_XLEN (cpu) == 64)
+	  cpu->regs[rd].s = result.s;
+	else
+	  set_double (cpu, rd, result.s);
+
 	TRACE_REG (cpu, rd);
       }
       break;
     case MATCH_UMULX16:
       {
-	/* Rt[31:16] = Ra[31:16] * Rb[15:0]
-	   Rt[15:0] = Ra[15:0] * Rb[31:16] */
-	uint64_t result = ((uint64_t) (cpu->regs[ra].ub16.h1
-				       * cpu->regs[rb].ub16.h0) << 32)
-			   | ((uint64_t) (cpu->regs[ra].ub16.h0
-					  * cpu->regs[rb].ub16.h1) & 0xFFFFFFFF);
-	set_udouble (cpu, rd, result);
+	/* Rt[63:32] = Ra[31:16] * Rb[15:0]
+	   Rt[31:0] = Ra[15:0] * Rb[31:16] */
+	*uptr32 = (uint32_t) *uptr_a16 * *(uptr_b16 + 1);
+	*(uptr32 + 1) = (uint32_t) *(uptr_a16 + 1) * *uptr_b16;
+
+	if (RISCV_XLEN (cpu) == 64)
+	  cpu->regs[rd].s = result.s;
+	else
+	  set_double (cpu, rd, result.s);
+
 	TRACE_REG (cpu, rd);
       }
       break;
