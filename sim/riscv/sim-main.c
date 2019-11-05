@@ -6161,13 +6161,21 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       TRACE_REG (cpu, rd);
       break;
     case MATCH_SWAP8:
-      cpu->regs[rd].u = ((cpu->regs[ra].u & 0xFF00FF00) >> 8)
-		       | ((cpu->regs[ra].u & 0x00FF00FF) << 8);
+      cpu->regs[rd].ub32.i0 = ((cpu->regs[ra].ub32.i0 & 0xFF00FF00) >> 8)
+	                      | ((cpu->regs[ra].ub32.i0 & 0x00FF00FF) << 8);
+#if (WITH_TARGET_WORD_BITSIZE == 64)
+      cpu->regs[rd].ub32.i1 = ((cpu->regs[ra].ub32.i1 & 0xFF00FF00) >> 8)
+	                      | ((cpu->regs[ra].ub32.i1 & 0x00FF00FF) << 8);
+#endif
       TRACE_REG (cpu, rd);
       break;
     case MATCH_SWAP16:
-      cpu->regs[rd].u = ((cpu->regs[ra].u & 0xFFFF0000) >> 16)
-		       | ((cpu->regs[ra].u & 0x0000FFFF) << 16);
+      cpu->regs[rd].ub32.i0 = ((cpu->regs[ra].ub32.i0 & 0xFFFF0000) >> 16)
+	                      | ((cpu->regs[ra].ub32.i0 & 0x0000FFFF) << 16);
+#if (WITH_TARGET_WORD_BITSIZE == 64)
+      cpu->regs[rd].ub32.i1 = ((cpu->regs[ra].ub32.i1 & 0xFFFF0000) >> 16)
+	                      | ((cpu->regs[ra].ub32.i1 & 0x0000FFFF) << 16);
+#endif
       TRACE_REG (cpu, rd);
       break;
     case MATCH_SCLIP32:
