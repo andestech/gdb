@@ -56,6 +56,16 @@ struct riscv_cl_insn
 
   /* The relocs associated with the instruction, if any.  */
   fixS *fixp;
+
+  /* The cmodel parameters.  */
+  struct
+    {
+      int method;
+      int state;
+      int type;
+      int index;
+      int offset;
+    } cmodel;
 };
 
 #ifndef DEFAULT_ARCH
@@ -65,6 +75,20 @@ struct riscv_cl_insn
 #ifndef DEFAULT_RISCV_ATTR
 #define DEFAULT_RISCV_ATTR 0
 #endif
+
+enum riscv_cl_insn_method
+{
+  METHOD_DEFAULT,
+  METHOD_VARIABLE,
+};
+
+enum cmodel_subtype_index
+{
+  CSI_INDIRECT_SYMBOL = 0,
+  CSI_REFERENCE_SYMBOL = 1,
+  CSI_LARGE_CODE = 2,
+  CSI_DEFAULT_CODE = 3,
+};
 
 static const char default_arch[] = DEFAULT_ARCH;
 
@@ -270,6 +294,26 @@ static bfd_boolean explicit_arch_attr = FALSE;
 #define RELAX_BRANCH_UNCOND(i) (((i) & 1) != 0)
 #define RELAX_BRANCH_RANGE(i) (((i) >> 6) & 0xF)
 
+#define RELAX_CMODEL_ENCODE(type, length, index)	\
+  ((relax_substateT) 					\
+   (0xd0000000						\
+    | ((type) << 0)					\
+    | ((length) << 8)					\
+    | ((index) << 16)))
+#define RELAX_CMODEL_P(i) (((i) & 0xf0000000) == 0xd0000000)
+#define RELAX_CMODEL_TYPE(i) ((i) & 0xff)
+#define RELAX_CMODEL_LENGTH(i) (((i) >> 8) & 0xff)
+#define RELAX_CMODEL_INDEX(i) (((i) >> 16) & 0xff)
+
+enum cmodel_type
+{
+  TYPE_JX = 0,
+  TYPE_LA,
+  TYPE_LD,
+  TYPE_ST,
+  TYPE_IS, /* indirect symbol  */
+};
+
 enum branch_range
 {
   RANGE_JMP = 1,
@@ -375,6 +419,44 @@ add_relaxed_insn (struct riscv_cl_insn *insn, int max_chars, int var,
 	    subtype, symbol, offset, NULL);
 }
 
+static void
+add_insn_grow (struct riscv_cl_insn *insn)
+{
+  frag_grow (insn_length (insn));
+  move_insn (insn, frag_now, frag_more (0) - frag_now->fr_literal + insn->cmodel.offset);
+}
+
+static inline void
+add_insn_grow_done (struct riscv_cl_insn *insn ATTRIBUTE_UNUSED, int max_chars, int var,
+      relax_substateT subtype, symbolS *symbol, offsetT offset)
+{
+  frag_var (rs_machine_dependent, max_chars, var,
+	    subtype, symbol, offset, NULL);
+}
+
+static inline
+bfd_boolean is_cmodel_large (void)
+{
+  return riscv_opts.cmodel == CMODEL_LARGE;
+}
+
+static inline
+bfd_boolean is_same_section_symbol (symbolS *sym, asection *sec)
+{
+  return (sym != NULL
+	  && S_IS_DEFINED (sym)
+	  && !S_IS_WEAK (sym)
+	  && sec == S_GET_SEGMENT (sym));
+}
+
+static inline
+bfd_boolean is_cmodel_relaxable (symbolS *sym, asection *sec)
+{
+  return (abi_xlen >= 64
+	  && is_cmodel_large ()
+	  && !is_same_section_symbol (sym, sec));
+}
+
 /* Compute the length of a branch sequence, and adjust the stored length
    accordingly.  If FRAGP is NULL, the worst-case length is returned.  */
 
@@ -418,6 +500,83 @@ relaxed_branch_length (fragS *fragp, asection *sec, int update)
   if (update)
     fragp->fr_subtype = RELAX_BRANCH_ENCODE (jump, rvc, length, range);
 
+  return length;
+}
+
+/* Compute the length of a CModel sequence, and adjust the stored length
+   accordingly.  */
+static unsigned
+relaxed_cmodel_length (fragS *fragp, asection *sec)
+{
+  int type = RELAX_CMODEL_TYPE (fragp->fr_subtype);
+  int length = RELAX_CMODEL_LENGTH (fragp->fr_subtype);
+  int index = RELAX_CMODEL_INDEX (fragp->fr_subtype);
+  int is_same_sec = is_same_section_symbol (fragp->fr_symbol, sec);
+
+  gas_assert (fragp);
+
+  switch (index)
+    {
+    case CSI_INDIRECT_SYMBOL:
+      switch (type)
+	{
+	case TYPE_JX ... TYPE_ST:
+	  length = 0;
+	  break;
+	case TYPE_IS:
+	  if (is_same_sec)
+	    length = 0;
+	  else
+	    gas_assert (length == 8);
+	  break;
+	default:
+	  as_fatal (_("internal error: invalid CModel type!"));
+	}
+      break;
+    case CSI_REFERENCE_SYMBOL:
+      switch (type)
+	{
+	case TYPE_JX ... TYPE_ST:
+	  length = 0;
+	  break;
+	default:
+	  as_fatal (_("internal error: invalid CModel type!"));
+	}
+      break;
+    case CSI_LARGE_CODE:
+      switch (type)
+	{
+	case TYPE_JX:
+	  if (is_same_sec)
+	    length = 0;
+	  break;
+	case TYPE_LA:
+	    length = 8;
+	    break;
+	case TYPE_LD... TYPE_ST:
+	  if (is_same_sec)
+	    length = 8; /* -= 4 is NG, might do more than time.  */
+	  break;
+	default:
+	  as_fatal (_("internal error: invalid CModel type!"));
+	}
+      break;
+    case CSI_DEFAULT_CODE:
+      switch (type)
+	{
+	case TYPE_JX:
+	  if (!is_same_sec)
+	    length = 0;
+	  break;
+	default:
+	  as_fatal (_("internal error: invalid CModel type!"));
+	}
+      break;
+    default:
+      as_fatal (_("internal error: invalid CModel index!"));
+    }
+
+  fragp->fr_subtype = RELAX_CMODEL_ENCODE (type, length, index);
   return length;
 }
 
@@ -1541,7 +1700,7 @@ append_insn (struct riscv_cl_insn *ip, expressionS *address_expr,
 			    address_expr->X_add_number);
 	  return;
 	}
-      else
+      else if (ip->cmodel.method == METHOD_DEFAULT)
 	{
 	  howto = bfd_reloc_type_lookup (stdoutput, reloc_type);
 	  if (howto == NULL)
@@ -1555,8 +1714,23 @@ append_insn (struct riscv_cl_insn *ip, expressionS *address_expr,
 	}
     }
 
-  add_fixed_insn (ip);
-  install_insn (ip);
+  if (ip->cmodel.method == METHOD_DEFAULT)
+    add_fixed_insn (ip);
+  else if  (ip->cmodel.method == METHOD_VARIABLE)
+    {
+      add_insn_grow (ip);
+      if (ip->cmodel.state == 0)
+	{
+	  int length = ip->cmodel.offset + 4;
+	  add_insn_grow_done (ip, length, 0,
+			      RELAX_CMODEL_ENCODE (ip->cmodel.type, length, ip->cmodel.index),
+			      address_expr->X_add_symbol,
+			      address_expr->X_add_number);
+	}
+      return;
+    }
+  else
+    as_fatal (_("internal error: invalid append_insn method!"));
 
   /* We need to start a new frag after any instruction that can be
      optimized away or compressed by the linker during relaxation, to prevent
@@ -1610,6 +1784,7 @@ macro_build (expressionS *ep, const char *name, const char *fmt, ...)
   bfd_reloc_code_real_type r;
   va_list args;
 
+  insn.cmodel.method = METHOD_DEFAULT;
   va_start (args, fmt);
 
   r = BFD_RELOC_UNUSED;
@@ -1690,6 +1865,14 @@ macro_build (expressionS *ep, const char *name, const char *fmt, ...)
 	  }
 	  /* fallthru */
 
+	case 'C':
+	  insn.cmodel.method = METHOD_VARIABLE;
+	  insn.cmodel.state = va_arg (args, int);
+	  insn.cmodel.type = va_arg (args, int);
+	  insn.cmodel.index = va_arg (args, int);
+	  insn.cmodel.offset = va_arg (args, int);
+	  continue;
+
 	default:
 	  as_fatal (_("internal error: invalid macro"));
 	}
@@ -1744,83 +1927,50 @@ make_internal_label (void)
 #define CMODEL_SECTION_ALIGN 3
 #define CMODEL_SECTION_ENTRY_SIZE (1u << CMODEL_SECTION_ALIGN)
 
-
-/* FEED:
- * what kind of symbol is faraway? (would need to trampline)
- *   all except local one in the same section
- *   only main symbol of expression is considered by now
- */
-
 static
-bfd_boolean is_nearby_symbol (expressionS *ep)
+void  make_indirect_symbol (expressionS *ep, expressionS *ep_ind)
 {
-  bfd_boolean is = FALSE;
-
-  if ( (S_GET_SEGMENT (ep->X_add_symbol) == now_seg)
-//     && (!S_IS_EXTERNAL (ep->X_add_symbol))
-//     && (S_IS_LOCAL (ep->X_add_symbol))
-    )
-    is = TRUE;
-
-  return is;
-}
-
-static
-bfd_boolean is_faraway_symbol (expressionS *ep)
-{
-  bfd_boolean is = FALSE;
-
-  if ( (riscv_opts.cmodel == CMODEL_LARGE)
-    && ((O_symbol <= ep->X_op) && (ep->X_op <= O_index))
-    && !is_nearby_symbol (ep) )
-    is = TRUE;
-
-  return is;
-}
-
-static
-expressionS *make_indirect_symbol (expressionS *ep)
-{
-  char buf[0x1000];
+  char buf[0x100];
   char isym_name[0x100];
   symbolS *isym;
+  const char *seg_name = segment_name (now_seg);
   const char *sym_name = S_GET_NAME (ep->X_add_symbol);
-  valueT sym_value = ep->X_add_number;
+  valueT sym_addend = ep->X_add_number;
 
   /* make indirect symbol once  */
-  sprintf (isym_name, "%s_%s_%lx", CMODEL_SYMBOL_PREFIX,
-	   sym_name, (unsigned long)sym_value);
+  sprintf (isym_name, "%s_%s_%s_%lx", CMODEL_SYMBOL_PREFIX, seg_name,
+	   sym_name, (unsigned long)sym_addend);
   isym = symbol_find (isym_name);
   if (isym == NULL)
     {
-  /* create indirect symbol now  */
-  const char *sec_name = segment_name (now_seg);
-  char *save_in;
-
-  sprintf (buf, "%s, %d", sec_name, CMODEL_SUBSECTION);
-  save_in = input_line_pointer;
-  input_line_pointer = buf;
-  obj_elf_section (1); /* .pushsection  */
-  input_line_pointer = save_in;
-
-  /* do create here  */
-  isym = colon (isym_name);
-  fix_new_exp (frag_now, frag_now_fix (),
-	       CMODEL_SECTION_ENTRY_SIZE, ep, 0,
-	       BFD_RELOC_64);
-
-  /* reserve space for indirect symbol  */
-  frag_more (CMODEL_SECTION_ENTRY_SIZE);
-
-  obj_elf_popsection (0); /* .popsection  */
+      /* create indirect symbol:
+       *   # .pushsection subsection
+       *   # make indirect symbol
+       *   # new variable fragment (grow frag, pend reloc till md_convert)
+       *   # .popsection
+       */
+      const char *sec_name = segment_name (now_seg);
+      char *save_in;
+      /* #  */
+      sprintf (buf, "%s, %d", sec_name, CMODEL_SUBSECTION);
+      save_in = input_line_pointer;
+      input_line_pointer = buf;
+      obj_elf_section (1); /* .pushsection  */
+      input_line_pointer = save_in;
+      /* #  */
+      isym = colon (isym_name);
+      /* #  */
+      frag_var (rs_machine_dependent, CMODEL_SECTION_ENTRY_SIZE, 0,
+		RELAX_CMODEL_ENCODE (TYPE_IS, CMODEL_SECTION_ENTRY_SIZE, 0),
+		ep->X_add_symbol, ep->X_add_number, NULL);
+      /* #  */
+      obj_elf_popsection (0); /* .popsection  */
     }
 
-  ep->X_op = O_symbol;
-  ep->X_add_symbol = isym;
-  ep->X_add_number = 0;
-  ep->X_md = 0; /* for ICT logic within fix_new_exp */
-
-  return ep;
+  ep_ind->X_op = O_symbol;
+  ep_ind->X_add_symbol = isym;
+  ep_ind->X_add_number = 0;
+  ep_ind->X_md = 0; /* for ICT logic within fix_new_exp */
 }
 
 /* Load an entry from the GOT.  */
@@ -1831,18 +1981,40 @@ pcrel_access (int destreg, int tempreg, expressionS *ep,
 	      bfd_reloc_code_real_type lo_reloc)
 {
   /* only L[BHWD]/S[BHWD support cmodel large  */
-  if (hi_reloc == BFD_RELOC_RISCV_PCREL_HI20 && is_faraway_symbol (ep))
+  if (hi_reloc == BFD_RELOC_RISCV_PCREL_HI20
+      && is_cmodel_relaxable (ep->X_add_symbol, now_seg))
     {
+      gas_assert (ep->X_op == O_symbol);
+      char lo_pattern_ex[0x100];
+      int index, type;
+      expressionS ep_ind, ep_ref;
       bfd_boolean is_la = strcmp (lo_insn, "addi") == 0;
-      expressionS *iep = make_indirect_symbol (ep);
-      pcrel_access (tempreg, tempreg, iep, LOAD_ADDRESS_INSN, "d,s,j", BFD_RELOC_RISCV_PCREL_HI20, BFD_RELOC_RISCV_PCREL_LO12_I);
-      if (!is_la)
-	{
-	  char *pattern = xstrdup (lo_pattern);
-	  pattern[3] = 0;
-	  macro_build (NULL, lo_insn, pattern, destreg, tempreg);
-	  free (pattern);
-	}
+      bfd_boolean is_st = lo_reloc == BFD_RELOC_RISCV_PCREL_LO12_S;
+      make_indirect_symbol (ep, &ep_ind);
+      ep_ref.X_op = O_symbol;
+      ep_ref.X_add_symbol = make_internal_label ();
+      ep_ref.X_add_number = 0;
+      ep_ref.X_md = 0; /* for ICT logic within fix_new_exp */
+      type = is_st ? TYPE_ST : is_la ? TYPE_LA : TYPE_LD;
+
+      strcpy (lo_pattern_ex, lo_pattern);
+      strcat (lo_pattern_ex, ",C");
+
+      /* index 0: argument, C: state, type, index, offset.  */
+      index = CSI_INDIRECT_SYMBOL;
+      macro_build (&ep_ind, "nop", "j,C", hi_reloc, 0, type, index, 0);
+
+      /* index 1: argument, C: state, type, index, offset.  */
+      index++; /* CSI_REFERENCE_SYMBOL  */
+      macro_build (&ep_ref, "nop", "j,C", hi_reloc, 0, type, index, 0);
+
+      /* index 2: generic form, C: state, type, index, offset.  */
+      index++; /* CSI_LARGE_CODE  */
+      macro_build (&ep_ind, "auipc", "d,u,C", tempreg, hi_reloc, 1, type, index, 0);
+      macro_build (&ep_ref, "ld", "d,s,j,C", tempreg, tempreg, hi_reloc, 1, type, index, 4);
+      macro_build (ep, lo_insn, lo_pattern_ex, destreg, tempreg, lo_reloc, 0, type, index, 8);
+
+      /* CSI_DEFAULT_CODE can be extracted from CSI_LARGE_CODE  */
     }
   else
     {
@@ -1862,6 +2034,7 @@ pcrel_load (int destreg, int tempreg, expressionS *ep, const char *lo_insn,
 	    bfd_reloc_code_real_type hi_reloc,
 	    bfd_reloc_code_real_type lo_reloc)
 {
+  gas_assert (lo_reloc == BFD_RELOC_RISCV_PCREL_LO12_I);
   pcrel_access (destreg, tempreg, ep, lo_insn, "d,s,j", hi_reloc, lo_reloc);
 }
 
@@ -1870,25 +2043,51 @@ pcrel_store (int srcreg, int tempreg, expressionS *ep, const char *lo_insn,
 	     bfd_reloc_code_real_type hi_reloc,
 	     bfd_reloc_code_real_type lo_reloc)
 {
+  gas_assert (lo_reloc == BFD_RELOC_RISCV_PCREL_LO12_S);
   pcrel_access (srcreg, tempreg, ep, lo_insn, "t,s,q", hi_reloc, lo_reloc);
 }
 
 /* PC-relative function call using AUIPC/JALR, relaxed to JAL.  */
 static void
-riscv_call (int destreg, int tempreg, expressionS *ep,
+ riscv_call (int destreg, int tempreg, expressionS *ep,
 	    bfd_reloc_code_real_type reloc)
 {
-  if (reloc == BFD_RELOC_RISCV_CALL && is_faraway_symbol (ep))
+  if (reloc == BFD_RELOC_RISCV_CALL
+      && is_cmodel_relaxable (ep->X_add_symbol, now_seg))
     {
-      expressionS *iep = make_indirect_symbol (ep);
-      pcrel_load (tempreg, tempreg, iep, LOAD_ADDRESS_INSN,
-		  BFD_RELOC_RISCV_PCREL_HI20, BFD_RELOC_RISCV_PCREL_LO12_I);
-      macro_build (NULL, "jalr", "d,s", destreg, tempreg);
-      return;
-    }
+      gas_assert (ep->X_op == O_symbol);
+      int index;
+      expressionS ep_ind, ep_ref;
+      make_indirect_symbol (ep, &ep_ind);
+      ep_ref.X_op = O_symbol;
+      ep_ref.X_add_symbol = make_internal_label ();
+      ep_ref.X_add_number = 0;
+      ep_ref.X_md = 0; /* for ICT logic within fix_new_exp */
 
-  macro_build (ep, "auipc", "d,u", tempreg, reloc);
-  macro_build (NULL, "jalr", "d,s", destreg, tempreg);
+      /* index 0: argument, C: state, type, index, offset.  */
+      index = CSI_INDIRECT_SYMBOL;
+      macro_build (&ep_ind, "nop", "j,C", reloc, 0, TYPE_JX, index, 0);
+
+      /* index 1: argument, C: state, type, index, offset.  */
+      index++; /* CSI_REFERENCE_SYMBOL  */
+      macro_build (&ep_ref, "nop", "j,C", reloc, 0, TYPE_JX, index, 0);
+
+      /* index 2: generic form, C: state, type, index, offset.  */
+      index++; /* CSI_LARGE_CODE  */
+      macro_build (&ep_ind, "auipc", "d,u,C", tempreg, reloc, 1, TYPE_JX, index, 0);
+      macro_build (&ep_ref, "ld", "d,s,j,C", tempreg, tempreg, reloc, 1, TYPE_JX, index, 4);
+      macro_build (ep, "jalr", "d,s,j,C", destreg, tempreg, reloc, 0, TYPE_JX, index, 8);
+
+      /* index 3: relaxed form  */
+      index++; /* CSI_DEFAULT_CODE  */
+      macro_build (ep, "auipc", "d,u,C", tempreg, reloc, 1, TYPE_JX, index, 0);
+      macro_build (ep, "jalr", "d,s,j,C", destreg, tempreg, reloc, 0, TYPE_JX, index, 4);
+    }
+  else
+    {
+      macro_build (ep, "auipc", "d,u", tempreg, reloc);
+      macro_build (NULL, "jalr", "d,s", destreg, tempreg);
+    }
 }
 
 /* Load an integer constant into a register.  */
@@ -4084,6 +4283,7 @@ md_assemble (char *str)
   struct riscv_cl_insn insn;
   expressionS imm_expr;
   bfd_reloc_code_real_type imm_reloc = BFD_RELOC_UNUSED;
+  insn.cmodel.method = 0;
 
   /* Set the first rvc info for the the current fragmant.  */
   if (!frag_now->tc_frag_data.rvc)
@@ -5076,7 +5276,14 @@ riscv_handle_align (fragS *fragP)
 int
 md_estimate_size_before_relax (fragS *fragp, asection *segtype)
 {
-  return (fragp->fr_var = relaxed_branch_length (fragp, segtype, FALSE));
+  if (RELAX_BRANCH_P (fragp->fr_subtype))
+    fragp->fr_var = relaxed_branch_length (fragp, segtype, FALSE);
+  else if (RELAX_CMODEL_P (fragp->fr_subtype))
+    fragp->fr_var = relaxed_cmodel_length (fragp, segtype);
+  else
+    gas_assert (0);
+
+  return fragp->fr_var;
 }
 
 /* Translate internal representation of relocation info to BFD target
@@ -5294,14 +5501,250 @@ done:
   fragp->fr_fix += fragp->fr_var;
 }
 
+static void
+md_convert_frag_cmodel (fragS *fragp, segT sec)
+{
+  static expressionS exp_ind, exp_ref;
+  bfd_byte *buf;
+  expressionS exp;
+  fixS *fixp = NULL;
+  int reloc;
+  int type = RELAX_CMODEL_TYPE (fragp->fr_subtype);
+  int length = RELAX_CMODEL_LENGTH (fragp->fr_subtype);
+  int index = RELAX_CMODEL_INDEX (fragp->fr_subtype);
+  int is_same_sec = is_same_section_symbol (fragp->fr_symbol, sec);
+
+  gas_assert (fragp->fr_var == RELAX_CMODEL_LENGTH (fragp->fr_subtype));
+
+  buf = (bfd_byte *)fragp->fr_literal + fragp->fr_fix;
+
+  exp.X_op = O_symbol;
+  exp.X_add_symbol = fragp->fr_symbol;
+  exp.X_add_number = fragp->fr_offset;
+
+  switch (index)
+  {
+  case CSI_INDIRECT_SYMBOL:
+    exp_ind = exp;
+    switch (type)
+    {
+    case TYPE_JX ... TYPE_ST:
+      break;
+    case TYPE_IS:
+      if (is_same_sec)
+	gas_assert (length == 0);
+      else
+	{
+	  gas_assert (length == 8);
+	  reloc = BFD_RELOC_64;
+	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+		       CMODEL_SECTION_ENTRY_SIZE, &exp, FALSE, reloc);
+	}
+      break;
+    default:
+      as_fatal (_("internal error: invalid CModel type!"));
+    }
+    break;
+  case CSI_REFERENCE_SYMBOL:
+    exp_ref = exp;
+    break;
+  case CSI_LARGE_CODE:
+    reloc = 0;
+    switch (type)
+    {
+    case TYPE_JX:
+      if (is_same_sec)
+        gas_assert (length == 0);
+      else
+	{
+	  reloc = BFD_RELOC_RISCV_PCREL_HI20;
+	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+		       4, &exp_ind, FALSE, reloc);
+	  reloc = BFD_RELOC_RISCV_RELAX;
+	  fix_new (fragp, buf - (bfd_byte *)fragp->fr_literal,
+		   0, abs_section_sym, 0, FALSE, reloc);
+
+	  reloc = BFD_RELOC_RISCV_PCREL_LO12_I;
+	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal + 4,
+		       4, &exp_ref, FALSE, reloc);
+	  reloc = BFD_RELOC_RISCV_RELAX;
+	  fix_new (fragp, buf - (bfd_byte *)fragp->fr_literal +4,
+		   0, abs_section_sym, 0, FALSE, reloc);
+
+	  /* TODO: relax jalr to c.jalr  */
+	}
+      break;
+    case TYPE_LA:
+      gas_assert (length == 8);
+      if (is_same_sec)
+	{
+	  int32_t *bin = (int32_t *) buf;
+	  bin[1] = bin[2];
+
+	  reloc = BFD_RELOC_RISCV_PCREL_HI20;
+	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+		       4, &exp, FALSE, reloc);
+	  reloc = BFD_RELOC_RISCV_RELAX;
+	  fix_new (fragp, buf - (bfd_byte *)fragp->fr_literal,
+		   0, abs_section_sym, 0, FALSE, reloc);
+
+	  reloc = BFD_RELOC_RISCV_PCREL_LO12_I;
+	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal + 4,
+		       4, &exp_ref, FALSE, reloc);
+	  reloc = BFD_RELOC_RISCV_RELAX;
+	  fix_new (fragp, buf - (bfd_byte *)fragp->fr_literal +4,
+		   0, abs_section_sym, 0, FALSE, reloc);
+	}
+      else
+	{
+	  reloc = BFD_RELOC_RISCV_PCREL_HI20;
+	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+		       4, &exp_ind, FALSE, reloc);
+	  reloc = BFD_RELOC_RISCV_RELAX;
+	  fix_new (fragp, buf - (bfd_byte *)fragp->fr_literal,
+		   0, abs_section_sym, 0, FALSE, reloc);
+
+	  reloc = BFD_RELOC_RISCV_PCREL_LO12_I;
+	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal + 4,
+		       4, &exp_ref, FALSE, reloc);
+	  reloc = BFD_RELOC_RISCV_RELAX;
+	  fix_new (fragp, buf - (bfd_byte *)fragp->fr_literal +4,
+		   0, abs_section_sym, 0, FALSE, reloc);
+	}
+      break;
+    case TYPE_LD:
+      if (is_same_sec)
+	{
+	  gas_assert (length == 8);
+	  int32_t *bin = (int32_t *) buf;
+	  bin[1] = bin[2];
+
+	  reloc = BFD_RELOC_RISCV_PCREL_HI20;
+	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+		       4, &exp, FALSE, reloc);
+	  reloc = BFD_RELOC_RISCV_RELAX;
+	  fix_new (fragp, buf - (bfd_byte *)fragp->fr_literal,
+		   0, abs_section_sym, 0, FALSE, reloc);
+
+	  reloc = BFD_RELOC_RISCV_PCREL_LO12_I;
+	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal + 4,
+		       4, &exp_ref, FALSE, reloc);
+	  reloc = BFD_RELOC_RISCV_RELAX;
+	  fix_new (fragp, buf - (bfd_byte *)fragp->fr_literal +4,
+		   0, abs_section_sym, 0, FALSE, reloc);
+	}
+      else
+	{
+	  gas_assert (length == 12);
+	  reloc = BFD_RELOC_RISCV_PCREL_HI20;
+	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+		       4, &exp_ind, FALSE, reloc);
+	  reloc = BFD_RELOC_RISCV_RELAX;
+	  fix_new (fragp, buf - (bfd_byte *)fragp->fr_literal,
+		   0, abs_section_sym, 0, FALSE, reloc);
+
+	  reloc = BFD_RELOC_RISCV_PCREL_LO12_I;
+	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal + 4,
+		       4, &exp_ref, FALSE, reloc);
+	  reloc = BFD_RELOC_RISCV_RELAX;
+	  fix_new (fragp, buf - (bfd_byte *)fragp->fr_literal +4,
+		   0, abs_section_sym, 0, FALSE, reloc);
+	}
+      break;
+    case TYPE_ST:
+      if (is_same_sec)
+	{
+	  gas_assert (length == 8);
+	  int32_t *bin = (int32_t *) buf;
+	  bin[1] = bin[2];
+
+	  reloc = BFD_RELOC_RISCV_PCREL_HI20;
+	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+		       4, &exp, FALSE, reloc);
+	  reloc = BFD_RELOC_RISCV_RELAX;
+	  fix_new (fragp, buf - (bfd_byte *)fragp->fr_literal,
+		   0, abs_section_sym, 0, FALSE, reloc);
+
+	  reloc = BFD_RELOC_RISCV_PCREL_LO12_S;
+	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal + 4,
+		       4, &exp_ref, FALSE, reloc);
+	  reloc = BFD_RELOC_RISCV_RELAX;
+	  fix_new (fragp, buf - (bfd_byte *)fragp->fr_literal +4,
+		   0, abs_section_sym, 0, FALSE, reloc);
+	}
+      else
+	{
+	  gas_assert (length == 12);
+	  reloc = BFD_RELOC_RISCV_PCREL_HI20;
+	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+		       4, &exp_ind, FALSE, reloc);
+	  reloc = BFD_RELOC_RISCV_RELAX;
+	  fix_new (fragp, buf - (bfd_byte *)fragp->fr_literal,
+		   0, abs_section_sym, 0, FALSE, reloc);
+
+	  reloc = BFD_RELOC_RISCV_PCREL_LO12_I;
+	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal + 4,
+		       4, &exp_ref, FALSE, reloc);
+	  reloc = BFD_RELOC_RISCV_RELAX;
+	  fix_new (fragp, buf - (bfd_byte *)fragp->fr_literal +4,
+		   0, abs_section_sym, 0, FALSE, reloc);
+	}
+      break;
+    default:
+      as_fatal (_("internal error: invalid CModel type!"));
+    }
+    break;
+  case CSI_DEFAULT_CODE:
+    reloc = 0;
+    switch (type)
+    {
+    case TYPE_JX:
+      if (!is_same_sec)
+        gas_assert (length == 0);
+      else
+	{
+	  reloc = BFD_RELOC_RISCV_CALL;
+	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+		       4, &exp, FALSE, reloc);
+	  reloc = BFD_RELOC_RISCV_RELAX;
+	  fix_new (fragp, buf - (bfd_byte *)fragp->fr_literal,
+		   0, abs_section_sym, 0, FALSE, reloc);
+	}
+      break;
+    default:
+      as_fatal (_("internal error: invalid CModel type!"));
+    }
+    break;
+  default:
+    as_fatal (_("internal error: invalid CModel index!"));
+  }
+
+  buf += length;
+
+  if (fixp)
+    {
+      fixp->fx_file = fragp->fr_file;
+      fixp->fx_line = fragp->fr_line;
+    }
+
+  gas_assert (buf == (bfd_byte *)fragp->fr_literal
+	      + fragp->fr_fix + fragp->fr_var);
+
+  fragp->fr_fix += fragp->fr_var;
+}
+
 /* Relax a machine dependent frag.  This returns the amount by which
    the current size of the frag should change.  */
 
 void
 md_convert_frag (bfd *abfd ATTRIBUTE_UNUSED, segT asec, fragS *fragp)
 {
-  gas_assert (RELAX_BRANCH_P (fragp->fr_subtype));
-  md_convert_frag_branch (fragp, asec);
+  gas_assert (RELAX_BRANCH_P (fragp->fr_subtype)
+	      || RELAX_CMODEL_P (fragp->fr_subtype));
+  if (RELAX_BRANCH_P (fragp->fr_subtype))
+    md_convert_frag_branch (fragp, asec);
+  else if (RELAX_CMODEL_P (fragp->fr_subtype))
+    md_convert_frag_cmodel (fragp, asec);
 }
 
 void
