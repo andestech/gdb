@@ -1519,7 +1519,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 
   reg_t result;
   int32_t res, i;
-  int32_t vec32_num = RISCV_XLEN (cpu) == 64 ? 2 : 0;
+  int32_t vec32_num = RISCV_XLEN (cpu) == 64 ? 2 : 1;
   int32_t vec16_num = RISCV_XLEN (cpu) == 64 ? 4 : 2;
   int32_t vec8_num = RISCV_XLEN (cpu) == 64 ? 8 : 4;
   int32_t *ptr32, *ptr_a32, *ptr_b32, *ptr_d32;
