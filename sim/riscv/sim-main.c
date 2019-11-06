@@ -6977,6 +6977,63 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	TRACE_REG (cpu, rd);
       }
       break;
+    case MATCH_SMAQA:
+      {
+        result.b32.i0 = cpu->regs[rd].b32.i0 +
+	                (int16_t) cpu->regs[ra].b8.b0 * cpu->regs[rb].b8.b0 +
+	                (int16_t) cpu->regs[ra].b8.b1 * cpu->regs[rb].b8.b1 +
+		        (int16_t) cpu->regs[ra].b8.b2 * cpu->regs[rb].b8.b2 +
+		        (int16_t) cpu->regs[ra].b8.b3 * cpu->regs[rb].b8.b3;
+#if (WITH_TARGET_WORD_BITSIZE == 64)
+        result.b32.i1 = cpu->regs[rd].b32.i1 +
+	                (int16_t) cpu->regs[ra].b8.b4 * cpu->regs[rb].b8.b4 +
+	                (int16_t) cpu->regs[ra].b8.b5 * cpu->regs[rb].b8.b5 +
+		        (int16_t) cpu->regs[ra].b8.b6 * cpu->regs[rb].b8.b6 +
+		        (int16_t) cpu->regs[ra].b8.b7 * cpu->regs[rb].b8.b7;
+#endif
+
+	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
+      }
+      break;
+    case MATCH_SMAQA_SU:
+      {
+        result.b32.i0 = cpu->regs[rd].b32.i0 +
+	                (int16_t) cpu->regs[ra].b8.b0 * cpu->regs[rb].ub8.b0 +
+	                (int16_t) cpu->regs[ra].b8.b1 * cpu->regs[rb].ub8.b1 +
+		        (int16_t) cpu->regs[ra].b8.b2 * cpu->regs[rb].ub8.b2 +
+		        (int16_t) cpu->regs[ra].b8.b3 * cpu->regs[rb].ub8.b3;
+#if (WITH_TARGET_WORD_BITSIZE == 64)
+        result.b32.i1 = cpu->regs[rd].b32.i1 +
+	                (int16_t) cpu->regs[ra].b8.b4 * cpu->regs[rb].ub8.b4 +
+	                (int16_t) cpu->regs[ra].b8.b5 * cpu->regs[rb].ub8.b5 +
+		        (int16_t) cpu->regs[ra].b8.b6 * cpu->regs[rb].ub8.b6 +
+		        (int16_t) cpu->regs[ra].b8.b7 * cpu->regs[rb].ub8.b7;
+#endif
+
+	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
+      }
+      break;
+    case MATCH_UMAQA:
+      {
+        result.ub32.i0 = cpu->regs[rd].ub32.i0 +
+	                (uint16_t) cpu->regs[ra].ub8.b0 * cpu->regs[rb].ub8.b0 +
+	                (uint16_t) cpu->regs[ra].ub8.b1 * cpu->regs[rb].ub8.b1 +
+		        (uint16_t) cpu->regs[ra].ub8.b2 * cpu->regs[rb].ub8.b2 +
+		        (uint16_t) cpu->regs[ra].ub8.b3 * cpu->regs[rb].ub8.b3;
+#if (WITH_TARGET_WORD_BITSIZE == 64)
+        result.ub32.i1 = cpu->regs[rd].ub32.i1 +
+	                (uint16_t) cpu->regs[ra].ub8.b4 * cpu->regs[rb].ub8.b4 +
+	                (uint16_t) cpu->regs[ra].ub8.b5 * cpu->regs[rb].ub8.b5 +
+		        (uint16_t) cpu->regs[ra].ub8.b6 * cpu->regs[rb].ub8.b6 +
+		        (uint16_t) cpu->regs[ra].ub8.b7 * cpu->regs[rb].ub8.b7;
+#endif
+
+	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
+      }
+      break;
     default:
       TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
       sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
