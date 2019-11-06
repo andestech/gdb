@@ -6457,13 +6457,14 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       {
 	/* Rt[63:32] = Ra[31:16] * Rb[31:16]
 	   Rt[31:0] = Ra[15:0] * Rb[15:0] */
-	*ptr32 = (int32_t) *ptr_a16 * *ptr_b16;
-	*(ptr32 + 1) = (int32_t) *(ptr_a16 + 1) * *(ptr_b16 + 1);
+	union64_t temp;
+	temp.b32.w0 = (int32_t) *ptr_a16 * *ptr_b16;
+	temp.b32.w1 = (int32_t) *(ptr_a16 + 1) * *(ptr_b16 + 1);
 
 	if (RISCV_XLEN (cpu) == 64)
-	  cpu->regs[rd].s = result.s;
+	  cpu->regs[rd].s = temp.d0;
 	else
-	  set_double (cpu, rd, result.s);
+	  set_double (cpu, rd, temp.d0);
 
 	TRACE_REG (cpu, rd);
       }
@@ -6472,13 +6473,14 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       {
 	/* Rt[63:32] = Ra[31:16] * Rb[15:0]
 	   Rt[31:0] = Ra[15:0] * Rb[31:16] */
-	*ptr32 = (int32_t) *ptr_a16 * *(ptr_b16 + 1);
-	*(ptr32 + 1) = (int32_t) *(ptr_a16 + 1) * *ptr_b16;
+	union64_t temp;
+	temp.b32.w0 = (int32_t) *ptr_a16 * *(ptr_b16 + 1);
+	temp.b32.w1 = (int32_t) *(ptr_a16 + 1) * *ptr_b16;
 
 	if (RISCV_XLEN (cpu) == 64)
-	  cpu->regs[rd].s = result.s;
+	  cpu->regs[rd].s = temp.d0;
 	else
-	  set_double (cpu, rd, result.s);
+	  set_double (cpu, rd, temp.d0);
 
 	TRACE_REG (cpu, rd);
       }
@@ -6487,13 +6489,14 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       {
 	/* Rt[63:32] = Ra[31:16] * Rb[31:16]
 	   Rt[31:0] = Ra[15:0] * Rb[15:0] */
-	*uptr32 = (uint32_t) *uptr_a16 * *uptr_b16;
-	*(uptr32 + 1) = (uint32_t) *(uptr_a16 + 1) * *(uptr_b16 + 1);
+	union64_t temp;
+	temp.ub32.w0 = (uint32_t) *uptr_a16 * *uptr_b16;
+	temp.ub32.w1 = (uint32_t) *(uptr_a16 + 1) * *(uptr_b16 + 1);
 
 	if (RISCV_XLEN (cpu) == 64)
-	  cpu->regs[rd].s = result.s;
+	  cpu->regs[rd].s = temp.d0;
 	else
-	  set_double (cpu, rd, result.s);
+	  set_double (cpu, rd, temp.d0);
 
 	TRACE_REG (cpu, rd);
       }
@@ -6502,13 +6505,14 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       {
 	/* Rt[63:32] = Ra[31:16] * Rb[15:0]
 	   Rt[31:0] = Ra[15:0] * Rb[31:16] */
-	*uptr32 = (uint32_t) *uptr_a16 * *(uptr_b16 + 1);
-	*(uptr32 + 1) = (uint32_t) *(uptr_a16 + 1) * *uptr_b16;
+	union64_t temp;
+	temp.ub32.w0 = (uint32_t) *uptr_a16 * *(uptr_b16 + 1);
+	temp.ub32.w1 = (uint32_t) *(uptr_a16 + 1) * *uptr_b16;
 
 	if (RISCV_XLEN (cpu) == 64)
-	  cpu->regs[rd].s = result.s;
+	  cpu->regs[rd].s = temp.d0;
 	else
-	  set_double (cpu, rd, result.s);
+	  set_double (cpu, rd, temp.d0);
 
 	TRACE_REG (cpu, rd);
       }
@@ -6519,15 +6523,16 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	 * Rt[47:32] = Ra[23:16] * Rb[23:16]
 	 * Rt[31:16] = Ra[15:8] * Rb[15:8]
 	   Rt[15:0] = Ra[7:0] * Rb[7:0] */
-	*ptr16 = (int16_t) *ptr_a8 * *ptr_b8;
-	*(ptr16 + 1) = (int16_t) *(ptr_a8 + 1) * *(ptr_b8 + 1);
-	*(ptr16 + 2) = (int16_t) *(ptr_a8 + 2) * *(ptr_b8 + 2);
-	*(ptr16 + 3) = (int16_t) *(ptr_a8 + 3) * *(ptr_b8 + 3);
+	union64_t temp;
+	temp.b16.h0 = (int16_t) *ptr_a8 * *ptr_b8;
+	temp.b16.h1 = (int16_t) *(ptr_a8 + 1) * *(ptr_b8 + 1);
+	temp.b16.h2 = (int16_t) *(ptr_a8 + 2) * *(ptr_b8 + 2);
+	temp.b16.h3 = (int16_t) *(ptr_a8 + 3) * *(ptr_b8 + 3);
 
 	if (RISCV_XLEN (cpu) == 64)
-	  cpu->regs[rd].s = result.s;
+	  cpu->regs[rd].s = temp.d0;
 	else
-	  set_double (cpu, rd, result.s);
+	  set_double (cpu, rd, temp.d0);
 
 	TRACE_REG (cpu, rd);
       }
@@ -6538,15 +6543,16 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	 * Rt[47:32] = Ra[23:16] * Rb[31:24]
 	 * Rt[31:16] = Ra[15:8] * Rb[7:0]
 	   Rt[15:0] = Ra[7:0] * Rb[15:8] */
-	*ptr16 = (int16_t) *ptr_a8 * *(ptr_b8 + 1);
-	*(ptr16 + 1) = (int16_t) *(ptr_a8 + 1) * *ptr_b8;
-	*(ptr16 + 2) = (int16_t) *(ptr_a8 + 2) * *(ptr_b8 + 3);
-	*(ptr16 + 3) = (int16_t) *(ptr_a8 + 3) * *(ptr_b8 + 2);
+	union64_t temp;
+	temp.b16.h0 = (int16_t) *ptr_a8 * *(ptr_b8 + 1);
+	temp.b16.h1 = (int16_t) *(ptr_a8 + 1) * *ptr_b8;
+	temp.b16.h2 = (int16_t) *(ptr_a8 + 2) * *(ptr_b8 + 3);
+	temp.b16.h3 = (int16_t) *(ptr_a8 + 3) * *(ptr_b8 + 2);
 
 	if (RISCV_XLEN (cpu) == 64)
-	  cpu->regs[rd].s = result.s;
+	  cpu->regs[rd].s = temp.d0;
 	else
-	  set_double (cpu, rd, result.s);
+	  set_double (cpu, rd, temp.d0);
 
 	TRACE_REG (cpu, rd);
       }
@@ -6557,15 +6563,16 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	 * Rt[47:32] = Ra[23:16] * Rb[23:16]
 	 * Rt[31:16] = Ra[15:8] * Rb[15:8]
 	   Rt[15:0] = Ra[7:0] * Rb[7:0] */
-	*uptr16 = (uint16_t) *uptr_a8 * *uptr_b8;
-	*(uptr16 + 1) = (uint16_t) *(uptr_a8 + 1) * *(uptr_b8 + 1);
-	*(uptr16 + 2) = (uint16_t) *(uptr_a8 + 2) * *(uptr_b8 + 2);
-	*(uptr16 + 3) = (uint16_t) *(uptr_a8 + 3) * *(uptr_b8 + 3);
+	union64_t temp;
+	temp.ub16.h0 = (uint16_t) *uptr_a8 * *uptr_b8;
+	temp.ub16.h1 = (uint16_t) *(uptr_a8 + 1) * *(uptr_b8 + 1);
+	temp.ub16.h2 = (uint16_t) *(uptr_a8 + 2) * *(uptr_b8 + 2);
+	temp.ub16.h3 = (uint16_t) *(uptr_a8 + 3) * *(uptr_b8 + 3);
 
 	if (RISCV_XLEN (cpu) == 64)
-	  cpu->regs[rd].s = result.s;
+	  cpu->regs[rd].s = temp.d0;
 	else
-	  set_double (cpu, rd, result.s);
+	  set_double (cpu, rd, temp.d0);
 
 	TRACE_REG (cpu, rd);
       }
@@ -6576,15 +6583,16 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	 * Rt[47:32] = Ra[23:16] * Rb[31:24]
 	 * Rt[31:16] = Ra[15:8] * Rb[7:0]
 	   Rt[15:0] = Ra[7:0] * Rb[15:8] */
-	*uptr16 = (int16_t) *uptr_a8 * *(uptr_b8 + 1);
-	*(uptr16 + 1) = (int16_t) *(uptr_a8 + 1) * *uptr_b8;
-	*(uptr16 + 2) = (int16_t) *(uptr_a8 + 2) * *(uptr_b8 + 3);
-	*(uptr16 + 3) = (int16_t) *(uptr_a8 + 3) * *(uptr_b8 + 2);
+	union64_t temp;
+	temp.ub16.h0 = (int16_t) *uptr_a8 * *(uptr_b8 + 1);
+	temp.ub16.h1 = (int16_t) *(uptr_a8 + 1) * *uptr_b8;
+	temp.ub16.h2 = (int16_t) *(uptr_a8 + 2) * *(uptr_b8 + 3);
+	temp.ub16.h3 = (int16_t) *(uptr_a8 + 3) * *(uptr_b8 + 2);
 
 	if (RISCV_XLEN (cpu) == 64)
-	  cpu->regs[rd].s = result.s;
+	  cpu->regs[rd].s = temp.d0;
 	else
-	  set_double (cpu, rd, result.s);
+	  set_double (cpu, rd, temp.d0);
 
 	TRACE_REG (cpu, rd);
       }

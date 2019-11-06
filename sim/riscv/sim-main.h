@@ -129,9 +129,28 @@ typedef union
 
   struct
     {
-      uint32_t w0;
+      int32_t w0;
       int32_t w1;
     } b32;
+  struct
+    {
+      int16_t h0;
+      int16_t h1;
+      int16_t h2;
+      int16_t h3;
+    } b16;
+  struct
+    {
+      int32_t w0;
+      int32_t w1;
+    } ub32;
+  struct
+    {
+      uint16_t h0;
+      uint16_t h1;
+      uint16_t h2;
+      uint16_t h3;
+    } ub16;
 } union64_t;
 
 typedef union
