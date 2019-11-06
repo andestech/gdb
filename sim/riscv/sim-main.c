@@ -5790,7 +5790,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 
 #if (WITH_TARGET_WORD_BITSIZE == 32)
 	acc = get_udouble (cpu, rd);
-	mul_val = (uint64_t) cpu->regs[ra].s * cpu->regs[rb].s;
+	mul_val = (uint64_t) cpu->regs[ra].u * cpu->regs[rb].u;
 #else
 	acc = cpu->regs[rd].u;
 	mul_val =
