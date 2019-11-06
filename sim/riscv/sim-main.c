@@ -2250,6 +2250,88 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 #endif
       }
       break;
+    case MATCH_STSA16:
+      {
+	/* Rt[31:16] = Ra[31:16] - Rb[31:16]
+	   Rt[15:0] = Ra[15:0] + Rb[15:0] */
+	for (i = 0; i < vec16_num; i+=2)
+	  {
+	    res = *(ptr_a16 + (i + 1)) - *(ptr_b16 + (i + 1));
+	    *(ptr16 + (i + 1)) = res;
+	    res = *(ptr_a16 + i) + *(ptr_b16 + i);
+	    *(ptr16 + i) = res;
+	  }
+	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
+      }
+      break;
+    case MATCH_RSTSA16:
+      {
+	/* Rt[31:16] = (Ra[31:16] - Rb[31:16]) >>1
+	   Rt[15:0] = (Ra[15:0] + Rb[15:0]) >> 1 */
+	for (i = 0; i < vec16_num; i+=2)
+	  {
+	    res = (int16_t) (((int32_t) *(ptr_a16 + (i + 1))
+			      - *(ptr_b16 + (i + 1))) >> 1);
+	    *(ptr16 + (i + 1)) = res;
+	    res = (int16_t) (((int32_t) *(ptr_a16 + i)
+			      + *(ptr_b16 + i)) >> 1);
+	    *(ptr16 + i) = res;
+	  }
+	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
+      }
+      break;
+    case MATCH_URSTSA16:
+      {
+	/* Rt[31:16] = (Ra[31:16] - Rb[31:16]) >>1
+	   Rt[15:0] = (Ra[15:0] + Rb[15:0]) >> 1 */
+	for (i = 0; i < vec16_num; i+=2)
+	  {
+	    res = (uint16_t) (((uint32_t) *(uptr_a16 + (i + 1))
+			      - *(uptr_b16 + (i + 1))) >> 1);
+	    *(uptr16 + (i + 1)) = res;
+	    res = (uint16_t) (((uint32_t) *(uptr_a16 + i)
+			      + *(uptr_b16 + i)) >> 1);
+	    *(uptr16 + i) = res;
+	  }
+	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
+      }
+      break;
+    case MATCH_KSTSA16:
+      {
+	/* Rt[31:16] = Ra[31:16] - Rb[31:16]
+	   Rt[15:0] = Ra[15:0] + Rb[15:0] */
+	for (i = 0; i < vec16_num; i+=2)
+	  {
+	    res = *(ptr_a16 + (i + 1)) - *(ptr_b16 + (i + 1));
+	    *(ptr16 + (i + 1)) = insn_sat_helper (cpu, res, 15);
+	    res = *(ptr_a16 + i) + *(ptr_b16 + i);
+	    *(ptr16 + i) = insn_sat_helper (cpu, res, 15);
+	  }
+	cpu->regs[rd].s = result.s;
+	TRACE_REG (cpu, rd);
+      }
+      break;
+    case MATCH_UKSTSA16:
+      {
+	/* Rt[31:16] = Ra[31:16] - Rb[31:16]
+	   Rt[15:0] = Ra[15:0] + Rb[15:0] */
+	for (i = 0; i < vec16_num; i+=2)
+	  {
+	    res = *(uptr_a16 + (i + 1)) - *(uptr_b16 + (i + 1));
+	    *(uptr16 + (i + 1)) = insn_usat_helper (cpu, res, 16);
+	    res = *(uptr_a16 + i) + *(uptr_b16 + i);
+	    *(uptr16 + i) = insn_usat_helper (cpu, res, 16);
+	  }
+	cpu->regs[rd].u = result.u;
+	TRACE_REG (cpu, rd);
+      }
+      break;
+#endif
+      }
+      break;
     case MATCH_ADD8:
       {
 	/* Rt[31:24] = Ra[31:24] + Rb[31:24]
