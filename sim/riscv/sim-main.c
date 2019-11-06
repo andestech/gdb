@@ -2690,6 +2690,15 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	TRACE_REG (cpu, rd);
       }
       break;
+    case MATCH_SRAIW_U:
+      {
+	uint32_t rnd_mask = (1UL << (imm5u - 1));
+	int32_t rnd_val = (cpu->regs[ra].b32.i0 & rnd_mask) ? 1 : 0;
+
+	cpu->regs[rd].s = (cpu->regs[ra].b32.i0 >> imm4u) + rnd_val;
+	TRACE_REG (cpu, rd);
+      }
+      break;
     case MATCH_SRAI8_U:
       {
 	uint32_t rnd_mask = (1UL << (imm3u - 1));
