@@ -7204,9 +7204,9 @@ regname_internal_riscv (unsigned int regno)
 static void
 init_dwarf_regnames_riscv (void)
 {
-  dwarf_regnames = dwarf_regnames_riscv;
-  dwarf_regnames_count = ARRAY_SIZE (dwarf_regnames_riscv);
-  dwarf_regnames_lookup_func = regname_internal_by_table_only;
+  dwarf_regnames = NULL;
+  dwarf_regnames_count = 8192;
+  dwarf_regnames_lookup_func = regname_internal_riscv;
 }
 
 void
