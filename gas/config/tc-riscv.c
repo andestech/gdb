@@ -4522,6 +4522,9 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
       break;
 
     case BFD_RELOC_RISCV_ALIGN:
+      if (fixP->fx_frag->fr_var >= 2)
+	fixP->fx_addnumber += 2;
+      break;
     case BFD_RELOC_RISCV_ALIGN_BTB:
     case BFD_RELOC_RISCV_DATA:
     case BFD_RELOC_RISCV_ICT_64:
@@ -4771,30 +4774,35 @@ bfd_boolean
 riscv_frag_align_code (int n)
 {
   /* TODO: Review this.  */
+  expressionS exp;
+  bfd_vma alignment_power = riscv_opts.rvc ? 1 : 2;
   bfd_vma bytes = (bfd_vma) 1 << n;
   bfd_vma insn_alignment = 2;
   bfd_vma worst_case_bytes = bytes - insn_alignment;
-  char *nops;
-  expressionS ex;
-
-  /* If we are moving to a smaller alignment than the instruction size, then no
-     alignment is required. */
-  if (bytes <= insn_alignment)
-    return TRUE;
+  fragS* fragP = frag_now;
+  /* Set the address at the optimizable begining.  */
+  unsigned fragP_fix = (frag_now_fix() + 1) >> 1 << 1;
 
   /* When not relaxing, riscv_handle_align handles code alignment.  */
   if (!riscv_opts.relax)
     return FALSE;
 
-  nops = frag_more (worst_case_bytes);
+  /* If we are moving to a smaller alignment than the instruction size,
+     riscv_handle_align handles code alignment.  */
+  if (bytes <= insn_alignment)
+    return FALSE;
 
-  ex.X_op = O_constant;
-  ex.X_add_number = worst_case_bytes;
+  /* Make sure the current alignment is align to insntruction alignment.  */
+  frag_align_code (alignment_power, 0);
 
-  riscv_make_nops (nops, worst_case_bytes);
-
-  fix_new_exp (frag_now, nops - frag_now->fr_literal, 0,
-	       &ex, FALSE, BFD_RELOC_RISCV_ALIGN);
+  /* Insert a ALIGN relocation for linker to remove the redandunt nops.
+     Locate the relocation in the rs_align_code frag instead of frag_now,
+     because we want linker to know the whole size of the alignment.  */
+  exp.X_op = O_constant;
+  /* Just set the worst value temporarily.  */
+  exp.X_add_number = worst_case_bytes;
+  fix_new_exp (fragP, fragP_fix, 0, &exp, 0, BFD_RELOC_RISCV_ALIGN);
+  frag_more (worst_case_bytes);
 
   return TRUE;
 }
@@ -4804,38 +4812,37 @@ riscv_frag_align_code (int n)
 void
 riscv_handle_align (fragS *fragP)
 {
-  switch (fragP->fr_type)
+  bfd_signed_vma bytes ;
+
+  if (fragP->fr_type != rs_align_code)
+    return;
+
+  bytes = fragP->fr_next->fr_address - fragP->fr_address - fragP->fr_fix;
+  /* We have 4 byte uncompressed nops.  */
+  bfd_signed_vma size = 4;
+  bfd_signed_vma excess = bytes % size;
+  char *p = fragP->fr_literal + fragP->fr_fix;
+
+  if (bytes <= 0)
+    return;
+
+  /* Insert zeros or compressed nops to get 4 byte alignment.  */
+  if (excess)
     {
-    case rs_align_code:
-      /* When relaxing, riscv_frag_align_code handles code alignment.  */
-      if (!riscv_opts.relax)
-	{
-	  bfd_signed_vma bytes = (fragP->fr_next->fr_address
-				  - fragP->fr_address - fragP->fr_fix);
-	  /* We have 4 byte uncompressed nops.  */
-	  bfd_signed_vma size = 4;
-	  bfd_signed_vma excess = bytes % size;
-	  char *p = fragP->fr_literal + fragP->fr_fix;
+      riscv_make_nops (p, excess);
+      fragP->fr_fix += excess;
+      p += excess;
+      if (excess >= 2)
+	fragP->fr_var = 2;
+    }
 
-	  if (bytes <= 0)
-	    break;
-
-	  /* Insert zeros or compressed nops to get 4 byte alignment.  */
-	  if (excess)
-	    {
-	      riscv_make_nops (p, excess);
-	      fragP->fr_fix += excess;
-	      p += excess;
-	    }
-
-	  /* Insert variable number of 4 byte uncompressed nops.  */
-	  riscv_make_nops (p, size);
-	  fragP->fr_var = size;
-	}
-      break;
-
-    default:
-      break;
+  if (bytes > size)
+    {
+      /* After this function, the frag will be set to fr_fill.  We only
+	 insert one 4 byte nop here.  The reset space will be filled in
+	 write_contents.  */
+      riscv_make_nops (p, size);
+      fragP->fr_var = size;
     }
 }
 
