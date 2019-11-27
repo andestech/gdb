@@ -5590,13 +5590,6 @@ _bfd_riscv_relax_align (bfd *abfd, asection *sec,
 	  && riscv_relax_avoid_BTB_miss (abfd, sec, rel->r_offset, 4, 2))
 	rel->r_addend -= 2;
 
-      /* If the number of NOPs is already correct, there's nothing to do.  */
-      if (nop_bytes == rel->r_addend)
-	{
-	  rel->r_addend = nop_bytes | (1 << 31);
-	  return TRUE;
-	}
-
       /* Write as many RISC-V NOPs as we need.  */
       for (pos = 0; pos < (nop_bytes & -4); pos += 4)
 	bfd_put_32 (abfd, RISCV_NOP, contents + rel->r_offset + pos);
@@ -5604,6 +5597,13 @@ _bfd_riscv_relax_align (bfd *abfd, asection *sec,
       /* Write a final RVC NOP if need be.  */
       if (nop_bytes % 4 != 0)
 	bfd_put_16 (abfd, RVC_NOP, contents + rel->r_offset + pos);
+
+      /* If the number of NOPs is already correct, there's nothing to do.  */
+      if (nop_bytes == rel->r_addend)
+	{
+	  rel->r_addend = nop_bytes | (1 << 31);
+	  return TRUE;
+	}
 
       /* Delete the excess bytes.  */
       riscv_relax_delete_bytes (abfd, sec, rel->r_offset + nop_bytes,

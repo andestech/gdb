@@ -634,7 +634,7 @@ static reloc_howto_type howto_table[] =
      addend rounded up to the next power of two.  */
   HOWTO (R_RISCV_ALIGN,			/* type */
 	 0,				/* rightshift */
-	 2,				/* size */
+	 3,				/* size */
 	 0,				/* bitsize */
 	 FALSE,				/* pc_relative */
 	 0,				/* bitpos */
