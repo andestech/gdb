@@ -297,6 +297,8 @@ static const char *riscv_x_extensions[] = { "Xv5-", "xdsp", "xefhw" };
 
 enum RISCV_EXT
 {
+  // It doesn't check mmsc_cfg/cfg2 for fp16 extension to compatible with the current released HW. by Dabid in 2019.08.23
+  // It will be updated to EXT_X = 16 when recognize 'z', 's', 'h' multi-letter extensions
   EXT_X = 13,
   EXT_COUNT
 };
