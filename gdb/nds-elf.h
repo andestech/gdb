@@ -71,6 +71,7 @@ extern "C"
 
 #define Tag_File                     1
 #define Tag_ict_version              0x8000
+#define Tag_ict_model                0x8001
 
 #define Tag_RISCV_stack_align        4
 #define Tag_RISCV_arch               5
@@ -78,7 +79,6 @@ extern "C"
 #define Tag_RISCV_priv_spec          8
 #define Tag_RISCV_priv_spec_minor    10
 #define Tag_RISCV_priv_spec_revision 12
-#define Tag_ict_model                0x8002
 
 #define Tag_arch_legacy               4
 #define Tag_priv_spec_legacy          5
@@ -86,11 +86,6 @@ extern "C"
 #define Tag_priv_spec_revision_legacy 7
 #define Tag_strict_align_legacy       8
 #define Tag_stack_align_legacy        9
-#define Tag_ict_model_legacy          0x8001
-
-#define ict_model_tiny  1
-#define ict_model_small 2
-#define ict_model_large 3
 
 /* type from gdb for both rv32 and rv64. */
 typedef unsigned long long reg_t;
@@ -858,28 +853,12 @@ parse_legacy_riscv_attributes (const uint8_t * buf, const uint8_t * end)
 	  TAG_CASE (Tag_stack_align_legacy)
 	  TAG_CASE (Tag_ict_version)
 #undef TAG_CASE
-	case Tag_ict_model_legacy:
+	case Tag_ict_model:
 	  {
-	    print_indent ("Tag_ict_model_legacy: ");
-	    uint64_t val;
-	    if (parse_uleb128 (&buf, end, &val) == -1)
+	    const char *model = NULL;
+	    if (parse_ntbs (&buf, end, &model) == -1)
 	      return -1;
-	    switch (val)
-	      {
-	      case ict_model_tiny:
-		printf ("tiny");
-		break;
-	      case ict_model_small:
-		printf ("small");
-		break;
-	      case ict_model_large:
-		printf ("large");
-		break;
-	      default:
-		printf ("unknown %" PRIu64, val);
-		break;
-	      }
-	    printf ("\n");
+	    print_indent ("Tag_ict_model: %s\n", model);
 	    break;
 	  }
 	default:
@@ -933,26 +912,10 @@ parse_riscv_attributes (const uint8_t * buf, const uint8_t * end)
 #undef TAG_CASE
 	case Tag_ict_model:
 	  {
-	    print_indent ("Tag_ict_model: ");
-	    uint64_t val;
-	    if (parse_uleb128 (&buf, end, &val) == -1)
+	    const char *model = NULL;
+	    if (parse_ntbs (&buf, end, &model) == -1)
 	      return -1;
-	    switch (val)
-	      {
-	      case ict_model_tiny:
-		printf ("tiny");
-		break;
-	      case ict_model_small:
-		printf ("small");
-		break;
-	      case ict_model_large:
-		printf ("large");
-		break;
-	      default:
-		printf ("unknown %" PRIu64, val);
-		break;
-	      }
-	    printf ("\n");
+	    print_indent ("Tag_ict_model: %s\n", model);
 	    break;
 	  }
 	default:
