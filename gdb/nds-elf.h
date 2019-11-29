@@ -288,7 +288,7 @@ static const char *base_isas[BASE_ISA_COUNT] =
   { "RV32E", "RV32I", "RV64I", "RV128I" };
 
 // RISC-V extensions must appear in this order.
-static const char *riscv_extensions = "MAFDQLCBJTPVNX";
+static const char *riscv_extensions = "MAFDQLCBJTPVNXZSH"; // It will be updated to "MAFDQLCBJTPVNZSHX" in the future.
 
 // RISC-V Non-standard extensions
 static const char *riscv_x_extensions[] = { "Xv5-", "xdsp", "xefhw" };
@@ -708,6 +708,13 @@ parse_riscv_base_isa (const char **s)
   die ("Invalid base ISA `%s'", *s);
 }
 
+// c must be lowercase
+static bool
+is_multi_letter_extension (const char c)
+{
+  return c == 'z' || c == 's' || c == 'h' || c == 'x';
+}
+
 static int
 parse_riscv_isa_string (const char *s)
 {
@@ -740,24 +747,22 @@ parse_riscv_isa_string (const char *s)
       else
 	ext = e;
 
-      if (tolower (*e) != 'x')
+      if (!is_multi_letter_extension (tolower (*e)))
 	{
-	  // For standard extensions, it is followed by the version number.
+	  // For standard single-letter extensions, it is followed by the version number.
 	  print_indent ("%c ", *s++);
 	  if (parse_riscv_isa_version (&s, &major, &minor) == -1)
 	    return -1;
 	  Debug_printf ("\n");
 
 	  set_riscv_ext_info (e - riscv_extensions, major, minor);
-
 	}
       else
 	{
 	  char x_ext[6] = { 0 };
-	  // For non-standard extensions, it begins with a 'X' followed by
-	  // multiple alphabets and the version.
+	  // For multi-letter extensions, it is followed by multiple alphabets and the version.
 
-	  // We speically handle v5- here because it contains a
+	  // We speically handle xv5- here because it contains a
 	  // dash which may confuse the parser.
 	  if (strncasecmp (s, "Xv5-", 4) == 0)
 	    {
@@ -783,23 +788,22 @@ parse_riscv_isa_string (const char *s)
 	      while (isalpha (*end))
 		++end;
 	      if (s + 1 == end)
-		die ("Empty non-standard extension name");
+		die ("Empty multi-letter extension name");
 	      print_indent ("%.*s ", (int) (end - s), s);
 	      s = end;
 	    }
 	  if (parse_riscv_isa_version (&s, &major, &minor) == -1)
 	    return -1;
-
 	  Debug_printf ("\n");
 
 	  set_riscv_x_ext_info (x_ext, major, minor);
-	  // Each non-standard extension must be separated by an underscore ('_').
+	  // Each multi-letter extension must be separated by an underscore ('_').
 	  if (*s != '\0')
 	    {
 	      if (*s == '_')
 		++s;
 	      else
-		die ("Non-standard extensions is not separated by `_'");
+		die ("Multi-letter extensions is not separated by `_'");
 	    }
 	}
 
