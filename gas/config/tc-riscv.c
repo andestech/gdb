@@ -3959,6 +3959,7 @@ riscv_parse_arch_attribute (const char *in_arch, bfd_boolean update)
 	      break;
 	    }
 	  riscv_set_rvc (TRUE);
+	  /* Fall through.  */
 	case 'i':
 	case 'm':
 	case 'a':
