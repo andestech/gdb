@@ -8866,22 +8866,33 @@ riscv_relocation_check (struct bfd_link_info *info,
 static bfd_boolean
 riscv_init_global_pointer (bfd *output_bfd, struct bfd_link_info *info)
 {
-  asection *sdata_sec;
   struct bfd_link_hash_entry *h;
-  bfd_vma gp_value = 0;
+  asection *section = NULL;
+  bfd_vma gp_value = 0x800;
 
-  h = bfd_link_hash_lookup (info->hash, RISCV_GP_SYMBOL,
-			    FALSE, FALSE, TRUE);
+  h = bfd_link_hash_lookup (info->hash, RISCV_GP_SYMBOL, FALSE, FALSE, TRUE);
   if (!h || h->type != bfd_link_hash_defined)
     {
-      sdata_sec = bfd_get_section_by_name (output_bfd, ".sdata");
-      if (!sdata_sec)
-        sdata_sec = bfd_abs_section_ptr;
-      gp_value = 0x800;
+      /* find a suitable section to insert symbol.  */
+      const char *sections[] = {".sdata", ".sbss", ".data", ".bss", NULL};
+      int index = 0;
+      while (sections[index])
+	{
+	  section = bfd_get_section_by_name (output_bfd, sections[index]);
+	  if (section)
+	    break;
+	  index++;
+	}
+      /* if none, just insert it at COMMON (.bss) section blindly.  */
+      if (!section)
+	{
+	  section = bfd_abs_section_ptr;
+	  gp_value = 0;
+	}
 
       if (!_bfd_generic_link_add_one_symbol
-	  (info, output_bfd, RISCV_GP_SYMBOL, BSF_GLOBAL, sdata_sec,
-	   (bfd_vma) gp_value, (const char *) NULL, FALSE,
+	  (info, output_bfd, RISCV_GP_SYMBOL, BSF_GLOBAL, section,
+	   gp_value, (const char *) NULL, FALSE,
 	   get_elf_backend_data (output_bfd)->collect, &h))
 	return FALSE;
     }
