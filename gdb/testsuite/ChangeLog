@@ -2,6 +2,11 @@
 
 	* gdb.dwarf2/dw2-ranges-base.exp: Update regular expressions.
 
+2020-01-13  Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* lib/dwarf.exp (Dwarf::lines): Reset _line_saw_program and
+	_line_saw_file.
+
 2020-01-09  Andrew Burgess  <andrew.burgess@embecosm.com>
 
 	* gdb.base/skip.exp: Fix race condition in test.
