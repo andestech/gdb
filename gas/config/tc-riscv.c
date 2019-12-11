@@ -4977,7 +4977,7 @@ riscv_frag_align_code (int n)
   expressionS exp;
   bfd_vma alignment_power = riscv_opts.rvc ? 1 : 2;
   bfd_vma bytes = (bfd_vma) 1 << n;
-  bfd_vma insn_alignment = 2;
+  bfd_vma insn_alignment = riscv_opts.rvc ? 2 : 4;
   bfd_vma worst_case_bytes = bytes - insn_alignment;
   fragS* fragP = frag_now;
   /* Set the address at the optimizable begining.  */
