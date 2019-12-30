@@ -144,7 +144,7 @@ frame_show_address (struct frame_info *frame,
       return 0;
     }
 
-  return get_frame_pc (frame) != sal.pc;
+  return get_frame_pc (frame) != sal.pc || !sal.is_stmt;
 }
 
 /* See frame.h.  */
