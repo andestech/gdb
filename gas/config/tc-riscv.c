@@ -6463,7 +6463,6 @@ static const pseudo_typeS riscv_pseudo_table[] =
   {"dtprelword", s_dtprel, 4},
   {"dtpreldword", s_dtprel, 8},
   {"bss", s_bss, 0},
-  {"uleb128", s_riscv_leb128, 0},
   {"sleb128", s_riscv_leb128, 1},
   {"insn", s_riscv_insn, 0},
   {"attribute", s_riscv_attribute, 0},
