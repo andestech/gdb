@@ -3143,6 +3143,17 @@ riscv_merge_std_ext (bfd *ibfd,
   struct riscv_subset_t *in = *pin;
   struct riscv_subset_t *out = *pout;
 
+  /*   fix 'e' comes with 'i' issue: skip 'i'
+   *   refert to 'riscv_parse_std_ext', case 'e'
+   */
+  struct riscv_subset_t *next;
+  next = in->next;
+  if (next && !strcasecmp (next->name, "e") && !strcasecmp (in->name, "i"))
+    in = in->next;
+  next = out->next;
+  if (next && !strcasecmp (next->name, "e") && !strcasecmp (out->name, "i"))
+    out = out->next;
+
   /* First letter should be 'i' or 'e'.  */
   if (!riscv_i_or_e_p (ibfd, in_arch, in))
     return FALSE;
