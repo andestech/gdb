@@ -1,3 +1,8 @@
+2020-02-19  Nelson Chu  <nelson.chu@sifive.com>
+
+	* testsuite/gas/riscv/c-add-addi.d: New testcase.
+	* testsuite/gas/riscv/c-add-addi.s: Likewise.
+
 2019-11-22  Andrew Burgess  <andrew.burgess@embecosm.com>
 
 	* config/tc-riscv.c (tc_riscv_regname_to_dw2regnum): Lookup CSR
