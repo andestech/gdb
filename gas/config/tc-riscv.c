@@ -4980,6 +4980,8 @@ riscv_frag_align_code (int n)
   bfd_vma insn_alignment = riscv_opts.rvc ? 2 : 4;
   bfd_vma worst_case_bytes = bytes - insn_alignment;
   fragS* fragP = frag_now;
+  char *p;
+
   /* Set the address at the optimizable begining.  */
   unsigned fragP_fix = (frag_now_fix() + 1) >> 1 << 1;
 
@@ -5002,7 +5004,9 @@ riscv_frag_align_code (int n)
   /* Just set the worst value temporarily.  */
   exp.X_add_number = worst_case_bytes;
   fix_new_exp (fragP, fragP_fix, 0, &exp, 0, BFD_RELOC_RISCV_ALIGN);
-  frag_more (worst_case_bytes);
+  p = frag_more (worst_case_bytes);
+  /* zero contents for Andes bug20178.  */
+  md_number_to_chars (p, 0, worst_case_bytes);
 
   return TRUE;
 }
