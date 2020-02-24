@@ -933,17 +933,17 @@ riscv_parse_opcode (bfd_vma memaddr, insn_t word, disassemble_info *info,
 /* get architecture attributes from input BFD to test if V + XV5  */
 
 static bfd_boolean
-has_extension (char ext, disassemble_info *info)
+has_extension (const char *ext, disassemble_info *info)
 {
   bfd_boolean has = FALSE;
   obj_attribute *attr = NULL;
-  char extlo = tolower(ext);
 
   if (info && info->section && info->section->owner)
     attr = &elf_known_obj_attributes (info->section->owner)[OBJ_ATTR_PROC][Tag_RISCV_arch];
 
   if (attr && attr->s)
     {
+      int len = strlen (ext);
       const char *p = attr->s;
       if ((tolower(p[0]) == 'r') &&
 	  (tolower(p[1]) == 'v') &&
@@ -953,10 +953,7 @@ has_extension (char ext, disassemble_info *info)
 	  p += 4;
 	  while (*p)
 	    {
-	      if (tolower(*p) == 'x') /* before non-std  */
-		break;
-	      if ((tolower(*p) == extlo) &&
-		  ((extlo != 'p') || !isdigit(*(p-1))))
+	      if (strncasecmp(p, ext, len) == 0)
 		{
 		  has = TRUE;
 		  break;
@@ -995,12 +992,12 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
   /* Build a hash table to shorten the search time.  */
   if (!init)
     {
-      bfd_boolean has_v = has_extension ('v', info);
+      bfd_boolean has_xefhw = has_extension ("xefhw", info);
       for (op = riscv_opcodes; op->name; op++)
 	if (!riscv_hash[OP_HASH_IDX (op->match)])
 	  {
-	    /* patch hash to favor vector instructions if has v-ext.  */
-	    if (has_v && (op->mask == 0x707f))
+	    /* favor V extension than Xefhw one.  */
+	    if (!has_xefhw && (op->mask == 0x707f))
 	      if (!strcmp(op->name, "flhw") || !strcmp(op->name, "fshw"))
 		{
 		  reordered_op[init++] = *op;
