@@ -1,3 +1,8 @@
+2020-03-11  Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* buildsyms.c (buildsym_compunit::record_line): Avoid accessing
+	previous item in the list, when the list has no items.
+
 2020-03-20  Tom Tromey  <tromey@adacore.com>
 
 	* symmisc.c (maintenance_print_one_line_table): Use ui_out.
