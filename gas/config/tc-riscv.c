@@ -4153,6 +4153,7 @@ md_assemble (char *str)
   struct riscv_cl_insn insn;
   expressionS imm_expr;
   bfd_reloc_code_real_type imm_reloc = BFD_RELOC_UNUSED;
+  imm_expr.X_md = 0;
   insn.cmodel.method = 0;
 
   /* Set the first rvc info for the the current fragmant.  */
@@ -4556,30 +4557,31 @@ md_pcrel_from (fixS *fixP)
 static void
 riscv_convert_ict_relocs (fixS ** fix)
 {
-  if ((*fix)->tc_fix_data.ict == BFD_RELOC_RISCV_ICT_HI20)
-    switch ((*fix)->fx_r_type)
-      {
-      case BFD_RELOC_RISCV_HI20:
-	(*fix)->fx_r_type = BFD_RELOC_RISCV_ICT_HI20;
-	break;
-      case BFD_RELOC_RISCV_LO12_I:
-	(*fix)->fx_r_type = BFD_RELOC_RISCV_ICT_LO12_I;
-	break;
-      case BFD_RELOC_RISCV_PCREL_HI20:
-	(*fix)->fx_r_type = BFD_RELOC_RISCV_PCREL_ICT_HI20;
-	break;
-      case BFD_RELOC_RISCV_CALL:
-	(*fix)->fx_r_type = BFD_RELOC_RISCV_CALL_ICT;
-	break;
-      case BFD_RELOC_64:
-	(*fix)->fx_r_type = BFD_RELOC_RISCV_ICT_64;
-	break;
-      default:
-	as_fatal (_("internal error: ICT suffix for #%d "
-		    "is not supported"),
-		  (*fix)->fx_r_type);
-	break;
-      }
+  switch ((*fix)->fx_r_type)
+    {
+    case BFD_RELOC_RISCV_HI20:
+      if ((*fix)->tc_fix_data.ict == BFD_RELOC_RISCV_ICT_HI20)
+        (*fix)->fx_r_type = BFD_RELOC_RISCV_ICT_HI20;
+      break;
+    case BFD_RELOC_RISCV_LO12_I:
+      if ((*fix)->tc_fix_data.ict == BFD_RELOC_RISCV_ICT_HI20)
+        (*fix)->fx_r_type = BFD_RELOC_RISCV_ICT_LO12_I;
+      break;
+    case BFD_RELOC_RISCV_PCREL_HI20:
+      if ((*fix)->tc_fix_data.ict == BFD_RELOC_RISCV_ICT_HI20)
+        (*fix)->fx_r_type = BFD_RELOC_RISCV_PCREL_ICT_HI20;
+      break;
+    case BFD_RELOC_RISCV_CALL:
+      if ((*fix)->tc_fix_data.ict == BFD_RELOC_RISCV_ICT_HI20)
+        (*fix)->fx_r_type = BFD_RELOC_RISCV_CALL_ICT;
+      break;
+    case BFD_RELOC_64:
+      if ((*fix)->tc_fix_data.ict == BFD_RELOC_RISCV_ICT_HI20)
+        (*fix)->fx_r_type = BFD_RELOC_RISCV_ICT_64;
+      break;
+    default:
+      break;
+    }
 }
 
 /* Apply a fixup to the object file.  */
@@ -5109,6 +5111,7 @@ riscv_frag_align_code (int n)
   exp.X_op = O_constant;
   /* Just set the worst value temporarily.  */
   exp.X_add_number = worst_case_bytes;
+  exp.X_md = 0;
   fix_new_exp (fragP, fragP_fix, 0, &exp, 0, BFD_RELOC_RISCV_ALIGN);
   p = frag_more (worst_case_bytes);
   /* zero contents for Andes bug20178.  */
@@ -5246,6 +5249,7 @@ md_convert_frag_branch (fragS *fragp, segT sec)
   exp.X_op = O_symbol;
   exp.X_add_symbol = fragp->fr_symbol;
   exp.X_add_number = fragp->fr_offset;
+  exp.X_md = 0;
 
   gas_assert (fragp->fr_var == RELAX_BRANCH_LENGTH (fragp->fr_subtype));
 
@@ -5983,6 +5987,8 @@ s_riscv_insn (int x ATTRIBUTE_UNUSED)
   expressionS imm_expr;
   bfd_reloc_code_real_type imm_reloc = BFD_RELOC_UNUSED;
   char save_c;
+
+  imm_expr.X_md = 0;
 
   while (!is_end_of_line[(unsigned char) *input_line_pointer])
     ++input_line_pointer;

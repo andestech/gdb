@@ -1920,6 +1920,7 @@ output_fde (struct fde_entry *fde, struct cie_entry *cie,
   exp.X_add_symbol = end_address;
   exp.X_op_symbol = after_size_address;
   exp.X_add_number = 0;
+  exp.X_md = 0;
   if (eh_frame || fmt == dwarf2_format_32bit)
     offset_size = 4;
   else

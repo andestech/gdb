@@ -3952,6 +3952,8 @@ cons_worker (int nbytes,	/* 1=.byte, 2=.word, 4=.long.  */
   char *stop = NULL;
   char stopc = 0;
 
+  exp.X_md = 0;
+
 #ifdef md_flush_pending_output
   md_flush_pending_output ();
 #endif
