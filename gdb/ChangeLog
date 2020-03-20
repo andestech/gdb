@@ -1,3 +1,7 @@
+2020-03-20  Tom Tromey  <tromey@adacore.com>
+
+	* symmisc.c (maintenance_print_one_line_table): Use ui_out.
+
 2020-03-10  Andrew Burgess  <andrew.burgess@embecosm.com>
 
 	* buildsym-legacy.c (record_line): Pass extra parameter to
