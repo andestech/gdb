@@ -112,6 +112,7 @@ static int optimize = 0;
 static int optimize_for_space = 0;
 /* Save option -mict-model for ICT model setting.  */
 static const char *m_ict_model = NULL;
+static bfd_boolean pre_insn_is_a_cond_br = 0;
 
 /* This is the set of options which the .option pseudo-op may modify.  */
 
@@ -134,6 +135,7 @@ struct riscv_set_options
   int cmodel; /* cmodel type  */
   int no_vic; /* no vector instruction constraints */
   int update_count; /* virtual option, state of this object.  */
+  int b20282; /* bug{ID} workaround */
 };
 
 enum CMODEL_TYPES {
@@ -160,6 +162,7 @@ static struct riscv_set_options riscv_opts =
   CMODEL_DEFAULT,	/* cmodel */
   0,	/* no_vic */
   0,	/* update_count */
+  0,	/* b20282 */
 };
 
 /* The priority: `-mno-16-bit' option
@@ -2690,6 +2693,48 @@ riscv_csr_read_only_check (insn_t insn)
   return TRUE;
 }
 
+static bfd_boolean
+is_indirect_jump (struct riscv_opcode *insn)
+{
+  static insn_t insns[] = {
+    MATCH_JALR, MATCH_C_JALR, MATCH_C_JR,
+    0
+  };
+  bfd_boolean rz = FALSE;
+  int i = 0;
+  insn_t x;
+  while ((x = insns[i++])) {
+    if (x == insn->match) {
+      rz = TRUE;
+      break;
+    }
+  }
+  return rz;
+}
+
+static bfd_boolean
+is_conditional_branch (struct riscv_opcode *insn)
+{
+  static insn_t insns[] = {
+    MATCH_BEQ, MATCH_BEQC, MATCH_C_BEQZ,
+    MATCH_BNE, MATCH_BNEC, MATCH_C_BNEZ,
+    MATCH_BLT, MATCH_BLTU,
+    MATCH_BGE, MATCH_BGEU,
+    MATCH_BBC, MATCH_BBS,
+    0
+  };
+  bfd_boolean rz = FALSE;
+  int i = 0;
+  insn_t x;
+  while ((x = insns[i++])) {
+    if (x == insn->match) {
+      rz = TRUE;
+      break;
+    }
+  }
+  return rz;
+}
+
 /* This routine assembles an instruction into its binary format.  As a
    side effect, it sets the global variable imm_reloc to the type of
    relocation to do if one of the operands is an address expression.  */
@@ -3913,6 +3958,15 @@ out:
   if (save_c)
     *(argsStart - 1) = save_c;
 
+  if ((error == NULL) && riscv_opts.b20282) {
+    if (pre_insn_is_a_cond_br && is_indirect_jump(insn)) {
+      macro_build(NULL, "nop", "");
+      pre_insn_is_a_cond_br = FALSE;
+    } else {
+      pre_insn_is_a_cond_br = is_conditional_branch(insn);
+    }
+  }
+
   return error;
 }
 
@@ -4361,6 +4415,7 @@ enum options
   OPTION_MICT_MODEL,
   OPTION_MCMODEL,
   OPTION_MNO_VIC,
+  OPTION_MB20282,
   OPTION_END_OF_ENUM
 };
 
@@ -4390,6 +4445,7 @@ struct option md_longopts[] =
   {"mict-model", required_argument, NULL, OPTION_MICT_MODEL},
   {"mcmodel", required_argument, NULL, OPTION_MCMODEL},
   {"mno-check-constraints", no_argument, NULL, OPTION_MNO_VIC},
+  {"mb20282", no_argument, NULL, OPTION_MB20282},
 
   {NULL, no_argument, NULL, 0}
 };
@@ -4574,6 +4630,10 @@ md_parse_option (int c, const char *arg)
     case OPTION_MNO_VIC:
       riscv_opts.no_vic = TRUE;
       opc_set_no_vic (riscv_opts.no_vic);
+      break;
+
+    case OPTION_MB20282:
+	riscv_opts.b20282 = 1;
       break;
 
     default:
