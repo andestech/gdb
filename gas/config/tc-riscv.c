@@ -184,6 +184,7 @@ static int optimize = 0;
 static int optimize_for_space = 0;
 /* Save option -mict-model for ICT model setting.  */
 static const char *m_ict_model = NULL;
+static bool pre_insn_is_a_cond_br = false;
 /* } Andes  */
 
 /* { Andes ACE */
@@ -206,6 +207,10 @@ static void
 riscv_rvc_reloc_setting (int mode);
 static bool
 is_b19758_associated_insn (struct riscv_opcode *insn);
+static bool
+is_indirect_jump (struct riscv_opcode *insn);
+static bool
+is_conditional_branch (struct riscv_opcode *insn);
 /* } Andes */
 
 /* Set the default_isa_spec.  Return 0 if the spec isn't supported.
@@ -293,6 +298,7 @@ struct riscv_set_options
   int efhw; /* RVXefhw (flhw/fshw) */
   int workaround; /* Enable Andes workarounds.  */
   int b19758; /* workaround */
+  int b20282; /* workaround */
   /* } Andes  */
 };
 
@@ -314,6 +320,7 @@ static struct riscv_set_options riscv_opts =
   0, /* efhw */
   1, /* workaround */
   1, /* b19758 */
+  0, /* b20282 */
   /* } Andes  */
 };
 
@@ -4086,6 +4093,17 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
               macro_build (NULL, "fence", "P,Q", regno, regno);
 	    }
 	}
+
+      if (riscv_opts.b20282)
+	{
+	  if (pre_insn_is_a_cond_br && is_indirect_jump (insn))
+	    {
+	      macro_build (NULL, "nop", "");
+	      pre_insn_is_a_cond_br = false;
+	    }
+	  else
+	    pre_insn_is_a_cond_br = is_conditional_branch (insn);
+	}
     }
 
   return error;
@@ -4229,6 +4247,7 @@ enum options
   OPTION_MEXT_EFHW,
   OPTION_MNO_WORKAROUND,
   OPTION_MNO_B19758,
+  OPTION_MB20282,
   /* } Andes  */
   OPTION_END_OF_ENUM
 };
@@ -4264,6 +4283,7 @@ struct option md_longopts[] =
   {"mext-efhw", no_argument, NULL, OPTION_MEXT_EFHW},
   {"mno-workaround", no_argument, NULL, OPTION_MNO_WORKAROUND},
   {"mno-b19758", no_argument, NULL, OPTION_MNO_B19758},
+  {"mb20282", no_argument, NULL, OPTION_MB20282},
   /* } Andes  */
 
   {NULL, no_argument, NULL, 0}
@@ -4445,6 +4465,10 @@ md_parse_option (int c, const char *arg)
 
     case OPTION_MNO_B19758:
 	riscv_opts.b19758 = 0;
+      break;
+
+    case OPTION_MB20282:
+	riscv_opts.b20282 = 1;
       break;
 
     default:
@@ -6517,6 +6541,54 @@ is_b19758_associated_insn (struct riscv_opcode *insn)
 	      rz = true;
 	      break;
 	    }
+	}
+    }
+  return rz;
+}
+
+static bool
+is_indirect_jump (struct riscv_opcode *insn)
+{
+  static insn_t insns[] =
+    {
+      MATCH_JALR, MATCH_C_JALR, MATCH_C_JR,
+      0
+    };
+  bool rz = false;
+  int i = 0;
+  insn_t x;
+  while ((x = insns[i++]))
+    {
+      if (x == insn->match)
+	{
+	  rz = true;
+	  break;
+	}
+    }
+  return rz;
+}
+
+static bool
+is_conditional_branch (struct riscv_opcode *insn)
+{
+  static insn_t insns[] =
+    {
+      MATCH_BEQ, MATCH_BEQC, MATCH_C_BEQZ,
+      MATCH_BNE, MATCH_BNEC, MATCH_C_BNEZ,
+      MATCH_BLT, MATCH_BLTU,
+      MATCH_BGE, MATCH_BGEU,
+      MATCH_BBC, MATCH_BBS,
+      0
+    };
+  bool rz = false;
+  int i = 0;
+  insn_t x;
+  while ((x = insns[i++]))
+    {
+      if (x == insn->match)
+	{
+	  rz = true;
+	  break;
 	}
     }
   return rz;
