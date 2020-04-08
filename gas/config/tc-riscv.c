@@ -38,6 +38,8 @@
 #include <dlfcn.h>
 #endif
 
+extern int opc_set_no_vic (int is);
+
 /* Information about an instruction, including its format, operands
    and fixups.  */
 struct riscv_cl_insn
@@ -127,6 +129,7 @@ struct riscv_set_options
   int efhw; /* Xefhw-ext (flhw/fshw)  */
   int vector; /* V-ext */
   int cmodel; /* cmodel type  */
+  int no_vic; /* no vector instruction constraints */
 };
 
 enum CMODEL_TYPES {
@@ -149,6 +152,7 @@ static struct riscv_set_options riscv_opts =
   0,	/* efhw */
   0,	/* vector */
   CMODEL_DEFAULT,	/* cmodel */
+  0,	/* no_vic */
 };
 
 /* The priority: `-mno-16-bit' option
@@ -4152,6 +4156,7 @@ enum options
   OPTION_MEXT_VECTOR,
   OPTION_MICT_MODEL,
   OPTION_MCMODEL,
+  OPTION_MNO_VIC,
   OPTION_END_OF_ENUM
 };
 
@@ -4176,6 +4181,7 @@ struct option md_longopts[] =
   {"mext-vector", no_argument, NULL, OPTION_MEXT_VECTOR},
   {"mict-model", required_argument, NULL, OPTION_MICT_MODEL},
   {"mcmodel", required_argument, NULL, OPTION_MCMODEL},
+  {"mno-vic", no_argument, NULL, OPTION_MNO_VIC},
 
   {NULL, no_argument, NULL, 0}
 };
@@ -4339,6 +4345,11 @@ md_parse_option (int c, const char *arg)
 	riscv_opts.cmodel = CMODEL_DEFAULT;
       else
 	as_bad (_("invalid cmodel setting -mcmodel=%s"), arg);
+      break;
+
+    case OPTION_MNO_VIC:
+      riscv_opts.no_vic = TRUE;
+      opc_set_no_vic (riscv_opts.no_vic);
       break;
 
     default:
