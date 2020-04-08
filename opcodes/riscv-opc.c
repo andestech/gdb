@@ -104,6 +104,22 @@ const char * const riscv_vecm_names_numeric[NVECM] =
 #define MASK_VS2 (OP_MASK_VS2 << OP_SH_VS2)
 #define MASK_VMASK (OP_MASK_VMASK << OP_SH_VMASK)
 
+static struct opc_options
+{
+  int no_vic;
+} opc_opts =
+{
+  0, /* no_vic */
+};
+
+int opc_set_no_vic (int is);
+int opc_set_no_vic (int is)
+{
+  int previous = opc_opts.no_vic;
+  opc_opts.no_vic = is;
+  return previous;
+}
+
 static int
 match_opcode (const struct riscv_opcode *op,
 	      insn_t insn,
@@ -278,6 +294,9 @@ match_widen_vd_neq_vs1_neq_vs2_neq_vm (const struct riscv_opcode *op,
 				       insn_t insn,
 				       int constraints)
 {
+  if (opc_opts.no_vic)
+    return match_opcode (op, insn);
+
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
@@ -298,6 +317,9 @@ match_widen_vd_neq_vs1_neq_vm (const struct riscv_opcode *op,
 			       insn_t insn,
 			       int constraints)
 {
+  if (opc_opts.no_vic)
+    return match_opcode (op, insn);
+
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
@@ -318,6 +340,9 @@ match_widen_vd_neq_vs2_neq_vm (const struct riscv_opcode *op,
 			       insn_t insn,
 			       int constraints)
 {
+  if (opc_opts.no_vic)
+    return match_opcode (op, insn);
+
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
   int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
@@ -336,6 +361,9 @@ match_widen_vd_neq_vm (const struct riscv_opcode *op,
 		       insn_t insn,
 		       int constraints)
 {
+  if (opc_opts.no_vic)
+    return match_opcode (op, insn);
+
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
   int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
@@ -354,6 +382,9 @@ match_quad_vd_neq_vs1_neq_vs2_neq_vm (const struct riscv_opcode *op,
 				      insn_t insn,
 				      int constraints)
 {
+  if (opc_opts.no_vic)
+    return match_opcode (op, insn);
+
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
@@ -374,6 +405,9 @@ match_quad_vd_neq_vs2_neq_vm (const struct riscv_opcode *op,
 			      insn_t insn,
 			      int constraints)
 {
+  if (opc_opts.no_vic)
+    return match_opcode (op, insn);
+
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
   int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
@@ -392,6 +426,9 @@ match_narrow_vd_neq_vs2 (const struct riscv_opcode *op,
 			 insn_t insn,
 			 int constraints)
 {
+  if (opc_opts.no_vic)
+    return match_opcode (op, insn);
+
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
 
@@ -408,6 +445,9 @@ match_vd_neq_vs1_neq_vs2_neq_vm (const struct riscv_opcode *op,
 				 insn_t insn,
 				 int constraints)
 {
+  if (opc_opts.no_vic)
+    return match_opcode (op, insn);
+
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
@@ -427,6 +467,9 @@ match_vd_neq_vs2_neq_vm (const struct riscv_opcode *op,
 			 insn_t insn,
 			 int constraints)
 {
+  if (opc_opts.no_vic)
+    return match_opcode (op, insn);
+
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
   int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
@@ -458,6 +501,9 @@ match_vd_neq_vm (const struct riscv_opcode *op,
 		 insn_t insn,
 		 int constraints)
 {
+  if (opc_opts.no_vic)
+    return match_opcode (op, insn);
+
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
 
@@ -472,6 +518,9 @@ match_vmv_nf_rv (const struct riscv_opcode *op,
 		 insn_t insn,
 		 int constraints)
 {
+  if (opc_opts.no_vic)
+    return match_opcode (op, insn);
+
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
   int nf = ((insn & (0x7 << 15) ) >> 15) + 1;
