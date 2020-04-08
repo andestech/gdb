@@ -4384,7 +4384,7 @@ struct option md_longopts[] =
   {"mext-vector", no_argument, NULL, OPTION_MEXT_VECTOR},
   {"mict-model", required_argument, NULL, OPTION_MICT_MODEL},
   {"mcmodel", required_argument, NULL, OPTION_MCMODEL},
-  {"mno-vic", no_argument, NULL, OPTION_MNO_VIC},
+  {"mno-check-constraints", no_argument, NULL, OPTION_MNO_VIC},
 
   {NULL, no_argument, NULL, 0}
 };
