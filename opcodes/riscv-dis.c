@@ -993,11 +993,12 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
   if (!init)
     {
       bfd_boolean has_xefhw = has_extension ("xefhw", info);
+      bfd_boolean has_v = has_extension ("v", info);
       for (op = riscv_opcodes; op->name; op++)
 	if (!riscv_hash[OP_HASH_IDX (op->match)])
 	  {
 	    /* favor V extension than Xefhw one.  */
-	    if (!has_xefhw && (op->mask == 0x707f))
+	    if ((has_v || !has_xefhw) && (op->mask == 0x707f))
 	      if (!strcmp(op->name, "flhw") || !strcmp(op->name, "fshw"))
 		{
 		  reordered_op[init++] = *op;
