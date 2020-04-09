@@ -38,6 +38,7 @@
 #include <dlfcn.h>
 #endif
 
+static void arch_sanity_check (int is_final);
 extern int opc_set_no_vic (int is);
 
 /* Information about an instruction, including its format, operands
@@ -130,6 +131,7 @@ struct riscv_set_options
   int vector; /* V-ext */
   int cmodel; /* cmodel type  */
   int no_vic; /* no vector instruction constraints */
+  int update_count; /* virtual option, state of this object.  */
 };
 
 enum CMODEL_TYPES {
@@ -153,6 +155,7 @@ static struct riscv_set_options riscv_opts =
   0,	/* vector */
   CMODEL_DEFAULT,	/* cmodel */
   0,	/* no_vic */
+  0,	/* update_count */
 };
 
 /* The priority: `-mno-16-bit' option
@@ -227,6 +230,7 @@ riscv_set_arch (const char *s)
   rps.error_handler = as_fatal;
   rps.xlen = &xlen;
 
+  riscv_opts.update_count += 1;
   riscv_release_subset_list (&riscv_subsets);
   riscv_parse_subset (&rps, s);
 
@@ -277,7 +281,7 @@ const char FLT_CHARS[] = "rRsSfFdDxXpP";
 /* Indicate we are already assemble any instructions or not.  */
 static bfd_boolean start_assemble = FALSE;
 
-/* Indicate arch attribute is explictly set.  */
+/* Indicate arch attribute is explicitly set.  */
 static bfd_boolean explicit_arch_attr = FALSE;
 
 /* Macros for encoding relaxation state for RVC branches and far jumps.  */
@@ -4102,8 +4106,9 @@ md_assemble (char *str)
      assembling instructions.  */
   if (!start_assemble_insn)
     {
-      riscv_set_arch_attributes (NULL);
+      riscv_set_arch_attributes (NULL); /* redundant?  */
       start_assemble_insn = 1;
+      arch_sanity_check(TRUE); /* is_final = TRUE  */
     }
 
   const char *error = riscv_ip (str, &insn, &imm_expr, &imm_reloc, op_hash);
@@ -4359,10 +4364,15 @@ md_parse_option (int c, const char *arg)
   return 1;
 }
 
-void
-riscv_after_parse_args (void)
+static void
+arch_sanity_check (int is_final)
 {
   int d4_arch_type = 0;
+
+  if (is_final && riscv_opts.update_count == 0)
+    return;
+  riscv_opts.update_count = 0;
+
   if (xlen == 0)
     {
       if (strncmp (default_arch, "rv32", 4) == 0)
@@ -4387,6 +4397,19 @@ riscv_after_parse_args (void)
     riscv_set_arch(d4_arch_type == 1 ? default_arch
 				     : xlen == 64 ? "rv64g" : "rv32g");
 
+  /* check if Xefhw + V confilict  */
+  if ((riscv_opts.efhw || riscv_subset_supports ("xefhw")) &&
+      (riscv_opts.vector || riscv_subset_supports ("v")))
+    as_fatal ("Extension 'V' and 'Xefhw' are exclusive!");
+
+  if (is_final)
+    {
+      if (riscv_opts.efhw == 0)
+	riscv_opts.efhw = riscv_subset_supports ("xefhw");
+      if (riscv_opts.vector == 0)
+	riscv_opts.vector = riscv_subset_supports ("v");
+    }
+
   /* We must keep the extension set by the options if needed.  */
   if (riscv_opts.atomic)
     riscv_add_subset (&riscv_subsets, "a", 2, 0);
@@ -4399,10 +4422,13 @@ riscv_after_parse_args (void)
     riscv_add_subset (&riscv_subsets, "xefhw", 1, 0);
 
   if (riscv_opts.vector)
-    riscv_add_subset (&riscv_subsets, "v", 0, 7);
+    riscv_add_subset (&riscv_subsets, "v", 0, 8);
 
+# if 0
+  /* redundant?  */
   /* Always add `c' into `all_subsets' for the `riscv_opcodes' table.  */
-//   riscv_add_subset (&riscv_subsets, "c", 2, 0);
+  riscv_add_subset (&riscv_subsets, "c", 2, 0);
+#endif
 
   /* Add the RVC extension, regardless of -march, to support .option rvc.  */
   riscv_set_rvc (FALSE);
@@ -4450,6 +4476,12 @@ riscv_after_parse_args (void)
 #ifdef DEBUG_CMODEL
   printf("%s: cmodel = %d\n", __func__, riscv_opts.cmodel);
 #endif
+}
+
+void
+riscv_after_parse_args (void)
+{
+  arch_sanity_check(FALSE); /* is_final = FALSE  */
 }
 
 long
