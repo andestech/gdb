@@ -1679,11 +1679,11 @@ riscv_parse_std_ext (riscv_parse_subset_t *rps,
 
       subset[0] = std_ext;
 
-      /* v extension default version is 0p7 */
+      /* v extension default version is 0p8 */
       if ((start_of_version == p) && !strcasecmp(subset, "v"))
 	{
 	  major_version = 0;
-	  minor_version = 7;
+	  minor_version = 8;
 	}
 
       riscv_add_subset (rps->subset_list, subset, major_version, minor_version);
