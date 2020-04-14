@@ -8840,7 +8840,15 @@ riscv_init_global_pointer (bfd *output_bfd, struct bfd_link_info *info)
   bfd_vma gp_value = 0x800;
 
   h = bfd_link_hash_lookup (info->hash, RISCV_GP_SYMBOL, FALSE, FALSE, TRUE);
-  if (!h || h->type != bfd_link_hash_defined)
+  /* 1. no GP_SYMBOL found, disable gp relaxation  */
+  if (!h)
+    {
+      struct riscv_elf_link_hash_table *table;
+      table = riscv_elf_hash_table (info);
+      table->gp_relative_insn = 0;
+    }
+  /* 2. GP_SYMBOL referenced but not defined, generate one  */
+  else if (h->type == bfd_link_hash_undefined)
     {
       /* find a suitable section to insert symbol.  */
       const char *sections[] = {".sdata", ".sbss", ".data", ".bss", NULL};
