@@ -3483,6 +3483,9 @@ funct6 VM  VS2  VS1/RS1/IMM funct3 VD   opcode
 #define CSR_PMAADDR13 0xbdd
 #define CSR_PMAADDR14 0xbde
 #define CSR_PMAADDR15 0xbdf
+#define CSR_MCRASH_STATESAVE 0xfc8
+#define CSR_MSTATUS_CRASHSAVE 0xfc9
+#define CSR_MCLK_CTL 0x7df
 
 /* These registers are present in priv spec 1.9.1, dropped in 1.10.  */
 #define CSR_HSTATUS 0x200
@@ -4536,6 +4539,9 @@ DECLARE_CSR(pmaaddr12, CSR_PMAADDR12)
 DECLARE_CSR(pmaaddr13, CSR_PMAADDR13)
 DECLARE_CSR(pmaaddr14, CSR_PMAADDR14)
 DECLARE_CSR(pmaaddr15, CSR_PMAADDR15)
+DECLARE_CSR(mcrash_statesave, CSR_MCRASH_STATESAVE)
+DECLARE_CSR(mstatus_crashsave, CSR_MSTATUS_CRASHSAVE)
+DECLARE_CSR(mclk_ctl, CSR_MCLK_CTL)
 #endif
 #ifdef DECLARE_CSR_ALIAS
 /* Ubadaddr is 0x043 in 1.9.1, but 0x043 is utval in 1.10.  */
