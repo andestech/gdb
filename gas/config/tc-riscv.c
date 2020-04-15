@@ -2697,14 +2697,17 @@ static bfd_boolean
 is_indirect_jump (struct riscv_opcode *insn)
 {
   static insn_t insns[] = {
-    MATCH_JALR, MATCH_C_JALR, MATCH_C_JR,
+    MATCH_JALR, MASK_JALR,
+    MATCH_C_JALR, MASK_C_JALR,
+    MATCH_C_JR, MASK_C_JR,
     0
   };
   bfd_boolean rz = FALSE;
   int i = 0;
-  insn_t x;
-  while ((x = insns[i++])) {
-    if (x == insn->match) {
+  while (insns[i]) {
+    insn_t match = insns[i++];
+    insn_t mask = insns[i++];
+    if ((insn->match == match) && (insn->mask == mask)) {
       rz = TRUE;
       break;
     }
