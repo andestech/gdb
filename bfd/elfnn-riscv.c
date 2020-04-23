@@ -7803,6 +7803,11 @@ riscv_elf_relocate_execit_table (struct bfd_link_info *link_info, bfd *abfd)
 #define MASK_IMM ENCODE_ITYPE_IMM (-1U)
 #define MASK_RS1 (OP_MASK_RS1 << OP_SH_RS1)
 #define MASK_RD (OP_MASK_RD << OP_SH_RD)
+#define MASK_MAJOR_OP OP_MASK_OP
+#define MATCH_OP_V (0x57)
+#define MATCH_OP_AMO (0x2f)
+#define MATCH_OP_LOAD_FP (0x07)
+#define MATCH_OP_STORE_FP (0x27)
 
 static bfd_boolean
 riscv_elf_execit_check_insn_available (uint32_t insn)
@@ -7817,6 +7822,27 @@ riscv_elf_execit_check_insn_available (uint32_t insn)
       || ((insn & (MASK_JALR | MASK_RD | MASK_RS1 | MASK_IMM))
 	  == (MATCH_JALR | (X_RA << OP_SH_RS1))))
     return FALSE;
+
+  /* RVV is not exec.it supported by now.  */
+  uint32_t major = insn & MASK_MAJOR_OP;
+  if (major == MATCH_OP_V)
+    return FALSE;
+  else
+    {
+      uint32_t width = (insn >> 12) & 0x7;
+      if (major == MATCH_OP_AMO)
+        {
+	  if (width > 5)
+	    return FALSE;
+	}
+      else if ((major == MATCH_OP_LOAD_FP) ||
+	       (major == MATCH_OP_STORE_FP))
+        {
+	  if ((width == 0) || (width > 4))
+	    return FALSE;
+	}
+    }
+
   return TRUE;
 }
 
