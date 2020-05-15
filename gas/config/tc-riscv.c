@@ -5145,11 +5145,9 @@ riscv_handle_align (fragS *fragP)
       riscv_make_nops (p, excess);
       fragP->fr_fix += excess;
       p += excess;
-      if (excess >= 2)
-	fragP->fr_var = 2;
     }
 
-  if (bytes > size)
+  if (bytes >= size)
     {
       /* After this function, the frag will be set to fr_fill.  We only
 	 insert one 4 byte nop here.  The reset space will be filled in
