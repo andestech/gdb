@@ -5775,12 +5775,12 @@ _bfd_riscv_relax_delete (bfd *abfd,
    if the RVC is enabled.  */
 
 static int
-riscv_enable_rvc (Elf_Internal_Rela *rel)
+riscv_enable_rvc (Elf_Internal_Rela *rel, Elf_Internal_Rela *end)
 {
   int type, result = -1;
   bfd_vma offset = rel->r_offset;
 
-  while (rel && rel->r_offset == offset)
+  while (rel != end && rel->r_offset == offset)
     {
       type = ELFNN_R_TYPE (rel->r_info);
       switch (type)
@@ -5823,6 +5823,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
   /* For EXECIT update.  */
   static int execit_replace_again = 0;
   bfd_boolean rvc = FALSE;
+  Elf_Internal_Rela *relocs_end;
 
   /* Reset it for each input section.
      It used to record orevious alignment offset
@@ -6003,6 +6004,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 
   rvc = elf_elfheader (abfd)->e_flags & EF_RISCV_RVC;
   /* Examine and consider relaxing each reloc.  */
+  relocs_end = relocs + sec->reloc_count;
   for (i = 0; i < sec->reloc_count; i++)
     {
       asection *sym_sec;
@@ -6011,7 +6013,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
       int type = ELFNN_R_TYPE (rel->r_info);
       bfd_vma symval;
 
-      switch (riscv_enable_rvc (rel))
+      switch (riscv_enable_rvc (rel, relocs_end))
 	{
 	case 1: rvc = 0; break;
 	case 0: rvc = 1; break;
