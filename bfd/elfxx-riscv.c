@@ -1841,6 +1841,7 @@ riscv_parse_prefixed_ext (riscv_parse_subset_t *rps,
 	  return NULL;
 	}
 
+#if 0
       /* Check that we are in alphabetical order within the subset.  */
       if (!strncasecmp (last_name, config->prefix, 1)
 	  && strcasecmp (last_name, subset) > 0)
@@ -1851,6 +1852,7 @@ riscv_parse_prefixed_ext (riscv_parse_subset_t *rps,
 	  free (subset);
 	  return NULL;
 	}
+#endif
 
       riscv_add_subset (rps->subset_list, subset, major_version, minor_version);
       free (subset);
