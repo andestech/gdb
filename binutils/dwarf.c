@@ -7201,7 +7201,7 @@ regname_internal_riscv (unsigned int regno)
   return name;
 }
 
-static void
+void
 init_dwarf_regnames_riscv (void)
 {
   dwarf_regnames = NULL;

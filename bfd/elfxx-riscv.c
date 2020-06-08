@@ -1756,14 +1756,6 @@ riscv_parse_prefixed_ext (riscv_parse_subset_t *rps,
       if (class != config->class)
 	break;
 
-      if (strncasecmp (p, ext_type, ext_type_len) != 0)
-	break;
-
-      /* It's non-standard supervisor extension if it prefix with sx.  */
-      if ((ext_type[0] == 's') && (ext_type_len == 1)
-	  && (*(p + 1) == 'x'))
-	break;
-
       /* look ahead for xv5{-XpY} */
       if (strncasecmp(p, "xv5", 3) == 0)
 	{

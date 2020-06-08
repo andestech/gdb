@@ -295,7 +295,7 @@ match_widen_vd_neq_vs1_neq_vs2_neq_vm (const struct riscv_opcode *op,
 				       int constraints)
 {
   if (opc_opts.no_vic)
-    return match_opcode (op, insn);
+    return match_opcode (op, insn, 0);
 
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
@@ -318,7 +318,7 @@ match_widen_vd_neq_vs1_neq_vm (const struct riscv_opcode *op,
 			       int constraints)
 {
   if (opc_opts.no_vic)
-    return match_opcode (op, insn);
+    return match_opcode (op, insn, 0);
 
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
@@ -341,7 +341,7 @@ match_widen_vd_neq_vs2_neq_vm (const struct riscv_opcode *op,
 			       int constraints)
 {
   if (opc_opts.no_vic)
-    return match_opcode (op, insn);
+    return match_opcode (op, insn, 0);
 
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
@@ -362,7 +362,7 @@ match_widen_vd_neq_vm (const struct riscv_opcode *op,
 		       int constraints)
 {
   if (opc_opts.no_vic)
-    return match_opcode (op, insn);
+    return match_opcode (op, insn, 0);
 
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
@@ -383,7 +383,7 @@ match_quad_vd_neq_vs1_neq_vs2_neq_vm (const struct riscv_opcode *op,
 				      int constraints)
 {
   if (opc_opts.no_vic)
-    return match_opcode (op, insn);
+    return match_opcode (op, insn, 0);
 
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
@@ -406,7 +406,7 @@ match_quad_vd_neq_vs2_neq_vm (const struct riscv_opcode *op,
 			      int constraints)
 {
   if (opc_opts.no_vic)
-    return match_opcode (op, insn);
+    return match_opcode (op, insn, 0);
 
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
@@ -427,7 +427,7 @@ match_narrow_vd_neq_vs2 (const struct riscv_opcode *op,
 			 int constraints)
 {
   if (opc_opts.no_vic)
-    return match_opcode (op, insn);
+    return match_opcode (op, insn, 0);
 
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
@@ -446,7 +446,7 @@ match_vd_neq_vs1_neq_vs2_neq_vm (const struct riscv_opcode *op,
 				 int constraints)
 {
   if (opc_opts.no_vic)
-    return match_opcode (op, insn);
+    return match_opcode (op, insn, 0);
 
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
@@ -468,7 +468,7 @@ match_vd_neq_vs2_neq_vm (const struct riscv_opcode *op,
 			 int constraints)
 {
   if (opc_opts.no_vic)
-    return match_opcode (op, insn);
+    return match_opcode (op, insn, 0);
 
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
@@ -502,7 +502,7 @@ match_vd_neq_vm (const struct riscv_opcode *op,
 		 int constraints)
 {
   if (opc_opts.no_vic)
-    return match_opcode (op, insn);
+    return match_opcode (op, insn, 0);
 
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
@@ -519,7 +519,7 @@ match_vmv_nf_rv (const struct riscv_opcode *op,
 		 int constraints)
 {
   if (opc_opts.no_vic)
-    return match_opcode (op, insn);
+    return match_opcode (op, insn, 0);
 
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
