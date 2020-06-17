@@ -6217,6 +6217,7 @@ s_riscv_insn (int x ATTRIBUTE_UNUSED)
   bfd_reloc_code_real_type imm_reloc = BFD_RELOC_UNUSED;
   char save_c;
 
+  insn.cmodel.method = 0;
   imm_expr.X_md = 0;
 
   while (!is_end_of_line[(unsigned char) *input_line_pointer])
