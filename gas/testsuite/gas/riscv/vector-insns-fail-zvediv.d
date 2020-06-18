@@ -1,7 +1,7 @@
 #as: -march=rv32iv
 #source: vector-insns-fail-zvediv.s
-#warning_output: vector-insns-fail-zvediv.l
-#objdump: -dr
+##warning_output: vector-insns-fail-zvediv.l
+#objdump: -d
 
 .*:[ 	]+file format .*
 
