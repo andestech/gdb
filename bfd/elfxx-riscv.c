@@ -1698,9 +1698,9 @@ riscv_get_prefix_class (const char *arch)
 {
   switch (*arch)
     {
-    case 's': return RV_ISA_CLASS_S;
-    case 'x': return RV_ISA_CLASS_X;
-    case 'z': return RV_ISA_CLASS_Z;
+    case 's': case 'S': return RV_ISA_CLASS_S;
+    case 'x': case 'X': return RV_ISA_CLASS_X;
+    case 'z': case 'Z': return RV_ISA_CLASS_Z;
     default: return RV_ISA_CLASS_UNKNOWN;
     }
 }
@@ -1783,6 +1783,10 @@ riscv_parse_prefixed_ext (riscv_parse_subset_t *rps,
       char *subset = xstrdup (p);
       char *q = subset;
       const char *end_of_version;
+
+      /* lower case for case non-sensitive.  */
+      for ( ; *q; ++q) *q = TOLOWER(*q);
+      q = subset;
 
       while (*++q != '\0' && *q != '_' && !ISDIGIT (*q))
 	;
@@ -1875,6 +1879,7 @@ riscv_parse_prefixed_ext (riscv_parse_subset_t *rps,
 
 static const char * const riscv_std_z_ext_strtab[] =
   {
+    "zefhw", "zfh", /* Andes Extensions  */
     NULL
   };
 
