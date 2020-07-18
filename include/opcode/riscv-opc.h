@@ -1628,6 +1628,18 @@ xxx - 00 x 10000 xxxxx --- xxxxx 0000111 VLSEG<nf>E<EEW>FF
 #define MASK_VL1RV   0xfff0707f
 #define MATCH_VS1RV  0x02800027
 #define MASK_VS1RV   0xfff0707f
+#define MATCH_VL2R_V 0x22800007
+#define MASK_VL2R_V  0xfff0707f
+#define MATCH_VL4R_V 0x62800007
+#define MASK_VL4R_V  0xfff0707f
+#define MATCH_VL8R_V 0xe2800007
+#define MASK_VL8R_V  0xfff0707f
+#define MATCH_VS2R_V 0x22800027
+#define MASK_VS2R_V  0xfff0707f
+#define MATCH_VS4R_V 0x62800027
+#define MASK_VS4R_V  0xfff0707f
+#define MATCH_VS8R_V 0xe2800027
+#define MASK_VS8R_V  0xfff0707f
 
 /* Temporary AMO encoding info
 

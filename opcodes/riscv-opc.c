@@ -2080,6 +2080,12 @@ const struct riscv_opcode riscv_opcodes[] =
 
 {"vl1r.v",  0, {"V", 0},  "Vd,0(s)", MATCH_VL1RV, MASK_VL1RV, match_opcode, INSN_DREF },
 {"vs1r.v",  0, {"V", 0},  "Vd,0(s)", MATCH_VS1RV, MASK_VS1RV, match_opcode, INSN_DREF },
+{"vl2r.v",  0, {"V", 0},  "Vd,0(s)", MATCH_VL2R_V, MASK_VL2R_V, match_opcode, INSN_DREF },
+{"vs2r.v",  0, {"V", 0},  "Vd,0(s)", MATCH_VS2R_V, MASK_VS2R_V, match_opcode, INSN_DREF },
+{"vl4r.v",  0, {"V", 0},  "Vd,0(s)", MATCH_VL4R_V, MASK_VL4R_V, match_opcode, INSN_DREF },
+{"vs4r.v",  0, {"V", 0},  "Vd,0(s)", MATCH_VS4R_V, MASK_VS4R_V, match_opcode, INSN_DREF },
+{"vl8r.v",  0, {"V", 0},  "Vd,0(s)", MATCH_VL8R_V, MASK_VL8R_V, match_opcode, INSN_DREF },
+{"vs8r.v",  0, {"V", 0},  "Vd,0(s)", MATCH_VS8R_V, MASK_VS8R_V, match_opcode, INSN_DREF },
 
 {"vamoaddei8.v",   0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOADDEI8V, MASK_VAMOADDEI8V, match_opcode, INSN_DREF},
 {"vamoswapei8.v",  0, {"V", 0},  "Ve,0(s),Vt,VfVm", MATCH_VAMOSWAPEI8V, MASK_VAMOSWAPEI8V, match_opcode, INSN_DREF},
