@@ -2394,6 +2394,8 @@ const struct riscv_opcode riscv_opcodes[] =
 {"vfwnmsac.vf", 0, {"V", "F", 0}, "Vd,S,VtVm", MATCH_VFWNMSACVF, MASK_VFWNMSACVF, match_widen_vd_neq_vs2_neq_vm, 0},
 
 {"vfsqrt.v",   0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFSQRTV, MASK_VFSQRTV, match_opcode, 0},
+{"vfrsqrte7.v",0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFRSQRTE7_V, MASK_VFRSQRTE7_V, match_opcode, 0},
+{"vfrece7.v",  0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFRECE7_V, MASK_VFRECE7_V, match_opcode, 0},
 
 {"vfmin.vv",   0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFMINVV, MASK_VFMINVV, match_opcode, 0},
 {"vfmin.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFMINVF, MASK_VFMINVF, match_opcode, 0},

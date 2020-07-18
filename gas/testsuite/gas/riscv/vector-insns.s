@@ -2497,6 +2497,10 @@
 
 	vfsqrt.v v4, v8
 	vfsqrt.v v4, v8, v0.t
+	vfrsqrte7.v v4, v8
+	vfrsqrte7.v v4, v8, v0.t
+	vfrece7.v v4, v8
+	vfrece7.v v4, v8, v0.t
 
 	vfmin.vv v4, v8, v12
 	vfmin.vf v4, v8, fa2
