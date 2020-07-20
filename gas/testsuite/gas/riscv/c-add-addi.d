@@ -1,5 +1,5 @@
 #as:
-#objdump: -dr
+#objdump: -d
 
 .*:[ 	]+file format .*
 
@@ -7,5 +7,5 @@
 Disassembly of section .text:
 
 0+000 <.text>:
-[ 	]+0:[ 	]+4605[ 	]+li[ 	]+a2,1
-[ 	]+2:[ 	]+852e[ 	]+mv[ 	]+a0,a1
+[ 	]+0:[ 	]+4605[ 	]+c.li[ 	]+a2,1
+[ 	]+2:[ 	]+852e[ 	]+c.mv[ 	]+a0,a1
