@@ -2519,6 +2519,7 @@ const struct riscv_opcode riscv_opcodes[] =
 {"vfslide1down.vf", 0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFSLIDE1DOWNVF, MASK_VFSLIDE1DOWNVF, match_opcode, 0},
 
 {"vrgather.vv",0, {"V", 0}, "Vd,Vt,VsVm", MATCH_VRGATHERVV, MASK_VRGATHERVV, match_vd_neq_vs1_neq_vs2_neq_vm, 0},
+{"vrgatherei16.vv",0, {"V", 0}, "Vd,Vt,VsVm", MATCH_VRGATHEREI16_VV, MASK_VRGATHEREI16_VV, match_vd_neq_vs1_neq_vs2_neq_vm, 0},
 {"vrgather.vx",0, {"V", 0}, "Vd,Vt,sVm", MATCH_VRGATHERVX, MASK_VRGATHERVX, match_vd_neq_vs2_neq_vm, 0},
 {"vrgather.vi",0, {"V", 0}, "Vd,Vt,VjVm", MATCH_VRGATHERVI, MASK_VRGATHERVI, match_vd_neq_vs2_neq_vm, 0},
 

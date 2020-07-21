@@ -2711,10 +2711,12 @@
 	vfslide1down.vf v4, v8, fa1, v0.t
 
 	vrgather.vv v4, v8, v12
+ 	vrgatherei16.vv v4, v8, v12
 	vrgather.vx v4, v8, a1
 	vrgather.vi v4, v8, 0
 	vrgather.vi v4, v8, 31
 	vrgather.vv v4, v8, v12, v0.t
+	vrgatherei16.vv v4, v8, v12, v0.t
 	vrgather.vx v4, v8, a1, v0.t
 	vrgather.vi v4, v8, 0, v0.t
 	vrgather.vi v4, v8, 31, v0.t
