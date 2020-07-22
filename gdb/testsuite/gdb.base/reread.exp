@@ -61,6 +61,7 @@ foreach_with_prefix opts {
 	set testfile "reread"
 	set binfile [standard_output_file ${testfile}$EXEEXT]
 
+	gdb_exit
 	gdb_start
 	gdb_reinitialize_dir $srcdir/$subdir
 
