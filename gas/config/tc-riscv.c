@@ -1576,7 +1576,6 @@ md_begin (void)
   if (ace_lib_load_success)
     {
       int i;
-      riscv_add_subset (&riscv_subsets, "x", 0, 0);
 
       /* Insert instruction information in a hash table */
       i = 0;
