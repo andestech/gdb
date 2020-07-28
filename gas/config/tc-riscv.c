@@ -135,7 +135,9 @@ struct riscv_set_options
   int cmodel; /* cmodel type  */
   int no_vic; /* no vector instruction constraints */
   int update_count; /* virtual option, state of this object.  */
-  int b20282; /* bug{ID} workaround */
+  /* bug{ID} workaround */
+  int b19758;
+  int b20282;
 };
 
 enum CMODEL_TYPES {
@@ -162,6 +164,7 @@ static struct riscv_set_options riscv_opts =
   CMODEL_DEFAULT,	/* cmodel */
   0,	/* no_vic */
   0,	/* update_count */
+  1,	/* b19758 */
   0,	/* b20282 */
 };
 
@@ -1883,6 +1886,13 @@ macro_build (expressionS *ep, const char *name, const char *fmt, ...)
 	  insn.cmodel.offset = va_arg (args, int);
 	  continue;
 
+	case 'P':
+	  INSERT_OPERAND (PRED, insn, va_arg (args, int));
+	  continue;
+	case 'Q':
+	  INSERT_OPERAND (SUCC, insn, va_arg (args, int));
+	  continue;
+
 	default:
 	  as_fatal (_("internal error: invalid macro"));
 	}
@@ -2690,6 +2700,68 @@ riscv_csr_read_only_check (insn_t insn)
     return FALSE;
 
   return TRUE;
+}
+
+#ifndef MASK_AQRL
+  #define MASK_AQRL (0x3u << 25)
+#endif
+
+static bfd_boolean
+is_b19758_associated_insn (struct riscv_opcode *insn)
+{
+  static insn_t lr_insns[] = {
+    MATCH_LR_W,
+    #if 0
+    MATCH_LR_D,
+    #endif
+    0
+  };
+  static insn_t amo_insns[] = {
+    MATCH_AMOSWAP_W,
+    MATCH_AMOADD_W,
+    MATCH_AMOAND_W,
+    MATCH_AMOOR_W,
+    MATCH_AMOXOR_W,
+    MATCH_AMOMAX_W,
+    MATCH_AMOMAXU_W,
+    MATCH_AMOMIN_W,
+    MATCH_AMOMINU_W,
+    #if 0
+    MATCH_AMOSWAP_D,
+    MATCH_AMOADD_D,
+    MATCH_AMOAND_D,
+    MATCH_AMOOR_D,
+    MATCH_AMOXOR_D,
+    MATCH_AMOMAX_D,
+    MATCH_AMOMAXU_D,
+    MATCH_AMOMIN_D,
+    MATCH_AMOMINU_D,
+    #endif
+    0
+  };
+  const insn_t lr_mask = MASK_LR_W | MASK_AQRL;
+  const insn_t amo_mask = MASK_AMOSWAP_W | MASK_AQRL;
+  bfd_boolean rz = FALSE;
+  int i = 0;
+
+  if (insn->mask == lr_mask) {
+    insn_t match = insn->match & ~(MASK_AQRL|0x1000);
+    while (lr_insns[i]) {
+      if (match == lr_insns[i++]) {
+        rz = TRUE;
+        break;
+      }
+    }
+  } else if (insn->mask == amo_mask) {
+    insn_t match = insn->match & ~(MASK_AQRL|0x1000);
+    while (amo_insns[i]) {
+      if (match == amo_insns[i++]) {
+        rz = TRUE;
+        break;
+      }
+    }
+  }
+  return rz;
 }
 
 static bfd_boolean
@@ -3959,12 +4031,21 @@ out:
   if (save_c)
     *(argsStart - 1) = save_c;
 
-  if ((error == NULL) && riscv_opts.b20282) {
-    if (pre_insn_is_a_cond_br && is_indirect_jump(insn)) {
-      macro_build(NULL, "nop", "");
-      pre_insn_is_a_cond_br = FALSE;
-    } else {
-      pre_insn_is_a_cond_br = is_conditional_branch(insn);
+  if (error == NULL) {
+    if (riscv_opts.b19758) {
+      if (is_b19758_associated_insn(insn)) {
+	  s = (char*)"iorw";
+	  arg_lookup (&s, riscv_pred_succ, ARRAY_SIZE (riscv_pred_succ), &regno);
+          macro_build(NULL, "fence", "P,Q", regno, regno);
+      }
+    }
+    if (riscv_opts.b20282) {
+      if (pre_insn_is_a_cond_br && is_indirect_jump(insn)) {
+        macro_build(NULL, "nop", "");
+        pre_insn_is_a_cond_br = FALSE;
+      } else {
+        pre_insn_is_a_cond_br = is_conditional_branch(insn);
+      }
     }
   }
 
@@ -4417,6 +4498,7 @@ enum options
   OPTION_MICT_MODEL,
   OPTION_MCMODEL,
   OPTION_MNO_VIC,
+  OPTION_MNO_B19758,
   OPTION_MB20282,
   OPTION_END_OF_ENUM
 };
@@ -4447,6 +4529,7 @@ struct option md_longopts[] =
   {"mict-model", required_argument, NULL, OPTION_MICT_MODEL},
   {"mcmodel", required_argument, NULL, OPTION_MCMODEL},
   {"mno-check-constraints", no_argument, NULL, OPTION_MNO_VIC},
+  {"mno-b19758", no_argument, NULL, OPTION_MNO_B19758},
   {"mb20282", no_argument, NULL, OPTION_MB20282},
 
   {NULL, no_argument, NULL, 0}
@@ -4632,6 +4715,10 @@ md_parse_option (int c, const char *arg)
     case OPTION_MNO_VIC:
       riscv_opts.no_vic = TRUE;
       opc_set_no_vic (riscv_opts.no_vic);
+      break;
+
+    case OPTION_MNO_B19758:
+	riscv_opts.b19758 = 0;
       break;
 
     case OPTION_MB20282:
