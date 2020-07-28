@@ -204,6 +204,8 @@ ace_ip (char **args, char **str, struct riscv_cl_insn *ip);
 /* { Andes */
 static void
 riscv_rvc_reloc_setting (int mode);
+static bool
+is_b19758_associated_insn (struct riscv_opcode *insn);
 /* } Andes */
 
 /* Set the default_isa_spec.  Return 0 if the spec isn't supported.
@@ -290,6 +292,7 @@ struct riscv_set_options
   int vector; /* RVV */
   int efhw; /* RVXefhw (flhw/fshw) */
   int workaround; /* Enable Andes workarounds.  */
+  int b19758; /* workaround */
   /* } Andes  */
 };
 
@@ -310,6 +313,7 @@ static struct riscv_set_options riscv_opts =
   0, /* vector */
   0, /* efhw */
   1, /* workaround */
+  1, /* b19758 */
   /* } Andes  */
 };
 
@@ -1913,6 +1917,13 @@ macro_build (expressionS *ep, const char *name, const char *fmt, ...)
 	  insn.cmodel.offset = va_arg (args, int);
 	  continue;
 	/* } Andes */
+
+	case 'P':
+	  INSERT_OPERAND (PRED, insn, va_arg (args, int));
+	  continue;
+	case 'Q':
+	  INSERT_OPERAND (SUCC, insn, va_arg (args, int));
+	  continue;
 
 	default:
 	unknown_macro_argument:
@@ -4064,6 +4075,19 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
   if (save_c)
     *(asargStart  - 1) = save_c;
 
+  if (error == NULL && riscv_opts.workaround)
+    {
+      if (riscv_opts.b19758)
+	{
+	  if (is_b19758_associated_insn (insn))
+	    {
+	      char *s = (char*) "iorw";
+	      arg_lookup (&s, riscv_pred_succ, ARRAY_SIZE (riscv_pred_succ), &regno);
+              macro_build (NULL, "fence", "P,Q", regno, regno);
+	    }
+	}
+    }
+
   return error;
 }
 
@@ -4204,6 +4228,7 @@ enum options
   OPTION_MEXT_VECTOR,
   OPTION_MEXT_EFHW,
   OPTION_MNO_WORKAROUND,
+  OPTION_MNO_B19758,
   /* } Andes  */
   OPTION_END_OF_ENUM
 };
@@ -4238,6 +4263,7 @@ struct option md_longopts[] =
   {"mext-vector", no_argument, NULL, OPTION_MEXT_VECTOR},
   {"mext-efhw", no_argument, NULL, OPTION_MEXT_EFHW},
   {"mno-workaround", no_argument, NULL, OPTION_MNO_WORKAROUND},
+  {"mno-b19758", no_argument, NULL, OPTION_MNO_B19758},
   /* } Andes  */
 
   {NULL, no_argument, NULL, 0}
@@ -4415,6 +4441,10 @@ md_parse_option (int c, const char *arg)
 
     case OPTION_MNO_WORKAROUND:
 	riscv_opts.workaround = 0;
+      break;
+
+    case OPTION_MNO_B19758:
+	riscv_opts.b19758 = 0;
       break;
 
     default:
@@ -6420,6 +6450,77 @@ riscv_rvc_reloc_setting (int mode)
 	     0x0, 0, BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN);
 }
 
+
+#ifndef MASK_AQRL
+  #define MASK_AQRL (0x3u << 25)
+#endif
+
+static bool
+is_b19758_associated_insn (struct riscv_opcode *insn)
+{
+  static insn_t lr_insns[] =
+    {
+      MATCH_LR_W,
+      #if 0
+      MATCH_LR_D,
+      #endif
+      0
+    };
+  static insn_t amo_insns[] =
+    {
+      MATCH_AMOSWAP_W,
+      MATCH_AMOADD_W,
+      MATCH_AMOAND_W,
+      MATCH_AMOOR_W,
+      MATCH_AMOXOR_W,
+      MATCH_AMOMAX_W,
+      MATCH_AMOMAXU_W,
+      MATCH_AMOMIN_W,
+      MATCH_AMOMINU_W,
+      #if 0
+      MATCH_AMOSWAP_D,
+      MATCH_AMOADD_D,
+      MATCH_AMOAND_D,
+      MATCH_AMOOR_D,
+      MATCH_AMOXOR_D,
+      MATCH_AMOMAX_D,
+      MATCH_AMOMAXU_D,
+      MATCH_AMOMIN_D,
+      MATCH_AMOMINU_D,
+      #endif
+      0
+    };
+  const insn_t lr_mask = MASK_LR_W | MASK_AQRL;
+  const insn_t amo_mask = MASK_AMOSWAP_W | MASK_AQRL;
+  bool rz = false;
+  int i = 0;
+
+  if (insn->mask == lr_mask)
+    {
+      insn_t match = insn->match & ~(MASK_AQRL|0x1000);
+      while (lr_insns[i])
+	{
+	  if (match == lr_insns[i++])
+	    {
+	      rz = true;
+	      break;
+	    }
+	}
+    }
+  else if (insn->mask == amo_mask)
+    {
+      insn_t match = insn->match & ~(MASK_AQRL|0x1000);
+      while (amo_insns[i])
+	{
+	  if (match == amo_insns[i++])
+	    {
+	      rz = true;
+	      break;
+	    }
+	}
+    }
+  return rz;
+}
 /* } Andes */
 
 /* { Andes ACE */
