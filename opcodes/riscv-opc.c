@@ -1,5 +1,5 @@
 /* RISC-V opcode list
-   Copyright (C) 2011-2019 Free Software Foundation, Inc.
+   Copyright (C) 2011-2020 Free Software Foundation, Inc.
 
    Contributed by Andrew Waterman (andrew@sifive.com).
    Based on MIPS target.
@@ -158,6 +158,19 @@ match_vs1_eq_vs2 (const struct riscv_opcode *op,
 }
 
 static int
+match_vs1_eq_vs2_neq_vm (const struct riscv_opcode *op,
+			 insn_t insn,
+			 int constraints ATTRIBUTE_UNUSED)
+{
+  //int vd = (insn & MASK_VD) >> OP_SH_VD;
+  int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
+  int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
+  //int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
+
+  return match_opcode (op, insn, 0) && vs1 == vs2;
+}
+
+static int
 match_vd_eq_vs1_eq_vs2 (const struct riscv_opcode *op,
 			insn_t insn,
 			int constraints ATTRIBUTE_UNUSED)
@@ -294,13 +307,13 @@ match_widen_vd_neq_vs1_neq_vs2_neq_vm (const struct riscv_opcode *op,
 				       insn_t insn,
 				       int constraints)
 {
-  if (opc_opts.no_vic)
-    return match_opcode (op, insn, 0);
-
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
   int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
+
+  if (!constraints)
+    return match_opcode (op, insn, 0);
 
   if (constraints
       && ((vd % 2) != 0
@@ -317,13 +330,13 @@ match_widen_vd_neq_vs1_neq_vm (const struct riscv_opcode *op,
 			       insn_t insn,
 			       int constraints)
 {
-  if (opc_opts.no_vic)
-    return match_opcode (op, insn, 0);
-
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
   int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
+
+  if (!constraints)
+    return match_opcode (op, insn, 0);
 
   if (constraints
       && ((vd % 2) != 0
@@ -340,12 +353,12 @@ match_widen_vd_neq_vs2_neq_vm (const struct riscv_opcode *op,
 			       insn_t insn,
 			       int constraints)
 {
-  if (opc_opts.no_vic)
-    return match_opcode (op, insn, 0);
-
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
   int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
+
+  if (!constraints)
+    return match_opcode (op, insn, 0);
 
   if (constraints
       && ((vd % 2) != 0
@@ -361,12 +374,12 @@ match_widen_vd_neq_vm (const struct riscv_opcode *op,
 		       insn_t insn,
 		       int constraints)
 {
-  if (opc_opts.no_vic)
-    return match_opcode (op, insn, 0);
-
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
   int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
+
+  if (!constraints)
+    return match_opcode (op, insn, 0);
 
   if (constraints
       && ((vd % 2) != 0
@@ -422,22 +435,24 @@ match_quad_vd_neq_vs2_neq_vm (const struct riscv_opcode *op,
 }
 
 static int
-match_narrow_vd_neq_vs2 (const struct riscv_opcode *op,
-			 insn_t insn,
-			 int constraints)
+match_vd_neq_vs1_neq_vs2 (const struct riscv_opcode *op,
+			  insn_t insn,
+			  int constraints)
 {
-  if (opc_opts.no_vic)
-    return match_opcode (op, insn, 0);
-
   int vd = (insn & MASK_VD) >> OP_SH_VD;
+  int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
 
-  if (constraints
-      && ((vs2 % 2) != 0
-	  || (vd >= vs2 && vd <= (vs2 + 1))))
-    return 0;
+  if (!constraints)
+    return match_opcode (op, insn, 0);
 
-  return match_opcode (op, insn, 0);
+  if (vs1 == vd)
+    ;
+  else if (vs2 == vd)
+    ;
+  else
+    return match_opcode (op, insn, 0);
+  return 0;
 }
 
 static int
@@ -445,13 +460,13 @@ match_vd_neq_vs1_neq_vs2_neq_vm (const struct riscv_opcode *op,
 				 insn_t insn,
 				 int constraints)
 {
-  if (opc_opts.no_vic)
-    return match_opcode (op, insn, 0);
-
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
   int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
+
+  if (!constraints)
+    return match_opcode (op, insn, 0);
 
   if (constraints
       && (vs1 == vd
@@ -482,19 +497,10 @@ match_vd_neq_vs2_neq_vm (const struct riscv_opcode *op,
   return match_opcode (op, insn, 0);
 }
 
-static int
-match_vd_neq_vs2 (const struct riscv_opcode *op,
-		  insn_t insn,
-		  int constraints)
-{
-  int vd = (insn & MASK_VD) >> OP_SH_VD;
-  int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
-
-   if (constraints && vs2 == vd)
-    return 0;
-
-  return match_opcode (op, insn, 0);
-}
+/* v[m]adc and v[m]sbc use the vm encoding to encode the
+   carry-in v0 register.  The carry-in v0 register can not
+   overlap with the vd, too.  Therefore, we use the same
+   match_vd_neq_vm to check the overlap constraints.  */
 
 static int
 match_vd_neq_vm (const struct riscv_opcode *op,
@@ -2389,12 +2395,12 @@ const struct riscv_opcode riscv_opcodes[] =
 {"vssra.vx",    0, {"V", 0},  "Vd,Vt,sVm", MATCH_VSSRAVX, MASK_VSSRAVX, match_opcode, 0 },
 {"vssra.vi",    0, {"V", 0},  "Vd,Vt,VjVm", MATCH_VSSRAVI, MASK_VSSRAVI, match_opcode, 0 },
 
-{"vnclipu.wv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VNCLIPUWV, MASK_VNCLIPUWV, match_narrow_vd_neq_vs2, 0 },
-{"vnclipu.wx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VNCLIPUWX, MASK_VNCLIPUWX, match_narrow_vd_neq_vs2, 0 },
-{"vnclipu.wi",   0, {"V", 0},  "Vd,Vt,VjVm", MATCH_VNCLIPUWI, MASK_VNCLIPUWI, match_narrow_vd_neq_vs2, 0 },
-{"vnclip.wv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VNCLIPWV, MASK_VNCLIPWV, match_narrow_vd_neq_vs2, 0 },
-{"vnclip.wx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VNCLIPWX, MASK_VNCLIPWX, match_narrow_vd_neq_vs2, 0 },
-{"vnclip.wi",   0, {"V", 0},  "Vd,Vt,VjVm", MATCH_VNCLIPWI, MASK_VNCLIPWI, match_narrow_vd_neq_vs2, 0 },
+{"vnclipu.wv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VNCLIPUWV, MASK_VNCLIPUWV, match_narrow_vd_neq_vs2_neq_vm, 0 },
+{"vnclipu.wx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VNCLIPUWX, MASK_VNCLIPUWX, match_narrow_vd_neq_vs2_neq_vm, 0 },
+{"vnclipu.wi",   0, {"V", 0},  "Vd,Vt,VjVm", MATCH_VNCLIPUWI, MASK_VNCLIPUWI, match_narrow_vd_neq_vs2_neq_vm, 0 },
+{"vnclip.wv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VNCLIPWV, MASK_VNCLIPWV, match_narrow_vd_neq_vs2_neq_vm, 0 },
+{"vnclip.wx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VNCLIPWX, MASK_VNCLIPWX, match_narrow_vd_neq_vs2_neq_vm, 0 },
+{"vnclip.wi",   0, {"V", 0},  "Vd,Vt,VjVm", MATCH_VNCLIPWI, MASK_VNCLIPWI, match_narrow_vd_neq_vs2_neq_vm, 0 },
 
 {"vfadd.vv",   0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFADDVV, MASK_VFADDVV, match_opcode, 0},
 {"vfadd.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFADDVF, MASK_VFADDVF, match_opcode, 0},
@@ -2496,14 +2502,14 @@ const struct riscv_opcode riscv_opcodes[] =
 {"vfwcvt.f.x.v",      0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFWCVTFXV, MASK_VFWCVTFXV, match_widen_vd_neq_vs2_neq_vm, 0},
 {"vfwcvt.f.f.v",      0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFWCVTFFV, MASK_VFWCVTFFV, match_widen_vd_neq_vs2_neq_vm, 0},
 
-{"vfncvt.xu.f.w",     0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVTXUFW, MASK_VFNCVTXUFW, match_narrow_vd_neq_vs2, 0},
-{"vfncvt.x.f.w",      0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVTXFW, MASK_VFNCVTXFW, match_narrow_vd_neq_vs2, 0},
-{"vfncvt.rtz.xu.f.w", 0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVTRTZXUFW, MASK_VFNCVTRTZXUFW, match_narrow_vd_neq_vs2, 0},
-{"vfncvt.rtz.x.f.w",  0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVTRTZXFW, MASK_VFNCVTRTZXFW, match_narrow_vd_neq_vs2, 0},
-{"vfncvt.f.xu.w",     0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVTFXUW, MASK_VFNCVTFXUW, match_narrow_vd_neq_vs2, 0},
-{"vfncvt.f.x.w",      0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVTFXW, MASK_VFNCVTFXW, match_narrow_vd_neq_vs2, 0},
-{"vfncvt.f.f.w",      0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVTFFW, MASK_VFNCVTFFW, match_narrow_vd_neq_vs2, 0},
-{"vfncvt.rod.f.f.w",  0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVTRODFFW, MASK_VFNCVTRODFFW, match_narrow_vd_neq_vs2, 0},
+{"vfncvt.xu.f.w",     0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVTXUFW, MASK_VFNCVTXUFW, match_narrow_vd_neq_vs2_neq_vm, 0},
+{"vfncvt.x.f.w",      0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVTXFW, MASK_VFNCVTXFW, match_narrow_vd_neq_vs2_neq_vm, 0},
+{"vfncvt.rtz.xu.f.w", 0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVTRTZXUFW, MASK_VFNCVTRTZXUFW, match_narrow_vd_neq_vs2_neq_vm, 0},
+{"vfncvt.rtz.x.f.w",  0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVTRTZXFW, MASK_VFNCVTRTZXFW, match_narrow_vd_neq_vs2_neq_vm, 0},
+{"vfncvt.f.xu.w",     0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVTFXUW, MASK_VFNCVTFXUW, match_narrow_vd_neq_vs2_neq_vm, 0},
+{"vfncvt.f.x.w",      0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVTFXW, MASK_VFNCVTFXW, match_narrow_vd_neq_vs2_neq_vm, 0},
+{"vfncvt.f.f.w",      0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVTFFW, MASK_VFNCVTFFW, match_narrow_vd_neq_vs2_neq_vm, 0},
+{"vfncvt.rod.f.f.w",  0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFNCVTRODFFW, MASK_VFNCVTRODFFW, match_narrow_vd_neq_vs2_neq_vm, 0},
 
 {"vredsum.vs", 0, {"V", 0}, "Vd,Vt,VsVm", MATCH_VREDSUMVS, MASK_VREDSUMVS, match_opcode, 0},
 {"vredmaxu.vs",0, {"V", 0}, "Vd,Vt,VsVm", MATCH_VREDMAXUVS, MASK_VREDMAXUVS, match_opcode, 0},
@@ -2554,22 +2560,22 @@ const struct riscv_opcode riscv_opcodes[] =
 {"vfmv.f.s",   0, {"V", "F", 0}, "D,Vt", MATCH_VFMVFS, MASK_VFMVFS, match_opcode, 0},
 {"vfmv.s.f",   0, {"V", "F", 0}, "Vd,S", MATCH_VFMVSF, MASK_VFMVSF, match_opcode, 0},
 
-{"vslideup.vx",0, {"V", 0}, "Vd,Vt,sVm", MATCH_VSLIDEUPVX, MASK_VSLIDEUPVX, match_vd_neq_vs2, 0},
-{"vslideup.vi",0, {"V", 0}, "Vd,Vt,VjVm", MATCH_VSLIDEUPVI, MASK_VSLIDEUPVI, match_vd_neq_vs2, 0},
-{"vslidedown.vx",0,{"V", 0}, "Vd,Vt,sVm", MATCH_VSLIDEDOWNVX, MASK_VSLIDEDOWNVX, match_opcode, 0},
-{"vslidedown.vi",0,{"V", 0}, "Vd,Vt,VjVm", MATCH_VSLIDEDOWNVI, MASK_VSLIDEDOWNVI, match_opcode, 0},
+{"vslideup.vx",0, {"V", 0}, "Vd,Vt,sVm", MATCH_VSLIDEUPVX, MASK_VSLIDEUPVX, match_vd_neq_vs2_neq_vm, 0},
+{"vslideup.vi",0, {"V", 0}, "Vd,Vt,VjVm", MATCH_VSLIDEUPVI, MASK_VSLIDEUPVI, match_vd_neq_vs2_neq_vm, 0},
+{"vslidedown.vx",0,{"V", 0}, "Vd,Vt,sVm", MATCH_VSLIDEDOWNVX, MASK_VSLIDEDOWNVX, match_vd_neq_vm, 0},
+{"vslidedown.vi",0,{"V", 0}, "Vd,Vt,VjVm", MATCH_VSLIDEDOWNVI, MASK_VSLIDEDOWNVI, match_vd_neq_vm, 0},
 
-{"vslide1up.vx",    0, {"V", 0}, "Vd,Vt,sVm", MATCH_VSLIDE1UPVX, MASK_VSLIDE1UPVX, match_vd_neq_vs2, 0},
-{"vslide1down.vx",  0, {"V", 0}, "Vd,Vt,sVm", MATCH_VSLIDE1DOWNVX, MASK_VSLIDE1DOWNVX, match_opcode, 0},
-{"vfslide1up.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFSLIDE1UPVF, MASK_VFSLIDE1UPVF, match_vd_neq_vs2, 0},
-{"vfslide1down.vf", 0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFSLIDE1DOWNVF, MASK_VFSLIDE1DOWNVF, match_opcode, 0},
+{"vslide1up.vx",    0, {"V", 0}, "Vd,Vt,sVm", MATCH_VSLIDE1UPVX, MASK_VSLIDE1UPVX, match_vd_neq_vs2_neq_vm, 0},
+{"vslide1down.vx",  0, {"V", 0}, "Vd,Vt,sVm", MATCH_VSLIDE1DOWNVX, MASK_VSLIDE1DOWNVX, match_vd_neq_vm, 0},
+{"vfslide1up.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFSLIDE1UPVF, MASK_VFSLIDE1UPVF, match_vd_neq_vs2_neq_vm, 0},
+{"vfslide1down.vf", 0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFSLIDE1DOWNVF, MASK_VFSLIDE1DOWNVF, match_vd_neq_vm, 0},
 
 {"vrgather.vv",    0, {"V", 0}, "Vd,Vt,VsVm", MATCH_VRGATHERVV, MASK_VRGATHERVV, match_vd_neq_vs1_neq_vs2_neq_vm, 0},
 {"vrgather.vx",    0, {"V", 0}, "Vd,Vt,sVm", MATCH_VRGATHERVX, MASK_VRGATHERVX, match_vd_neq_vs2_neq_vm, 0},
 {"vrgather.vi",    0, {"V", 0}, "Vd,Vt,VjVm", MATCH_VRGATHERVI, MASK_VRGATHERVI, match_vd_neq_vs2_neq_vm, 0},
 {"vrgatherei16.vv",0, {"V", 0}, "Vd,Vt,VsVm", MATCH_VRGATHEREI16VV, MASK_VRGATHEREI16VV, match_vd_neq_vs1_neq_vs2_neq_vm, 0},
 
-{"vcompress.vm",0, {"V", 0}, "Vd,Vt,Vs", MATCH_VCOMPRESSVM, MASK_VCOMPRESSVM, match_vd_neq_vs1_neq_vs2_neq_vm, 0},
+{"vcompress.vm",0, {"V", 0}, "Vd,Vt,Vs", MATCH_VCOMPRESSVM, MASK_VCOMPRESSVM, match_vd_neq_vs1_neq_vs2, 0},
 
 {"vmv1r.v",    0, {"V", 0}, "Vd,Vt", MATCH_VMV1RV, MASK_VMV1RV, match_vmv_nf_rv, 0},
 {"vmv2r.v",    0, {"V", 0}, "Vd,Vt", MATCH_VMV2RV, MASK_VMV2RV, match_vmv_nf_rv, 0},

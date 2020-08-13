@@ -3646,7 +3646,11 @@ jump:
 		  INSERT_OPERAND (VS2, *ip, regno);
 		  continue;
 
-		case '0': /* required vector mask register without .t */
+		/* The `V0` is carry-in register for v[m]adc and v[m]sbc,
+		   and is used to choose vs1/rs1/frs1/imm or vs2 for
+		   v[f]merge.  It use the same encoding as the vector mask
+		   register.  */
+		case '0':
 		  if (reg_lookup (&s, RCLASS_VECR, &regno) && regno == 0)
 		    continue;
 		  break;
