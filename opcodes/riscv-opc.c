@@ -456,6 +456,23 @@ match_vd_neq_vs1_neq_vs2 (const struct riscv_opcode *op,
 }
 
 static int
+match_vd_neq_vs1_neq_vs2 (const struct riscv_opcode *op,
+			  insn_t insn,
+			  int constraints)
+{
+  int vd = (insn & MASK_VD) >> OP_SH_VD;
+  int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
+  int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
+
+  if (constraints
+      && (vs1 == vd
+	  || vs2 == vd))
+    return 0;
+
+  return match_opcode (op, insn, 0);
+}
+
+static int
 match_vd_neq_vs1_neq_vs2_neq_vm (const struct riscv_opcode *op,
 				 insn_t insn,
 				 int constraints)
@@ -2548,9 +2565,9 @@ const struct riscv_opcode riscv_opcodes[] =
 
 {"vpopc.m",    0, {"V", 0}, "d,VtVm", MATCH_VPOPCM, MASK_VPOPCM, match_opcode, 0},
 {"vfirst.m",   0, {"V", 0}, "d,VtVm", MATCH_VFIRSTM, MASK_VFIRSTM, match_opcode, 0},
-{"vmsbf.m",    0, {"V", 0}, "Vd,VtVm", MATCH_VMSBFM, MASK_VMSBFM, match_opcode, 0},
-{"vmsif.m",    0, {"V", 0}, "Vd,VtVm", MATCH_VMSIFM, MASK_VMSIFM, match_opcode, 0},
-{"vmsof.m",    0, {"V", 0}, "Vd,VtVm", MATCH_VMSOFM, MASK_VMSOFM, match_opcode, 0},
+{"vmsbf.m",    0, {"V", 0}, "Vd,VtVm", MATCH_VMSBFM, MASK_VMSBFM, match_vd_neq_vs2_neq_vm, 0},
+{"vmsif.m",    0, {"V", 0}, "Vd,VtVm", MATCH_VMSIFM, MASK_VMSIFM, match_vd_neq_vs2_neq_vm, 0},
+{"vmsof.m",    0, {"V", 0}, "Vd,VtVm", MATCH_VMSOFM, MASK_VMSOFM, match_vd_neq_vs2_neq_vm, 0},
 {"viota.m",    0, {"V", 0}, "Vd,VtVm", MATCH_VIOTAM, MASK_VIOTAM, match_vd_neq_vs2_neq_vm, 0},
 {"vid.v",      0, {"V", 0}, "VdVm", MATCH_VIDV, MASK_VIDV, match_opcode, 0},
 
