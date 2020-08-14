@@ -907,7 +907,7 @@ riscv_parse_opcode (bfd_vma memaddr, insn_t word, disassemble_info *info,
       for (; op->name; op++)
 	{
 	  /* Does the opcode match?  */
-	  if (! (op->match_func) (op, word, 0))
+	  if (! (op->match_func) (op, word, 0, NULL))
 	    continue;
 	  /* Is this a pseudo-instruction and may we print it as such?  */
 	  if (no_aliases && (op->pinfo & INSN_ALIAS))
@@ -1071,7 +1071,7 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
       for (; op->name; op++)
 	{
 	  /* Does the opcode match?  */
-	  if (! (op->match_func) (op, word, 0))
+	  if (! (op->match_func) (op, word, 0, NULL))
 	    {
 	      if (!op[1].name && !op[1].mask && reordered_op[0].name)
 	        op = reordered_op - 1;

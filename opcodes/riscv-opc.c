@@ -123,7 +123,8 @@ int opc_set_no_vic (int is)
 static int
 match_opcode (const struct riscv_opcode *op,
 	      insn_t insn,
-	      int constraints ATTRIBUTE_UNUSED)
+	      int constraints ATTRIBUTE_UNUSED,
+	      const char **error ATTRIBUTE_UNUSED)
 {
   return ((insn ^ op->match) & op->mask) == 0;
 }
@@ -131,7 +132,8 @@ match_opcode (const struct riscv_opcode *op,
 static int
 match_never (const struct riscv_opcode *op ATTRIBUTE_UNUSED,
 	     insn_t insn ATTRIBUTE_UNUSED,
-	     int constraints ATTRIBUTE_UNUSED)
+	     int constraints ATTRIBUTE_UNUSED,
+	     const char **error ATTRIBUTE_UNUSED)
 {
   return 0;
 }
@@ -139,63 +141,76 @@ match_never (const struct riscv_opcode *op ATTRIBUTE_UNUSED,
 static int
 match_rs1_eq_rs2 (const struct riscv_opcode *op,
 		  insn_t insn,
-		  int constraints ATTRIBUTE_UNUSED)
+		  int constraints ATTRIBUTE_UNUSED,
+		  const char **error ATTRIBUTE_UNUSED)
 {
   int rs1 = (insn & MASK_RS1) >> OP_SH_RS1;
   int rs2 = (insn & MASK_RS2) >> OP_SH_RS2;
-  return match_opcode (op, insn, 0) && rs1 == rs2;
+  return match_opcode (op, insn, 0, NULL) && rs1 == rs2;
 }
 
 static int
 match_vs1_eq_vs2 (const struct riscv_opcode *op,
 		  insn_t insn,
-		  int constraints ATTRIBUTE_UNUSED)
+		  int constraints ATTRIBUTE_UNUSED,
+		  const char **error ATTRIBUTE_UNUSED)
 {
   int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
 
-  return match_opcode (op, insn, 0) && vs1 == vs2;
+  return match_opcode (op, insn, 0, NULL) && vs1 == vs2;
 }
 
 static int
 match_vs1_eq_vs2_neq_vm (const struct riscv_opcode *op,
 			 insn_t insn,
-			 int constraints ATTRIBUTE_UNUSED)
+			 int constraints,
+			 const char **error)
 {
-  //int vd = (insn & MASK_VD) >> OP_SH_VD;
+  int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
-  //int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
+  int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
 
-  return match_opcode (op, insn, 0) && vs1 == vs2;
+  if (!constraints || error == NULL)
+    return match_opcode (op, insn, 0, NULL) && vs1 == vs2;
+
+  if (!vm && vm == vd)
+    *error = "illegal operands vd cannot overlap vm";
+  else
+    return match_opcode (op, insn, 0, NULL) && vs1 == vs2;
+  return 0;
 }
 
 static int
 match_vd_eq_vs1_eq_vs2 (const struct riscv_opcode *op,
 			insn_t insn,
-			int constraints ATTRIBUTE_UNUSED)
+			int constraints ATTRIBUTE_UNUSED,
+			const char **error ATTRIBUTE_UNUSED)
 {
   int vd =  (insn & MASK_VD) >> OP_SH_VD;
   int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
 
-  return match_opcode (op, insn, 0) && vd == vs1 && vs1 == vs2;
+  return match_opcode (op, insn, 0, NULL) && vd == vs1 && vs1 == vs2;
 }
 
 static int
 match_rd_nonzero (const struct riscv_opcode *op,
 		  insn_t insn,
-		  int constraints ATTRIBUTE_UNUSED)
+		  int constraints ATTRIBUTE_UNUSED,
+		  const char **error ATTRIBUTE_UNUSED)
 {
-  return match_opcode (op, insn, 0) && ((insn & MASK_RD) != 0);
+  return match_opcode (op, insn, 0, NULL) && ((insn & MASK_RD) != 0);
 }
 
 static int
 match_c_add (const struct riscv_opcode *op,
 	     insn_t insn,
-	     int constraints ATTRIBUTE_UNUSED)
+	     int constraints ATTRIBUTE_UNUSED,
+	     const char **error ATTRIBUTE_UNUSED)
 {
-  return match_rd_nonzero (op, insn, 0) && ((insn & MASK_CRS2) != 0);
+  return match_rd_nonzero (op, insn, 0, NULL) && ((insn & MASK_CRS2) != 0);
 }
 
 /* We don't allow mv zero,X to become a c.mv hint, so we need a separate
@@ -204,26 +219,29 @@ match_c_add (const struct riscv_opcode *op,
 static int
 match_c_add_with_hint (const struct riscv_opcode *op,
 		       insn_t insn,
-		       int constraints ATTRIBUTE_UNUSED)
+		       int constraints ATTRIBUTE_UNUSED,
+		       const char **error ATTRIBUTE_UNUSED)
 {
-  return match_opcode (op, insn, 0) && ((insn & MASK_CRS2) != 0);
+  return match_opcode (op, insn, 0, NULL) && ((insn & MASK_CRS2) != 0);
 }
 
 static int
 match_c_nop (const struct riscv_opcode *op,
 	     insn_t insn,
-	     int constraints ATTRIBUTE_UNUSED)
+	     int constraints ATTRIBUTE_UNUSED,
+	     const char **error ATTRIBUTE_UNUSED)
 {
-  return (match_opcode (op, insn, 0)
+  return (match_opcode (op, insn, 0, NULL)
 	  && (((insn & MASK_RD) >> OP_SH_RD) == 0));
 }
 
 static int
 match_c_addi16sp (const struct riscv_opcode *op,
 		  insn_t insn,
-		  int constraints ATTRIBUTE_UNUSED)
+		  int constraints ATTRIBUTE_UNUSED,
+		  const char **error ATTRIBUTE_UNUSED)
 {
-  return (match_opcode (op, insn, 0)
+  return (match_opcode (op, insn, 0, NULL)
 	  && (((insn & MASK_RD) >> OP_SH_RD) == 2)
 	  && EXTRACT_RVC_ADDI16SP_IMM (insn) != 0);
 }
@@ -231,9 +249,10 @@ match_c_addi16sp (const struct riscv_opcode *op,
 static int
 match_c_lui (const struct riscv_opcode *op,
 	     insn_t insn,
-	     int constraints ATTRIBUTE_UNUSED)
+	     int constraints ATTRIBUTE_UNUSED,
+	     const char **error ATTRIBUTE_UNUSED)
 {
-  return (match_rd_nonzero (op, insn, 0)
+  return (match_rd_nonzero (op, insn, 0, NULL)
 	  && (((insn & MASK_RD) >> OP_SH_RD) != 2)
 	  && EXTRACT_RVC_LUI_IMM (insn) != 0);
 }
@@ -244,9 +263,10 @@ match_c_lui (const struct riscv_opcode *op,
 static int
 match_c_lui_with_hint (const struct riscv_opcode *op,
 		       insn_t insn,
-		       int constraints ATTRIBUTE_UNUSED)
+		       int constraints ATTRIBUTE_UNUSED,
+		       const char **error ATTRIBUTE_UNUSED)
 {
-  return (match_opcode (op, insn, 0)
+  return (match_opcode (op, insn, 0, NULL)
 	  && (((insn & MASK_RD) >> OP_SH_RD) != 2)
 	  && EXTRACT_RVC_LUI_IMM (insn) != 0);
 }
@@ -254,9 +274,11 @@ match_c_lui_with_hint (const struct riscv_opcode *op,
 static int
 match_c_addi4spn (const struct riscv_opcode *op,
 		  insn_t insn,
-		  int constraints ATTRIBUTE_UNUSED)
+		  int constraints ATTRIBUTE_UNUSED,
+		  const char **error ATTRIBUTE_UNUSED)
 {
-  return match_opcode (op, insn, 0) && EXTRACT_RVC_ADDI4SPN_IMM (insn) != 0;
+  return (match_opcode (op, insn, 0, NULL)
+	  && EXTRACT_RVC_ADDI4SPN_IMM (insn) != 0);
 }
 
 /* This requires a non-zero shift.  A zero rd is a hint, so is allowed.  */
@@ -264,9 +286,10 @@ match_c_addi4spn (const struct riscv_opcode *op,
 static int
 match_c_slli (const struct riscv_opcode *op,
 	      insn_t insn,
-	      int constraints ATTRIBUTE_UNUSED)
+	      int constraints ATTRIBUTE_UNUSED,
+	      const char **error ATTRIBUTE_UNUSED)
 {
-  return match_opcode (op, insn, 0) && EXTRACT_RVC_IMM (insn) != 0;
+  return match_opcode (op, insn, 0, NULL) && EXTRACT_RVC_IMM (insn) != 0;
 }
 
 /* This requires a non-zero rd, and a non-zero shift.  */
@@ -274,9 +297,11 @@ match_c_slli (const struct riscv_opcode *op,
 static int
 match_slli_as_c_slli (const struct riscv_opcode *op,
 		      insn_t insn,
-		      int constraints ATTRIBUTE_UNUSED)
+		      int constraints ATTRIBUTE_UNUSED,
+		      const char **error ATTRIBUTE_UNUSED)
 {
-  return match_rd_nonzero (op, insn, 0) && EXTRACT_RVC_IMM (insn) != 0;
+  return (match_rd_nonzero (op, insn, 0, NULL)
+	  && EXTRACT_RVC_IMM (insn) != 0);
 }
 
 /* This requires a zero shift.  A zero rd is a hint, so is allowed.  */
@@ -284,9 +309,10 @@ match_slli_as_c_slli (const struct riscv_opcode *op,
 static int
 match_c_slli64 (const struct riscv_opcode *op,
 		insn_t insn,
-		int constraints ATTRIBUTE_UNUSED)
+		int constraints ATTRIBUTE_UNUSED,
+		const char **error ATTRIBUTE_UNUSED)
 {
-  return match_opcode (op, insn, 0) && EXTRACT_RVC_IMM (insn) == 0;
+  return match_opcode (op, insn, 0, NULL) && EXTRACT_RVC_IMM (insn) == 0;
 }
 
 /* This is used for both srli and srai.  This requires a non-zero shift.
@@ -295,9 +321,10 @@ match_c_slli64 (const struct riscv_opcode *op,
 static int
 match_srxi_as_c_srxi (const struct riscv_opcode *op,
 		      insn_t insn,
-		      int constraints ATTRIBUTE_UNUSED)
+		      int constraints ATTRIBUTE_UNUSED,
+		      const char **error ATTRIBUTE_UNUSED)
 {
-  return match_opcode (op, insn, 0) && EXTRACT_RVC_IMM (insn) != 0;
+  return match_opcode (op, insn, 0, NULL) && EXTRACT_RVC_IMM (insn) != 0;
 }
 
 /* These are used to check the vector constraints.  */
@@ -305,213 +332,253 @@ match_srxi_as_c_srxi (const struct riscv_opcode *op,
 static int
 match_widen_vd_neq_vs1_neq_vs2_neq_vm (const struct riscv_opcode *op,
 				       insn_t insn,
-				       int constraints)
+				       int constraints,
+				       const char **error)
 {
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
   int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
 
-  if (!constraints)
-    return match_opcode (op, insn, 0);
+  if (!constraints || error == NULL)
+    return match_opcode (op, insn, 0, NULL);
 
-  if (constraints
-      && ((vd % 2) != 0
-	  || (vs1 >= vd && vs1 <= (vd + 1))
-	  || (vs2 >= vd && vs2 <= (vd + 1))
-	  || (!vm && vm >= vd && vm <= (vd + 1))))
-    return 0;
-
-  return match_opcode (op, insn, 0);
+  if ((vd % 2) != 0)
+    *error = "illegal operands vd must be multiple of 2";
+  else if (vs1 >= vd && vs1 <= (vd + 1))
+    *error = "illegal operands vd cannot overlap vs1";
+  else if (vs2 >= vd && vs2 <= (vd + 1))
+    *error = "illegal operands vd cannot overlap vs2";
+  else if (!vm && vm >= vd && vm <= (vd + 1))
+    *error = "illegal operands vd cannot overlap vm";
+  else
+    return match_opcode (op, insn, 0, NULL);
+  return 0;
 }
 
 static int
 match_widen_vd_neq_vs1_neq_vm (const struct riscv_opcode *op,
 			       insn_t insn,
-			       int constraints)
+			       int constraints,
+			       const char **error)
 {
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
   int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
 
-  if (!constraints)
-    return match_opcode (op, insn, 0);
+  if (!constraints || error == NULL)
+    return match_opcode (op, insn, 0, NULL);
 
-  if (constraints
-      && ((vd % 2) != 0
-	  || (vs2 % 2) != 0
-	  || (vs1 >= vd && vs1 <= (vd + 1))
-	  || (!vm && vm >= vd && vm <= (vd + 1))))
-    return 0;
-
-  return match_opcode (op, insn, 0);
+  if ((vd % 2) != 0)
+    *error = "illegal operands vd must be multiple of 2";
+  else if ((vs2 % 2) != 0)
+    *error = "illegal operands vs2 must be multiple of 2";
+  else if (vs1 >= vd && vs1 <= (vd + 1))
+    *error = "illegal operands vd cannot overlap vs1";
+  else if (!vm && vm >= vd && vm <= (vd + 1))
+    *error = "illegal operands vd cannot overlap vm";
+  else
+    return match_opcode (op, insn, 0, NULL);
+  return 0;
 }
 
 static int
 match_widen_vd_neq_vs2_neq_vm (const struct riscv_opcode *op,
 			       insn_t insn,
-			       int constraints)
+			       int constraints,
+			       const char **error)
 {
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
   int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
 
-  if (!constraints)
-    return match_opcode (op, insn, 0);
+  if (!constraints || error == NULL)
+    return match_opcode (op, insn, 0, NULL);
 
-  if (constraints
-      && ((vd % 2) != 0
-	  || (vs2 >= vd && vs2 <= (vd + 1))
-	  || (!vm && vm >= vd && vm <= (vd + 1))))
-    return 0;
-
-  return match_opcode (op, insn, 0);
+  if ((vd % 2) != 0)
+    *error = "illegal operands vd must be multiple of 2";
+  else if (vs2 >= vd && vs2 <= (vd + 1))
+    *error = "illegal operands vd cannot overlap vs2";
+  else if (!vm && vm >= vd && vm <= (vd + 1))
+    *error = "illegal operands vd cannot overlap vm";
+  else
+    return match_opcode (op, insn, 0, NULL);
+  return 0;
 }
 
 static int
 match_widen_vd_neq_vm (const struct riscv_opcode *op,
 		       insn_t insn,
-		       int constraints)
+		       int constraints,
+		       const char **error)
 {
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
   int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
 
-  if (!constraints)
-    return match_opcode (op, insn, 0);
+  if (!constraints || error == NULL)
+    return match_opcode (op, insn, 0, NULL);
 
-  if (constraints
-      && ((vd % 2) != 0
-	  || (vs2 % 2) != 0
-	  || (!vm && vm >= vd && vm <= (vd + 1))))
-    return 0;
+  if ((vd % 2) != 0)
+    *error = "illegal operands vd must be multiple of 2";
+  else if ((vs2 % 2) != 0)
+    *error = "illegal operands vs2 must be multiple of 2";
+  else if (!vm && vm >= vd && vm <= (vd + 1))
+    *error = "illegal operands vd cannot overlap vm";
+  else
+    return match_opcode (op, insn, 0, NULL);
+  return 0;
+}
 
-  return match_opcode (op, insn, 0);
+static int
+match_narrow_vd_neq_vs2_neq_vm (const struct riscv_opcode *op,
+				insn_t insn,
+				int constraints,
+				const char **error)
+{
+  int vd = (insn & MASK_VD) >> OP_SH_VD;
+  int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
+  int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
+
+  if (!constraints || error == NULL)
+    return match_opcode (op, insn, 0, NULL);
+
+  if ((vs2 % 2) != 0)
+    *error = "illegal operands vd must be multiple of 2";
+  else if (vd >= vs2 && vd <= (vs2 + 1))
+    *error = "illegal operands vd cannot overlap vs2";
+  else if (!vm && vd >= vm && vd <= (vm + 1))
+    *error = "illegal operands vd cannot overlap vm";
+  else
+    return match_opcode (op, insn, 0, NULL);
+  return 0;
 }
 
 static int
 match_quad_vd_neq_vs1_neq_vs2_neq_vm (const struct riscv_opcode *op,
 				      insn_t insn,
-				      int constraints)
+				      int constraints,
+				      const char **error)
 {
   if (opc_opts.no_vic)
-    return match_opcode (op, insn, 0);
+    return match_opcode (op, insn, 0, NULL);
 
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
   int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
 
-  if (constraints
-      && ((vd % 4) != 0
-	  || (vs1 >= vd && vs1 <= (vd + 3))
-	  || (vs2 >= vd && vs2 <= (vd + 3))
-	  || (!vm && vm >= vd && vm <= (vd + 3))))
-    return 0;
+  if (!constraints || error == NULL)
+    return match_opcode (op, insn, 0, NULL);
 
-  return match_opcode (op, insn, 0);
+  if ((vd % 4) != 0)
+    *error = "illegal operands vd must be multiple of 4";
+  else if (vs1 >= vd && vs1 <= (vd + 3))
+    *error = "illegal operands vd cannot overlap vs1";
+  else if (vs2 >= vd && vs2 <= (vd + 3))
+    *error = "illegal operands vd cannot overlap vs2";
+  else if (!vm && vm >= vd && vm <= (vd + 3))
+    *error = "illegal operands vd cannot overlap vm";
+  else
+    return match_opcode (op, insn, 0, NULL);
+  return 0;
 }
 
 static int
 match_quad_vd_neq_vs2_neq_vm (const struct riscv_opcode *op,
 			      insn_t insn,
-			      int constraints)
+			      int constraints,
+			      const char **error)
 {
   if (opc_opts.no_vic)
-    return match_opcode (op, insn, 0);
+    return match_opcode (op, insn, 0, NULL);
 
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
   int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
 
-  if (constraints
-      && ((vd % 4) != 0
-	  || (vs2 >= vd && vs2 <= (vd + 3))
-	  || (!vm && vm >= vd && vm <= (vd + 3))))
-    return 0;
+  if (!constraints || error == NULL)
+    return match_opcode (op, insn, 0, NULL);
 
-  return match_opcode (op, insn, 0);
-}
-
-static int
-match_vd_neq_vs1_neq_vs2 (const struct riscv_opcode *op,
-			  insn_t insn,
-			  int constraints)
-{
-  int vd = (insn & MASK_VD) >> OP_SH_VD;
-  int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
-  int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
-
-  if (!constraints)
-    return match_opcode (op, insn, 0);
-
-  if (vs1 == vd)
-    ;
-  else if (vs2 == vd)
-    ;
+  if ((vd % 4) != 0)
+    *error = "illegal operands vd must be multiple of 4";
+  else if (vs2 >= vd && vs2 <= (vd + 3))
+    *error = "illegal operands vd cannot overlap vs2";
+  else if (!vm && vm >= vd && vm <= (vd + 3))
+    *error = "illegal operands vd cannot overlap vm";
   else
-    return match_opcode (op, insn, 0);
+    return match_opcode (op, insn, 0, NULL);
   return 0;
 }
 
 static int
 match_vd_neq_vs1_neq_vs2 (const struct riscv_opcode *op,
 			  insn_t insn,
-			  int constraints)
+			  int constraints,
+			  const char **error)
 {
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
 
-  if (constraints
-      && (vs1 == vd
-	  || vs2 == vd))
-    return 0;
+  if (!constraints || error == NULL)
+    return match_opcode (op, insn, 0, NULL);
 
-  return match_opcode (op, insn, 0);
+  if (vs1 == vd)
+    *error = "illegal operands vd cannot overlap vs1";
+  else if (vs2 == vd)
+    *error = "illegal operands vd cannot overlap vs2";
+  else
+    return match_opcode (op, insn, 0, NULL);
+  return 0;
 }
 
 static int
 match_vd_neq_vs1_neq_vs2_neq_vm (const struct riscv_opcode *op,
 				 insn_t insn,
-				 int constraints)
+				 int constraints,
+				 const char **error)
 {
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
   int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
 
-  if (!constraints)
-    return match_opcode (op, insn, 0);
+  if (!constraints || error == NULL)
+    return match_opcode (op, insn, 0, NULL);
 
-  if (constraints
-      && (vs1 == vd
-	  || vs2 == vd
-	  || (!vm && vm == vd)))
-    return 0;
-
-  return match_opcode (op, insn, 0);
+  if (vs1 == vd)
+    *error = "illegal operands vd cannot overlap vs1";
+  else if (vs2 == vd)
+    *error = "illegal operands vd cannot overlap vs2";
+  else if (!vm && vm == vd)
+    *error = "illegal operands vd cannot overlap vm";
+  else
+    return match_opcode (op, insn, 0, NULL);
+  return 0;
 }
 
 static int
 match_vd_neq_vs2_neq_vm (const struct riscv_opcode *op,
 			 insn_t insn,
-			 int constraints)
+			 int constraints,
+			 const char **error)
 {
-  if (opc_opts.no_vic)
-    return match_opcode (op, insn, 0);
-
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
   int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
 
-   if (constraints
-      && (vs2 == vd
-	  || (!vm && vm == vd)))
-    return 0;
+  if (!constraints || error == NULL)
+    return match_opcode (op, insn, 0, NULL);
 
-  return match_opcode (op, insn, 0);
+  if (vs2 == vd)
+    *error = "illegal operands vd cannot overlap vs2";
+  else if (!vm && vm == vd)
+    *error = "illegal operands vd cannot overlap vm";
+  else
+    return match_opcode (op, insn, 0, NULL);
+  return 0;
 }
 
 /* v[m]adc and v[m]sbc use the vm encoding to encode the
@@ -522,38 +589,61 @@ match_vd_neq_vs2_neq_vm (const struct riscv_opcode *op,
 static int
 match_vd_neq_vm (const struct riscv_opcode *op,
 		 insn_t insn,
-		 int constraints)
+		 int constraints,
+		 const char **error)
 {
-  if (opc_opts.no_vic)
-    return match_opcode (op, insn, 0);
-
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
 
-  if (constraints && !vm && vm == vd)
-    return 0;
+  if (!constraints || error == NULL)
+    return match_opcode (op, insn, 0, NULL);
 
-  return match_opcode (op, insn, 0);
+  if (!vm && vm == vd)
+    *error = "illegal operands vd cannot overlap vm";
+  else
+    return match_opcode (op, insn, 0, NULL);
+  return 0;
+}
+
+static int
+match_vls_nf_rv (const struct riscv_opcode *op,
+		 insn_t insn,
+		 int constraints,
+		 const char **error)
+{
+  int vd = (insn & MASK_VD) >> OP_SH_VD;
+  int nf = ((insn & (0x7 << 29) ) >> 29) + 1;
+
+  if (!constraints || error == NULL)
+    return match_opcode (op, insn, 0, NULL);
+
+  if ((vd % nf) != 0)
+    *error = "illegal operands vd must be multiple of nf";
+  else
+    return match_opcode (op, insn, 0, NULL);
+  return 0;
 }
 
 static int
 match_vmv_nf_rv (const struct riscv_opcode *op,
 		 insn_t insn,
-		 int constraints)
+		 int constraints,
+		 const char **error)
 {
-  if (opc_opts.no_vic)
-    return match_opcode (op, insn, 0);
-
   int vd = (insn & MASK_VD) >> OP_SH_VD;
   int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
   int nf = ((insn & (0x7 << 15) ) >> 15) + 1;
 
-  if (constraints
-      && ((vd % nf) != 0
-	  || (vs2 % nf) != 0))
-    return 0;
+  if (!constraints || error == NULL)
+    return match_opcode (op, insn, 0, NULL);
 
-  return match_opcode (op, insn, 0);
+  if ((vd % nf) != 0)
+    *error = "illegal operands vd must be multiple of nf";
+  else if ((vs2 % nf) != 0)
+    *error = "illegal operands vs2 must be multiple of nf";
+  else
+    return match_opcode (op, insn, 0, NULL);
+  return 0;
 }
 
 const struct riscv_opcode riscv_opcodes[] =
