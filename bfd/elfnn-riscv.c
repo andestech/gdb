@@ -4027,15 +4027,6 @@ riscv_relax_delete_bytes (bfd *abfd, asection *sec, bfd_vma addr, size_t count,
       Elf_Internal_Sym *sym = (Elf_Internal_Sym *) symtab_hdr->contents + i;
       if (sym->st_shndx == sec_shndx)
 	{
-	  /* Maybe we should adjust symbol size before adjusting symbol value.  */
-	  /* If the symbol *spans* the bytes we just deleted (i.e. its
-	   *end* is in the moved bytes but its *start* isn't), then we
-	   must adjust its size.  */
-	  if (sym->st_value <= addr
-	      && sym->st_value + sym->st_size > addr
-	      && sym->st_value + sym->st_size <= toaddr)
-	    sym->st_size -= count;
-
 	  /* If the symbol is in the range of memory we just moved, we
 	     have to adjust its value.  */
 	  if (sym->st_value > addr && sym->st_value <= toaddr)
