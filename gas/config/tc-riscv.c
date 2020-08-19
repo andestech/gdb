@@ -2597,8 +2597,8 @@ my_getVsetvliExpression (expressionS *ep, char *str)
       ep->X_add_number = (vediv_value << OP_SH_VEDIV)
 			 | (vsew_value << OP_SH_VSEW)
 			 | (vta_value << OP_SH_VTA)
-			 | (vma_value << OP_SH_VMA) ;
-      INSERT_VLMUL (ep->X_add_number, vlmul_value);
+			 | (vma_value << OP_SH_VMA)
+			 | (vlmul_value << OP_SH_VLMUL);
       expr_end = str;
       return;
     }

@@ -447,10 +447,10 @@ static const char * const riscv_vma[2] =
 #define OP_MASK_VFUNCT6		0x3f
 #define OP_SH_VFUNCT6		26
 
-#define OP_MASK_VLMUL		0x23
+#define OP_MASK_VLMUL		0x7
 #define OP_SH_VLMUL		0
 #define OP_MASK_VSEW		0x7
-#define OP_SH_VSEW		2
+#define OP_SH_VSEW		3
 #define OP_MASK_VEDIV		0x3
 #define OP_SH_VEDIV		8
 #define OP_MASK_VTYPE_RES	0x1
@@ -503,11 +503,6 @@ static const char * const riscv_vma[2] =
 /* Extract the operand given by FIELD from integer INSN.  */
 #define EXTRACT_OPERAND(FIELD, INSN) \
   EXTRACT_BITS ((INSN), OP_MASK_##FIELD, OP_SH_##FIELD)
-
-/* Extract the vlmul value from vsetvli instrucion.  */
-#define EXTRACT_VLMUL(INSN) \
-  (((EXTRACT_OPERAND (VLMUL, INSN) >> 5) << 2) \
-   | (EXTRACT_OPERAND (VLMUL, INSN) & 0x3))
 
 /* The maximal number of subset can be required. */
 #define MAX_SUBSET_NUM 4
