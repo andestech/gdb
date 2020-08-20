@@ -1691,7 +1691,18 @@ riscv_parse_std_ext (riscv_parse_subset_t *rps,
   return p;
 }
 
-/* Classify the argument 'arch' into one of riscv_isa_ext_class_t.  */
+typedef struct {
+  const char *name;
+  const int major;
+  const int minor;
+} default_version_t;
+
+static default_version_t non_std_ext_d4_versions[] = {
+  {"xandes", 5, 0}, /* don't change index of this item */
+  {"xefhw", 1, 0},
+  {"zfh", 0, 0},
+  {NULL}
+};
 
 riscv_isa_ext_class_t
 riscv_get_prefix_class (const char *arch)
@@ -1756,37 +1767,20 @@ riscv_parse_prefixed_ext (riscv_parse_subset_t *rps,
       if (class != config->class)
 	break;
 
-      /* look ahead for xv5{-XpY} */
-      if (strncasecmp(p, "xv5", 3) == 0)
-	{
-	  p += 3;
-	  if (*p == '-')
-	    {
-	      p = riscv_parsing_subset_version (
-		    rps,
-		    march,
-		    p + 1, &major_version, &minor_version,
-		    /* default_major_version= */ 1,
-		    /* default_minor_version= */ 1,
-		    /* std_ext_p= */FALSE);
-	    }
-	  else
-	    {
-	      major_version = 1; /* default version 1p1  */
-	      minor_version = 1;
-	    }
-	  riscv_add_subset (rps->subset_list, "xv5-", major_version, minor_version);
-	  continue;
-	}
-
       /* general non-standard extensions */
       char *subset = xstrdup (p);
       char *q = subset;
       const char *end_of_version;
+      char *effect_subset = subset;
+      int is_xv5 = 0;
 
-      /* lower case for case non-sensitive.  */
-      for ( ; *q; ++q) *q = TOLOWER(*q);
-      q = subset;
+      /* parse xv5 specially  */
+      if (strncasecmp(subset, "xv5", 3) == 0)
+        {
+	  is_xv5 = 1;
+	  effect_subset = non_std_ext_d4_versions[0].name;
+	  q += 2;
+	}
 
       while (*++q != '\0' && *q != '_' && !ISDIGIT (*q))
 	;
@@ -1802,59 +1796,32 @@ riscv_parse_prefixed_ext (riscv_parse_subset_t *rps,
 
       *q = '\0';
 
-      /* x_efhw default version is 1p0 */
-      if ((end_of_version == q) && !strcasecmp(subset, "xefhw"))
+      /* enforce default versions  */
+      if (end_of_version == q)
 	{
-	  major_version = 1;
-	  minor_version = 0;
+	  default_version_t *p = &non_std_ext_d4_versions;
+	  while (p->name)
+	    {
+	      if (strcasecmp(effect_subset, p->name) == 0)
+		{
+		  major_version = p->major;
+		  minor_version = p->minor;
+		  break;
+		}
+		p++;
+	    }
 	}
-      /* z_fh default version is 0p0 */
-      else if ((end_of_version == q) && !strcasecmp(subset, "zfh"))
+      else
 	{
-	  major_version = 0;
-	  minor_version = 0;
-	}
-
-      /* Check that the name is valid.
-	 For 'x', anything goes but it cannot simply be 'x'.
-	 For 's', it must be known from a list and cannot simply be 's'.
-	 For 'z', it must be known from a list and cannot simply be 'z'.  */
-
-      /* Check that the extension name is well-formed.  */
-      if (!config->ext_valid_p (subset))
-	{
-	  rps->error_handler
-	    ("-march=%s: Invalid or unknown %s ISA extension: '%s'",
-	     march, config->prefix, subset);
-	  free (subset);
-	  return NULL;
+	  /* convert Xv5-?p? to Xandes5p0  */
+	  if (is_xv5)
+	    {
+	      major_version = non_std_ext_d4_versions[0].major;
+	      minor_version = non_std_ext_d4_versions[0].minor;
+	    }
 	}
 
-      /* Check that the last item is not the same as this.  */
-      last_name = rps->subset_list->tail->name;
-
-      if (!strcasecmp (last_name, subset))
-	{
-	  rps->error_handler ("-march=%s: Duplicate %s ISA extension: \'%s\'",
-			      march, config->prefix, subset);
-	  free (subset);
-	  return NULL;
-	}
-
-#if 0
-      /* Check that we are in alphabetical order within the subset.  */
-      if (!strncasecmp (last_name, config->prefix, 1)
-	  && strcasecmp (last_name, subset) > 0)
-	{
-	  rps->error_handler ("-march=%s: %s ISA extension not in alphabetical "
-			      "order: \'%s\' must come before \'%s\'.",
-			      march, config->prefix, subset, last_name);
-	  free (subset);
-	  return NULL;
-	}
-#endif
-
-      riscv_add_subset (rps->subset_list, subset, major_version, minor_version);
+      riscv_add_subset (rps->subset_list, effect_subset, major_version, minor_version);
       free (subset);
       p += end_of_version - subset;
 
