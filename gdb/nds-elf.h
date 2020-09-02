@@ -291,7 +291,8 @@ static const char *base_isas[BASE_ISA_COUNT] =
 static const char *riscv_extensions = "MAFDQLCBJTPVNXZSH"; // It will be updated to "MAFDQLCBJTPVNZSHX" in the future.
 
 // RISC-V Non-standard extensions
-static const char *riscv_x_extensions[] = { "Xv5-", "xdsp", "xefhw" };
+// "xandes" is equals to "Xv5-"(old version)
+static const char *riscv_x_extensions[] = { "xandes", "Xv5-", "xdsp", "xefhw" };
 
 
 
@@ -304,6 +305,7 @@ enum RISCV_EXT
 enum RISCV_X_EXT
 {
   X_EXT_V5,
+  X_EXT_V5_OLD,
   X_EXT_DSP,
   X_EXT_FHW,
   X_EXT_COUNT
@@ -375,11 +377,17 @@ set_riscv_x_ext_info (const char *ext, int major, int minor)
 {
   nds_info.ext_use[EXT_X] = true;
 
-  if (strncmp (ext, riscv_x_extensions[X_EXT_V5], 4) == 0)
+  if (strncmp (ext, riscv_x_extensions[X_EXT_V5], 6) == 0)
     {
       nds_info.x_ext_use[X_EXT_V5] = true;
       nds_info.x_ext_major[X_EXT_V5] = major;
       nds_info.x_ext_minor[X_EXT_V5] = minor;
+    }
+  else if (strncmp (ext, riscv_x_extensions[X_EXT_V5_OLD], 4) == 0)
+    {
+      nds_info.x_ext_use[X_EXT_V5_OLD] = true;
+      nds_info.x_ext_major[X_EXT_V5_OLD] = major;
+      nds_info.x_ext_minor[X_EXT_V5_OLD] = minor;
     }
   else if (strncmp (ext, riscv_x_extensions[X_EXT_DSP], 4) == 0)
     {
@@ -492,8 +500,12 @@ print_riscv_isa_version (void)
 
   /* Non standard (X) Extension. */
   if (get_riscv_ext_info_i (EXT_X, &use, &major, &minor) != -1 && use)
+  {
     if (get_riscv_x_ext_info_i (X_EXT_V5, &use, &major, &minor) != -1 && use)
       printf ("%s v%d.%d\n", riscv_x_extensions[X_EXT_V5], major, minor);
+    else if (get_riscv_x_ext_info_i (X_EXT_V5_OLD, &use, &major, &minor) != -1 && use)
+      printf ("%s v%d.%d\n", riscv_x_extensions[X_EXT_V5_OLD], major, minor);
+  }
 #endif
 }
 
@@ -759,28 +771,34 @@ parse_riscv_isa_string (const char *s)
 	}
       else
 	{
-	  char x_ext[6] = { 0 };
+	  char x_ext[8] = { 0 };
 	  // For multi-letter extensions, it is followed by multiple alphabets and the version.
 
 	  // We speically handle xv5- here because it contains a
 	  // dash which may confuse the parser.
-	  if (strncasecmp (s, "Xv5-", 4) == 0)
+	  if (strncasecmp (s, "xandes", 6) == 0)
+	    {
+	      print_indent ("%.6s ", s);
+	      s += 6;
+	      strncpy (x_ext, riscv_x_extensions[X_EXT_V5], 8);
+	    }
+	  else if (strncasecmp (s, "Xv5-", 4) == 0)
 	    {
 	      print_indent ("%.4s ", s);
 	      s += 4;
-	      strncpy (x_ext, riscv_x_extensions[X_EXT_V5], 6);
+	      strncpy (x_ext, riscv_x_extensions[X_EXT_V5_OLD], 8);
 	    }
 	  else if (strncasecmp (s, "xdsp", 4) == 0)
 	    {
 	      print_indent ("%.4s ", s);
 	      s += 4;
-	      strncpy (x_ext, riscv_x_extensions[X_EXT_DSP], 6);
+	      strncpy (x_ext, riscv_x_extensions[X_EXT_DSP], 8);
 	    }
 	  else if (strncasecmp (s, "xefhw", 5) == 0)
 	    {
 	      print_indent ("%.5s ", s);
 	      s += 5;
-	      strncpy (x_ext, riscv_x_extensions[X_EXT_FHW], 6);
+	      strncpy (x_ext, riscv_x_extensions[X_EXT_FHW], 8);
 	    }
 	  else
 	    {
@@ -1148,6 +1166,13 @@ elf_check (void *file_data, unsigned int file_size,
 
   /* Non-standard extension. */
   if (elf_use_ext_i (X_EXT_V5, false))
+    {
+      if (NEC_check_bool (EFT_ERROR, "V5 Extension",
+			  cpu_support_v5_ext (CSR_mmsc_cfg), true))
+	n_error++;
+    }
+
+  if (elf_use_ext_i (X_EXT_V5_OLD, false))
     {
       if (NEC_check_bool (EFT_ERROR, "V5 Extension",
 			  cpu_support_v5_ext (CSR_mmsc_cfg), true))
