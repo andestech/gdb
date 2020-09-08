@@ -7171,8 +7171,9 @@ riscv_elf_execit_replace_instruction (struct bfd_link_info *link_info,
 			  && execit_insn->irel->r_info == irel->r_info)
 			{
 			  insn_pc = sec_addr (sec) + off;
-			  relocation = isec->output_section->vma + isec->output_offset
-			    + st_value + irel->r_addend;
+			  relocation = (isec == NULL) ? 0 :
+			    (isec->output_section->vma + isec->output_offset);
+			  relocation += st_value + irel->r_addend;
 			  if (execit_check_pchi_for_jal (relocation, insn_pc))
 			    {
 			      do_replace = 1;
@@ -7954,8 +7955,9 @@ riscv_elf_execit_build_hash_table (bfd *abfd, asection *sec,
 
 		  bfd_vma st_value = (isym + r_symndx)->st_value;
 		  isec = elf_elfsections (abfd)[shndx]->bfd_section;
-		  relocation = (isec->output_section->vma + isec->output_offset
-				+ st_value + irel->r_addend);
+		  relocation = (isec == NULL) ? 0 :
+		    (isec->output_section->vma + isec->output_offset);
+		  relocation += st_value + irel->r_addend;
 		}
 	      else
 		{
