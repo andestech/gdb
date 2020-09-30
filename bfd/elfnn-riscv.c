@@ -4506,6 +4506,7 @@ _bfd_riscv_relax_lui_gp_insn (bfd *abfd,
 			      bfd_vma reserve_size,
 			      bfd_boolean *again ATTRIBUTE_UNUSED,
 			      riscv_pcgp_relocs *pcgp_relocs ATTRIBUTE_UNUSED,
+			      bfd_boolean undefined_weak,
 			      bfd_boolean rvc ATTRIBUTE_UNUSED)
 {
   bfd_byte *contents = elf_section_data (sec)->this_hdr.contents;
@@ -4516,13 +4517,6 @@ _bfd_riscv_relax_lui_gp_insn (bfd *abfd,
   Elf_Internal_Shdr *symtab_hdr = &elf_symtab_hdr (abfd);
   Elf_Internal_Sym *isym = NULL;
   struct elf_link_hash_entry *h = NULL;
-
-  /* Mergeable symbols and code might later move out of range.  */
-  /* For bug-14274, symbols defined in the .rodata (the sections
-     before .data, may also later move out of range.  */
-  if (sym_sec->flags & (SEC_MERGE | SEC_CODE)
-      || (data_start && sec_addr (sym_sec) < data_start))
-    return TRUE;
 
   BFD_ASSERT (rel->r_offset + 4 <= sec->size);
 
@@ -4588,8 +4582,9 @@ _bfd_riscv_relax_lui_gp_insn (bfd *abfd,
   int do_replace = 0;
   uint32_t insn = bfd_get_32 (abfd, contents + rel->r_offset);
   /* For Bug-16488, check if gp-relative offset is in range.  */
-  if ((symval >= gp
-       && (symval - gp + max_alignment + reserve_size) < 0x20000)
+  if (undefined_weak
+      || (symval >= gp
+	  && (symval - gp + max_alignment + reserve_size) < 0x20000)
       || (symval < gp
 	  && (gp - symval + max_alignment + reserve_size) <= 0x20000))
     {
@@ -4718,8 +4713,6 @@ _bfd_riscv_relax_lui (bfd *abfd,
   bfd_vma gp = riscv_global_pointer_value (link_info);
   bfd_vma data_start = riscv_data_start_value (link_info);
 
-  /* FIXME: For bug-14274, symbols defined in the .rodata (the sections
-     before .data, may also later move out of range.  */
   BFD_ASSERT (rel->r_offset + 4 <= sec->size);
 
   if (gp)
@@ -4748,10 +4741,18 @@ _bfd_riscv_relax_lui (bfd *abfd,
 	case R_RISCV_LO12_I:
 	  if (undefined_weak)
 	    {
-	      /* Change the RS1 to zero.  */
-	      bfd_vma insn = bfd_get_32 (abfd, contents + rel->r_offset);
-	      insn &= ~(OP_MASK_RS1 << OP_SH_RS1);
-	      bfd_put_32 (abfd, insn, contents + rel->r_offset);
+	      if (rvc)
+		{
+		  rel->r_info = ELFNN_R_INFO (ELFNN_R_SYM (rel->r_info), R_RISCV_RVC_LUI);
+		  riscv_relax_delete_bytes (abfd, sec, rel->r_offset + 2, 2, link_info);
+		}
+	      else
+		{
+		  /* Change the RS1 to zero.  */
+		  bfd_vma insn = bfd_get_32 (abfd, contents + rel->r_offset);
+		  insn &= ~(OP_MASK_RS1 << OP_SH_RS1);
+		  bfd_put_32 (abfd, insn, contents + rel->r_offset);
+		}
 	    }
 	  else
 	    rel->r_info = ELFNN_R_INFO (sym, R_RISCV_GPREL_I);
@@ -4760,10 +4761,18 @@ _bfd_riscv_relax_lui (bfd *abfd,
 	case R_RISCV_LO12_S:
 	  if (undefined_weak)
 	    {
-	      /* Change the RS1 to zero.  */
-	      bfd_vma insn = bfd_get_32 (abfd, contents + rel->r_offset);
-	      insn &= ~(OP_MASK_RS1 << OP_SH_RS1);
-	      bfd_put_32 (abfd, insn, contents + rel->r_offset);
+	      if (rvc)
+		{
+		  rel->r_info = ELFNN_R_INFO (ELFNN_R_SYM (rel->r_info), R_RISCV_RVC_LUI);
+		  riscv_relax_delete_bytes (abfd, sec, rel->r_offset + 2, 2, link_info);
+		}
+	      else
+		{
+		  /* Change the RS1 to zero.  */
+		  bfd_vma insn = bfd_get_32 (abfd, contents + rel->r_offset);
+		  insn &= ~(OP_MASK_RS1 << OP_SH_RS1);
+		  bfd_put_32 (abfd, insn, contents + rel->r_offset);
+		}
 	    }
 	  else
 	    rel->r_info = ELFNN_R_INFO (sym, R_RISCV_GPREL_S);
