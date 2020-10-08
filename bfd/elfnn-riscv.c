@@ -2117,10 +2117,9 @@ riscv_elf_relocate_section (bfd *output_bfd,
 	       && r_type != R_RISCV_ICT_64)
 	{
 	  (*_bfd_error_handler)
-	    (_("%pB: Error: there are mixed indirect call function \'%s\' "
+	    (_("%pB: warning: there are mixed indirect call function \'%s\' "
 	       "in the ICT model\n"),
 	     input_bfd, h->root.root.string);
-	  return FALSE;
 	}
 
       switch (r_type)
