@@ -8130,7 +8130,7 @@ riscv_elf_execit_itb_base (struct bfd_link_info *link_info)
   bfd *output_bfd = NULL;
   struct bfd_link_hash_entry *bh = NULL;
 
-  if (is_ITB_BASE_set == 1)
+  if (is_ITB_BASE_set == 1 || link_info->type == type_relocatable)
     return TRUE;
 
   is_ITB_BASE_set = 1;
