@@ -95,7 +95,10 @@ enum
   DATA_EXIST = 1,
   /* For checking EXECIT with alignment.  */
   ALIGN_CLEAN_PRE = 1 << 1,
-  ALIGN_PUSH_PRE = 1 << 2
+  ALIGN_PUSH_PRE = 1 << 2,
+  RELAX_REGION_END = 1 << 3,
+  SYMBOL_RELOCATION = 1 << 4,
+  DUMMY
 };
 
 /* Helper functions for Rom Patch and ICT.  */
@@ -7001,6 +7004,7 @@ riscv_elf_execit_replace_instruction (struct bfd_link_info *link_info,
   struct elf_link_hash_entry **sym_hashes = elf_sym_hashes (abfd);
   int data_flag, do_replace, save_irel;
   struct elf_link_hash_entry_list *h_list;
+  int is_on_relocation;
 
   /* Load section instructions, relocations, and symbol table.  */
   if (!riscv_get_section_contents (abfd, sec, &contents, TRUE)
@@ -7090,13 +7094,19 @@ riscv_elf_execit_replace_instruction (struct bfd_link_info *link_info,
       execit_insn = execit_insn_head;
       insn = bfd_get_32 (abfd, contents + off);
       insn_with_reg = 0;
-      int is_on_relocation = FALSE;
+      is_on_relocation = FALSE;
 
-      if (irel != NULL && irel < irelend && irel->r_offset == off)
+      if (irel != NULL &&
+          irel < irelend &&
+	  irel->r_offset == off &&
+	  data_flag & SYMBOL_RELOCATION)
 	is_on_relocation = TRUE;
 
-      if (is_on_relocation == TRUE)
-	riscv_elf_get_insn_with_reg (abfd, irel, insn, &insn_with_reg);
+      if (is_on_relocation)
+	if (data_flag & SYMBOL_RELOCATION)
+	  riscv_elf_get_insn_with_reg (abfd, irel, insn, &insn_with_reg);
+	else
+	  riscv_elf_get_insn_with_reg (abfd, NULL, insn, &insn_with_reg);
 
       while (execit_insn)
 	{
@@ -7105,7 +7115,7 @@ riscv_elf_execit_replace_instruction (struct bfd_link_info *link_info,
 	  do_replace = 0;
 	  save_irel = 0;
 
-      if (is_on_relocation == TRUE)
+	  if (is_on_relocation == TRUE)
 	    riscv_elf_get_insn_with_reg (abfd, execit_insn->irel, it_insn, &it_insn_with_reg);
 
 	  if (is_on_relocation
@@ -7154,7 +7164,7 @@ riscv_elf_execit_replace_instruction (struct bfd_link_info *link_info,
 			}
 		    }
 		}
-	      if (ELFNN_R_TYPE (irel->r_info) == R_RISCV_JAL)
+	      else if (ELFNN_R_TYPE (irel->r_info) == R_RISCV_JAL)
 		{
 		  bfd_vma insn_pc, relocation;
 		  r_symndx = ELFNN_R_SYM (irel->r_info);
@@ -7261,8 +7271,8 @@ riscv_elf_execit_replace_instruction (struct bfd_link_info *link_info,
 		    }
 		}
 	    }
-	  else if (!is_on_relocation
-		   && insn == it_insn && execit_insn->irel == NULL)
+	  else if ((!is_on_relocation &&
+		     insn == it_insn && execit_insn->irel == NULL))
 	    {
 	      /* Instruction without relocation, we only
 		 have to compare their byte code.  */
@@ -7862,6 +7872,7 @@ riscv_elf_execit_build_hash_table (bfd *abfd, asection *sec,
   int data_flag;
   bfd_vma relocation;
   struct riscv_elf_link_hash_table *table;
+  int is_on_relocation;
 
   sym_hashes = elf_sym_hashes (abfd);
   /* Load the input section instructions, relocations, and symbol table.  */
@@ -7923,6 +7934,10 @@ riscv_elf_execit_build_hash_table (bfd *abfd, asection *sec,
 	  continue;
 	}
 
+      is_on_relocation = FALSE;
+      if (irel != NULL && irel < irelend && irel->r_offset == off)
+	is_on_relocation = TRUE;
+
       h = NULL;
       isec = NULL;
       jrel = NULL;
@@ -7931,9 +7946,16 @@ riscv_elf_execit_build_hash_table (bfd *abfd, asection *sec,
       rel_backup.r_addend = 0;
       /* Load the instruction and its opcode with register for comparing.  */
       insn_with_reg = 0;
-      if (irel != NULL && irel < irelend && irel->r_offset == off)
+      if (is_on_relocation)
 	{
-	  riscv_elf_get_insn_with_reg (abfd, irel, insn, &insn_with_reg);
+	  if (data_flag & SYMBOL_RELOCATION)
+	    riscv_elf_get_insn_with_reg (abfd, irel, insn, &insn_with_reg);
+	  else
+	    {
+	      riscv_elf_get_insn_with_reg (abfd, NULL, insn, &insn_with_reg);
+	      goto rel_checked;
+	    }
+
 	  if ((!table->execit_noji && ELFNN_R_TYPE (irel->r_info) == R_RISCV_JAL)
 	      || (!table->execit_nols
 		&& (ELFNN_R_TYPE (irel->r_info) == R_RISCV_HI20
@@ -8009,7 +8031,7 @@ riscv_elf_execit_build_hash_table (bfd *abfd, asection *sec,
 		      continue;
 		    }
 		}
-
+rel_checked:
 	      insn = insn_with_reg
 		| riscv_elf_encode_relocation (abfd, irel, relocation);
 	    }
@@ -8658,6 +8680,8 @@ riscv_relocation_check (struct bfd_link_info *info,
      how many bytes location counter has to move.  */
   int result = 0;
   Elf_Internal_Rela *irel_save = NULL;
+  Elf_Internal_Rela *irel_from = *irel;
+  bfd_vma off_from = *off;
   bfd_boolean nested_execit, nested_loop;
   bfd_boolean execit_loop_aware;
 
@@ -8671,6 +8695,8 @@ riscv_relocation_check (struct bfd_link_info *info,
       switch (ELFNN_R_TYPE ((*irel)->r_info))
 	{
 	case R_RISCV_RELAX_REGION_BEGIN:
+	  result = 0;
+	  irel_save = NULL;
 	  /* Ignore code block.  */
 	  nested_execit = FALSE;
 	  nested_loop = FALSE;
@@ -8691,6 +8717,7 @@ riscv_relocation_check (struct bfd_link_info *info,
 		  (*irel)++;
 		  if (ELFNN_R_TYPE ((*irel)->r_info) == R_RISCV_RELAX_REGION_BEGIN)
 		    {
+		      (*_bfd_error_handler)(_("Warning: Nested relax region!\n"));
 		      /* There may be nested region.  */
 		      if (((*irel)->r_addend & R_RISCV_RELAX_REGION_NO_EXECIT_FLAG) != 0)
 			nested_execit = TRUE;
@@ -8706,6 +8733,7 @@ riscv_relocation_check (struct bfd_link_info *info,
 		      else if (execit_loop_aware
 			       && ((*irel)->r_addend & R_RISCV_RELAX_REGION_LOOP_FLAG))
 			nested_loop = FALSE;
+			result |= RELAX_REGION_END;
 		    }
 		  else if (ELFNN_R_TYPE ((*irel)->r_info) == R_RISCV_ALIGN
 			   && ((*irel)->r_addend & (1 << 31)))
@@ -8727,12 +8755,18 @@ riscv_relocation_check (struct bfd_link_info *info,
 			result |= ALIGN_PUSH_PRE;
 		    }
 		}
+
 	      if ((*irel) >= irelend)
 		*off = sec->size;
 	      else
 		*off = (*irel)->r_offset;
 
-	      return result;
+	      /* rescan relocations on the target offset  */
+	      if (*off != off_from)
+		{
+		  while ((*irel) != NULL && (*irel) > irel_from && (*off) == (*irel)->r_offset)
+		    (*irel)--;
+		}
 	    }
 	  break;
 	case R_RISCV_ALIGN:
@@ -8885,7 +8919,10 @@ riscv_relocation_check (struct bfd_link_info *info,
       (*irel)++;
     }
   if (irel_save)
-    *irel = irel_save;
+    {
+      *irel = irel_save;
+      result |= SYMBOL_RELOCATION;
+    }
   return result;
 }
 
