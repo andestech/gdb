@@ -7916,7 +7916,7 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       TRACE_INSN (cpu, "csrrc");
       switch (csr)
 	{
-#define DECLARE_CSR(name, num) \
+#define DECLARE_CSR(name, num, cls) \
 	case num: \
 	  store_rd (cpu, rd, fetch_csr (cpu, #name, num, &cpu->csr.name)); \
 	  store_csr (cpu, #name, num, &cpu->csr.name, \
@@ -7930,7 +7930,7 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       TRACE_INSN (cpu, "csrrci");
       switch (csr)
 	{
-#define DECLARE_CSR(name, num) \
+#define DECLARE_CSR(name, num, cls) \
 	case num: \
 	  store_rd (cpu, rd, fetch_csr (cpu, #name, num, &cpu->csr.name)); \
 	  store_csr (cpu, #name, num, &cpu->csr.name, \
@@ -7944,7 +7944,7 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       TRACE_INSN (cpu, "csrrs");
       switch (csr)
 	{
-#define DECLARE_CSR(name, num) \
+#define DECLARE_CSR(name, num, cls) \
 	case num: \
 	  store_rd (cpu, rd, fetch_csr (cpu, #name, num, &cpu->csr.name)); \
 	  store_csr (cpu, #name, num, &cpu->csr.name, \
@@ -7958,7 +7958,7 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       TRACE_INSN (cpu, "csrrsi");
       switch (csr)
 	{
-#define DECLARE_CSR(name, num) \
+#define DECLARE_CSR(name, num, cls) \
 	case num: \
 	  store_rd (cpu, rd, fetch_csr (cpu, #name, num, &cpu->csr.name)); \
 	  store_csr (cpu, #name, num, &cpu->csr.name, \
@@ -7972,7 +7972,7 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       TRACE_INSN (cpu, "csrrw");
       switch (csr)
 	{
-#define DECLARE_CSR(name, num) \
+#define DECLARE_CSR(name, num, cls) \
 	case num: \
 	  store_rd (cpu, rd, fetch_csr (cpu, #name, num, &cpu->csr.name)); \
 	  store_csr (cpu, #name, num, &cpu->csr.name, cpu->regs[rs1].u); \
@@ -7985,7 +7985,7 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       TRACE_INSN (cpu, "csrrwi");
       switch (csr)
 	{
-#define DECLARE_CSR(name, num) \
+#define DECLARE_CSR(name, num, cls) \
 	case num: \
 	  store_rd (cpu, rd, fetch_csr (cpu, #name, num, &cpu->csr.name)); \
 	  store_csr (cpu, #name, num, &cpu->csr.name, rs1); \
@@ -8502,7 +8502,7 @@ riscv_decode (SIM_CPU *cpu, unsigned_word iw, sim_cia pc, int ex9)
   for (; op->name; op++)
     {
       /* Does the opcode match?  */
-      if (!(op->match_func) (op, iw))
+      if (!(op->match_func) (op, iw, 0))
 	continue;
 
       /* It's a match.  */
@@ -8627,7 +8627,7 @@ reg_fetch (sim_cpu *cpu, int rn, unsigned char *buf, int len)
       memcpy (buf, &cpu->pc, len);
       return len;
 
-#define DECLARE_CSR(name, num) \
+#define DECLARE_CSR(name, num, cls) \
     case SIM_RISCV_ ## num ## _REGNUM: \
       memcpy (buf, &cpu->csr.name, len); \
       return len;
@@ -8685,7 +8685,7 @@ reg_store (sim_cpu *cpu, int rn, unsigned char *buf, int len)
       memcpy (&cpu->pc, buf, len);
       return len;
 
-#define DECLARE_CSR(name, num) \
+#define DECLARE_CSR(name, num, cls) \
     case SIM_RISCV_ ## num ## _REGNUM: \
       memcpy (&cpu->csr.name, buf, len); \
       return len;

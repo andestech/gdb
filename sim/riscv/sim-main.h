@@ -213,7 +213,7 @@ struct _sim_cpu {
 #define CPU_ELF_FLAGS(cpu) ((cpu)->elf_flags)
 
   struct {
-#define DECLARE_CSR(name, num) unsigned_word name;
+#define DECLARE_CSR(name, num, cls) unsigned_word name;
 #include "opcode/riscv-opc.h"
 #undef DECLARE_CSR
   } csr;
