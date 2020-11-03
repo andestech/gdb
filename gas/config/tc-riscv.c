@@ -4360,14 +4360,17 @@ riscv_parse_arch_attribute (const char *in_arch, bfd_boolean update)
 
   /* We must keep the extension set by the options if needed.  */
   if (riscv_opts.atomic)
-    riscv_add_subset (&riscv_subsets, "a", 0, 0);
+    riscv_add_subset (&riscv_subsets, "a", 2, 0);
 
   if (riscv_opts.dsp)
-    riscv_add_subset (&riscv_subsets, "xdsp", 0, 0);
+    riscv_add_subset (&riscv_subsets, "p", 1, 0);
 
   /* default version of "xefhw": 1p0  */
   if (riscv_opts.efhw)
     riscv_add_subset (&riscv_subsets, "xefhw", 1, 0);
+
+  if (riscv_opts.vector)
+    riscv_add_subset (&riscv_subsets, "v", 1, 0);
 
   /* Always add `c' into `all_subsets' for the `riscv_opcodes' table.  */
   riscv_add_subset (&riscv_subsets, "c", 0, 0);
@@ -4783,14 +4786,14 @@ arch_sanity_check (int is_final)
     riscv_add_subset (&riscv_subsets, "a", 2, 0);
 
   if (riscv_opts.dsp)
-    riscv_add_subset (&riscv_subsets, "xdsp", 2, 0);
+    riscv_add_subset (&riscv_subsets, "p", 1, 0);
 
   /* default version of "xefhw": 1p0  */
   if (riscv_opts.efhw)
     riscv_add_subset (&riscv_subsets, "xefhw", 1, 0);
 
   if (riscv_opts.vector)
-    riscv_add_subset (&riscv_subsets, "v", 0, 8);
+    riscv_add_subset (&riscv_subsets, "v", 1, 0);
 
 # if 0
   /* redundant?  */

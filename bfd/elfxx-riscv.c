@@ -1698,7 +1698,9 @@ typedef struct {
 } default_version_t;
 
 static default_version_t non_std_ext_d4_versions[] = {
-  {"xandes", 5, 0}, /* don't change index of this item */
+  {"xandes", 5, 0},
+  {"p", 1, 0},   
+  /* don't change index of above items  */
   {"xefhw", 1, 0},
   {"zfh", 0, 0},
   {NULL}
@@ -1772,14 +1774,20 @@ riscv_parse_prefixed_ext (riscv_parse_subset_t *rps,
       char *q = subset;
       const char *end_of_version;
       char *effect_subset = subset;
-      int is_xv5 = 0;
+      int is_old_name = 0;
 
       /* parse xv5 specially  */
       if (strncasecmp(subset, "xv5", 3) == 0)
-        {
-	  is_xv5 = 1;
-	  effect_subset = non_std_ext_d4_versions[0].name;
+	{
+	  is_old_name = 1;
+	  effect_subset = non_std_ext_d4_versions[is_old_name-1].name;
 	  q += 2;
+	}
+      else if (strncasecmp(subset, "xdsp", 3) == 0)
+	{
+	  is_old_name = 2;
+	  effect_subset = non_std_ext_d4_versions[is_old_name-1].name;
+	  q += 4;
 	}
 
       while (*++q != '\0' && *q != '_' && !ISDIGIT (*q))
@@ -1813,11 +1821,11 @@ riscv_parse_prefixed_ext (riscv_parse_subset_t *rps,
 	}
       else
 	{
-	  /* convert Xv5-?p? to Xandes5p0  */
-	  if (is_xv5)
+	  /* set default version of old names  */
+	  if (is_old_name)
 	    {
-	      major_version = non_std_ext_d4_versions[0].major;
-	      minor_version = non_std_ext_d4_versions[0].minor;
+	      major_version = non_std_ext_d4_versions[is_old_name-1].major;
+	      minor_version = non_std_ext_d4_versions[is_old_name-1].minor;
 	    }
 	}
 
