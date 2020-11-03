@@ -1790,8 +1790,8 @@ riscv_parse_prefixed_ext (riscv_parse_subset_t *rps,
 	  q += 4;
 	}
 
-      while (*++q != '\0' && *q != '_' && !ISDIGIT (*q))
-	;
+      while (*q != '\0' && *q != '_' && !ISDIGIT (*q))
+	++q;
 
       end_of_version =
 	riscv_parsing_subset_version (
