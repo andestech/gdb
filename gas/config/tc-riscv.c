@@ -5277,7 +5277,7 @@ s_riscv_option (int x ATTRIBUTE_UNUSED)
       /* Force to set the 4-byte aligned when converting
 	 rvc to norvc.  The repeated alignment setting is
 	 fine since linker will remove the redundant nops.  */
-      if (riscv_opts.rvc)
+      if (riscv_opts.rvc && !riscv_opts.no_16_bit && start_assemble_insn)
 	riscv_frag_align_code (2);
       riscv_set_rvc (FALSE);
       riscv_rvc_reloc_setting (0);
@@ -6145,6 +6145,10 @@ riscv_final_no_execit_region (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
   fixp = seginfo->fix_root;
   for (; fixp; fixp = fixp->fx_next)
     {
+      /* skip redundant fixes  */
+      if (fixp->fx_done)
+	continue;
+
       if (fixp->fx_r_type == BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN)
 	fix_new (fixp->fx_frag, fixp->fx_where, 0, abs_section_sym,
 		 R_RISCV_RELAX_REGION_NO_EXECIT_FLAG, 0,
