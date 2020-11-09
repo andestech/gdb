@@ -5231,7 +5231,8 @@ riscv_rvc_reloc_setting (int mode)
      instruction.  It is no necessary to insert the NO_RVC_REGION relocs
      according to these options since the first rvc information is
      stored in the fragment's tc_frag_data.rvc.  */
-  if (!start_assemble_insn)
+  /* RVC is disable entirely when -mno-16-bit is enabled  */
+  if (!start_assemble_insn || riscv_opts.no_16_bit)
     return;
 
   if (mode)
@@ -5329,8 +5330,11 @@ s_riscv_option (int x ATTRIBUTE_UNUSED)
       else if (!riscv_opts.rvc && pre_rvc)
 	{
 	  /* rvc to norvc.  */
-	  riscv_opts.rvc = 1;
-	  riscv_frag_align_code (2);
+	  if (!riscv_opts.no_16_bit)
+	    {
+	      riscv_opts.rvc = 1;
+	      riscv_frag_align_code (2);
+	    }
 	  riscv_opts.rvc = 0;
 	  riscv_rvc_reloc_setting (0);
 	}
