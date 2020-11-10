@@ -1679,11 +1679,17 @@ riscv_parse_std_ext (riscv_parse_subset_t *rps,
 
       subset[0] = std_ext;
 
-      /* v extension default version is 0p8 */
-      if ((start_of_version == p) && !strcasecmp(subset, "v"))
+      /* p extension default version is 0p5 */
+      if ((start_of_version == p) && !strcasecmp(subset, "p"))
 	{
 	  major_version = 0;
-	  minor_version = 8;
+	  minor_version = 5;
+	}
+      /* v extension default version is 1p0 */
+      else if ((start_of_version == p) && !strcasecmp(subset, "v"))
+	{
+	  major_version = 1;
+	  minor_version = 0;
 	}
 
       riscv_add_subset (rps->subset_list, subset, major_version, minor_version);
@@ -1699,7 +1705,7 @@ typedef struct {
 
 static default_version_t non_std_ext_d4_versions[] = {
   {"xandes", 5, 0},
-  {"p", 1, 0},   
+  {"p", 0, 5},
   /* don't change index of above items  */
   {"xefhw", 1, 0},
   {"zfh", 0, 0},

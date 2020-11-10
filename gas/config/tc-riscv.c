@@ -4363,7 +4363,7 @@ riscv_parse_arch_attribute (const char *in_arch, bfd_boolean update)
     riscv_add_subset (&riscv_subsets, "a", 2, 0);
 
   if (riscv_opts.dsp)
-    riscv_add_subset (&riscv_subsets, "p", 1, 0);
+    riscv_add_subset (&riscv_subsets, "p", 0, 5);
 
   /* default version of "xefhw": 1p0  */
   if (riscv_opts.efhw)
@@ -4786,7 +4786,7 @@ arch_sanity_check (int is_final)
     riscv_add_subset (&riscv_subsets, "a", 2, 0);
 
   if (riscv_opts.dsp)
-    riscv_add_subset (&riscv_subsets, "p", 1, 0);
+    riscv_add_subset (&riscv_subsets, "p", 0, 5);
 
   /* default version of "xefhw": 1p0  */
   if (riscv_opts.efhw)
