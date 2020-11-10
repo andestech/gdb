@@ -4812,15 +4812,18 @@ arch_sanity_check (int is_final)
   riscv_add_subset (&riscv_subsets, "c", 2, 0);
 #endif
 
-  /* Add the RVC extension, regardless of -march, to support .option rvc.  */
-  riscv_set_rvc (FALSE);
-  if (riscv_subset_supports ("c"))
-    riscv_set_rvc (TRUE);
+  if (!is_final)
+    {
+      /* Add the RVC extension, regardless of -march, to support .option rvc.  */
+      riscv_set_rvc (FALSE);
+      if (riscv_subset_supports ("c"))
+	riscv_set_rvc (TRUE);
 
-  /* Enable RVE if specified by the -march option.  */
-  riscv_set_rve (FALSE);
-  if (riscv_subset_supports ("e"))
-    riscv_set_rve (TRUE);
+      /* Enable RVE if specified by the -march option.  */
+      riscv_set_rve (FALSE);
+      if (riscv_subset_supports ("e"))
+	riscv_set_rve (TRUE);
+    }
 
   /* Infer ABI from ISA if not specified on command line.  */
   if (abi_xlen == 0)
