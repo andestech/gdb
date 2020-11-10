@@ -1,3 +1,10 @@
+2020-11-10  Gary Benson <gbenson@redhat.com>
+
+	* gdb.cp/step-and-next-inline.exp: Only require
+	-gstatement-frontiers when building with GCC.
+	Only setup KFAIL's for GCC issues when using
+	a GCC-built executable.
+
 2020-07-16  Tom de Vries  <tdevries@suse.de>
 
 	* lib/dwarf.exp (program): Initialize _line.
