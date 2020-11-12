@@ -291,8 +291,8 @@ static const char *base_isas[BASE_ISA_COUNT] =
 static const char *riscv_extensions = "MAFDQLCBJTPVNXZSH"; // It will be updated to "MAFDQLCBJTPVNZSHX" in the future.
 
 // RISC-V Non-standard extensions
-// "xandes" is equals to "Xv5-"(old version)
-static const char *riscv_x_extensions[] = { "xandes", "Xv5-", "xdsp", "xefhw" };
+// "xandesv" is equals to "Xv5-"(old version)
+static const char *riscv_x_extensions[] = { "xandesv", "Xv5-", "xdsp", "xefhw" };
 
 
 
@@ -377,7 +377,7 @@ set_riscv_x_ext_info (const char *ext, int major, int minor)
 {
   nds_info.ext_use[EXT_X] = true;
 
-  if (strncmp (ext, riscv_x_extensions[X_EXT_V5], 6) == 0)
+  if (strncmp (ext, riscv_x_extensions[X_EXT_V5], 7) == 0)
     {
       nds_info.x_ext_use[X_EXT_V5] = true;
       nds_info.x_ext_major[X_EXT_V5] = major;
@@ -438,18 +438,23 @@ elf_use_ext_i (int i, bool std)
 }
 
 static bool
-cpu_support_std_ext (reg_t misa, char ext)
+cpu_support_std_ext (reg_t misa, reg_t mmsc_cfg, char ext)
 {
   // I-Extension allow E-Extension
-  if (ext == 'E')
-    {
-      return ((misa & (1 << ('E' - 'A'))) != 0)
-	|| ((misa & (1 << ('I' - 'A'))) != 0);
-    }
-
   int i = ext - 'A';
+  
+  bool is_ext_en = (misa & (1 << i)) != 0;
 
-  return (misa & (1 << i)) != 0;
+  if (ext == 'E')
+  {
+      is_ext_en = is_ext_en || ((misa & (1 << ('I' - 'A'))) != 0);
+  }
+  if (ext == 'P')
+  {
+      is_ext_en = is_ext_en || ((mmsc_cfg & (1 << 29)) != 0);
+  }
+
+  return is_ext_en;
 }
 
 static bool
@@ -462,9 +467,10 @@ cpu_support_v5_ext (reg_t mmsc_cfg)
 }
 
 static bool
-cpu_support_v5dsp_ext (reg_t mmsc_cfg)
+cpu_support_v5dsp_ext (reg_t mmsc_cfg, reg_t misa)
 {
   bool CPU_EDSP = (mmsc_cfg & (1 << 29)) != 0;
+  bool CPU_P_EXT = (misa & (1 << 15)) != 0;
 
   return CPU_EDSP;
 }
@@ -776,10 +782,10 @@ parse_riscv_isa_string (const char *s)
 
 	  // We speically handle xv5- here because it contains a
 	  // dash which may confuse the parser.
-	  if (strncasecmp (s, "xandes", 6) == 0)
+	  if (strncasecmp (s, "xandesv", 7) == 0)
 	    {
-	      print_indent ("%.6s ", s);
-	      s += 6;
+	      print_indent ("%.7s ", s);
+	      s += 7;
 	      strncpy (x_ext, riscv_x_extensions[X_EXT_V5], 8);
 	    }
 	  else if (strncasecmp (s, "Xv5-", 4) == 0)
@@ -1131,12 +1137,12 @@ elf_check (void *file_data, unsigned int file_size,
   if (elf_base_isa == BASE_ISA_RV32E)
     {
       /* mxl must be 1 (32bit) for RV32E */
-      if (mxl != 1 || !cpu_support_std_ext (CSR_misa, 'E'))
+      if (mxl != 1 || !cpu_support_std_ext (CSR_misa, CSR_mmsc_cfg, 'E'))
 	error_type = EFT_ERROR;
     }
   else
     {
-      if (mxl != elf_base_isa || !cpu_support_std_ext (CSR_misa, 'I'))
+      if (mxl != elf_base_isa || !cpu_support_std_ext (CSR_misa, CSR_mmsc_cfg, 'I'))
 	error_type = EFT_ERROR;
     }
   if (error_type == EFT_ERROR)
@@ -1158,7 +1164,7 @@ elf_check (void *file_data, unsigned int file_size,
       ext_str[0] = riscv_extensions[i];
       NEC_snprintf (temp, sizeof (temp), "Extension '%s'", ext_str);
       if (NEC_check_bool (EFT_ERROR, temp,
-			  cpu_support_std_ext (CSR_misa, riscv_extensions[i]),
+			  cpu_support_std_ext (CSR_misa, CSR_mmsc_cfg, riscv_extensions[i]),
 			  elf_use_ext_i (i, true)))
 	n_error++;
 
@@ -1182,7 +1188,7 @@ elf_check (void *file_data, unsigned int file_size,
   if (elf_use_ext_i (X_EXT_DSP, false))
     {
       if (NEC_check_bool (EFT_ERROR, "V5 DSP Extension",
-			  cpu_support_v5dsp_ext (CSR_mmsc_cfg), true))
+			  cpu_support_v5dsp_ext (CSR_mmsc_cfg, CSR_misa), true))
 	n_error++;
     }
 
