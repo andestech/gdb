@@ -249,9 +249,9 @@ riscv_set_arch (const char *s)
       riscv_set_rve (TRUE);
     }
 
-  if (riscv_lookup_subset_version (&riscv_subsets, "xv5-", 0, 0))
+  if (riscv_lookup_subset_version (&riscv_subsets, "xandes", 0, 0))
     {
-      /* x_v5 imply x_efhw */
+      /* x_v5 imply x_efhw, x_v5- has renamed to xAndes  */
       if (!riscv_lookup_subset (rps.subset_list, "xefhw"))
         /* default version of "xefhw": 1p0  */
         riscv_add_subset (&riscv_subsets, "xefhw", 1, 0);
@@ -1502,6 +1502,7 @@ struct arch_info arch_info[] =
 {0, 0, 0, 0}
 };
 
+#ifdef TO_REMOVE
 /* Generally, we do not allow the name of non-standard
    arch includes numbers, but you can define your own
    special arch name here.  */
@@ -1513,6 +1514,7 @@ static struct hash_control *arch_info_hash = NULL;
 #define DEFAULT_PRIV_SPEC_REVISION 0
 #define DEFAULT_STRICT_ALIGN 0
 #define DEFAULT_STACK_ALIGN 0
+#endif
 #define DEFAULT_ICT_VERSION 1
 
 #if 0
@@ -4063,6 +4065,7 @@ out:
   return error;
 }
 
+#ifdef TO_REMOVE
 /* Parse the version of ISA in .attribute directive.  */
 
 static int
@@ -4432,6 +4435,7 @@ riscv_set_arch_attributes (const char *name)
     as_fatal ("internal error: cannot parse .attribute %s",
 	      string);
 }
+#endif
 
 static int start_assemble_insn = 0;
 
@@ -4452,7 +4456,9 @@ md_assemble (char *str)
      assembling instructions.  */
   if (!start_assemble_insn)
     {
+#ifdef TO_REMOVE
       riscv_set_arch_attributes (NULL); /* redundant?  */
+#endif
       start_assemble_insn = 1;
       arch_sanity_check(TRUE); /* is_final = TRUE  */
     }
@@ -6685,9 +6691,11 @@ andes_riscv_set_public_attributes (void)
   printf ("\n");
 #endif
 
+#ifdef TO_REMOVE
   /* The assembly dose not contain instructions.  */
   if (!start_assemble_insn)
     riscv_set_arch_attributes (NULL);
+#endif
 
   riscv_write_out_arch_attr ();
 
