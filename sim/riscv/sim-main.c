@@ -1785,42 +1785,36 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
   const int imm3u = rb & 0x7;
   const int imm2u = (iw >> 20) & 0x3;
 
-  sim_cia pc = cpu->pc + 4;
-  if (ex9)
-    pc -= 2;
-
   reg_t result;
   int32_t res, i;
   int32_t vec32_num = RISCV_XLEN (cpu) == 64 ? 2 : 1;
   int32_t vec16_num = RISCV_XLEN (cpu) == 64 ? 4 : 2;
   int32_t vec8_num = RISCV_XLEN (cpu) == 64 ? 8 : 4;
-  int32_t *ptr32, *ptr_a32, *ptr_b32, *ptr_d32;
-  ptr32 = (int32_t *) & result.b32;
-  ptr_a32 = (int32_t *) & cpu->regs[ra].b32;
-  ptr_b32 = (int32_t *) & cpu->regs[rb].b32;
-  ptr_d32 = (int32_t *) & cpu->regs[rd].b32;
-  uint32_t *uptr32, *uptr_a32, *uptr_b32, *uptr_d32;
-  uptr32 = (uint32_t *) & result.b32;
-  uptr_a32 = (uint32_t *) & cpu->regs[ra].b32;
-  uptr_b32 = (uint32_t *) & cpu->regs[rb].b32;
-  uptr_d32 = (uint32_t *) & cpu->regs[rd].b32;
-  int16_t *ptr16, *ptr_a16, *ptr_b16, *ptr_d16;
-  ptr16 = (int16_t *) & result.b16;
-  ptr_a16 = (int16_t *) & cpu->regs[ra].b16;
-  ptr_b16 = (int16_t *) & cpu->regs[rb].b16;
-  ptr_d16 = (int16_t *) & cpu->regs[rd].b16;
-  uint16_t *uptr16, *uptr_a16, *uptr_b16;
-  uptr16 = (uint16_t *) & result.ub16;
-  uptr_a16 = (uint16_t *) & cpu->regs[ra].ub16;
-  uptr_b16 = (uint16_t *) & cpu->regs[rb].ub16;
-  int8_t *ptr8, *ptr_a8, *ptr_b8;
-  ptr8 = (int8_t *) & result.b8;
-  ptr_a8 = (int8_t *) & cpu->regs[ra].b8;
-  ptr_b8 = (int8_t *) & cpu->regs[rb].b8;
-  uint8_t *uptr8, *uptr_a8, *uptr_b8;
-  uptr8 = (uint8_t *) & result.ub8;
-  uptr_a8 = (uint8_t *) & cpu->regs[ra].ub8;
-  uptr_b8 = (uint8_t *) & cpu->regs[rb].ub8;
+  int32_t *ptr32 = (int32_t *) & result.b32;
+  int32_t *ptr_a32 = (int32_t *) & cpu->regs[ra].b32;
+  int32_t *ptr_b32 = (int32_t *) & cpu->regs[rb].b32;
+  int32_t *ptr_d32 = (int32_t *) & cpu->regs[rd].b32;
+  uint32_t *uptr32 = (uint32_t *) & result.b32;
+  uint32_t *uptr_a32 = (uint32_t *) & cpu->regs[ra].b32;
+  uint32_t *uptr_b32 = (uint32_t *) & cpu->regs[rb].b32;
+  uint32_t *uptr_d32 = (uint32_t *) & cpu->regs[rd].b32;
+  int16_t *ptr16 = (int16_t *) & result.b16;
+  int16_t *ptr_a16 = (int16_t *) & cpu->regs[ra].b16;
+  int16_t *ptr_b16 = (int16_t *) & cpu->regs[rb].b16;
+  int16_t *ptr_d16 = (int16_t *) & cpu->regs[rd].b16;
+  uint16_t *uptr16 = (uint16_t *) & result.ub16;
+  uint16_t *uptr_a16 = (uint16_t *) & cpu->regs[ra].ub16;
+  uint16_t *uptr_b16 = (uint16_t *) & cpu->regs[rb].ub16;
+  int8_t *ptr8 = (int8_t *) & result.b8;
+  int8_t *ptr_a8 = (int8_t *) & cpu->regs[ra].b8;
+  int8_t *ptr_b8 = (int8_t *) & cpu->regs[rb].b8;
+  uint8_t *uptr8 = (uint8_t *) & result.ub8;
+  uint8_t *uptr_a8 = (uint8_t *) & cpu->regs[ra].ub8;
+  uint8_t *uptr_b8 = (uint8_t *) & cpu->regs[rb].ub8;
+
+  sim_cia pc = cpu->pc + 4;
+  if (ex9)
+    pc -= 2;
 
   switch (op->match)
     {
@@ -6535,6 +6529,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int16_t bop = cpu->regs[rb].b16.h0;
 	int32_t mul = (int32_t) aop * bop;
 	int32_t res = mul << 1;
+	int64_t resadd;
 
 	if (mul != (res >> 1))
 	  {
@@ -6542,7 +6537,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    CCPU_UCODE_OV_SET();
 	  }
 
-	int64_t resadd = res + cpu->regs[rd].b32.i0;
+	resadd = res + cpu->regs[rd].b32.i0;
 	resadd = insn_sat_helper (cpu, resadd, 31);
 
 	cpu->regs[rd].s = resadd;
@@ -6554,6 +6549,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	for (i = 0; i <= vec32_num; i+=2)
 	  {
 	    int32_t res;
+            int32_t resadd;
 	    if ((*(ptr_a16 + i) == (int16_t) 0x8000)
 		&& (*(ptr_b16 + i) == (int16_t) 0x8000))
 	      {
@@ -6566,7 +6562,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 		res = res << 1;
 	      }
 
-	    int32_t resadd = res + *(ptr_d32 + (i / 2));
+	    resadd = res + *(ptr_d32 + (i / 2));
 	    resadd = insn_sat_helper (cpu, resadd, 31);
 	    *(ptr32 + (i / 2)) = resadd;
 	  }
@@ -6581,6 +6577,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int16_t bop = cpu->regs[rb].b16.h1;
 	int32_t mul = (int32_t) aop * bop;
 	int32_t res = mul << 1;
+	int64_t resadd;
 
 	if (mul != (res >> 1))
 	  {
@@ -6588,7 +6585,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    CCPU_UCODE_OV_SET();
 	  }
 
-	int64_t resadd = res + cpu->regs[rd].b32.i0;
+	resadd = res + cpu->regs[rd].b32.i0;
 	resadd = insn_sat_helper (cpu, resadd, 31);
 
 	cpu->regs[rd].s = resadd;
@@ -6600,6 +6597,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	for (i = 0; i <= vec32_num; i+=2)
 	  {
 	    int32_t res;
+	    int32_t resadd;
 	    if ((*(ptr_a16 + i) == (int16_t) 0x8000)
 		&& (*(ptr_b16 + (i + 1)) == (int16_t) 0x8000))
 	      {
@@ -6612,7 +6610,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 		res = res << 1;
 	      }
 
-	    int32_t resadd = res + *(ptr_d32 + (i / 2));
+	    resadd = res + *(ptr_d32 + (i / 2));
 	    resadd = insn_sat_helper (cpu, resadd, 31);
 	    *(ptr32 + (i / 2)) = resadd;
 	  }
@@ -6627,6 +6625,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int16_t bop = cpu->regs[rb].b16.h1;
 	int32_t mul = (int32_t) aop * bop;
 	int32_t res = mul << 1;
+	int64_t resadd;
 
 	if (mul != (res >> 1))
 	  {
@@ -6634,7 +6633,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    CCPU_UCODE_OV_SET();
 	  }
 
-	int64_t resadd = res + cpu->regs[rd].b32.i0;
+	resadd = res + cpu->regs[rd].b32.i0;
 	resadd = insn_sat_helper (cpu, resadd, 31);
 
 	cpu->regs[rd].s = resadd;
@@ -6646,6 +6645,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	for (i = 0; i <= vec32_num; i+=2)
 	  {
 	    int32_t res;
+	    int32_t resadd;
 	    if ((*(ptr_a16 + (i + 1)) == (int16_t) 0x8000)
 		&& (*(ptr_b16 + (i + 1)) == (int16_t) 0x8000))
 	      {
@@ -6658,7 +6658,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 		res = res << 1;
 	      }
 
-	    int32_t resadd = res + *(ptr_d32 + (i / 2));
+	    resadd = res + *(ptr_d32 + (i / 2));
 	    resadd = insn_sat_helper (cpu, resadd, 31);
 	    *(ptr32 + (i / 2)) = resadd;
 	  }
