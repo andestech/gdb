@@ -1050,6 +1050,7 @@ execute_c (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 	  /* c.jr */
 	  TRACE_INSN (cpu, "c.jr %s", rd_name);
 	  pc = cpu->regs[rd].u;
+	  TRACE_BRANCH (cpu, "to %#"PRIxTW, pc);
 	}
       return pc;
     }
@@ -1069,6 +1070,7 @@ execute_c (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 	  TRACE_INSN (cpu, "c.jalr %s", rd_name);
 	  pc = cpu->regs[rd].u;
 	  store_rd (cpu, X_RA, cpu->pc + 2);
+	  TRACE_BRANCH (cpu, "to %#"PRIxTW, pc);
 	}
       else
 	{
@@ -1245,6 +1247,7 @@ execute_c (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 	      TRACE_INSN (cpu, "c.jal %" PRIiTW, EXTRACT_RVC_J_IMM (iw));
 	      store_rd (cpu, X_RA, cpu->pc + 2);
 	      pc = cpu->pc + EXTRACT_RVC_J_IMM (iw);
+	      TRACE_BRANCH (cpu, "to %#"PRIxTW, pc);
 	    }
 	  else
 	    {
@@ -1333,13 +1336,19 @@ execute_c (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 	  TRACE_INSN (cpu, "c.beqz %s, %" PRIiTW,
 		      crs1s_name, cpu->pc + EXTRACT_RVC_B_IMM (iw));
 	  if (cpu->regs[crs1s].u == 0)
-	    pc = cpu->pc + EXTRACT_RVC_B_IMM (iw);
+	    {
+	      pc = cpu->pc + EXTRACT_RVC_B_IMM (iw);
+	      TRACE_BRANCH (cpu, "to %#"PRIxTW, pc);
+	    }
 	  return pc;
 	case MATCH_C_BNEZ:
 	  TRACE_INSN (cpu, "c.bnez %s, %" PRIiTW,
 		      crs1s_name, cpu->pc + EXTRACT_RVC_B_IMM (iw));
 	  if (cpu->regs[crs1s].u != 0)
-	    pc = cpu->pc + EXTRACT_RVC_B_IMM (iw);
+	    {
+	      pc = cpu->pc + EXTRACT_RVC_B_IMM (iw);
+	      TRACE_BRANCH (cpu, "to %#"PRIxTW, pc);
+	    }
 	  return pc;
 	case MATCH_C_LUI:
 	  TRACE_INSN (cpu, "c.lui %s, %" PRIiTW,
@@ -1350,6 +1359,7 @@ execute_c (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 	  TRACE_INSN (cpu, "c.j %" PRIiTW,
 		      cpu->pc + EXTRACT_RVC_B_IMM (iw));
 	  pc = cpu->pc + EXTRACT_RVC_J_IMM (iw);
+	  TRACE_BRANCH (cpu, "to %#"PRIxTW, pc);
 	  return pc;
 	default:
 	  TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
@@ -7831,16 +7841,14 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	  TRACE_INSN (cpu, "jal %s, %"PRIiTW";", rd_name, EXTRACT_UJTYPE_IMM (iw));
 	  store_rd (cpu, rd, cpu->pc + 2);
 	  pc = cpu->pc + EXTRACT_UJTYPE_IMM (iw);
-	  TRACE_BRANCH (cpu, "to %#"PRIxTW, pc);
-
 	}
       else
 	{
 	  TRACE_INSN (cpu, "jal %s, %"PRIiTW";", rd_name, EXTRACT_UJTYPE_IMM (iw));
 	  store_rd (cpu, rd, cpu->pc + 4);
 	  pc = cpu->pc + EXTRACT_UJTYPE_IMM (iw);
-	  TRACE_BRANCH (cpu, "to %#"PRIxTW, pc);
 	}
+      TRACE_BRANCH (cpu, "to %#"PRIxTW, pc);
       break;
     case MATCH_JALR:
       TRACE_INSN (cpu, "jalr %s, %s, %"PRIiTW";", rd_name, rs1_name, i_imm);
