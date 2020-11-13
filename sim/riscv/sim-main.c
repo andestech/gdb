@@ -1644,76 +1644,76 @@ execute_andes(SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int
       break;
 #endif
     case MATCH_LBGP:
-      TRACE_INSN (cpu, "lbgp %s, %"PRIiTW"; // ",
-		  rd_name, lbgp_imm);
+      TRACE_INSN (cpu, "lbgp %s, %"PRIiTW"; // %s = *(gp + %"PRIiTW")",
+		  rd_name, lbgp_imm, rd_name, lbgp_imm);
       store_rd (cpu, rd, EXTEND8 (
 	sim_core_read_unaligned_1 (cpu, cpu->pc, read_map,
 				   cpu->regs[X_GP].u + lbgp_imm)));
       break;
     case MATCH_LBUGP:
-      TRACE_INSN (cpu, "lbugp %s, %"PRIiTW"; // ",
-		  rd_name, lbgp_imm);
+      TRACE_INSN (cpu, "lbugp %s, %"PRIiTW"; // %s = *(gp + %"PRIiTW")",
+		  rd_name, lbgp_imm, rd_name, lbgp_imm);
       store_rd (cpu, rd,
 	sim_core_read_unaligned_1 (cpu, cpu->pc, read_map,
 				   cpu->regs[X_GP].u + lbgp_imm));
       break;
     case MATCH_LHGP:
-      TRACE_INSN (cpu, "lhgp %s, %"PRIiTW"; // ",
-		  rd_name, lhgp_imm);
+      TRACE_INSN (cpu, "lhgp %s, %"PRIiTW"; // %s = *(gp + %"PRIiTW")",
+		  rd_name, lbgp_imm, rd_name, lbgp_imm);
       store_rd (cpu, rd, EXTEND16 (
 	sim_core_read_unaligned_2 (cpu, cpu->pc, read_map,
 				   cpu->regs[X_GP].u + lhgp_imm)));
       break;
     case MATCH_LHUGP:
-      TRACE_INSN (cpu, "lhugp %s, %"PRIiTW"; // ",
-		  rd_name, lhgp_imm);
+      TRACE_INSN (cpu, "lhugp %s, %"PRIiTW"; // %s = *(gp + %"PRIiTW")",
+		  rd_name, lbgp_imm, rd_name, lbgp_imm);
       store_rd (cpu, rd,
 	sim_core_read_unaligned_2 (cpu, cpu->pc, read_map,
 				   cpu->regs[X_GP].u + lhgp_imm));
       break;
     case MATCH_LWGP:
-      TRACE_INSN (cpu, "lwgp %s, %"PRIiTW"; // ",
-		  rd_name, lwgp_imm);
+      TRACE_INSN (cpu, "lwgp %s, %"PRIiTW"; // %s = *(gp + %"PRIiTW")",
+		  rd_name, lbgp_imm, rd_name, lbgp_imm);
       store_rd (cpu, rd, EXTEND32 (
 	sim_core_read_unaligned_4 (cpu, cpu->pc, read_map,
 				   cpu->regs[X_GP].u + lwgp_imm)));
       break;
     case MATCH_LWUGP:
-      TRACE_INSN (cpu, "lwugp %s, %"PRIiTW"; // ",
-		  rd_name, lwgp_imm);
+      TRACE_INSN (cpu, "lwugp %s, %"PRIiTW"; // %s = *(gp + %"PRIiTW")",
+		  rd_name, lbgp_imm, rd_name, lbgp_imm);
       store_rd (cpu, rd,
 	sim_core_read_unaligned_4 (cpu, cpu->pc, read_map,
 				   cpu->regs[X_GP].u + lwgp_imm));
       break;
     case MATCH_LDGP:
-      TRACE_INSN (cpu, "ldgp %s, %"PRIiTW"; // ",
-		  rd_name, ldgp_imm);
+      TRACE_INSN (cpu, "ldgp %s, %"PRIiTW"; // %s = *(gp + %"PRIiTW")",
+		  rd_name, lbgp_imm, rd_name, lbgp_imm);
       RISCV_ASSERT_RV64 (cpu, "insn: %s", op->name);
       store_rd (cpu, rd,
 	sim_core_read_unaligned_8 (cpu, cpu->pc, read_map,
 				   cpu->regs[X_GP].u + ldgp_imm));
       break;
     case MATCH_SBGP:
-      TRACE_INSN (cpu, "sbgp %s, %"PRIiTW"; // ",
-		  rs2_name, sbgp_imm);
+      TRACE_INSN (cpu, "sbgp %s, %"PRIiTW"; // *(gp + %"PRIiTW") = %s",
+		  rs2_name, sbgp_imm, sbgp_imm, rs2_name);
       sim_core_write_unaligned_1 (cpu, cpu->pc, write_map,
 				  cpu->regs[X_GP].u + sbgp_imm, cpu->regs[rs2].u);
       break;
     case MATCH_SHGP:
-      TRACE_INSN (cpu, "shgp %s, %"PRIiTW"; // ",
-		  rs2_name, shgp_imm);
+      TRACE_INSN (cpu, "shgp %s, %"PRIiTW"; // *(gp + %"PRIiTW") = %s",
+		  rs2_name, sbgp_imm, sbgp_imm, rs2_name);
       sim_core_write_unaligned_2 (cpu, cpu->pc, write_map,
 				  cpu->regs[X_GP].u + shgp_imm, cpu->regs[rs2].u);
       break;
     case MATCH_SWGP:
-      TRACE_INSN (cpu, "swgp %s, %"PRIiTW"; // ",
-		  rs2_name, swgp_imm);
+      TRACE_INSN (cpu, "swgp %s, %"PRIiTW"; // *(gp + %"PRIiTW") = %s",
+		  rs2_name, sbgp_imm, sbgp_imm, rs2_name);
       sim_core_write_unaligned_4 (cpu, cpu->pc, write_map,
 				  cpu->regs[X_GP].u + swgp_imm, cpu->regs[rs2].u);
       break;
     case MATCH_SDGP:
-      TRACE_INSN (cpu, "sdgp %s, %"PRIiTW"; // ",
-		  rs2_name, sdgp_imm);
+      TRACE_INSN (cpu, "sdgp %s, %"PRIiTW"; // *(gp + %"PRIiTW") = %s",
+		  rs2_name, sbgp_imm, sbgp_imm, rs2_name);
       RISCV_ASSERT_RV64 (cpu, "insn: %s", op->name);
       sim_core_write_unaligned_8 (cpu, cpu->pc, write_map,
 				  cpu->regs[X_GP].u + sdgp_imm, cpu->regs[rs2].u);
@@ -7679,77 +7679,77 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
 
     case MATCH_LD:
-      TRACE_INSN (cpu, "ld %s, %" PRIiTW "(%s);",
-		  rd_name, i_imm, rs1_name);
+      TRACE_INSN (cpu, "ld %s, %"PRIiTW"(%s); // %s = *(%s + %"PRIiTW")",
+		  rd_name, i_imm, rs1_name, rd_name, rs1_name, i_imm);
       RISCV_ASSERT_RV64 (cpu, "insn: %s", op->name);
       store_rd (cpu, rd,
 	sim_core_read_unaligned_8 (cpu, cpu->pc, read_map,
 				   cpu->regs[rs1].u + i_imm));
       break;
     case MATCH_LW:
-      TRACE_INSN (cpu, "lw %s, %" PRIiTW "(%s);",
-		  rd_name, i_imm, rs1_name);
+      TRACE_INSN (cpu, "lw %s, %"PRIiTW"(%s); // %s = *(%s + %"PRIiTW")",
+		  rd_name, i_imm, rs1_name, rd_name, rs1_name, i_imm);
       store_rd (cpu, rd, EXTEND32 (
 	sim_core_read_unaligned_4 (cpu, cpu->pc, read_map,
 				   cpu->regs[rs1].u + i_imm)));
       break;
     case MATCH_LWU:
-      TRACE_INSN (cpu, "lwu %s, %" PRIiTW "(%s);",
-		  rd_name, i_imm, rs1_name);
+      TRACE_INSN (cpu, "lwu %s, %"PRIiTW"(%s); // %s = *(%s + %"PRIiTW")",
+		  rd_name, i_imm, rs1_name, rd_name, rs1_name, i_imm);
       store_rd (cpu, rd,
 	sim_core_read_unaligned_4 (cpu, cpu->pc, read_map,
 				   cpu->regs[rs1].u + i_imm));
       break;
     case MATCH_LH:
-      TRACE_INSN (cpu, "lh %s, %" PRIiTW "(%s);",
-		  rd_name, i_imm, rs1_name);
+      TRACE_INSN (cpu, "lh %s, %"PRIiTW"(%s); // %s = *(%s + %"PRIiTW")",
+		  rd_name, i_imm, rs1_name, rd_name, rs1_name, i_imm);
       store_rd (cpu, rd, EXTEND16 (
 	sim_core_read_unaligned_2 (cpu, cpu->pc, read_map,
 				   cpu->regs[rs1].u + i_imm)));
       break;
     case MATCH_LHU:
-      TRACE_INSN (cpu, "lhu %s, %" PRIiTW "(%s);",
-		  rd_name, i_imm, rs1_name);
+      TRACE_INSN (cpu, "lhu %s, %"PRIiTW"(%s); // %s = *(%s + %"PRIiTW")",
+		  rd_name, i_imm, rs1_name, rd_name, rs1_name, i_imm);
       store_rd (cpu, rd,
 	sim_core_read_unaligned_2 (cpu, cpu->pc, read_map,
 				   cpu->regs[rs1].u + i_imm));
       break;
     case MATCH_LB:
-      TRACE_INSN (cpu, "lb %s, %" PRIiTW "(%s);",
-		  rd_name, i_imm, rs1_name);
+      TRACE_INSN (cpu, "lb %s, %"PRIiTW"(%s); // %s = *(%s + %"PRIiTW")",
+		  rd_name, i_imm, rs1_name, rd_name, rs1_name, i_imm);
       store_rd (cpu, rd, EXTEND8 (
 	sim_core_read_unaligned_1 (cpu, cpu->pc, read_map,
 				   cpu->regs[rs1].u + i_imm)));
       break;
     case MATCH_LBU:
-      TRACE_INSN (cpu, "lbu %s, %" PRIiTW "(%s);",
-		  rd_name, i_imm, rs1_name);
+      TRACE_INSN (cpu, "lbu %s, %"PRIiTW"(%s); // %s = *(%s + %"PRIiTW")",
+		  rd_name, i_imm, rs1_name, rd_name, rs1_name, i_imm);
       store_rd (cpu, rd,
 	sim_core_read_unaligned_1 (cpu, cpu->pc, read_map,
 				   cpu->regs[rs1].u + i_imm));
       break;
     case MATCH_SD:
-      TRACE_INSN (cpu, "sd %s, %" PRIiTW "(%s);",
-		  rs2_name, s_imm, rs1_name);
+      TRACE_INSN (cpu, "sd %s, %"PRIiTW"(%s); // *(%s + %"PRIiTW") = %s",
+		  rs2_name, s_imm, rs1_name, rs1_name, s_imm, rs2_name);
       RISCV_ASSERT_RV64 (cpu, "insn: %s", op->name);
       sim_core_write_unaligned_8 (cpu, cpu->pc, write_map,
 				  cpu->regs[rs1].u + s_imm, cpu->regs[rs2].u);
       break;
     case MATCH_SW:
-      TRACE_INSN (cpu, "sw %s, %" PRIiTW "(%s);",
-		  rs2_name, s_imm, rs1_name);
+      TRACE_INSN (cpu, "sw %s, %"PRIiTW"(%s); // *(%s + %"PRIiTW") = %s",
+		  rs2_name, s_imm, rs1_name, rs1_name, s_imm, rs2_name);
       sim_core_write_unaligned_4 (cpu, cpu->pc, write_map,
 				  cpu->regs[rs1].u + s_imm, cpu->regs[rs2].u);
       break;
     case MATCH_SH:
-      TRACE_INSN (cpu, "sh %s, %" PRIiTW "(%s);",
-		  rs2_name, s_imm, rs1_name);
+      TRACE_INSN (cpu, "sh %s, %"PRIiTW"(%s); // *(%s + %"PRIiTW") = %s",
+		  rs2_name, s_imm, rs1_name, rs1_name, s_imm, rs2_name);
       sim_core_write_unaligned_2 (cpu, cpu->pc, write_map,
 				  cpu->regs[rs1].u + s_imm, cpu->regs[rs2].u);
       break;
     case MATCH_SB:
-      TRACE_INSN (cpu, "sb %s, %" PRIiTW "(%s);",
-		  rs2_name, s_imm, rs1_name);
+      TRACE_INSN (cpu, "sb %s, %"PRIiTW"(%s); // *(%s + %"PRIiTW") = %s",
+		  rs2_name, s_imm, rs1_name, rs1_name, s_imm, rs2_name);
       sim_core_write_unaligned_1 (cpu, cpu->pc, write_map,
 				  cpu->regs[rs1].u + s_imm, cpu->regs[rs2].u);
       break;
