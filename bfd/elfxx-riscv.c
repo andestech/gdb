@@ -1787,7 +1787,7 @@ riscv_parse_prefixed_ext (riscv_parse_subset_t *rps,
 	{
 	  is_old_name = 1;
 	  effect_subset = non_std_ext_d4_versions[is_old_name-1].name;
-	  q += 2;
+	  q += (q[3] == '-') ? 4 : 3;
 	}
       else if (strncasecmp(subset, "xdsp", 3) == 0)
 	{
