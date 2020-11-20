@@ -63,7 +63,7 @@ proc verify_testval {name value} {
 
 # A simple test of next over a throw.
 set oldtimeout $timeout
-set timeout [expr "$timeout + 10"]
+set timeout [expr "$timeout + 100"]
 tbreak_and_cont "Start: first test"
 gdb_test "next" ".*" "next over a throw 1"
 tbreak_and_cont "End: first test"
