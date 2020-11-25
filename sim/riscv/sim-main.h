@@ -180,7 +180,9 @@ typedef union FRegisterValue
   float        S[4];
   double       D[2];
 
+  float64_t    d[2];
   float32_t    f[4];
+  float16_t    hf[8];
 } FRegister;
 
 struct _sim_cpu {
