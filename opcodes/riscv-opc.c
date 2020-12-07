@@ -2527,7 +2527,7 @@ const struct riscv_opcode riscv_opcodes[] =
 {"vsra.vx",    0, {"V", 0},  "Vd,Vt,sVm", MATCH_VSRAVX, MASK_VSRAVX, match_vd_neq_vm, 0 },
 {"vsra.vi",    0, {"V", 0},  "Vd,Vt,VjVm", MATCH_VSRAVI, MASK_VSRAVI, match_vd_neq_vm, 0 },
 
-{"vncvt.x.x.v",0, {"V", 0},  "Vd,VtVm", MATCH_VNCVTXXV, MASK_VNCVTXXV, match_narrow_vd_neq_vs2_neq_vm, INSN_ALIAS },
+{"vncvt.x.x.w",0, {"V", 0},  "Vd,VtVm", MATCH_VNCVTXXW, MASK_VNCVTXXW, match_narrow_vd_neq_vs2_neq_vm, INSN_ALIAS },
 
 {"vnsrl.wv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VNSRLWV, MASK_VNSRLWV, match_narrow_vd_neq_vs2_neq_vm, 0 },
 {"vnsrl.wx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VNSRLWX, MASK_VNSRLWX, match_narrow_vd_neq_vs2_neq_vm, 0 },
