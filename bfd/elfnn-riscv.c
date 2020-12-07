@@ -4518,6 +4518,13 @@ _bfd_riscv_relax_lui_gp_insn (bfd *abfd,
   Elf_Internal_Sym *isym = NULL;
   struct elf_link_hash_entry *h = NULL;
 
+  /* Mergeable symbols and code might later move out of range.  */
+  /* For bug-14274, symbols defined in the .rodata (the sections
+     before .data, may also later move out of range.  */
+  if (sym_sec->flags & (SEC_MERGE | SEC_CODE)
+      || (data_start && sec_addr (sym_sec) < data_start))
+    return TRUE;
+
   BFD_ASSERT (rel->r_offset + 4 <= sec->size);
 
   if (gp)
