@@ -304,6 +304,7 @@ free_each_cb(void *l ATTRIBUTE_UNUSED, void *j ATTRIBUTE_UNUSED, void *p ATTRIBU
   return FALSE; /* to the end  */
 }
 
+#ifdef TO_REMOVE
 static int 
 find_vma_each_cb(void *l ATTRIBUTE_UNUSED, bfd_vma *j, execit_vma_t *p, void *q ATTRIBUTE_UNUSED)
 {
@@ -319,6 +320,7 @@ find_vma_final_cb(void *l ATTRIBUTE_UNUSED, bfd_vma *j ATTRIBUTE_UNUSED, void *p
     printf("vma 0x%08lx not found\n", *j);
   return 0;
 }
+#endif
 
 #define LIST_ITER(list_pp, obj, each_cb, final_cb) \
       list_iterate((list_entry_t **)list_pp, (void *)obj, \
@@ -2047,6 +2049,7 @@ perform_relocation (const reloc_howto_type *howto,
     case R_RISCV_ICT_64:
       break;
 
+    case R_RISCV_NDS_MISC:
     case R_RISCV_DELETE:
       return bfd_reloc_ok;
 
@@ -5104,7 +5107,7 @@ _bfd_riscv_relax_lui (bfd *abfd,
 {
   bfd_byte *contents = elf_section_data (sec)->this_hdr.contents;
   bfd_vma gp = riscv_global_pointer_value (link_info);
-  bfd_vma data_start = riscv_data_start_value (link_info);
+  //bfd_vma data_start = riscv_data_start_value (link_info);
 
   BFD_ASSERT (rel->r_offset + 4 <= sec->size);
 
@@ -7158,6 +7161,7 @@ estimate_relocation_each_cb(void *l ATTRIBUTE_UNUSED, void *j ATTRIBUTE_UNUSED, 
   return FALSE; /* to iter to the end  */
 }
 
+#ifdef TO_REVIEW
 static int 
 determine_relocation_each_cb(void *l ATTRIBUTE_UNUSED, void *j, execit_irel_t *p, void *q ATTRIBUTE_UNUSED)
 {
@@ -7168,7 +7172,6 @@ determine_relocation_each_cb(void *l ATTRIBUTE_UNUSED, void *j, execit_irel_t *p
   return FALSE; /* to iter to the end  */
 }
 
-#ifdef TO_REVIEW
 static int 
 estimate_pc_each_cb(void *l ATTRIBUTE_UNUSED, void *j ATTRIBUTE_UNUSED, execit_irel_t *p, void *q ATTRIBUTE_UNUSED)
 {
@@ -7257,6 +7260,7 @@ andes_execit_estimate_lui (execit_hash_t *he, execit_vma_t **lst_pp)
   LIST_EACH1(&he->irels, collect_lui_vma_each_cb, lst_pp);
 }
 
+#ifdef TO_REMOVE
 static void
 andes_execit_determine_lui (execit_hash_t *he, execit_vma_t **lst_pp, struct bfd_link_info *info)
 {
@@ -7266,6 +7270,7 @@ andes_execit_determine_lui (execit_hash_t *he, execit_vma_t **lst_pp, struct bfd
 //   collect_lui_vma_each_cb(NULL, NULL, NULL, NULL); /* reset cache  */
 //   LIST_EACH1(&he->irels, collect_lui_vma_each_cb, lst_pp);
 }
+#endif
 
 #ifdef TO_REVIEW
 static void
@@ -8300,6 +8305,7 @@ andes_execit_relocate_itable (struct bfd_link_info *link_info, bfd *abfd)
     return;
 
   /* Relocate instruction.  */
+  /* TODO: mark relocated entries to avoid redundancy calculations  */
   for (int index = 0; index < execit.raw_itable_entries; ++index)
     {
       execit_hash_t *he = itable[index];
@@ -8531,10 +8537,10 @@ andes_execit_render_hash (execit_context_t *ctx)
 //		      && h->root.type != bfd_link_hash_undefweak
 		      ))
 		  {
-		    printf("%s: skip global symbol.\n", __FUNCTION__);
+		//     printf("%s: skip global symbol.\n", __FUNCTION__);
 		    return rz;
 		  }
-	      ctx->ie.isec = h->root.u.def.section; /* TODO: renmae isec  */
+	      ctx->ie.isec = h->root.u.def.section; /* TODO: rename isec  */
 	      ctx->ie.addend = h->root.u.def.value + irel->r_addend;
 	      ctx->ie.relocation = sec_addr (ctx->ie.isec) + ctx->ie.addend;
 	      ctx->ie.h = h;
@@ -8595,8 +8601,10 @@ andes_execit_render_hash (execit_context_t *ctx)
 
   if (rz == EXECIT_HASH_OK)
     snprintf (ctx->buf, sizeof(ctx->buf), "%08x|%08llx|%08llx|%s",
-	      ctx->ie.fixed, relocation_for_hash,
-	      addend_for_hash, symbol);
+	      ctx->ie.fixed,
+	      (long long unsigned int)relocation_for_hash,
+	      (long long unsigned int)addend_for_hash,
+	      symbol);
   else
     BFD_ASSERT (irel);
 

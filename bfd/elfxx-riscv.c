@@ -901,6 +901,21 @@ static reloc_howto_type howto_table[] =
   EMPTY_HOWTO (226), EMPTY_HOWTO (227), EMPTY_HOWTO (228), EMPTY_HOWTO (229),
 
   /* Relocations for NDS V5.  */
+  /* Andes misc. info. (alignment info so far)  */
+  HOWTO (R_RISCV_NDS_MISC,		/* type */
+         0,				/* rightshift */
+         0,				/* size */
+         0,				/* bitsize */
+         FALSE,				/* pc_relative */
+         0,				/* bitpos */
+         complain_overflow_dont,	/* complain_on_overflow */
+         bfd_elf_generic_reloc,		/* special_function */
+         "R_RISCV_NDS_MISC",		/* name */
+         FALSE,				/* partial_inplace */
+         0,				/* src_mask */
+         0,				/* dst_mask */
+         FALSE),			/* pcrel_offset */
+
   /* EXEC.IT itable entry index.  */
   HOWTO (R_RISCV_EXECIT_ITE,		/* type */
 	 0,				/* rightshift */
@@ -915,21 +930,6 @@ static reloc_howto_type howto_table[] =
 	 0,				/* src_mask */
 	 ENCODE_RVC_EXECIT_IMM (-1U),	/* dst_mask */
 	 FALSE),			/* pcrel_offset */
-
-  /* Mark the end of the region that can not do some linker relaxations.  */
-  HOWTO (R_RISCV_NDS_MISC,		/* type */
-         0,				/* rightshift */
-         0,				/* size */
-         0,				/* bitsize */
-         FALSE,				/* pc_relative */
-         0,				/* bitpos */
-         complain_overflow_dont,	/* complain_on_overflow */
-         bfd_elf_generic_reloc,		/* special_function */
-         "R_RISCV_NDS_MISC",		/* name */
-         FALSE,				/* partial_inplace */
-         0,				/* src_mask */
-         0,				/* dst_mask */
-         FALSE),			/* pcrel_offset */
 
   /* Jump-patch table relocations.  */
   /* High 20 bits of 32-bit 32-bit absolute address for jump-patch table.  */
