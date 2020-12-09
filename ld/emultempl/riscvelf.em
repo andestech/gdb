@@ -495,7 +495,7 @@ PARSE_AND_LIST_ARGS_CASES='
       einfo (_("Missing file for --mexport-execit=<file>.\n"));
 
       execit_export_file = optarg;
-      /* Open file in the riscv_elf_relocate_execit_table.  */
+      /* Open file in the andes_execit_relocate_itable.  */
       break;
   case OPTION_IMPORT_EXECIT:
     if (!optarg)

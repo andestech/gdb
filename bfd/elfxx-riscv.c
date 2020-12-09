@@ -902,6 +902,20 @@ static reloc_howto_type howto_table[] =
   EMPTY_HOWTO (230),
 
   /* Relocations for NDS V5.  */
+  /* EXEC.IT itable entry index.  */
+  HOWTO (R_RISCV_EXECIT_ITE,		/* type */
+	 0,				/* rightshift */
+	 2,				/* size */
+	 16,				/* bitsize */
+	 FALSE,				/* pc_relative */
+	 0,				/* bitpos */
+	 complain_overflow_dont,	/* complain_on_overflow */
+	 bfd_elf_generic_reloc,		/* special_function */
+	 "R_RISCV_EXECIT_ITE",		/* name */
+	 FALSE,				/* partial_inplace */
+	 0,				/* src_mask */
+	 ENCODE_RVC_EXECIT_IMM (-1U),	/* dst_mask */
+	 FALSE),			/* pcrel_offset */
 
   /* Mark the end of the region that can not do some linker relaxations.  */
   HOWTO (R_RISCV_NDS_MISC,		/* type */
@@ -1345,6 +1359,7 @@ static const struct elf_reloc_map riscv_reloc_map[] =
   { BFD_RELOC_RISCV_SET32, R_RISCV_SET32 },
   { BFD_RELOC_RISCV_32_PCREL, R_RISCV_32_PCREL },
   { BFD_RELOC_RISCV_NDS_MISC, R_RISCV_NDS_MISC },
+  { BFD_RELOC_RISCV_EXECIT_ITE, R_RISCV_EXECIT_ITE },
   { BFD_RELOC_RISCV_ICT_HI20, R_RISCV_ICT_HI20 },
   { BFD_RELOC_RISCV_ICT_LO12_I, R_RISCV_ICT_LO12_I },
   { BFD_RELOC_RISCV_PCREL_ICT_HI20, R_RISCV_PCREL_ICT_HI20 },
