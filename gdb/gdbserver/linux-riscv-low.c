@@ -275,7 +275,9 @@ struct linux_target_ops the_low_target =
   NULL, /* supply_ptrace_register */
   NULL, /* siginfo_fixup */
   NULL, /* new_process */
+  NULL, /* delete_process */
   NULL, /* new_thread */
+  NULL, /* delete_thread */
   NULL, /* new_fork */
   NULL, /* prepare_to_resume */
   NULL, /* process_qsupported */
@@ -287,6 +289,8 @@ struct linux_target_ops the_low_target =
   NULL, /* supports_range_stepping */
   NULL, /* breakpoint_kind_from_current_state */
   riscv_supports_hardware_single_step,
+  NULL, /* get_syscall_trapinfo */
+  NULL, /* get_ipa_tdesc_idx */
 };
 
 void
