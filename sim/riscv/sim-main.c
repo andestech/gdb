@@ -8823,6 +8823,30 @@ execute_zfh (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int 
 }
 
 static sim_cia
+execute_xebfhw (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex9)
+{
+  SIM_DESC sd = CPU_STATE (cpu);
+
+  int rd = (iw >> OP_SH_RD) & OP_MASK_RD;
+  int rs2 = (iw >> OP_SH_RS2) & OP_MASK_RS2;
+
+  switch (op->match & MASK_FCVT_S_BF16)
+    {
+    case MATCH_FCVT_S_BF16:
+      cpu->fpregs[rd].w[0] = cpu->fpregs[rs2].w[0] << 16;
+      break;
+    case MATCH_FCVT_BF16_S:
+      cpu->fpregs[rd].w[0] = cpu->fpregs[rs2].w[0] >> 16;
+      break;
+    default:
+      TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
+      sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
+    }
+
+  return cpu->pc + 4;
+}
+
+static sim_cia
 execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex9)
 {
   SIM_DESC sd = CPU_STATE (cpu);
@@ -8861,6 +8885,8 @@ execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int 
         return execute_andes(cpu, iw, op, ex9);
       if (strncmp (subset, "DSP", 3) == 0)
 	return execute_p (cpu, iw, op, ex9);
+      if (strncmp (subset, "EBFHW", 5) == 0)
+        return execute_xebfhw(cpu, iw, op, ex9);
     case 'Z':
       subset++;
       if (strncmp(subset, "FH", 2) == 0)
