@@ -1795,6 +1795,12 @@ execute_andes(SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int
                                       cpu->csr.uitb + EXTRACT_RVC_EXECIT_IMM (iw));
       pc = riscv_decode (cpu, iw, cpu->pc, 1);
       return pc;
+    case MATCH_FCVT_S_BF16:
+      cpu->fpregs[rd].w[0] = cpu->fpregs[rs2].w[0] << 16;
+      break;
+    case MATCH_FCVT_BF16_S:
+      cpu->fpregs[rd].w[0] = cpu->fpregs[rs2].w[0] >> 16;
+      break;
     default:
       TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
       sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
