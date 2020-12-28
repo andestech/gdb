@@ -927,8 +927,8 @@ const struct riscv_opcode riscv_opcodes[] =
 {"exec.it",     0, {"XANDES", "C", 0}, "Cet",  MATCH_C_EXECIT, MASK_C_EXECIT, match_opcode, 0 },
 {"ex9.it",      0, {"XANDES", "C", 0}, "Cei",  MATCH_C_EX9IT, MASK_C_EX9IT, match_opcode, 0 },
 
-{"fcvt.s.bf16", 0, {"XANDES", "F", 0}, "D,T",  MATCH_FCVT_S_BF16, MASK_FCVT_S_BF16, match_opcode, 0 },
-{"fcvt.bf16.s", 0, {"XANDES", "F", 0}, "D,T",  MATCH_FCVT_BF16_S, MASK_FCVT_BF16_S, match_opcode, 0 },
+{"fcvt.s.bf16", 0, {"XEBFHW", "XANDES", "F", 0}, "D,T",  MATCH_FCVT_S_BF16, MASK_FCVT_S_BF16, match_opcode, 0 },
+{"fcvt.bf16.s", 0, {"XEBFHW", "XANDES", "F", 0}, "D,T",  MATCH_FCVT_BF16_S, MASK_FCVT_BF16_S, match_opcode, 0 },
 {"vfwcvt.s.bf16",0,{"XANDES", "V", "F", 0}, "Vd,Vt", MATCH_VFWCVT_S_BF16, MASK_VFWCVT_S_BF16, match_opcode, 0},
 {"vfncvt.bf16.s",0,{"XANDES", "V", "F", 0}, "Vd,Vt", MATCH_VFNCVT_BF16_S, MASK_VFNCVT_BF16_S, match_opcode, 0},
 
