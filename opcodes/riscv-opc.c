@@ -825,11 +825,6 @@ const struct riscv_opcode riscv_opcodes[] =
 {"vfwcvt.s.bf16",0,{"XANDES", "V", "F", 0}, "Vd,Vt", MATCH_VFWCVT_S_BF16, MASK_VFWCVT_S_BF16, match_opcode, 0},
 {"vfncvt.bf16.s",0,{"XANDES", "V", "F", 0}, "Vd,Vt", MATCH_VFNCVT_BF16_S, MASK_VFNCVT_BF16_S, match_opcode, 0},
 
-{"vln.v",       0, {"XANDES", "V", 0}, "Vd,0(s)Vm",  MATCH_VLN_V, MASK_VLN_V, match_opcode, INSN_DREF },
-{"vlnu.v",      0, {"XANDES", "V", 0}, "Vd,0(s)Vm",  MATCH_VLNU_V, MASK_VLNU_V, match_opcode, INSN_DREF },
-{"vln8.v",      0, {"XANDES", "V", 0}, "Vd,0(s)Vm", MATCH_VLN8_V, MASK_VLN8_V, match_opcode, INSN_DREF},
-{"vlnu8.v",     0, {"XANDES", "V", 0}, "Vd,0(s)Vm", MATCH_VLNU8_V, MASK_VLNU8_V, match_opcode, INSN_DREF},
-
 /* NDS V5 DSP Extension.  */
 {"add8",        0, {"XDSP", 0}, "d,s,t",     MATCH_ADD8, MASK_ADD8, match_opcode, 0 },
 {"add16",       0, {"XDSP", 0}, "d,s,t",     MATCH_ADD16, MASK_ADD16, match_opcode, 0 },
@@ -1586,6 +1581,22 @@ const struct riscv_opcode riscv_opcodes[] =
 {"vd4dotsu.vv", 0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VD4DOTSU_VV, MASK_VD4DOTSU_VV, match_opcode, 0},
 
 /* RVV */
+/* Andes V5 vector small INT handling extension  */
+{"vle4.v",            0, {"V", 0},  "Vd,0(s)", MATCH_VLE4_V, MASK_VLE4_V, match_opcode, INSN_DREF },
+{"vfwcvt.f.n.v",      0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFWCVT_F_N_V, MASK_VFWCVT_F_N_V, match_widen_vd_neq_vs2_neq_vm, 0},
+{"vfwcvt.f.nu.v",     0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFWCVT_F_NU_V, MASK_VFWCVT_F_NU_V, match_widen_vd_neq_vs2_neq_vm, 0},
+{"vfwcvt.f.b.v",      0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFWCVT_F_B_V, MASK_VFWCVT_F_B_V, match_widen_vd_neq_vs2_neq_vm, 0},
+{"vfwcvt.f.bu.v",     0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFWCVT_F_BU_V, MASK_VFWCVT_F_BU_V, match_widen_vd_neq_vs2_neq_vm, 0},
+{"vfpmadt.vf",        0, {"V", "F", 0}, "Vd,S,VtVm", MATCH_VFPMADT_VF, MASK_VFPMADT_VF, match_opcode, 0},
+{"vfpmadb.vf",        0, {"V", "F", 0}, "Vd,S,VtVm", MATCH_VFPMADB_VF, MASK_VFPMADB_VF, match_opcode, 0},
+
+/* Andes Xv5 INT4 Load (vln.v => vle4.v)  */
+{"vln.v",       0, {"XANDES", "V", 0}, "Vd,0(s)Vm",  MATCH_VLN_V, MASK_VLN_V, match_opcode, INSN_DREF | INSN_ALIAS},
+{"vlnu.v",      0, {"XANDES", "V", 0}, "Vd,0(s)Vm",  MATCH_VLNU_V, MASK_VLNU_V, match_opcode, INSN_DREF },
+{"vln8.v",      0, {"XANDES", "V", 0}, "Vd,0(s)Vm", MATCH_VLN8_V, MASK_VLN8_V, match_opcode, INSN_DREF},
+{"vlnu8.v",     0, {"XANDES", "V", 0}, "Vd,0(s)Vm", MATCH_VLNU8_V, MASK_VLNU8_V, match_opcode, INSN_DREF},
+
+/* RVV standard exetension  */
 {"vsetvl",     0, {"V", 0},  "d,s,t", MATCH_VSETVL, MASK_VSETVL, match_opcode, 0},
 {"vsetvli",    0, {"V", 0},  "d,s,Vc", MATCH_VSETVLI, MASK_VSETVLI, match_opcode, 0},
 
