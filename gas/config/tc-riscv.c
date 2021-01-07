@@ -5452,6 +5452,7 @@ riscv_frag_align_code (int n)
   exp.X_add_number = worst_case_bytes;
   exp.X_md = 0;
   fix_new_exp (fragP, fragP_fix, 0, &exp, 0, BFD_RELOC_RISCV_ALIGN);
+  frag_grow (worst_case_bytes);
   p = frag_more (worst_case_bytes);
   /* zero contents for Andes bug20178.  */
   md_number_to_chars (p, 0, worst_case_bytes);
