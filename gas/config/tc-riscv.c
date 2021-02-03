@@ -289,6 +289,7 @@ struct riscv_set_options
   int dsp; /* RVP */
   int vector; /* RVV */
   int efhw; /* RVXefhw (flhw/fshw) */
+  int workaround; /* Enable Andes workarounds.  */
   /* } Andes  */
 };
 
@@ -308,6 +309,7 @@ static struct riscv_set_options riscv_opts =
   0, /* dsp */
   0, /* vector */
   0, /* efhw */
+  1, /* workaround */
   /* } Andes  */
 };
 
@@ -4201,6 +4203,7 @@ enum options
   OPTION_MEXT_DSP,
   OPTION_MEXT_VECTOR,
   OPTION_MEXT_EFHW,
+  OPTION_MNO_WORKAROUND,
   /* } Andes  */
   OPTION_END_OF_ENUM
 };
@@ -4234,6 +4237,7 @@ struct option md_longopts[] =
   {"mext-dsp", no_argument, NULL, OPTION_MEXT_DSP},
   {"mext-vector", no_argument, NULL, OPTION_MEXT_VECTOR},
   {"mext-efhw", no_argument, NULL, OPTION_MEXT_EFHW},
+  {"mno-workaround", no_argument, NULL, OPTION_MNO_WORKAROUND},
   /* } Andes  */
 
   {NULL, no_argument, NULL, 0}
@@ -4408,6 +4412,10 @@ md_parse_option (int c, const char *arg)
       }
       break;
     /* } Andes ACE */
+
+    case OPTION_MNO_WORKAROUND:
+	riscv_opts.workaround = 0;
+      break;
 
     default:
       return 0;
@@ -5610,16 +5618,29 @@ RISC-V options:\n\
   -mlittle-endian             assemble for little-endian\n\
 "));
 
-  char *var = getenv("ANDES_EXTENSION");
+  char *var = getenv("ANDES_HELP");
   if (var)
     {
       fprintf (stream, _("\
 Andes options:\n\
+  -mno-16-bit                 don't generate rvc instructions\n\
+  -matomic                    enable atomic extension\n\
+  -mace                       support user defined instruction extension\n\
+  -O1                         optimize for performance\n\
+  -Os                         optimize for space\n\
+  -mext-dsp                   enable dsp extension\n\
+  -mext-efhw                  enable efhw extension\n\
+  -mext-vector                enable vector extension\n\
+  -mexecit-noji               disable execit relaxation for jump instructions\n\
+  -mexecit-nols               disable execit relaxation for load/store instructions\n\
+  -mexecit-norel              disable execit relaxation for instructions with reloaction\n\
+  -mcmodel=TYPE               set cmodel type\n\
   -mace                       support user defined instruction extension\n\
   -matomic                    enable atomic extension\n\
   -mext-dsp                   enable RVP (DSP) extension\n\
   -mext-vector                enable RVV (vector) extension\n\
   -mext-efhw                  enable efhw extension\n\
+  -mno-workaround             disable all workarounds\n\
 "));
     }
 }
