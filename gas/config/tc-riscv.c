@@ -138,6 +138,7 @@ struct riscv_set_options
   /* bug{ID} workaround */
   int b19758;
   int b20282;
+  int workaround;
 };
 
 enum CMODEL_TYPES {
@@ -166,6 +167,7 @@ static struct riscv_set_options riscv_opts =
   0,	/* update_count */
   1,	/* b19758 */
   0,	/* b20282 */
+  1,	/* workaround */
 };
 
 /* The priority: `-mno-16-bit' option
@@ -4045,14 +4047,14 @@ out:
     *(argsStart - 1) = save_c;
 
   if (error == NULL) {
-    if (riscv_opts.b19758) {
+    if (riscv_opts.b19758 && riscv_opts.workaround) {
       if (is_b19758_associated_insn(insn)) {
 	  s = (char*)"iorw";
 	  arg_lookup (&s, riscv_pred_succ, ARRAY_SIZE (riscv_pred_succ), &regno);
           macro_build(NULL, "fence", "P,Q", regno, regno);
       }
     }
-    if (riscv_opts.b20282) {
+    if (riscv_opts.b20282 && riscv_opts.workaround) {
       if (pre_insn_is_a_cond_br && is_indirect_jump(insn)) {
         macro_build(NULL, "nop", "");
         pre_insn_is_a_cond_br = FALSE;
@@ -4520,6 +4522,7 @@ enum options
   OPTION_MNO_VIC,
   OPTION_MNO_B19758,
   OPTION_MB20282,
+  OPTION_MNO_WORKAROUND,
   OPTION_END_OF_ENUM
 };
 
@@ -4551,7 +4554,8 @@ struct option md_longopts[] =
   {"mno-check-constraints", no_argument, NULL, OPTION_MNO_VIC},
   {"mno-b19758", no_argument, NULL, OPTION_MNO_B19758},
   {"mb20282", no_argument, NULL, OPTION_MB20282},
-
+  {"mno-workaround", no_argument, NULL, OPTION_MNO_WORKAROUND},
+  
   {NULL, no_argument, NULL, 0}
 };
 size_t md_longopts_size = sizeof (md_longopts);
@@ -4743,6 +4747,10 @@ md_parse_option (int c, const char *arg)
 
     case OPTION_MB20282:
 	riscv_opts.b20282 = 1;
+      break;
+
+    case OPTION_MNO_WORKAROUND:
+	riscv_opts.workaround = 0;
       break;
 
     default:
@@ -5977,28 +5985,29 @@ md_show_usage (FILE *stream)
 {
   fprintf (stream, _("\
 RISC-V options:\n\
-  -fpic          generate position-independent code\n\
-  -fPIC          same as -fpic\n\
-  -fno-pic       don't generate position-independent code (default)\n\
-  -march=ISA     set the RISC-V architecture\n\
-  -mabi=ABI      set the RISC-V ABI\n\
-  -mrelax        enable relax (default)\n\
-  -mno-relax     disable relax\n\
-  -march-attr    generate RISC-V arch attribute\n\
-  -mno-arch-attr don't generate RISC-V arch attribute\n\
+  -fpic           generate position-independent code\n\
+  -fPIC           same as -fpic\n\
+  -fno-pic        don't generate position-independent code (default)\n\
+  -march=ISA      set the RISC-V architecture\n\
+  -mabi=ABI       set the RISC-V ABI\n\
+  -mrelax         enable relax (default)\n\
+  -mno-relax      disable relax\n\
+  -march-attr     generate RISC-V arch attribute\n\
+  -mno-arch-attr  don't generate RISC-V arch attribute\n\
 \nNDS specific command line options:\n\
-  -mno-16-bit    don't generate rvc instructions\n\
-  -matomic       enable atomic extension\n\
-  -mace          Support user defined instruction extension\n\
-  -O1            optimize for performance\n\
-  -Os            optimize for space\n\
-  -mext-dsp      enable dsp extension\n\
-  -mext-efhw     enable efhw extension\n\
-  -mext-vector   enable vector extension\n\
-  -mexecit-noji  disable execit relaxation for jump instructions\n\
-  -mexecit-nols  disable execit relaxation for load/store instructions\n\
-  -mexecit-norel disable execit relaxation for instructions with reloaction\n\
-  -mcmodel=TYPE  set cmodel type\n\
+  -mno-16-bit     don't generate rvc instructions\n\
+  -matomic        enable atomic extension\n\
+  -mace           support user defined instruction extension\n\
+  -O1             optimize for performance\n\
+  -Os             optimize for space\n\
+  -mext-dsp       enable dsp extension\n\
+  -mext-efhw      enable efhw extension\n\
+  -mext-vector    enable vector extension\n\
+  -mexecit-noji   disable execit relaxation for jump instructions\n\
+  -mexecit-nols   disable execit relaxation for load/store instructions\n\
+  -mexecit-norel  disable execit relaxation for instructions with reloaction\n\
+  -mcmodel=TYPE   set cmodel type\n\
+  -mno-workaround disable all workarounds\n\
 "));
 }
 
