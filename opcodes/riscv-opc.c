@@ -456,86 +456,6 @@ match_narrow_vd_neq_vs2_neq_vm (const struct riscv_opcode *op,
 }
 
 static int
-match_narrow_vd_neq_vs2_neq_vm (const struct riscv_opcode *op,
-				insn_t insn,
-				int constraints)
-{
-  int vd = (insn & MASK_VD) >> OP_SH_VD;
-  int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
-  int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
-
-  if (!constraints)
-    return match_opcode (op, insn, 0);
-
-  if ((vs2 % 2) != 0)
-    ;
-  else if (vd >= vs2 && vd <= (vs2 + 1))
-    ;
-  else if (!vm && vd >= vm && vd <= (vm + 1))
-    ;
-  else
-    return match_opcode (op, insn, 0);
-  return 0;
-}
-
-static int
-match_quad_vd_neq_vs1_neq_vs2_neq_vm (const struct riscv_opcode *op,
-				      insn_t insn,
-				      int constraints,
-				      const char **error)
-{
-  if (opc_opts.no_vic)
-    return match_opcode (op, insn, 0, NULL);
-
-  int vd = (insn & MASK_VD) >> OP_SH_VD;
-  int vs1 = (insn & MASK_VS1) >> OP_SH_VS1;
-  int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
-  int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
-
-  if (!constraints || error == NULL)
-    return match_opcode (op, insn, 0, NULL);
-
-  if ((vd % 4) != 0)
-    *error = "illegal operands vd must be multiple of 4";
-  else if (vs1 >= vd && vs1 <= (vd + 3))
-    *error = "illegal operands vd cannot overlap vs1";
-  else if (vs2 >= vd && vs2 <= (vd + 3))
-    *error = "illegal operands vd cannot overlap vs2";
-  else if (!vm && vm >= vd && vm <= (vd + 3))
-    *error = "illegal operands vd cannot overlap vm";
-  else
-    return match_opcode (op, insn, 0, NULL);
-  return 0;
-}
-
-static int
-match_quad_vd_neq_vs2_neq_vm (const struct riscv_opcode *op,
-			      insn_t insn,
-			      int constraints,
-			      const char **error)
-{
-  if (opc_opts.no_vic)
-    return match_opcode (op, insn, 0, NULL);
-
-  int vd = (insn & MASK_VD) >> OP_SH_VD;
-  int vs2 = (insn & MASK_VS2) >> OP_SH_VS2;
-  int vm = (insn & MASK_VMASK) >> OP_SH_VMASK;
-
-  if (!constraints || error == NULL)
-    return match_opcode (op, insn, 0, NULL);
-
-  if ((vd % 4) != 0)
-    *error = "illegal operands vd must be multiple of 4";
-  else if (vs2 >= vd && vs2 <= (vd + 3))
-    *error = "illegal operands vd cannot overlap vs2";
-  else if (!vm && vm >= vd && vm <= (vd + 3))
-    *error = "illegal operands vd cannot overlap vm";
-  else
-    return match_opcode (op, insn, 0, NULL);
-  return 0;
-}
-
-static int
 match_vd_neq_vs1_neq_vs2 (const struct riscv_opcode *op,
 			  insn_t insn,
 			  int constraints,
@@ -2312,14 +2232,6 @@ const struct riscv_opcode riscv_opcodes[] =
 {"vwmaccsu.vx", 0, {"V", 0},  "Vd,s,VtVm", MATCH_VWMACCSUVX, MASK_VWMACCSUVX, match_widen_vd_neq_vs2_neq_vm, 0},
 {"vwmaccus.vx", 0, {"V", 0},  "Vd,s,VtVm", MATCH_VWMACCUSVX, MASK_VWMACCUSVX, match_widen_vd_neq_vs2_neq_vm, 0},
 
-{"vqmaccu.vv",  0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VQMACCUVV, MASK_VQMACCUVV, match_quad_vd_neq_vs1_neq_vs2_neq_vm, 0},
-{"vqmaccu.vx",  0, {"V", 0},  "Vd,s,VtVm",  MATCH_VQMACCUVX, MASK_VQMACCUVX, match_quad_vd_neq_vs2_neq_vm, 0},
-{"vqmacc.vv",   0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VQMACCVV, MASK_VQMACCVV, match_quad_vd_neq_vs1_neq_vs2_neq_vm, 0},
-{"vqmacc.vx",   0, {"V", 0},  "Vd,s,VtVm",  MATCH_VQMACCVX, MASK_VQMACCVX, match_quad_vd_neq_vs2_neq_vm, 0},
-{"vqmaccsu.vv", 0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VQMACCSUVV, MASK_VQMACCSUVV, match_quad_vd_neq_vs1_neq_vs2_neq_vm, 0},
-{"vqmaccsu.vx", 0, {"V", 0},  "Vd,s,VtVm",  MATCH_VQMACCSUVX, MASK_VQMACCSUVX, match_quad_vd_neq_vs2_neq_vm, 0},
-{"vqmaccus.vx", 0, {"V", 0},  "Vd,s,VtVm",  MATCH_VQMACCUSVX, MASK_VQMACCUSVX, match_quad_vd_neq_vs2_neq_vm, 0},
-
 {"vdivu.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VDIVUVV, MASK_VDIVUVV, match_opcode, 0 },
 {"vdivu.vx",   0, {"V", 0},  "Vd,Vt,sVm", MATCH_VDIVUVX, MASK_VDIVUVX, match_opcode, 0 },
 {"vdiv.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VDIVVV, MASK_VDIVVV, match_opcode, 0 },
@@ -2557,10 +2469,6 @@ const struct riscv_opcode riscv_opcodes[] =
 {"vmv2r.v",    0, {"V", 0}, "Vd,Vt", MATCH_VMV2RV, MASK_VMV2RV, match_vmv_nf_rv, 0},
 {"vmv4r.v",    0, {"V", 0}, "Vd,Vt", MATCH_VMV4RV, MASK_VMV4RV, match_vmv_nf_rv, 0},
 {"vmv8r.v",    0, {"V", 0}, "Vd,Vt", MATCH_VMV8RV, MASK_VMV8RV, match_vmv_nf_rv, 0},
-
-{"vdot.vv",    0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VDOTVV, MASK_VDOTVV, match_opcode, 0},
-{"vdotu.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VDOTUVV, MASK_VDOTUVV, match_opcode, 0},
-{"vfdot.vv",   0, {"V", 0},  "Vd,Vt,VsVm", MATCH_VFDOTVV, MASK_VFDOTVV, match_opcode, 0},
 /* END RVV */
 
 /* Terminate the list.  */
@@ -2687,3 +2595,97 @@ const struct riscv_opcode riscv_insn_types[] =
 /* Terminate the list.  */
 {0, 0, {0}, 0, 0, 0, 0, 0}
 };
+
+/* All standard extensions defined in all supported ISA spec.  */
+const struct riscv_ext_version riscv_ext_version_table[] =
+{
+/* name, ISA spec, major version, minor_version.  */
+{"e", ISA_SPEC_CLASS_20191213, 1, 9},
+{"e", ISA_SPEC_CLASS_20190608, 1, 9},
+{"e", ISA_SPEC_CLASS_2P2,      1, 9},
+
+{"i", ISA_SPEC_CLASS_20191213, 2, 1},
+{"i", ISA_SPEC_CLASS_20190608, 2, 1},
+{"i", ISA_SPEC_CLASS_2P2,      2, 0},
+
+{"m", ISA_SPEC_CLASS_20191213, 2, 0},
+{"m", ISA_SPEC_CLASS_20190608, 2, 0},
+{"m", ISA_SPEC_CLASS_2P2,      2, 0},
+
+{"a", ISA_SPEC_CLASS_20191213, 2, 1},
+{"a", ISA_SPEC_CLASS_20190608, 2, 0},
+{"a", ISA_SPEC_CLASS_2P2,      2, 0},
+
+{"f", ISA_SPEC_CLASS_20191213, 2, 2},
+{"f", ISA_SPEC_CLASS_20190608, 2, 2},
+{"f", ISA_SPEC_CLASS_2P2,      2, 0},
+
+{"d", ISA_SPEC_CLASS_20191213, 2, 2},
+{"d", ISA_SPEC_CLASS_20190608, 2, 2},
+{"d", ISA_SPEC_CLASS_2P2,      2, 0},
+
+{"q", ISA_SPEC_CLASS_20191213, 2, 2},
+{"q", ISA_SPEC_CLASS_20190608, 2, 2},
+{"q", ISA_SPEC_CLASS_2P2,      2, 0},
+
+{"c", ISA_SPEC_CLASS_20191213, 2, 0},
+{"c", ISA_SPEC_CLASS_20190608, 2, 0},
+{"c", ISA_SPEC_CLASS_2P2,      2, 0},
+
+{"p", ISA_SPEC_CLASS_20191213, 0, 2},
+{"p", ISA_SPEC_CLASS_20190608, 0, 2},
+{"p", ISA_SPEC_CLASS_2P2,      0, 1},
+
+{"v", ISA_SPEC_CLASS_NONE,     1, 0},
+
+{"n", ISA_SPEC_CLASS_20190608, 1, 1},
+{"n", ISA_SPEC_CLASS_2P2,      1, 1},
+
+{"zicsr", ISA_SPEC_CLASS_20191213, 2, 0},
+{"zicsr", ISA_SPEC_CLASS_20190608, 2, 0},
+
+{"zvamo",   ISA_SPEC_CLASS_NONE, 1, 0},
+{"zvlsseg", ISA_SPEC_CLASS_NONE, 1, 0},
+
+/* Terminate the list.  */
+{NULL, 0, 0, 0}
+};
+
+struct isa_spec_t
+{
+  const char *name;
+  enum riscv_isa_spec_class class;
+};
+
+/* List for all supported ISA spec versions.  */
+static const struct isa_spec_t isa_specs[] =
+{
+  {"2.2",      ISA_SPEC_CLASS_2P2},
+  {"20190608", ISA_SPEC_CLASS_20190608},
+  {"20191213", ISA_SPEC_CLASS_20191213},
+
+/* Terminate the list.  */
+  {NULL, 0}
+};
+
+/* Get the corresponding ISA spec class by giving a ISA spec string.  */
+
+int
+riscv_get_isa_spec_class (const char *s,
+                         enum riscv_isa_spec_class *class)
+{
+  const struct isa_spec_t *version;
+
+  if (s == NULL)
+    return 0;
+
+  for (version = &isa_specs[0]; version->name != NULL; ++version)
+    if (strcmp (version->name, s) == 0)
+      {
+       *class = version->class;
+       return 1;
+      }
+
+  /* Can not find the supported ISA spec.  */
+  return 0;
+}

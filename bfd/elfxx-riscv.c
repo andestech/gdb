@@ -1863,7 +1863,7 @@ riscv_parse_prefixed_ext (riscv_parse_subset_t *rps,
 static const char * const riscv_std_z_ext_strtab[] =
   {
     "zefhw", "zfh", /* Andes Extensions  */
-    NULL
+    "zicsr", "zvamo", "zvlsseg", NULL
   };
 
 /* Same as `riscv_std_z_ext_strtab', but for S-class extensions.  */

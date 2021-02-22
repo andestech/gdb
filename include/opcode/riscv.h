@@ -66,12 +66,6 @@ static const char * const riscv_vlmul[8] =
   "m1", "m2", "m4", "m8", 0, "mf8", "mf4", "mf2"
 };
 
-/* List of vsetvli vediv constants.  */
-static const char * const riscv_vediv[4] =
-{
-  "d1", "d2", "d4", "d8"
-};
-
 static const char * const riscv_vta[2] =
 {
   "tu", "ta"
@@ -547,6 +541,27 @@ struct riscv_opcode
   unsigned long pinfo;
 };
 
+/* The current supported ISA spec versions.  */
+
+enum riscv_isa_spec_class
+{
+  ISA_SPEC_CLASS_NONE,
+
+  ISA_SPEC_CLASS_2P2,
+  ISA_SPEC_CLASS_20190608,
+  ISA_SPEC_CLASS_20191213
+};
+
+/* This structure holds version information for specific ISA.  */
+
+struct riscv_ext_version
+{
+  const char *name;
+  enum riscv_isa_spec_class isa_spec_class;
+  unsigned int major_version;
+  unsigned int minor_version;
+};
+
 /* Instruction is a simple alias (e.g. "mv" for "addi").  */
 #define	INSN_ALIAS		0x00000001
 
@@ -633,5 +648,8 @@ extern const char * const riscv_vecm_names_numeric[NVECM];
 
 extern const struct riscv_opcode riscv_opcodes[];
 extern const struct riscv_opcode riscv_insn_types[];
+
+extern int
+riscv_get_isa_spec_class (const char *, enum riscv_isa_spec_class *);
 
 #endif /* _RISCV_H_ */

@@ -2555,9 +2555,9 @@ my_getSmallExpression (expressionS *ep, bfd_reloc_code_real_type *reloc,
 static void
 my_getVsetvliExpression (expressionS *ep, char *str)
 {
-  unsigned int vsew_value = 0, vlmul_value = 0, vediv_value = 0;
+  unsigned int vsew_value = 0, vlmul_value = 0;
   unsigned int vta_value = 0, vma_value = 0;
-  bfd_boolean vsew_found = FALSE, vlmul_found = FALSE, vediv_found = FALSE;
+  bfd_boolean vsew_found = FALSE, vlmul_found = FALSE;
   bfd_boolean vta_found = FALSE, vma_found = FALSE;
 
   if (arg_lookup (&str, riscv_vsew, ARRAY_SIZE (riscv_vsew), &vsew_value))
@@ -2592,29 +2592,21 @@ my_getVsetvliExpression (expressionS *ep, char *str)
 	as_bad (_("multiple vma constants"));
       vma_found = TRUE;
     }
-  if (arg_lookup (&str, riscv_vediv, ARRAY_SIZE (riscv_vediv), &vediv_value))
-    {
-      if (*str == ',')
-	++str;
-      if (vediv_found)
-	as_bad (_("multiple vediv constants"));
-      vediv_found = TRUE;
-    }
 
-  if (vsew_found || vlmul_found || vediv_found || vta_found || vma_found)
+  if (vsew_found || vlmul_found || vta_found || vma_found)
     {
       ep->X_op = O_constant;
-      ep->X_add_number = (vediv_value << OP_SH_VEDIV)
+      ep->X_add_number = (vlmul_value << OP_SH_VLMUL)
 			 | (vsew_value << OP_SH_VSEW)
 			 | (vta_value << OP_SH_VTA)
-			 | (vma_value << OP_SH_VMA)
-			 | (vlmul_value << OP_SH_VLMUL);
+			 | (vma_value << OP_SH_VMA);
       expr_end = str;
-      return;
     }
-
-  my_getExpression (ep, str);
-  str = expr_end;
+  else
+    {
+      my_getExpression (ep, str);
+      str = expr_end;
+    }
 }
 
 /* Parse opcode name, could be an mnemonics or number.  */
