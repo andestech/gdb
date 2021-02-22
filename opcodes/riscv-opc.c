@@ -1751,8 +1751,9 @@ const struct riscv_opcode riscv_opcodes[] =
 {"vlnu8.v",     0, {"XANDES", "V", 0}, "Vd,0(s)Vm", MATCH_VLNU8_V, MASK_VLNU8_V, match_opcode, INSN_DREF},
 
 /* RVV standard exetension  */
-{"vsetvl",     0, {"V", 0},  "d,s,t", MATCH_VSETVL, MASK_VSETVL, match_opcode, 0},
+{"vsetvl",     0, {"V", 0},  "d,s,t",  MATCH_VSETVL, MASK_VSETVL, match_opcode, 0},
 {"vsetvli",    0, {"V", 0},  "d,s,Vc", MATCH_VSETVLI, MASK_VSETVLI, match_opcode, 0},
+{"vsetivli",   0, {"V", 0},  "d,Z,Vb", MATCH_VSETIVLI, MASK_VSETIVLI, match_opcode, 0},
 
 {"vle1.v",     0, {"V", 0},  "Vd,0(s)", MATCH_VLE1V, MASK_VLE1V, match_opcode, INSN_DREF },
 {"vse1.v",     0, {"V", 0},  "Vd,0(s)", MATCH_VSE1V, MASK_VSE1V, match_opcode, INSN_DREF },
