@@ -2117,7 +2117,8 @@ static const char * const riscv_std_z_ext_strtab[] =
   {
     "zefhw", "zfh", /* Andes Extensions  */
     "zvamo", "zvlsseg", /* RVV  */
-    "zicsr", "zifencei", "zihintpause", NULL
+    "zicsr", "zifencei", "zihintpause",
+    "zba", "zbb", "zbc", NULL
   };
 
 /* Same as `riscv_std_z_ext_strtab', but for S-class extensions.  */
