@@ -2349,6 +2349,7 @@ const struct riscv_opcode riscv_opcodes[] =
 {"vfmax.vf",   0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFMAXVF, MASK_VFMAXVF, match_opcode, 0},
 
 {"vfneg.v",    0, {"V", "F", 0}, "Vd,VuVm", MATCH_VFSGNJNVV, MASK_VFSGNJNVV, match_vs1_eq_vs2_neq_vm, INSN_ALIAS },
+{"vfabs.v",    0, {"V", "F", 0}, "Vd,VuVm", MATCH_VFSGNJXVV, MASK_VFSGNJXVV, match_vs1_eq_vs2_neq_vm, INSN_ALIAS },
 
 {"vfsgnj.vv",  0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFSGNJVV, MASK_VFSGNJVV, match_opcode, 0},
 {"vfsgnj.vf",  0, {"V", "F", 0}, "Vd,Vt,SVm", MATCH_VFSGNJVF, MASK_VFSGNJVF, match_opcode, 0},
