@@ -1580,6 +1580,11 @@ const struct riscv_opcode riscv_opcodes[] =
 {"sfence.vma", 0, {"I", 0},   "s,t",  MATCH_SFENCE_VMA, MASK_SFENCE_VMA, match_opcode, 0 },
 {"wfi",        0, {"I", 0},   "",     MATCH_WFI, MASK_WFI, match_opcode, 0 },
 
+/* RVX Andes V5 Vector Dot Product Extension  */
+{"vd4dots.vv",  0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VD4DOTS_VV, MASK_VD4DOTS_VV, match_opcode, 0},
+{"vd4dotu.vv",  0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VD4DOTU_VV, MASK_VD4DOTU_VV, match_opcode, 0},
+{"vd4dotsu.vv", 0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VD4DOTSU_VV, MASK_VD4DOTSU_VV, match_opcode, 0},
+
 /* RVV */
 {"vsetvl",     0, {"V", 0},  "d,s,t", MATCH_VSETVL, MASK_VSETVL, match_opcode, 0},
 {"vsetvli",    0, {"V", 0},  "d,s,Vc", MATCH_VSETVLI, MASK_VSETVLI, match_opcode, 0},
