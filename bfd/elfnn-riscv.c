@@ -3056,36 +3056,6 @@ riscv_std_ext_p (const char *name)
   return (strlen (name) == 1) && (name[0] != 'x') && (name[0] != 's');
 }
 
-static bfd_boolean
-riscv_std_ext_long_p (const char *name)
-{
-  return (strlen (name) >= 2) && strchr("Zz", name[0]);
-}
-
-/* Predicator for non-standard extension.  */
-
-static bfd_boolean
-riscv_non_std_ext_p (const char *name)
-{
-  return (strlen (name) >= 2) && (name[0] == 'x');
-}
-
-/* Predicator for standard supervisor extension.  */
-
-static bfd_boolean
-riscv_std_sv_ext_p (const char *name)
-{
-  return (strlen (name) >= 2) && (name[0] == 's') && (name[1] != 'x');
-}
-
-/* Predicator for non-standard supervisor extension.  */
-
-static bfd_boolean
-riscv_non_std_sv_ext_p (const char *name)
-{
-  return (strlen (name) >= 3) && (name[0] == 's') && (name[1] == 'x');
-}
-
 /* Error handler when version mis-match.  */
 
 static void
@@ -3616,7 +3586,7 @@ riscv_parse_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
 	  strncat(output_arch_buffer, standard_arch, 1);
 	  riscv_arch_version_int2str (version_i, ver, 0);
 	  strncat(output_arch_buffer, ver, strlen (ver));
-	  strncat(output_arch_buffer, "p", 1);
+	  strcat(output_arch_buffer, "p");
 	  riscv_arch_version_int2str (version_i, ver, 1);
 	  strncat(output_arch_buffer, ver, strlen (ver));
 	}
@@ -3655,13 +3625,13 @@ riscv_parse_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
       if (first_X_arch)
 	first_X_arch = 0;
       else
-	strncat(output_arch_buffer, "_", 1);
+	strcat(output_arch_buffer, "_");
 
       strncat(output_arch_buffer, non_standard_arch->name,
 	      strlen (non_standard_arch->name));
       riscv_arch_version_int2str (non_standard_arch->version, ver, 0);
       strncat(output_arch_buffer, ver, strlen (ver));
-      strncat(output_arch_buffer, "p", 1);
+      strcat(output_arch_buffer, "p");
       riscv_arch_version_int2str (non_standard_arch->version, ver, 1);
       strncat(output_arch_buffer, ver, strlen (ver));
 
@@ -5837,7 +5807,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
   if (bfd_link_relocatable (info)
       || sec->sec_flg0
       || (sec->flags & SEC_RELOC) == 0
-      || (sec->flags & SEC_EXCLUDE) == 1
+      || (sec->flags & SEC_EXCLUDE) == SEC_EXCLUDE
       || (sec->flags & SEC_CODE) == 0
       || sec->size == 0
       || sec->reloc_count == 0
@@ -7103,10 +7073,12 @@ riscv_elf_execit_replace_instruction (struct bfd_link_info *link_info,
 	is_on_relocation = TRUE;
 
       if (is_on_relocation)
-	if (data_flag & SYMBOL_RELOCATION)
-	  riscv_elf_get_insn_with_reg (abfd, irel, insn, &insn_with_reg);
-	else
-	  riscv_elf_get_insn_with_reg (abfd, NULL, insn, &insn_with_reg);
+	{
+	  if (data_flag & SYMBOL_RELOCATION)
+	    riscv_elf_get_insn_with_reg (abfd, irel, insn, &insn_with_reg);
+	  else
+	    riscv_elf_get_insn_with_reg (abfd, NULL, insn, &insn_with_reg);
+	}
 
       while (execit_insn)
 	{

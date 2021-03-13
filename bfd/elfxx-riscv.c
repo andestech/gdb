@@ -1703,7 +1703,8 @@ typedef struct {
   const int minor;
 } default_version_t;
 
-static default_version_t non_std_ext_d4_versions[] = {
+static const
+default_version_t non_std_ext_d4_versions[] = {
   {"xandes", 5, 0},
   {"p", 0, 5},
   /* don't change index of above items  */
@@ -1758,7 +1759,6 @@ riscv_parse_prefixed_ext (riscv_parse_subset_t *rps,
 {
   unsigned major_version = 0;
   unsigned minor_version = 0;
-  const char *last_name;
   riscv_isa_ext_class_t class;
 
   while (*p)
@@ -1779,7 +1779,7 @@ riscv_parse_prefixed_ext (riscv_parse_subset_t *rps,
       char *subset = xstrdup (p);
       char *q = subset;
       const char *end_of_version;
-      char *effect_subset = subset;
+      const char *effect_subset = subset;
       int is_old_name = 0;
 
       /* parse xv5 specially  */
@@ -1813,16 +1813,16 @@ riscv_parse_prefixed_ext (riscv_parse_subset_t *rps,
       /* enforce default versions  */
       if (end_of_version == q)
 	{
-	  default_version_t *p = &non_std_ext_d4_versions;
-	  while (p->name)
+	  const default_version_t *pdv = non_std_ext_d4_versions;
+	  while (pdv->name)
 	    {
-	      if (strcasecmp(effect_subset, p->name) == 0)
+	      if (strcasecmp(effect_subset, pdv->name) == 0)
 		{
-		  major_version = p->major;
-		  minor_version = p->minor;
+		  major_version = pdv->major;
+		  minor_version = pdv->minor;
 		  break;
 		}
-		p++;
+		pdv++;
 	    }
 	}
       else
