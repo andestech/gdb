@@ -1,2 +1,2 @@
 Assembler messages:
-Fatal error: -march=rv32icx2p: Expect number after `2p'.
+Error: -march=rv32icx2p: expect number after `2p'

@@ -1,5 +1,5 @@
 #as: -march=rv32ic
-#objdump: -dr
+#objdump: -d
 
 .*:[ 	]+file format .*
 
@@ -8,7 +8,6 @@ Disassembly of section .text:
 
 0+000 <target>:
 [ 	]+0:[ 	]+4108[ 	]+c.lw[ 	]+a0,0\(a0\)
-.*R_RISCV_RELAX_ENTRY.*
 [ 	]+2:[ 	]+4108[ 	]+c.lw[ 	]+a0,0\(a0\)
 [ 	]+4:[ 	]+c108[ 	]+c.sw[ 	]+a0,0\(a0\)
 [ 	]+6:[ 	]+c108[ 	]+c.sw[ 	]+a0,0\(a0\)

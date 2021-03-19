@@ -150,6 +150,7 @@ extern void riscv_andes_md_cleanup (void);
 
 #define md_end riscv_md_end
 #define CONVERT_SYMBOLIC_ATTRIBUTE riscv_convert_symbolic_attribute
+
 extern void riscv_md_end (void);
 extern int riscv_convert_symbolic_attribute (const char *);
 

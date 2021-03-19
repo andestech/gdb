@@ -3058,17 +3058,40 @@ riscv_std_ext_p (const char *name)
 
 /* Error handler when version mis-match.  */
 
-static void
+static bfd_boolean
 riscv_version_mismatch (bfd *ibfd,
 			struct riscv_subset_t *in,
 			struct riscv_subset_t *out)
 {
-  _bfd_error_handler
-    (_("error: %pB: Mis-matched ISA version for '%s' exetension. "
-       "%d.%d vs %d.%d"),
-       ibfd, in->name,
-       in->major_version, in->minor_version,
-       out->major_version, out->minor_version);
+  if (in == NULL || out == NULL)
+    return TRUE;
+
+  /* Since there are no version conflicts for now, we just report
+     warning when the versions are mis-matched.  */
+  if (in->major_version != out->major_version
+      || in->minor_version != out->minor_version)
+    {
+      _bfd_error_handler
+	(_("warning: %pB: mis-matched ISA version %d.%d for '%s' "
+	   "extension, the output version is %d.%d"),
+	 ibfd,
+	 in->major_version,
+	 in->minor_version,
+	 in->name,
+	 out->major_version,
+	 out->minor_version);
+
+      /* Update the output ISA versions to the newest ones.  */
+      if ((in->major_version > out->major_version)
+	  || (in->major_version == out->major_version
+	      && in->minor_version > out->minor_version))
+	{
+	  out->major_version = in->major_version;
+	  out->minor_version = in->minor_version;
+	}
+    }
+
+  return TRUE;
 }
 
 /* Return true if subset is 'i' or 'e'.  */
@@ -3115,17 +3138,6 @@ riscv_merge_std_ext (bfd *ibfd,
   struct riscv_subset_t *in = *pin;
   struct riscv_subset_t *out = *pout;
 
-  /*   fix 'e' comes with 'i' issue: skip 'i'
-   *   refert to 'riscv_parse_std_ext', case 'e'
-   */
-  struct riscv_subset_t *next;
-  next = in->next;
-  if (next && !strcasecmp (next->name, "e") && !strcasecmp (in->name, "i"))
-    in = in->next;
-  next = out->next;
-  if (next && !strcasecmp (next->name, "e") && !strcasecmp (out->name, "i"))
-    out = out->next;
-
   /* First letter should be 'i' or 'e'.  */
   if (!riscv_i_or_e_p (ibfd, in_arch, in))
     return FALSE;
@@ -3133,24 +3145,19 @@ riscv_merge_std_ext (bfd *ibfd,
   if (!riscv_i_or_e_p (ibfd, out_arch, out))
     return FALSE;
 
-  if (in->name[0] != out->name[0])
+  if (strcasecmp (in->name, out->name) != 0)
     {
       /* TODO: We might allow merge 'i' with 'e'.  */
       _bfd_error_handler
-	(_("error: %pB: Mis-matched ISA string to merge '%s' and '%s'."),
+	(_("error: %pB: mis-matched ISA string to merge '%s' and '%s'"),
 	 ibfd, in->name, out->name);
       return FALSE;
     }
-  else if ((in->major_version != out->major_version) ||
-	   (in->minor_version != out->minor_version))
-    {
-      /* TODO: Allow different merge policy.  */
-      riscv_version_mismatch (ibfd, in, out);
-      return FALSE;
-    }
+  else if (!riscv_version_mismatch (ibfd, in, out))
+    return FALSE;
   else
     riscv_add_subset (&merged_subsets,
-		      in->name, in->major_version, in->minor_version);
+		      out->name, out->major_version, out->minor_version);
 
   in = in->next;
   out = out->next;
@@ -3158,28 +3165,24 @@ riscv_merge_std_ext (bfd *ibfd,
   /* Handle standard extension first.  */
   for (p = standard_exts; *p; ++p)
     {
+      struct riscv_subset_t *ext_in, *ext_out, *ext_merged;
       char find_ext[2] = {*p, '\0'};
-      struct riscv_subset_t *find_in =
-	riscv_lookup_subset (&in_subsets, find_ext);
-      struct riscv_subset_t *find_out =
-	riscv_lookup_subset (&out_subsets, find_ext);
+      bfd_boolean find_in, find_out;
 
-      if (find_in == NULL && find_out == NULL)
+      find_in = riscv_lookup_subset (&in_subsets, find_ext, &ext_in);
+      find_out = riscv_lookup_subset (&out_subsets, find_ext, &ext_out);
+
+      if (!find_in && !find_out)
 	continue;
 
-      /* Check version is same or not.  */
-      /* TODO: Allow different merge policy.  */
-      if ((find_in != NULL && find_out != NULL)
-	  && ((find_in->major_version != find_out->major_version)
-	      || (find_in->minor_version != find_out->minor_version)))
-	{
-	  riscv_version_mismatch (ibfd, in, out);
-	  return FALSE;
-	}
+      if (find_in
+	  && find_out
+	  && !riscv_version_mismatch (ibfd, ext_in, ext_out))
+	return FALSE;
 
-      struct riscv_subset_t *merged = find_in ? find_in : find_out;
-      riscv_add_subset (&merged_subsets, merged->name,
-			merged->major_version, merged->minor_version);
+      ext_merged = find_out ? ext_out : ext_in;
+      riscv_add_subset (&merged_subsets, ext_merged->name,
+			ext_merged->major_version, ext_merged->minor_version);
     }
 
   /* Skip all standard extensions.  */
@@ -3306,13 +3309,17 @@ riscv_merge_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
   riscv_parse_subset_t rpe_in;
   riscv_parse_subset_t rpe_out;
 
+  /* Only assembler needs to check the default version of ISA, so just set
+     the rpe_in.get_default_version and rpe_out.get_default_version to NULL.  */
   rpe_in.subset_list = &in_subsets;
   rpe_in.error_handler = _bfd_error_handler;
   rpe_in.xlen = &xlen_in;
+  rpe_in.get_default_version = NULL;
 
   rpe_out.subset_list = &out_subsets;
   rpe_out.error_handler = _bfd_error_handler;
   rpe_out.xlen = &xlen_out;
+  rpe_out.get_default_version = NULL;
 
   if (in_arch == NULL && out_arch == NULL)
     return NULL;
@@ -3368,13 +3375,17 @@ riscv_merge_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
     }
 
   /*  V and X_efhw are incompatible */
-  if (riscv_lookup_subset (&merged_subsets, "xefhw")
-      && riscv_lookup_subset (&merged_subsets, "v"))
+  if (1)
     {
-      _bfd_error_handler
-        (_("error: output arch \"%s\" is not compatible with \"%s\"."),
-	 out_arch, in_arch);
-      return NULL;
+      riscv_subset_t *subset = NULL;
+      if (riscv_lookup_subset (&merged_subsets, "xefhw", &subset) &&
+          riscv_lookup_subset (&merged_subsets, "v", &subset))
+	{
+	  _bfd_error_handler (
+	    _("error: output arch \"%s\" is not compatible with \"%s\"."),
+	    out_arch, in_arch);
+	  return NULL;
+	}
     }
 
   merged_arch_str = riscv_arch_str (ARCH_SIZE, &merged_subsets);

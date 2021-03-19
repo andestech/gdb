@@ -549,8 +549,12 @@ enum riscv_isa_spec_class
 
   ISA_SPEC_CLASS_2P2,
   ISA_SPEC_CLASS_20190608,
-  ISA_SPEC_CLASS_20191213
+  ISA_SPEC_CLASS_20191213,
+  ISA_SPEC_CLASS_ANDES,
+  ISA_SPEC_CLASS_DRAFT
 };
+
+#define RISCV_UNKNOWN_VERSION -1
 
 /* This structure holds version information for specific ISA.  */
 
@@ -560,6 +564,53 @@ struct riscv_ext_version
   enum riscv_isa_spec_class isa_spec_class;
   unsigned int major_version;
   unsigned int minor_version;
+};
+
+/* All RISC-V CSR belong to one of these classes.  */
+
+enum riscv_csr_class
+{
+  CSR_CLASS_NONE,
+
+  CSR_CLASS_I,
+  CSR_CLASS_I_32,      /* rv32 only */
+  CSR_CLASS_F,         /* f-ext only */
+  CSR_CLASS_V,         /* v-ext only */
+  CSR_CLASS_DEBUG      /* debug CSR */
+};
+
+/* The current supported privilege spec versions.  */
+
+enum riscv_priv_spec_class
+{
+  PRIV_SPEC_CLASS_NONE,
+
+  PRIV_SPEC_CLASS_1P9P1,
+  PRIV_SPEC_CLASS_1P10,
+  PRIV_SPEC_CLASS_1P11,
+  PRIV_SPEC_CLASS_DRAFT
+};
+
+/* This structure holds all restricted conditions for a CSR.  */
+
+struct riscv_csr_extra
+{
+  /* Class to which this CSR belongs.  Used to decide whether or
+     not this CSR is legal in the current -march context.  */
+  enum riscv_csr_class csr_class;
+
+  /* CSR may have differnet numbers in the previous priv spec.  */
+  unsigned address;
+
+  /* Record the CSR is defined/valid in which versions.  */
+  enum riscv_priv_spec_class define_version;
+
+  /* Record the CSR is aborted/invalid from which versions.  If it isn't
+     aborted in the current version, then it should be CSR_CLASS_VDRAFT.  */
+  enum riscv_priv_spec_class abort_version;
+
+  /* The CSR may have more than one setting.  */
+  struct riscv_csr_extra *next;
 };
 
 /* Instruction is a simple alias (e.g. "mv" for "addi").  */
@@ -630,9 +681,14 @@ enum
   M_CALL,
   M_J,
   M_LI,
+  M_ZEXTH,
+  M_ZEXTW,
+  M_SEXTB,
+  M_SEXTH,
+  /* RVV  */
   M_VMSGE,
   M_VMSGEU,
-  /* NDS V5 Extension.  */
+  /* Andes  */
   M_LA_LO,
   M_NUM_MACROS
 };
@@ -648,6 +704,7 @@ extern const char * const riscv_vecm_names_numeric[NVECM];
 
 extern const struct riscv_opcode riscv_opcodes[];
 extern const struct riscv_opcode riscv_insn_types[];
+extern const struct riscv_ext_version riscv_ext_version_table[];
 
 extern int
 riscv_get_isa_spec_class (const char *, enum riscv_isa_spec_class *);

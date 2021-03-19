@@ -1,5 +1,5 @@
 #as:
-#objdump: -dr
+#objdump: -d
 
 .*:[ 	]+file format .*
 
@@ -8,7 +8,6 @@ Disassembly of section .text:
 
 0+000 <.text>:
 [ 	]+0:[ 	]+4501[ 	]+c.li[ 	]+a0,0
-.*R_RISCV_RELAX_ENTRY.*
 [ 	]+2:[ 	]+4581[ 	]+c.li[ 	]+a1,0
 [ 	]+4:[ 	]+8a01[ 	]+c.andi[ 	]+a2,0
 [ 	]+6:[ 	]+8a81[ 	]+c.andi[ 	]+a3,0

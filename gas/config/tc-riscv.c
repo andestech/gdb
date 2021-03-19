@@ -34,9 +34,16 @@
 #include "opcode/riscv.h"
 
 #include <stdint.h>
+
 #ifndef __MINGW32__
 #include <dlfcn.h>
 #endif
+
+/* workaround of gas/hash changes  */
+#define str_htab_create hash_new
+#define str_hash_insert(htab, key, value, replace) hash_insert(htab, key, value)
+#define str_hash_find  hash_find
+typedef struct hash_control * htab_t;
 
 static void arch_sanity_check (int is_final);
 extern int opc_set_no_vic (int is);
@@ -79,6 +86,26 @@ struct riscv_cl_insn
 #define DEFAULT_RISCV_ATTR 0
 #endif
 
+/* Let riscv_after_parse_args set the default value according to xlen.  */
+
+#ifndef DEFAULT_RISCV_ARCH_WITH_EXT
+#define DEFAULT_RISCV_ARCH_WITH_EXT NULL
+#endif
+
+/* The default ISA spec is set to 2.2 rather than the lastest version.
+   The reason is that compiler generates the ISA string with fixed 2p0
+   verisons only for the RISCV ELF architecture attributes, but not for
+   the -march option.  Therefore, we should update the compiler or linker
+   to resolve this problem.  */
+
+#ifndef DEFAULT_RISCV_ISA_SPEC
+#define DEFAULT_RISCV_ISA_SPEC "andes"
+#endif
+
+#ifndef DEFAULT_RISCV_PRIV_SPEC
+#define DEFAULT_RISCV_PRIV_SPEC "1.11"
+#endif
+
 enum riscv_cl_insn_method
 {
   METHOD_DEFAULT,
@@ -94,10 +121,21 @@ enum cmodel_subtype_index
 };
 
 static const char default_arch[] = DEFAULT_ARCH;
+static const char *default_arch_with_ext = DEFAULT_RISCV_ARCH_WITH_EXT;
+static enum riscv_isa_spec_class default_isa_spec = ISA_SPEC_CLASS_NONE;
+static enum riscv_priv_spec_class default_priv_spec = PRIV_SPEC_CLASS_NONE;
 
 static unsigned xlen = 0; /* width of an x-register */
 static unsigned abi_xlen = 0; /* width of a pointer in the ABI */
 static bfd_boolean rve_abi = FALSE;
+enum float_abi {
+  FLOAT_ABI_DEFAULT = -1,
+  FLOAT_ABI_SOFT,
+  FLOAT_ABI_SINGLE,
+  FLOAT_ABI_DOUBLE,
+  FLOAT_ABI_QUAD
+};
+static enum float_abi float_abi = FLOAT_ABI_DEFAULT;
 
 #define LOAD_ADDRESS_INSN (abi_xlen == 64 ? "ld" : "lw")
 #define ADD32_INSN (xlen == 64 ? "addiw" : "addi")
@@ -113,6 +151,77 @@ static int optimize_for_space = 0;
 /* Save option -mict-model for ICT model setting.  */
 static const char *m_ict_model = NULL;
 static bfd_boolean pre_insn_is_a_cond_br = 0;
+
+/* Set the default_isa_spec.  Return 0 if the input spec string isn't
+   supported.  Otherwise, return 1.  */
+
+static int
+riscv_set_default_isa_spec (const char *s)
+{
+  enum riscv_isa_spec_class class;
+  if (!riscv_get_isa_spec_class (s, &class))
+    {
+      as_bad ("Unknown default ISA spec `%s' set by "
+             "-misa-spec or --with-isa-spec", s);
+      return 0;
+    }
+  else
+    default_isa_spec = class;
+  return 1;
+}
+
+/* Set the default_priv_spec, assembler will find the suitable CSR address
+   according to default_priv_spec.  We will try to check priv attributes if
+   the input string is NULL.  Return 0 if the input priv spec string isn't
+   supported.  Otherwise, return 1.  */
+
+static int
+riscv_set_default_priv_spec (const char *s)
+{
+  enum riscv_priv_spec_class class;
+  unsigned major, minor, revision;
+  obj_attribute *attr;
+
+  /* Find the corresponding priv spec class.  */
+  if (riscv_get_priv_spec_class (s, &class))
+    {
+      default_priv_spec = class;
+      return 1;
+    }
+
+  if (s != NULL)
+    {
+      as_bad (_("Unknown default privilege spec `%s' set by "
+               "-mpriv-spec or --with-priv-spec"), s);
+      return 0;
+    }
+
+  /* Try to set the default_priv_spec according to the priv attributes.  */
+  attr = elf_known_obj_attributes_proc (stdoutput);
+  major = (unsigned) attr[Tag_RISCV_priv_spec].i;
+  minor = (unsigned) attr[Tag_RISCV_priv_spec_minor].i;
+  revision = (unsigned) attr[Tag_RISCV_priv_spec_revision].i;
+
+  if (riscv_get_priv_spec_class_from_numbers (major,
+					      minor,
+					      revision,
+					      &class))
+    {
+      /* The priv attributes setting 0.0.0 is meaningless.  We should have set
+	 the default_priv_spec by md_parse_option and riscv_after_parse_args,
+	 so just skip the following setting.  */
+      if (class == PRIV_SPEC_CLASS_NONE)
+	return 1;
+
+      default_priv_spec = class;
+      return 1;
+    }
+
+  /* Still can not find the priv spec class.  */
+  as_bad (_("Unknown default privilege spec `%d.%d.%d' set by "
+           "privilege attributes"),  major, minor, revision);
+  return 0;
+}
 
 /* This is the set of options which the .option pseudo-op may modify.  */
 
@@ -214,10 +323,11 @@ static riscv_subset_list_t riscv_subsets;
 static bfd_boolean
 riscv_subset_supports (const char *feature)
 {
+  riscv_subset_t *subset = NULL;
   if (riscv_opts.rvc && (strcasecmp (feature, "c") == 0))
     return TRUE;
 
-  return riscv_lookup_subset (&riscv_subsets, feature) != NULL;
+  return riscv_lookup_subset (&riscv_subsets, feature, &subset);
 }
 
 static bfd_boolean
@@ -232,32 +342,131 @@ riscv_multi_subset_supports (const char *features[])
   return supported;
 }
 
+/* Handle of the extension with version hash table.  */
+static htab_t ext_version_hash = NULL;
+
+static htab_t ATTRIBUTE_UNUSED
+init_ext_version_hash (const struct riscv_ext_version *table)
+{
+  int i = 0;
+  htab_t hash = str_htab_create ();
+
+  while (table[i].name)
+    {
+      const char *name = table[i].name;
+      if (str_hash_insert (hash, name, (void*)&table[i], 0) != NULL)
+	as_fatal (_("duplicate %s"), name);
+
+      i++;
+      while (table[i].name
+            && strcmp (table[i].name, name) == 0)
+       i++;
+    }
+
+  return hash;
+}
+
+static void
+riscv_get_default_ext_version (const char *name,
+			       int *major_version,
+			       int *minor_version)
+{
+  struct riscv_ext_version *ext;
+
+  if (name == NULL || default_isa_spec == ISA_SPEC_CLASS_NONE)
+    return;
+
+  ext = (struct riscv_ext_version *) str_hash_find (ext_version_hash, name);
+  while (ext
+	 && ext->name
+	 && strcmp (ext->name, name) == 0)
+    {
+      if (ext->isa_spec_class == ISA_SPEC_CLASS_DRAFT
+	  || ext->isa_spec_class == default_isa_spec)
+	{
+	  *major_version = ext->major_version;
+	  *minor_version = ext->minor_version;
+	  return;
+	}
+      ext++;
+    }
+}
+
 /* Set which ISA and extensions are available.  */
 
-ATTRIBUTE_UNUSED static void
+static void
 riscv_set_arch (const char *s)
 {
   riscv_parse_subset_t rps;
   rps.subset_list = &riscv_subsets;
-  rps.error_handler = as_fatal;
+  rps.error_handler = as_bad;
   rps.xlen = &xlen;
+  rps.get_default_version = riscv_get_default_ext_version;
+
+  if (s == NULL)
+    return;
 
   riscv_opts.update_count += 1;
   riscv_release_subset_list (&riscv_subsets);
   riscv_parse_subset (&rps, s);
 
-  if (riscv_lookup_subset (rps.subset_list, "e"))
+  if (1)
     {
-      riscv_set_rve (TRUE);
+      riscv_subset_t *subset = NULL;
+      if (riscv_lookup_subset (rps.subset_list, "e", &subset))
+	riscv_set_rve (TRUE);
+
+      if (riscv_lookup_subset_version (&riscv_subsets, "xandes", 0, 0))
+	{ /* x_v5 imply x_efhw, x_v5- has renamed to xAndes  */
+	  if (!riscv_lookup_subset (rps.subset_list, "xefhw", &subset))
+	  /* default version of "xefhw": 1p0  */
+	  riscv_add_subset (&riscv_subsets, "xefhw", 1, 0);
+	}
+    }
+}
+
+/* Indicate -mabi= option is explictly set.  */
+static bfd_boolean explicit_mabi = FALSE;
+
+static void
+riscv_set_abi (unsigned new_xlen, enum float_abi new_float_abi, bfd_boolean rve)
+{
+  abi_xlen = new_xlen;
+  float_abi = new_float_abi;
+  rve_abi = rve;
+}
+
+/* If the -mabi option isn't set, then we set the abi according to the arch
+   string.  Otherwise, check if there are conflicts between architecture
+   and abi setting.  */
+
+static void
+riscv_set_abi_by_arch (void)
+{
+  if (!explicit_mabi)
+    {
+      if (riscv_subset_supports ("q"))
+	riscv_set_abi (xlen, FLOAT_ABI_QUAD, FALSE);
+      else if (riscv_subset_supports ("d"))
+	riscv_set_abi (xlen, FLOAT_ABI_DOUBLE, FALSE);
+      else
+	riscv_set_abi (xlen, FLOAT_ABI_SOFT, FALSE);
+    }
+  else
+    {
+      gas_assert (abi_xlen != 0 && xlen != 0 && float_abi != FLOAT_ABI_DEFAULT);
+      if (abi_xlen > xlen)
+	as_bad ("can't have %d-bit ABI on %d-bit ISA", abi_xlen, xlen);
+      else if (abi_xlen < xlen)
+	as_bad ("%d-bit ABI not yet supported on %d-bit ISA", abi_xlen, xlen);
     }
 
-  if (riscv_lookup_subset_version (&riscv_subsets, "xandes", 0, 0))
-    {
-      /* x_v5 imply x_efhw, x_v5- has renamed to xAndes  */
-      if (!riscv_lookup_subset (rps.subset_list, "xefhw"))
-        /* default version of "xefhw": 1p0  */
-        riscv_add_subset (&riscv_subsets, "xefhw", 1, 0);
-    }
+  /* Update the EF_RISCV_FLOAT_ABI field of elf_flags.  */
+  elf_flags &= ~EF_RISCV_FLOAT_ABI;
+  elf_flags |= float_abi << 1;
+
+  if (rve_abi)
+    elf_flags |= EF_RISCV_RVE;
 }
 
 /* Handle of the OPCODE hash table.  */
@@ -743,27 +952,6 @@ hash_reg_names (enum reg_class class, const char * const names[], unsigned n)
   for (i = 0; i < n; i++)
     hash_reg_name (class, names[i], i);
 }
-
-/* All RISC-V CSRs belong to one of these classes.  */
-
-enum riscv_csr_class
-{
-  CSR_CLASS_NONE,
-
-  CSR_CLASS_I,
-  CSR_CLASS_I_32,	/* rv32 only */
-  CSR_CLASS_F,		/* f-ext only */
-  CSR_CLASS_V,		/* v-ext only */
-};
-
-/* This structure holds all restricted conditions for a CSR.  */
-
-struct riscv_csr_extra
-{
-  /* Class to which this CSR belongs.  Used to decide whether or
-     not this CSR is legal in the current -march context.  */
-  enum riscv_csr_class csr_class;
-};
 
 /* Init two hashes, csr_extra_hash and reg_names_hash, for CSR.  */
 
@@ -2824,6 +3012,7 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
   int argnum;
   const struct percent_op_match *p;
   const char *error = "unrecognized opcode";
+  const char *default_error = error;
   /* Indicate we are assembling instruction with CSR.  */
   bfd_boolean insn_with_csr = FALSE;
 
@@ -2850,8 +3039,6 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
       else if (!riscv_multi_subset_supports (insn->subset))
 	continue;
 
-      /* Reset error message of the previous round.  */
-      error = _("illegal operands");
       create_insn (ip, insn);
       argnum = 1;
 
@@ -3448,9 +3635,11 @@ branch:
 
 	    case 'u':		/* Upper 20 bits.  */
 	      p = percent_op_utype;
-	      if (!my_getSmallExpression (imm_expr, imm_reloc, s, p)
-		  && imm_expr->X_op == O_constant)
+	      if (!my_getSmallExpression (imm_expr, imm_reloc, s, p))
 		{
+		  if (imm_expr->X_op != O_constant)
+		    break;
+
 		  if (imm_expr->X_add_number < 0
 		      || imm_expr->X_add_number >= (signed)RISCV_BIGIMM_REACH)
 		    as_bad (_("lui expression not in range 0..1048575"));
@@ -3458,9 +3647,6 @@ branch:
 		  *imm_reloc = BFD_RELOC_RISCV_HI20;
 		  imm_expr->X_add_number <<= RISCV_IMM_BITS;
 		}
-	      /* The 'u' format specifier must be a symbol or a constant.  */
-	      if (imm_expr->X_op != O_symbol && imm_expr->X_op != O_constant)
-	        break;
 	      s = expr_end;
 	      continue;
 
@@ -4038,6 +4224,8 @@ jump:
 	  break;
 	}
       s = argsStart;
+      if (error == default_error)
+	error = _("illegal operands");
       insn_with_csr = FALSE;
     }
 
@@ -4439,8 +4627,6 @@ riscv_set_arch_attributes (const char *name)
 }
 #endif
 
-static int start_assemble_insn = 0;
-
 void
 md_assemble (char *str)
 {
@@ -4454,20 +4640,20 @@ md_assemble (char *str)
   if (!frag_now->tc_frag_data.rvc)
     frag_now->tc_frag_data.rvc = riscv_opts.rvc ? 1 : -1;
 
-  /* The target architecture attribute must be set before
-     assembling instructions.  */
-  if (!start_assemble_insn)
+  /* The arch and priv attributes should be set before assembling.  */
+  if (!start_assemble)
     {
-#ifdef TO_REMOVE
-      riscv_set_arch_attributes (NULL); /* redundant?  */
-#endif
-      start_assemble_insn = 1;
+      start_assemble = TRUE;
+      riscv_set_abi_by_arch ();
+
+      /* Set the default_priv_spec according to the priv attributes.  */
+      if (!riscv_set_default_priv_spec (NULL))
+       return;
+
       arch_sanity_check(TRUE); /* is_final = TRUE  */
     }
 
   const char *error = riscv_ip (str, &insn, &imm_expr, &imm_reloc, op_hash);
-
-  start_assemble = TRUE;
 
   if (error)
     {
@@ -4505,10 +4691,16 @@ enum options
   OPTION_NO_RELAX,
   OPTION_ARCH_ATTR,
   OPTION_NO_ARCH_ATTR,
-  OPTION_CHECK_CONSTRAINTS,
-  OPTION_NO_CHECK_CONSTRAINTS,
   OPTION_CSR_CHECK,
   OPTION_NO_CSR_CHECK,
+  OPTION_MISA_SPEC,
+  OPTION_MPRIV_SPEC,
+  OPTION_BIG_ENDIAN,
+  OPTION_LITTLE_ENDIAN,
+  /* RVV  */
+  OPTION_CHECK_CONSTRAINTS,
+  OPTION_NO_CHECK_CONSTRAINTS,
+  /* Andes  */
   OPTION_NO_16_BIT,
   OPTION_MATOMIC,
   OPTION_ACE,
@@ -4537,10 +4729,16 @@ struct option md_longopts[] =
   {"mno-relax", no_argument, NULL, OPTION_NO_RELAX},
   {"march-attr", no_argument, NULL, OPTION_ARCH_ATTR},
   {"mno-arch-attr", no_argument, NULL, OPTION_NO_ARCH_ATTR},
-  {"mcheck-constraints", no_argument, NULL, OPTION_CHECK_CONSTRAINTS},
-  {"mno-check-constraints", no_argument, NULL, OPTION_NO_CHECK_CONSTRAINTS},
   {"mcsr-check", no_argument, NULL, OPTION_CSR_CHECK},
   {"mno-csr-check", no_argument, NULL, OPTION_NO_CSR_CHECK},
+  {"misa-spec", required_argument, NULL, OPTION_MISA_SPEC},
+  {"mpriv-spec", required_argument, NULL, OPTION_MPRIV_SPEC},
+  {"mbig-endian", no_argument, NULL, OPTION_BIG_ENDIAN},
+  {"mlittle-endian", no_argument, NULL, OPTION_LITTLE_ENDIAN},
+  /* RVV  */
+  {"mcheck-constraints", no_argument, NULL, OPTION_CHECK_CONSTRAINTS},
+  {"mno-check-constraints", no_argument, NULL, OPTION_NO_CHECK_CONSTRAINTS},
+  /* Andes  */
   {"mno-16-bit", no_argument, NULL, OPTION_NO_16_BIT},
   {"matomic", no_argument, NULL, OPTION_MATOMIC},
   {"mace", required_argument, NULL, OPTION_ACE},
@@ -4560,30 +4758,15 @@ struct option md_longopts[] =
 };
 size_t md_longopts_size = sizeof (md_longopts);
 
-enum float_abi {
-  FLOAT_ABI_DEFAULT = -1,
-  FLOAT_ABI_SOFT,
-  FLOAT_ABI_SINGLE,
-  FLOAT_ABI_DOUBLE,
-  FLOAT_ABI_QUAD
-};
-static enum float_abi float_abi = FLOAT_ABI_DEFAULT;
-
-static void
-riscv_set_abi (unsigned new_xlen, enum float_abi new_float_abi, bfd_boolean rve)
-{
-  abi_xlen = new_xlen;
-  float_abi = new_float_abi;
-  rve_abi = rve;
-}
-
 int
 md_parse_option (int c, const char *arg)
 {
   switch (c)
     {
     case OPTION_MARCH:
-      riscv_set_arch (arg);
+      /* riscv_after_parse_args will call riscv_set_arch to parse
+        the architecture.  */
+      default_arch_with_ext = arg;
       break;
 
     case OPTION_NO_PIC:
@@ -4633,20 +4816,34 @@ md_parse_option (int c, const char *arg)
       riscv_opts.arch_attr = FALSE;
       break;
 
-    case OPTION_CHECK_CONSTRAINTS:
-      riscv_opts.check_constraints = TRUE;
-      break;
-
-    case OPTION_NO_CHECK_CONSTRAINTS:
-      riscv_opts.check_constraints = FALSE;
-      break;
-
     case OPTION_CSR_CHECK:
       riscv_opts.csr_check = TRUE;
       break;
 
     case OPTION_NO_CSR_CHECK:
       riscv_opts.csr_check = FALSE;
+      break;
+
+    case OPTION_MISA_SPEC:
+      return riscv_set_default_isa_spec (arg);
+
+    case OPTION_MPRIV_SPEC:
+      return riscv_set_default_priv_spec (arg);
+
+    case OPTION_BIG_ENDIAN:
+      target_big_endian = 1;
+      break;
+
+    case OPTION_LITTLE_ENDIAN:
+      target_big_endian = 0;
+      break;
+
+    case OPTION_CHECK_CONSTRAINTS:
+      riscv_opts.check_constraints = TRUE;
+      break;
+
+    case OPTION_NO_CHECK_CONSTRAINTS:
+      riscv_opts.check_constraints = FALSE;
       break;
 
     /* Load ACE shared library if ACE option is enable */
@@ -4761,37 +4958,35 @@ md_parse_option (int c, const char *arg)
 }
 
 static void
+riscv_add_subset_if_not_found (riscv_subset_list_t *subset_list,
+				const char *subset,
+				int major,
+				int minor)
+{
+  int majorN, minorN;
+
+  if (riscv_subset_supports (subset))
+    return;
+
+  majorN = minorN = 0;
+  if ((major == RISCV_UNKNOWN_VERSION) || (minor == RISCV_UNKNOWN_VERSION))
+    riscv_get_default_ext_version (subset, &majorN, &minorN);
+
+  if (major != RISCV_UNKNOWN_VERSION)
+    majorN = major;
+  
+  if (minor != RISCV_UNKNOWN_VERSION)
+    minorN = minor;
+
+  riscv_add_subset (subset_list, subset, majorN, minorN);
+}
+
+static void
 arch_sanity_check (int is_final)
 {
-  int d4_arch_type = 0;
-
   if (is_final && riscv_opts.update_count == 0)
     return;
   riscv_opts.update_count = 0;
-
-  if (xlen == 0)
-    {
-      if (strncmp (default_arch, "rv32", 4) == 0)
-	{
-	  xlen = 32;
-	  d4_arch_type = 1;
-	}
-      else if (strncmp (default_arch, "rv64", 4) == 0)
-	{
-	  xlen = 64;
-	  d4_arch_type = 1;
-	}
-      else if (strcmp (default_arch, "riscv32") == 0)
-	xlen = 32;
-      else if (strcmp (default_arch, "riscv64") == 0)
-	xlen = 64;
-      else
-	as_bad ("unknown default architecture `%s'", default_arch);
-    }
-
-  if (riscv_subsets.head == NULL)
-    riscv_set_arch(d4_arch_type == 1 ? default_arch
-				     : xlen == 64 ? "rv64g" : "rv32g");
 
   /* check if Xefhw + V confilict  */
   if ((riscv_opts.efhw || riscv_subset_supports ("xefhw")) &&
@@ -4799,7 +4994,7 @@ arch_sanity_check (int is_final)
     as_fatal ("Extension 'V' and 'Xefhw' are exclusive!");
 
   if (is_final)
-    {
+    { /* update riscv_opts  */
       if (riscv_opts.efhw == 0)
 	riscv_opts.efhw = riscv_subset_supports ("xefhw");
       if (riscv_opts.vector == 0)
@@ -4808,36 +5003,20 @@ arch_sanity_check (int is_final)
 
   /* We must keep the extension set by the options if needed.  */
   if (riscv_opts.atomic)
-    riscv_add_subset (&riscv_subsets, "a", 2, 0);
+    riscv_add_subset_if_not_found (&riscv_subsets, "a",
+      RISCV_UNKNOWN_VERSION, RISCV_UNKNOWN_VERSION);
 
   if (riscv_opts.dsp)
-    riscv_add_subset (&riscv_subsets, "p", 0, 5);
+    riscv_add_subset_if_not_found (&riscv_subsets, "p",
+      RISCV_UNKNOWN_VERSION, RISCV_UNKNOWN_VERSION);
 
   /* default version of "xefhw": 1p0  */
   if (riscv_opts.efhw)
-    riscv_add_subset (&riscv_subsets, "xefhw", 1, 0);
+    riscv_add_subset_if_not_found (&riscv_subsets, "xefhw", 1, 0);
 
   if (riscv_opts.vector)
-    riscv_add_subset (&riscv_subsets, "v", 1, 0);
-
-# if 0
-  /* redundant?  */
-  /* Always add `c' into `all_subsets' for the `riscv_opcodes' table.  */
-  riscv_add_subset (&riscv_subsets, "c", 2, 0);
-#endif
-
-  if (!is_final)
-    {
-      /* Add the RVC extension, regardless of -march, to support .option rvc.  */
-      riscv_set_rvc (FALSE);
-      if (riscv_subset_supports ("c"))
-	riscv_set_rvc (TRUE);
-
-      /* Enable RVE if specified by the -march option.  */
-      riscv_set_rve (FALSE);
-      if (riscv_subset_supports ("e"))
-	riscv_set_rve (TRUE);
-    }
+    riscv_add_subset_if_not_found (&riscv_subsets, "v",
+      RISCV_UNKNOWN_VERSION, RISCV_UNKNOWN_VERSION);
 
   /* Infer ABI from ISA if not specified on command line.  */
   if (abi_xlen == 0)
@@ -4872,14 +5051,67 @@ arch_sanity_check (int is_final)
   /* disable --cmodel=large if RV32  */
   if (riscv_opts.cmodel == CMODEL_LARGE && xlen <= 32)
 	riscv_opts.cmodel = CMODEL_DEFAULT;
-#ifdef DEBUG_CMODEL
-  printf("%s: cmodel = %d\n", __func__, riscv_opts.cmodel);
-#endif
 }
 
 void
 riscv_after_parse_args (void)
 {
+  /* The --with-arch is optional for now, so we have to set the xlen
+     according to the default_arch, which is set by the --targte, first.
+     Then, we use the xlen to set the default_arch_with_ext if the
+     -march and --with-arch are not set.  */
+  if (xlen == 0)
+    {
+      if (strncmp (default_arch, "rv32", 4) == 0)
+	xlen = 32;
+      else if (strncmp (default_arch, "rv64", 4) == 0)
+	xlen = 64;
+      else if (strcmp (default_arch, "riscv32") == 0)
+	xlen = 32;
+      else if (strcmp (default_arch, "riscv64") == 0)
+	xlen = 64;
+      else
+	as_bad ("unknown default architecture `%s'", default_arch);
+    }
+  if (default_arch_with_ext == NULL)
+    {
+      if (strncmp (default_arch, "rv", 2) == 0)
+	default_arch_with_ext = default_arch;
+      default_arch_with_ext = xlen == 64 ? "rv64g" : "rv32g";
+    }
+
+  /* Initialize the hash table for extensions with default version.  */
+  ext_version_hash = init_ext_version_hash (riscv_ext_version_table);
+
+  /* If the -misa-spec isn't set, then we set the default ISA spec according
+     to DEFAULT_RISCV_ISA_SPEC.  */
+  if (default_isa_spec == ISA_SPEC_CLASS_NONE)
+    riscv_set_default_isa_spec (DEFAULT_RISCV_ISA_SPEC);
+
+  /* Set the architecture according to -march or or --with-arch.  */
+  riscv_set_arch (default_arch_with_ext);
+
+  /* Add the RVC extension, regardless of -march, to support .option rvc.  */
+  riscv_set_rvc (FALSE);
+  if (riscv_subset_supports ("c"))
+    riscv_set_rvc (TRUE);
+
+  /* Enable RVE if specified by the -march option.  */
+  riscv_set_rve (FALSE);
+  if (riscv_subset_supports ("e"))
+    riscv_set_rve (TRUE);
+
+  /* If the -mpriv-spec isn't set, then we set the default privilege spec
+     according to DEFAULT_PRIV_SPEC.  */
+  if (default_priv_spec == PRIV_SPEC_CLASS_NONE)
+    riscv_set_default_priv_spec (DEFAULT_RISCV_PRIV_SPEC);
+
+  /* If the CIE to be produced has not been overridden on the command line,
+     then produce version 3 by default.  This allows us to use the full
+     range of registers in a .cfi_return_column directive.  */
+  if (flag_dwarf_cie_version == -1)
+    flag_dwarf_cie_version = 3;
+
   arch_sanity_check(FALSE); /* is_final = FALSE  */
 }
 
@@ -5249,7 +5481,7 @@ riscv_rvc_reloc_setting (int mode)
      according to these options since the first rvc information is
      stored in the fragment's tc_frag_data.rvc.  */
   /* RVC is disable entirely when -mno-16-bit is enabled  */
-  if (!start_assemble_insn || riscv_opts.no_16_bit)
+  if (!start_assemble || riscv_opts.no_16_bit)
     return;
 
   if (mode)
@@ -5294,7 +5526,7 @@ s_riscv_option (int x ATTRIBUTE_UNUSED)
       /* Force to set the 4-byte aligned when converting
 	 rvc to norvc.  The repeated alignment setting is
 	 fine since linker will remove the redundant nops.  */
-      if (riscv_opts.rvc && !riscv_opts.no_16_bit && start_assemble_insn)
+      if (riscv_opts.rvc && !riscv_opts.no_16_bit && start_assemble)
 	riscv_frag_align_code (2);
       riscv_set_rvc (FALSE);
       riscv_rvc_reloc_setting (0);
@@ -6293,6 +6525,7 @@ riscv_post_relax_hook (void)
 void
 riscv_elf_final_processing (void)
 {
+  riscv_set_abi_by_arch ();
   elf_elfheader (stdoutput)->e_flags |= elf_flags;
 }
 
@@ -6703,7 +6936,7 @@ andes_riscv_set_public_attributes (void)
 
 #ifdef TO_REMOVE
   /* The assembly dose not contain instructions.  */
-  if (!start_assemble_insn)
+  if (!start_assemble)
     riscv_set_arch_attributes (NULL);
 #endif
 

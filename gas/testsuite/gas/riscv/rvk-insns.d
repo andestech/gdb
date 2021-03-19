@@ -1,4 +1,4 @@
-#as: -march=rv64ifd_Zfh
+#as: -march=rv64ifd_zfh
 #objdump: -d
 
 .*:[ 	]+file format .*
