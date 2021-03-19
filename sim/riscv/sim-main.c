@@ -8887,7 +8887,7 @@ riscv_decode (SIM_CPU *cpu, unsigned_word iw, sim_cia pc, int ex9)
   for (; op->name; op++)
     {
       /* Does the opcode match?  */
-      if (!(op->match_func) (op, iw, 0))
+      if (!(op->match_func) (op, iw, 0, NULL))
 	continue;
 
       /* It's a match.  */
