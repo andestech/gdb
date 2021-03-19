@@ -66,6 +66,12 @@ static const char * const riscv_vlmul[8] =
   "m1", "m2", "m4", "m8", 0, "mf8", "mf4", "mf2"
 };
 
+/* List of vsetvli vediv constants.  */
+static const char * const riscv_vediv[4] =
+{
+  "d1", "d2", "d4", "d8"
+};
+
 static const char * const riscv_vta[2] =
 {
   "tu", "ta"

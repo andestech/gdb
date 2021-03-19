@@ -1758,6 +1758,21 @@
 	vwmaccus.vx v4, a1, v8
 	vwmaccus.vx v4, a1, v8, v0.t
 
+	vqmaccu.vv v4, v12, v8
+	vqmaccu.vx v4, a1, v8
+	vqmaccu.vv v4, v12, v8, v0.t
+	vqmaccu.vx v4, a1, v8, v0.t
+	vqmacc.vv v4, v12, v8
+	vqmacc.vx v4, a1, v8
+	vqmacc.vv v4, v12, v8, v0.t
+	vqmacc.vx v4, a1, v8, v0.t
+	vqmaccsu.vv v4, v12, v8
+	vqmaccsu.vx v4, a1, v8
+	vqmaccsu.vv v4, v12, v8, v0.t
+	vqmaccsu.vx v4, a1, v8, v0.t
+	vqmaccus.vx v4, a1, v8
+	vqmaccus.vx v4, a1, v8, v0.t
+
 	vdivu.vv v4, v8, v12
 	vdivu.vx v4, v8, a1
 	vdivu.vv v4, v8, v12, v0.t
@@ -2191,3 +2206,10 @@
 	vmv2r.v v2, v4
 	vmv4r.v v4, v8
 	vmv8r.v v0, v8
+
+	vdot.vv v4, v8, v12
+	vdotu.vv v4, v8, v12
+	vfdot.vv v4, v8, v12
+	vdot.vv v4, v8, v12, v0.t
+	vdotu.vv v4, v8, v12, v0.t
+	vfdot.vv v4, v8, v12, v0.t
