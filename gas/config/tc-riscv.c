@@ -185,6 +185,12 @@ static int optimize_for_space = 0;
 /* Save option -mict-model for ICT model setting.  */
 static const char *m_ict_model = NULL;
 static bool pre_insn_is_a_cond_br = false;
+static struct andes_as_states
+{
+  /* b22827 */
+  const struct riscv_opcode *prev_insn_op;
+  insn_t prev_insn;
+} nsta;
 /* } Andes  */
 
 /* { Andes ACE */
@@ -211,6 +217,18 @@ static bool
 is_indirect_jump (struct riscv_opcode *insn);
 static bool
 is_conditional_branch (struct riscv_opcode *insn);
+static bool
+is_insn_fdiv_or_fsqrt (const struct riscv_opcode *insn);
+static bool
+is_insn_in_b22827_list (const struct riscv_opcode *insn,
+			insn_t prev, insn_t curr);
+static inline int insn_fp_rd (insn_t insn);
+static inline bool is_insn_fmt_s (insn_t insn);
+static inline bool is_insn_fshw (const struct riscv_opcode *insn);
+static bool
+is_insn_of_std_type (const struct riscv_opcode *insn, const char *type);
+static bool
+is_insn_of_fp_types (const struct riscv_opcode *insn);
 /* } Andes */
 
 /* Set the default_isa_spec.  Return 0 if the spec isn't supported.
@@ -297,8 +315,12 @@ struct riscv_set_options
   int vector; /* RVV */
   int efhw; /* RVXefhw (flhw/fshw) */
   int workaround; /* Enable Andes workarounds.  */
-  int b19758; /* workaround */
-  int b20282; /* workaround */
+  /* { workaround */
+  int b19758;
+  int b20282;
+  int b22827;
+  int b22827_1;
+  /* } workaround */
   /* } Andes  */
 };
 
@@ -321,6 +343,8 @@ static struct riscv_set_options riscv_opts =
   1, /* workaround */
   1, /* b19758 */
   0, /* b20282 */
+  0, /* b22827 */
+  0, /* b22827_1 */
   /* } Andes  */
 };
 
@@ -4104,6 +4128,44 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 	  else
 	    pre_insn_is_a_cond_br = is_conditional_branch (insn);
 	}
+
+      if ((riscv_opts.b22827 || riscv_opts.b22827_1)
+	  && !riscv_subset_supports (&riscv_rps_as, "v"))
+	{
+	  insn_t curr_insn = ip->insn_opcode;
+
+	  /* insert “fclass.x x0, RD(FDIV/FSQRT)” after FDIV/FSQRT unless 
+	   * the next immediate instruction is 
+	   * “fsub/fadd/fmul/fmadd/fsqrt/fdiv/jal/ret and their 16bit variants”
+	   * NOTE: by jal I mean jal and jral. Ret includes jr. 
+	   * If you can accept more complex conditions, RD(FDIV/FSQRT) has to be
+	   * in fa0-7 to exclude jal/ret.
+	   */
+	  if (riscv_opts.b22827
+	      && is_insn_fdiv_or_fsqrt (nsta.prev_insn_op)
+	      && is_insn_in_b22827_list (insn, nsta.prev_insn, curr_insn))
+	    {
+	      const char *mne = "fclass.d";
+	      if (is_insn_fmt_s (nsta.prev_insn))
+		mne = "fclass.s";
+	      macro_build (NULL, mne, "d,s", 0, insn_fp_rd (nsta.prev_insn));
+	    }
+
+	  /* to provide a separate flag to turn it off, with the following rule:
+	   * If FSHW is followed by any floating-point instructions (including 
+	   * FSHW and FLHW), insert a NOP after it.
+	   */
+	  if (riscv_opts.b22827_1
+	      && is_insn_fshw (nsta.prev_insn_op)
+	      && is_insn_of_fp_types (insn))
+	    {
+	      macro_build (NULL, "nop", "");
+	    }
+
+	    /* update previous insns  */
+	    nsta.prev_insn_op = insn;
+	    nsta.prev_insn = curr_insn;
+	}
     }
 
   return error;
@@ -4248,6 +4310,8 @@ enum options
   OPTION_MNO_WORKAROUND,
   OPTION_MNO_B19758,
   OPTION_MB20282,
+  OPTION_MB22827,
+  OPTION_MB22827_1,
   /* } Andes  */
   OPTION_END_OF_ENUM
 };
@@ -4284,6 +4348,8 @@ struct option md_longopts[] =
   {"mno-workaround", no_argument, NULL, OPTION_MNO_WORKAROUND},
   {"mno-b19758", no_argument, NULL, OPTION_MNO_B19758},
   {"mb20282", no_argument, NULL, OPTION_MB20282},
+  {"mb22827", no_argument, NULL, OPTION_MB22827},
+  {"mb22827.1", no_argument, NULL, OPTION_MB22827_1},
   /* } Andes  */
 
   {NULL, no_argument, NULL, 0}
@@ -4471,6 +4537,13 @@ md_parse_option (int c, const char *arg)
 	riscv_opts.b20282 = 1;
       break;
 
+    case OPTION_MB22827:
+	riscv_opts.b22827 = 1;
+      break;
+    case OPTION_MB22827_1:
+	riscv_opts.b22827_1 = 1;
+      break;
+
     default:
       return 0;
     }
@@ -4508,6 +4581,8 @@ riscv_after_parse_args (void)
     flag_dwarf_cie_version = 3;
 
   /* { Andes */
+  memset (&nsta, 0, sizeof (nsta)); /* init once.  */
+
   /* disable --cmodel=large if RV32  */
   if (riscv_opts.cmodel == CMODEL_LARGE && xlen <= 32)
 	riscv_opts.cmodel = CMODEL_DEFAULT;
@@ -6590,6 +6665,152 @@ is_conditional_branch (struct riscv_opcode *insn)
 	  rz = true;
 	  break;
 	}
+    }
+  return rz;
+}
+
+#define MASK_RM (0x7u << 12)
+
+static bool
+is_insn_fdiv_or_fsqrt (const struct riscv_opcode *insn)
+{
+  static insn_t insns[] =
+    {
+      MATCH_FDIV_D, MATCH_FSQRT_D,
+      MATCH_FDIV_S, MATCH_FSQRT_S,
+      0
+    };
+  bool rz = false;
+  if (insn)
+    {
+      insn_t x;
+      insn_t match = insn->match & ~MASK_RM; /* all rounding mode  */
+      int i = 0;
+      while ((x = insns[i++]))
+	{
+	  if (x == match)
+	    {
+	      rz = true;
+	      break;
+	    }
+	}
+    }
+  return rz;
+}
+
+static inline int
+insn_fp_rd (insn_t insn)
+{
+  int rd = 0x1fu & (insn >> 7);
+  return rd;
+}
+
+static bool
+is_insn_in_b22827_list (const struct riscv_opcode *insn,
+			insn_t prev, insn_t curr)
+{
+  static insn_t insns[] =
+    {
+      /* unconditional  */
+      MATCH_FSUB_S, MATCH_FADD_S, MATCH_FMUL_S, MATCH_FMADD_S,
+      MATCH_FSQRT_S, MATCH_FDIV_S,
+      MATCH_FSUB_D, MATCH_FADD_D, MATCH_FMUL_D, MATCH_FMADD_D,
+      MATCH_FSQRT_D, MATCH_FDIV_D,
+      MATCH_FSUB_Q, MATCH_FADD_Q, MATCH_FMUL_Q, MATCH_FMADD_Q,
+      MATCH_FSQRT_Q, MATCH_FDIV_Q,
+      0
+    };
+
+  bool rz = false;
+  insn_t x;
+  insn_t match = insn->match & ~MASK_RM; /* all rounding mode  */
+  int i = 0;
+  while ((x = insns[i++]))
+    {
+      if (x == match)
+	{
+	  rz = true;
+	  return !rz;
+	}
+    }
+
+  /* RD(FDIV/FSQRT) has to be in fa0-7 to exclude jal/ret  */
+  if ((((insn->match & MASK_JAL) == MATCH_JAL)
+       && (curr & (0x1fu << 7))) // JAL RD != 0 (not J)
+      || (insn->match == (MATCH_JAL|(0x1u << 7)))   // JAL RA
+      || ((insn->match & MASK_JALR) == MATCH_JALR)  // JALR|JR
+      || (insn->match == MATCH_C_JAL)               // C.JAL
+      || ((insn->match & MASK_C_JR) == MATCH_C_JR)  // C.JR
+      || (insn->match == MATCH_C_JALR))             // C.JALR
+    {
+      int rd = insn_fp_rd (prev);
+      rz = (10 <= rd) && (rd <= 17); /* rd in fa0 .. fa7  */
+    }
+
+  return !rz;
+}
+
+static inline bool
+is_insn_fmt_s (insn_t insn)
+{
+  int fmt = 0x3u & (insn >> 25);
+  return fmt == 0; /* 0:s, 1:d, 2:h, 3:q  */
+}
+
+static inline bool
+is_insn_fshw (const struct riscv_opcode *insn)
+{
+  return insn && (insn->match == MATCH_FSHW);
+}
+
+static bool
+is_insn_of_std_type (const struct riscv_opcode *insn, const char *type)
+{
+  bool rz = false;
+  const char *p = type;
+  enum riscv_insn_class klass = insn->insn_class;
+  while (p && !rz)
+    {
+      switch (*p)
+	{
+	case 'D':
+	  if (klass == INSN_CLASS_D
+	      || klass == INSN_CLASS_D_AND_C
+	      || klass == INSN_CLASS_D_OR_ZDINX
+	      || klass == INSN_CLASS_D_AND_ZFH)
+	    rz = true;
+	  break;
+	case 'F':
+	  if (klass == INSN_CLASS_F
+	      || klass == INSN_CLASS_F_AND_C
+	      || klass == INSN_CLASS_F_OR_ZFINX
+	      || klass == INSN_CLASS_F_AND_ZFH)
+	    rz = true;
+	  break;
+	case 'Q':
+	  if (klass == INSN_CLASS_Q
+	      || klass == INSN_CLASS_Q_OR_ZQINX
+	      || klass == INSN_CLASS_Q_AND_ZFH)
+	    rz = true;
+	  break;
+	default:
+	  gas_assert (0);
+	}
+    }
+  return rz;
+}
+
+static bool
+is_insn_of_fp_types (const struct riscv_opcode *insn)
+{
+  bool rz = false;
+  if (insn)
+    {
+      if (insn->match == MATCH_FSHW
+	  || insn->match == MATCH_FLHW)
+	rz = true;
+      else
+	rz = is_insn_of_std_type (insn, "FDQ");
     }
   return rz;
 }
