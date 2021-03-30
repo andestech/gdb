@@ -2642,59 +2642,59 @@ const struct riscv_opcode riscv_insn_types[] =
 const struct riscv_ext_version riscv_ext_version_table[] =
 {
 /* name, ISA spec, major version, minor_version.  */
-{"e", ISA_SPEC_CLASS_ANDES,    1, 9},
 {"e", ISA_SPEC_CLASS_20191213, 1, 9},
 {"e", ISA_SPEC_CLASS_20190608, 1, 9},
+{"e", ISA_SPEC_CLASS_ANDES,    1, 9},
 {"e", ISA_SPEC_CLASS_2P2,      1, 9},
 
-{"i", ISA_SPEC_CLASS_ANDES,    2, 1},
 {"i", ISA_SPEC_CLASS_20191213, 2, 1},
 {"i", ISA_SPEC_CLASS_20190608, 2, 1},
+{"i", ISA_SPEC_CLASS_ANDES,    2, 0},
 {"i", ISA_SPEC_CLASS_2P2,      2, 0},
 
-{"m", ISA_SPEC_CLASS_ANDES, 2, 0},
 {"m", ISA_SPEC_CLASS_20191213, 2, 0},
 {"m", ISA_SPEC_CLASS_20190608, 2, 0},
+{"m", ISA_SPEC_CLASS_ANDES,    2, 0},
 {"m", ISA_SPEC_CLASS_2P2,      2, 0},
 
-{"a", ISA_SPEC_CLASS_ANDES, 2, 1},
 {"a", ISA_SPEC_CLASS_20191213, 2, 1},
 {"a", ISA_SPEC_CLASS_20190608, 2, 0},
+{"a", ISA_SPEC_CLASS_ANDES,    2, 0},
 {"a", ISA_SPEC_CLASS_2P2,      2, 0},
 
-{"f", ISA_SPEC_CLASS_ANDES, 2, 2},
 {"f", ISA_SPEC_CLASS_20191213, 2, 2},
 {"f", ISA_SPEC_CLASS_20190608, 2, 2},
+{"f", ISA_SPEC_CLASS_ANDES,    2, 0},
 {"f", ISA_SPEC_CLASS_2P2,      2, 0},
 
-{"d", ISA_SPEC_CLASS_ANDES, 2, 2},
 {"d", ISA_SPEC_CLASS_20191213, 2, 2},
 {"d", ISA_SPEC_CLASS_20190608, 2, 2},
+{"d", ISA_SPEC_CLASS_ANDES,    2, 0},
 {"d", ISA_SPEC_CLASS_2P2,      2, 0},
 
-{"q", ISA_SPEC_CLASS_ANDES, 2, 2},
 {"q", ISA_SPEC_CLASS_20191213, 2, 2},
 {"q", ISA_SPEC_CLASS_20190608, 2, 2},
+{"q", ISA_SPEC_CLASS_ANDES,    2, 0},
 {"q", ISA_SPEC_CLASS_2P2,      2, 0},
 
-{"c", ISA_SPEC_CLASS_ANDES, 2, 0},
 {"c", ISA_SPEC_CLASS_20191213, 2, 0},
 {"c", ISA_SPEC_CLASS_20190608, 2, 0},
+{"c", ISA_SPEC_CLASS_ANDES,    2, 0},
 {"c", ISA_SPEC_CLASS_2P2,      2, 0},
 
-{"p", ISA_SPEC_CLASS_ANDES, 0, 5},
 {"p", ISA_SPEC_CLASS_20191213, 0, 2},
 {"p", ISA_SPEC_CLASS_20190608, 0, 2},
+{"p", ISA_SPEC_CLASS_ANDES,    0, 5},
 {"p", ISA_SPEC_CLASS_2P2,      0, 1},
 
 {"v", ISA_SPEC_CLASS_ANDES,    1, 0},
 {"v", ISA_SPEC_CLASS_NONE,     1, 0},
 
-{"n", ISA_SPEC_CLASS_ANDES, 1, 1},
 {"n", ISA_SPEC_CLASS_20190608, 1, 1},
+{"n", ISA_SPEC_CLASS_ANDES,    1, 1},
 {"n", ISA_SPEC_CLASS_2P2,      1, 1},
 
-{"zfh", ISA_SPEC_CLASS_ANDES, 0, 1},
+{"zfh", ISA_SPEC_CLASS_ANDES,  0, 1},
 
 // {"zicsr", ISA_SPEC_CLASS_ANDES, 2, 0},
 {"zicsr", ISA_SPEC_CLASS_20191213, 2, 0},
@@ -2710,8 +2710,6 @@ const struct riscv_ext_version riscv_ext_version_table[] =
 
 /* Andes  */
 {"xandes", ISA_SPEC_CLASS_ANDES, 5, 0},
-{"xandes", ISA_SPEC_CLASS_2P2, 5, 0},
-{"xandes", ISA_SPEC_CLASS_NONE, 5, 0},
 
 /* Terminate the list.  */
 {NULL, 0, 0, 0}
