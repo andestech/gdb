@@ -5096,14 +5096,7 @@ dw2_debug_names_iterator::next ()
 void
 dwarf2_debug_names_index::dump (struct objfile *objfile)
 {
-  dwarf2_per_objfile *per_objfile = get_dwarf2_per_objfile (objfile);
-
-  printf_filtered (".debug_names:");
-  if (per_objfile->per_bfd->debug_names_table)
-    printf_filtered (" exists\n");
-  else
-    printf_filtered (" faked for \"readnow\"\n");
-  printf_filtered ("\n");
+  printf_filtered (".debug_names: exists\n");
 }
 
 void
@@ -5114,10 +5107,6 @@ dwarf2_debug_names_index::expand_matching_symbols
    symbol_compare_ftype *ordered_compare)
 {
   dwarf2_per_objfile *per_objfile = get_dwarf2_per_objfile (objfile);
-
-  /* debug_names_table is NULL if OBJF_READNOW.  */
-  if (!per_objfile->per_bfd->debug_names_table)
-    return;
 
   mapped_debug_names &map = *per_objfile->per_bfd->debug_names_table;
   const block_search_flags block_flags
@@ -5159,10 +5148,6 @@ dwarf2_debug_names_index::expand_symtabs_matching
    enum search_domain kind)
 {
   dwarf2_per_objfile *per_objfile = get_dwarf2_per_objfile (objfile);
-
-  /* debug_names_table is NULL if OBJF_READNOW.  */
-  if (!per_objfile->per_bfd->debug_names_table)
-    return true;
 
   dw_expand_symtabs_matching_file_matcher (per_objfile, file_matcher);
 
