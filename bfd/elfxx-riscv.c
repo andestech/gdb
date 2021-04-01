@@ -1540,6 +1540,17 @@ riscv_add_subset (riscv_subset_list_t *subset_list,
 		  int major,
 		  int minor)
 {
+  /* de-duplication */
+  riscv_subset_t *ss;
+  if (riscv_lookup_subset (subset_list, subset, &ss))
+    { /* merge higher versions  */
+      if (major > ss->major_version)
+	ss->major_version = major;
+      if (minor > ss->minor_version)
+	ss->minor_version = minor;
+      return;
+    }
+
   riscv_subset_t *s = xmalloc (sizeof *s);
 
   if (subset_list->head == NULL)
@@ -1550,8 +1561,17 @@ riscv_add_subset (riscv_subset_list_t *subset_list,
   s->minor_version = minor;
   s->next = NULL;
 
+  if (ss && ss != subset_list->tail)
+    { /* insert  */
+      s->next = ss->next;
+      ss->next = s;
+      return;
+    }
+
+  /* append  */
   if (subset_list->tail != NULL)
     subset_list->tail->next = s;
+
   subset_list->tail = s;
 }
 
