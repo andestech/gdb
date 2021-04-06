@@ -1816,7 +1816,10 @@ riscv_parse_std_ext (riscv_parse_subset_t *rps,
 				major_version,
 				minor_version, FALSE);
 	/* i-ext must be enabled.  */
-	riscv_parse_add_subset (rps, "i",
+	if (rps->get_default_version == NULL)
+	  riscv_parse_add_subset (rps, "i", 2, 0, TRUE);
+	else
+	  riscv_parse_add_subset (rps, "i",
 				RISCV_UNKNOWN_VERSION,
 				RISCV_UNKNOWN_VERSION, FALSE);
 
