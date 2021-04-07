@@ -1683,19 +1683,19 @@ const struct riscv_opcode riscv_opcodes[] =
 {"wfi",        0, {"I", 0},   "",     MATCH_WFI, MASK_WFI, match_opcode, 0 },
 
 /* RVX Andes V5 Vector Dot Product Extension  */
-{"vd4dots.vv",  0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VD4DOTS_VV, MASK_VD4DOTS_VV, match_opcode, 0},
-{"vd4dotu.vv",  0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VD4DOTU_VV, MASK_VD4DOTU_VV, match_opcode, 0},
-{"vd4dotsu.vv", 0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VD4DOTSU_VV, MASK_VD4DOTSU_VV, match_opcode, 0},
+{"vd4dots.vv",  0, {"XANDES", "V", 0},  "Vd,Vs,VtVm", MATCH_VD4DOTS_VV, MASK_VD4DOTS_VV, match_opcode, 0},
+{"vd4dotu.vv",  0, {"XANDES", "V", 0},  "Vd,Vs,VtVm", MATCH_VD4DOTU_VV, MASK_VD4DOTU_VV, match_opcode, 0},
+{"vd4dotsu.vv", 0, {"XANDES", "V", 0},  "Vd,Vs,VtVm", MATCH_VD4DOTSU_VV, MASK_VD4DOTSU_VV, match_opcode, 0},
 
 /* RVV */
 /* Andes V5 vector small INT handling extension  */
-{"vle4.v",            0, {"V", 0},  "Vd,0(s)", MATCH_VLE4_V, MASK_VLE4_V, match_opcode, INSN_DREF },
-{"vfwcvt.f.n.v",      0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFWCVT_F_N_V, MASK_VFWCVT_F_N_V, match_widen_vd_neq_vs2_neq_vm, 0},
-{"vfwcvt.f.nu.v",     0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFWCVT_F_NU_V, MASK_VFWCVT_F_NU_V, match_widen_vd_neq_vs2_neq_vm, 0},
-{"vfwcvt.f.b.v",      0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFWCVT_F_B_V, MASK_VFWCVT_F_B_V, match_widen_vd_neq_vs2_neq_vm, 0},
-{"vfwcvt.f.bu.v",     0, {"V", "F", 0}, "Vd,VtVm", MATCH_VFWCVT_F_BU_V, MASK_VFWCVT_F_BU_V, match_widen_vd_neq_vs2_neq_vm, 0},
-{"vfpmadt.vf",        0, {"V", "F", 0}, "Vd,S,VtVm", MATCH_VFPMADT_VF, MASK_VFPMADT_VF, match_opcode, 0},
-{"vfpmadb.vf",        0, {"V", "F", 0}, "Vd,S,VtVm", MATCH_VFPMADB_VF, MASK_VFPMADB_VF, match_opcode, 0},
+{"vle4.v",        0, {"XANDES", "V", 0},  "Vd,0(s)", MATCH_VLE4_V, MASK_VLE4_V, match_opcode, INSN_DREF },
+{"vfwcvt.f.n.v",  0, {"XANDES", "V", "F", 0}, "Vd,VtVm", MATCH_VFWCVT_F_N_V, MASK_VFWCVT_F_N_V, match_widen_vd_neq_vs2_neq_vm, 0},
+{"vfwcvt.f.nu.v", 0, {"XANDES", "V", "F", 0}, "Vd,VtVm", MATCH_VFWCVT_F_NU_V, MASK_VFWCVT_F_NU_V, match_widen_vd_neq_vs2_neq_vm, 0},
+{"vfwcvt.f.b.v",  0, {"XANDES", "V", "F", 0}, "Vd,VtVm", MATCH_VFWCVT_F_B_V, MASK_VFWCVT_F_B_V, match_widen_vd_neq_vs2_neq_vm, 0},
+{"vfwcvt.f.bu.v", 0, {"XANDES", "V", "F", 0}, "Vd,VtVm", MATCH_VFWCVT_F_BU_V, MASK_VFWCVT_F_BU_V, match_widen_vd_neq_vs2_neq_vm, 0},
+{"vfpmadt.vf",    0, {"XANDES", "V", "F", 0}, "Vd,S,VtVm", MATCH_VFPMADT_VF, MASK_VFPMADT_VF, match_opcode, 0},
+{"vfpmadb.vf",    0, {"XANDES", "V", "F", 0}, "Vd,S,VtVm", MATCH_VFPMADB_VF, MASK_VFPMADB_VF, match_opcode, 0},
 
 /* Andes Xv5 INT4 Load (vln.v => vle4.v)  */
 {"vln.v",       0, {"XANDES", "V", 0}, "Vd,0(s)Vm",  MATCH_VLN_V, MASK_VLN_V, match_opcode, INSN_DREF | INSN_ALIAS},
