@@ -2300,6 +2300,14 @@ andes_parse_add_implicit_subsets (riscv_parse_subset_t *rps)
 			      RISCV_UNKNOWN_VERSION,
 			      RISCV_UNKNOWN_VERSION, FALSE);
     }
+
+  /* add implicit extensions  */
+  /* # zfh0p0 is implied by both v and f  */
+  if (riscv_lookup_subset (rps->subset_list, "v", &subset) &&
+      riscv_lookup_subset (rps->subset_list, "f", &subset))
+    {
+      riscv_add_subset (rps->subset_list, "zfh", 0, 0);
+    }
 }
 
 
