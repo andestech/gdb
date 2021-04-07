@@ -2711,6 +2711,8 @@ const struct riscv_ext_version riscv_ext_version_table[] =
 /* Andes  */
 {"xandes", ISA_SPEC_CLASS_ANDES, 5, 0},
 
+{"xefhw", ISA_SPEC_CLASS_ANDES,  1, 0},
+
 /* Terminate the list.  */
 {NULL, 0, 0, 0}
 };

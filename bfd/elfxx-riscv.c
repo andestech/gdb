@@ -1674,6 +1674,25 @@ riscv_parse_add_subset (riscv_parse_subset_t *rps,
 			       major_version, minor_version);
 }
 
+ static void
+riscv_del_subset (riscv_parse_subset_t *rps,
+		  const char *subset)
+{
+  const riscv_subset_list_t *subset_list = rps->subset_list;
+  riscv_subset_t *s, *pre_s = NULL;
+
+  for (s = subset_list->head;
+       s != NULL;
+       pre_s = s, s = s->next)
+    {
+      int cmp = riscv_compare_subsets (s->name, subset);
+      if (cmp) continue;
+      pre_s->next = s->next;
+      free ((void*)s->name);
+      free (s);
+    }
+}
+
 /* Release subset list.  */
 
 void
@@ -1908,16 +1927,6 @@ typedef struct {
   const int major;
   const int minor;
 } default_version_t;
-
-static const ATTRIBUTE_UNUSED
-default_version_t non_std_ext_d4_versions[] = {
-  {"xandes", 5, 0},
-  {"p", 0, 5},
-  /* don't change index of above items  */
-  {"xefhw", 1, 0},
-  {"zfh", 0, 0},
-  {NULL}
-};
 
 riscv_isa_ext_class_t
 riscv_get_prefix_class (const char *arch)
@@ -2256,61 +2265,105 @@ riscv_parse_add_implicit_subsets (riscv_parse_subset_t *rps)
     }
 }
 
-static const char *
-replace_string (const char *str, const char *sub, const char *replace)
+/* Add the implicit extensions according to the arch string extensions.
+ * Andes Extended.
+ */
+
+static void
+andes_parse_add_implicit_subsets (riscv_parse_subset_t *rps)
 {
-  char buf[0x100];
-  const char *p = str;
-  char *q = buf;
-  const char *r;
-  char *found = strstr (p, sub);
-  if (found)
+  riscv_subset_t *subset = NULL;
+
+  /* replace old extension names  */
+  /* # xv5 is replaced with xandes, and xv5 / xv5-0p0 implies xefhw  */
+  if (riscv_lookup_subset (rps->subset_list, "xv", &subset))
     {
-      /* copy ..< match  */
-      while (p < found) *q++ = *p++;
-      /* insert replace  */
-      r = replace;
-      while (*r) *q++ = *r++;
-      /* drop sub  */
-      r = sub;
-      while (*r++) p++;
-      /* copy match_end ..  */
-      while (*p) *q++ = *p++;
+      if (((subset->major_version == 5) || (subset->major_version == 50))
+	  && (subset->minor_version == 0))
+	{
+	  riscv_parse_add_subset (rps, "xefhw",
+				  RISCV_UNKNOWN_VERSION,
+				  RISCV_UNKNOWN_VERSION, FALSE);
+	}
+      riscv_parse_add_subset (rps, "xandes",
+			      RISCV_UNKNOWN_VERSION,
+			      RISCV_UNKNOWN_VERSION, FALSE);
+      riscv_del_subset (rps, "xv");
     }
-  *q = 0;
-  return strdup (buf);
+
+  /* # xdsp is replaced with standard p  */
+  if ((riscv_lookup_subset (rps->subset_list, "xdsp", &subset))
+      && (subset->major_version >= 5))
+    {
+      riscv_del_subset (rps, "xdsp");
+      riscv_parse_add_subset (rps, "p",
+			      RISCV_UNKNOWN_VERSION,
+			      RISCV_UNKNOWN_VERSION, FALSE);
+    }
+}
+
+
+static bfd_boolean
+andes_parse_check_conflict_subsets (riscv_parse_subset_t *rps, const char *arch)
+{
+  bfd_boolean no_conflict = TRUE;
+  riscv_subset_t *subset = NULL;
+  if (riscv_lookup_subset (rps->subset_list, "v", &subset)
+      && riscv_lookup_subset (rps->subset_list, "xefhw", &subset))
+    {
+      rps->error_handler
+	(_("-march=%s: 'V' and 'XEFHW' are exclusive!"),
+	 arch);
+      no_conflict = FALSE;
+    }
+  return no_conflict;
 }
 
 static void
-andes_replace_old_names (const char *arch, char *buf, size_t size)
+andes_replace_old_name_xv5 (const char *arch, char *buf)
 {
-  const char *p = arch;
-  char *q;
-  const char *r = NULL;
-  q = strstr (p, "xv5");
-  while (q)
+  /* convert "xv5-" to "xv5"  */
+  char tmp[0x200];
+  strncpy (tmp, arch, sizeof(tmp));
+  const char *p = tmp;
+  char *q = buf;
+  char *r = strstr (p, "xv5");
+  while (r)
     {
-      if (*(q+3) == '-')
-	p = replace_string (arch, "xv5-", "_xandes");
-      else
-	p = replace_string (arch, "xv5", "_xandes");
-
-      if (r) free ((void*)r);
-      r = p;
-
-      q = strstr (p, "xv5");
+      int sz = (intptr_t)r - (intptr_t)p + 3;
+      strncpy (q, p, sz);
+      p += sz;
+      q += sz;
+      if (*p == '-') p++;
+      r = strstr (p, "xv5");
     }
 
-  while (strstr (p, "xdsp"))
+  while (*p) *q++ = *p++;
+  *q = 0;
+}
+
+static void
+andes_replace_old_name_xdsp (const char *arch, char *buf)
+{
+  /* convert "xdsp" to "xdsp5"  */
+  char tmp[0x200];
+  strncpy (tmp, arch, sizeof(tmp));
+  const char *p = tmp;
+  char *q = buf;
+  char *r = strstr (p, "xdsp");
+  while (r)
     {
-      p = replace_string (p, "xdsp", "_p");
-      if (r) free ((void*)r);
-      r = p;
+      int sz = (intptr_t)r - (intptr_t)p + 4;
+      strncpy (q, p, sz);
+      p += sz;
+      q += sz;
+      if (*p == '-') p++;
+      *q++ = '5';
+      r = strstr (p, "xdsp");
     }
 
-  strncpy (buf, p, size);
-
-  if (r) free ((void*)r);
+  while (*p) *q++ = *p++;
+  *q = 0;
 }
 
 /* Function for parsing arch string.
@@ -2332,8 +2385,9 @@ riscv_parse_subset (riscv_parse_subset_t *rps,
   bfd_boolean no_conflict = TRUE;
 
   /* Andes compatibility  */
-  char buf[0x100];
-  andes_replace_old_names (archx, buf, sizeof(buf));
+  char buf[0x200];
+  andes_replace_old_name_xv5 (archx, buf);
+  andes_replace_old_name_xdsp (buf, buf);
   const char *arch = buf;
 
   for (p = arch; *p != '\0'; p++)
@@ -2401,6 +2455,7 @@ riscv_parse_subset (riscv_parse_subset_t *rps,
   /* Finally add implicit extensions according to the current
      extensions.  */
   riscv_parse_add_implicit_subsets (rps);
+  andes_parse_add_implicit_subsets (rps);
 
   /* Check the conflicts.  */
   if (riscv_lookup_subset (rps->subset_list, "e", &subset)
@@ -2419,6 +2474,9 @@ riscv_parse_subset (riscv_parse_subset_t *rps,
 	 arch);
       no_conflict = FALSE;
     }
+
+  no_conflict &= andes_parse_check_conflict_subsets (rps, arch);
+
   return no_conflict;
 }
 

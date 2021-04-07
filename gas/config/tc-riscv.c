@@ -419,13 +419,6 @@ riscv_set_arch (const char *s)
       riscv_subset_t *subset = NULL;
       if (riscv_lookup_subset (rps.subset_list, "e", &subset))
 	riscv_set_rve (TRUE);
-
-      if (riscv_lookup_subset_version (&riscv_subsets, "xandes", 0, 0))
-	{ /* x_v5 imply x_efhw, x_v5- has renamed to xAndes  */
-	  if (!riscv_lookup_subset (rps.subset_list, "xefhw", &subset))
-	  /* default version of "xefhw": 1p0  */
-	  riscv_add_subset (&riscv_subsets, "xefhw", 1, 0);
-	}
     }
 }
 
@@ -5205,11 +5198,6 @@ arch_sanity_check (int is_final)
   if (is_final && riscv_opts.update_count == 0)
     return;
   riscv_opts.update_count = 0;
-
-  /* check if Xefhw + V confilict  */
-  if ((riscv_opts.efhw || riscv_subset_supports ("xefhw")) &&
-      (riscv_opts.vector || riscv_subset_supports ("v")))
-    as_fatal ("Extension 'V' and 'Xefhw' are exclusive!");
 
   if (is_final)
     { /* update riscv_opts  */
