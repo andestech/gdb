@@ -5283,7 +5283,8 @@ riscv_after_parse_args (void)
     {
       if (strncmp (default_arch, "rv", 2) == 0)
 	default_arch_with_ext = default_arch;
-      default_arch_with_ext = xlen == 64 ? "rv64g" : "rv32g";
+      else
+	default_arch_with_ext = xlen == 64 ? "rv64g" : "rv32g";
     }
 
   /* Initialize the hash table for extensions with default version.  */
