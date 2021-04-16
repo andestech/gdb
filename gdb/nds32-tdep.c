@@ -24,10 +24,12 @@
 #include "frame-base.h"
 #include "symtab.h"
 #include "gdbtypes.h"
+#include "gdbcmd.h"
 #include "gdbcore.h"
 #include "value.h"
 #include "reggroups.h"
 #include "inferior.h"
+#include "objfiles.h"
 #include "osabi.h"
 #include "arch-utils.h"
 #include "regcache.h"
@@ -53,6 +55,7 @@
 #define N32_FLDI_SP \
 	N32_TYPE2 (LDC, 0, REG_SP, 0)
 
+extern void nds32_init_remote_cmds (void);
 extern void _initialize_nds32_tdep (void);
 
 /* Use an invalid address value as 'not available' marker.  */
@@ -161,6 +164,12 @@ static const struct
   {"ir27", "int_pend2"},
   {"ir28", "int_pri2"},
   {"ir29", "int_trigger"},
+  {"ir30", "int_gpr_push_dis"},
+  {"ir31", "int_mask3"},
+  {"ir32", "int_pend3"},
+  {"ir33", "int_pri3"},
+  {"ir34", "int_pri4"},
+  {"ir35", "int_trigger2"},
 
   {"mr0", "mmu_ctl"},
   {"mr1", "l1_pptb"},
@@ -227,6 +236,8 @@ static const struct
   {"hspr0", "hsp_ctl"},
   {"hspr1", "sp_bound"},
   {"hspr2", "sp_bound_priv"},
+  {"hspr3", "sp_base"},
+  {"hspr4", "sp_base_priv"},
 
   {"pfr0", "pfmc0"},
   {"pfr1", "pfmc1"},
@@ -292,10 +303,23 @@ nds32_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
 			  int *lenptr)
 {
   /* The same insn machine code is used for little-endian and big-endian.  */
-  static const gdb_byte break_insn[] = { 0xEA, 0x00 };
+  static const gdb_byte break_insn[] = { 0x64, 0x00, 0x00, 0x0A };
+  static const gdb_byte break16_insn[] = { 0xEA, 0x00 };
+  gdb_byte buf[1];
 
-  *lenptr = sizeof (break_insn);
-  return break_insn;
+  if (target_read_memory (*pcptr, buf, 1) == 0)
+    {
+      if ((buf[0] & 0x80) == 0)
+	{
+	  /* *pcptr points to 32-bit instruction.  */
+	  *lenptr = sizeof (break_insn);
+	  return break_insn;
+	}
+    }
+
+  /* *pcptr cannot be accessed or *pcptr points to 16-bit instruction.  */
+  *lenptr = sizeof (break16_insn);
+  return break16_insn;
 }
 
 /* Implement the "dwarf2_reg_to_regnum" gdbarch method.  */
@@ -338,6 +362,7 @@ static struct reggroup *nds32_dmar_reggroup;
 static struct reggroup *nds32_racr_reggroup;
 static struct reggroup *nds32_idr_reggroup;
 static struct reggroup *nds32_secur_reggroup;
+static struct reggroup *nds32_acr_reggroup;
 
 static void
 nds32_init_reggroups (void)
@@ -352,6 +377,7 @@ nds32_init_reggroups (void)
   nds32_racr_reggroup = reggroup_new ("racr", USER_REGGROUP);
   nds32_idr_reggroup = reggroup_new ("idr", USER_REGGROUP);
   nds32_secur_reggroup = reggroup_new ("secur", USER_REGGROUP);
+  nds32_acr_reggroup = reggroup_new ("acr", USER_REGGROUP);
 }
 
 static void
@@ -376,7 +402,19 @@ nds32_add_reggroups (struct gdbarch *gdbarch)
   reggroup_add (gdbarch, nds32_racr_reggroup);
   reggroup_add (gdbarch, nds32_idr_reggroup);
   reggroup_add (gdbarch, nds32_secur_reggroup);
+  reggroup_add (gdbarch, nds32_acr_reggroup);
 }
+
+typedef struct acr_type
+{
+  int adj_bitsize;
+  struct type *type;
+} acr_type;
+DEF_VEC_O(acr_type);
+
+/* This vector is shared between different gdbarch, and it is used to contain
+   information about dynamically created acr type.  */
+static VEC (acr_type) *acr_type_vec;
 
 /* Implement the "register_reggroup_p" gdbarch method.  */
 
@@ -387,6 +425,10 @@ nds32_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
   const char *reg_name;
   const char *group_name;
   int ret;
+  unsigned len;
+  int ix;
+  acr_type *p_acr_type = NULL;
+  struct type *type = NULL;
 
   if (reggroup == all_reggroup)
     return 1;
@@ -408,6 +450,20 @@ nds32_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
   if (reggroup == system_reggroup)
     return (regnum > NDS32_PC_REGNUM)
 	    && !nds32_register_reggroup_p (gdbarch, regnum, float_reggroup);
+
+  if (reggroup == nds32_acr_reggroup)
+    {
+      len = VEC_length (acr_type, acr_type_vec);
+      for (ix = 0; ix < len; ix++)
+	{
+	  p_acr_type = VEC_index (acr_type, acr_type_vec, ix);
+	  type = register_type (gdbarch, regnum);
+	  if (p_acr_type->type == type)
+	    return 1;
+	}
+
+      return 0;
+    }
 
   /* The NDS32 reggroup contains registers whose name is prefixed
      by reggroup name.  */
@@ -933,7 +989,14 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
 
   cache->pc = get_frame_func (this_frame);
   current_pc = get_frame_pc (this_frame);
-  nds32_analyze_prologue (gdbarch, cache->pc, current_pc, cache);
+  if (cache->pc != 0)
+    {
+      struct obj_section *s = find_pc_section (cache->pc);
+      flagword flags = bfd_get_section_flags (NULL, s->the_bfd_section);
+
+      if (flags & SEC_CODE)
+	nds32_analyze_prologue (gdbarch, cache->pc, current_pc, cache);
+    }
 
   /* Compute the previous frame's stack pointer (which is also the
      frame's ID's stack address), and this frame's base pointer.  */
@@ -1428,19 +1491,27 @@ static int
 nds32_check_calling_use_fpr (struct type *type)
 {
   struct type *t;
+  struct type *ft;
   enum type_code typecode;
 
-  t = type;
+  t = check_typedef (type);
   while (1)
     {
-      t = check_typedef (t);
       typecode = TYPE_CODE (t);
       if (typecode != TYPE_CODE_STRUCT)
 	break;
       else if (TYPE_NFIELDS (t) != 1)
 	return 0;
       else
-	t = TYPE_FIELD_TYPE (t, 0);
+        {
+	  ft = TYPE_FIELD_TYPE (t, 0);
+	  ft = check_typedef (ft);
+	  if (ft == t)
+	    /* Recursive definition.  */
+	    return 0;
+	  else
+	    t = ft;
+	}
     }
 
   return typecode == TYPE_CODE_FLT;
@@ -1454,6 +1525,7 @@ nds32_type_align (struct type *type)
   int n;
   int align;
   int falign;
+  struct type *field_type;
 
   type = check_typedef (type);
   switch (TYPE_CODE (type))
@@ -1483,9 +1555,14 @@ nds32_type_align (struct type *type)
       align = 1;
       for (n = 0; n < TYPE_NFIELDS (type); n++)
 	{
-	  falign = nds32_type_align (TYPE_FIELD_TYPE (type, n));
-	  if (falign > align)
-	    align = falign;
+	  field_type = check_typedef (TYPE_FIELD_TYPE (type, n));
+	  if (field_type != type)
+	    {
+	      /* Skip to avoid recursive definition.  */
+	      falign = nds32_type_align (field_type);
+	      if (falign > align)
+		align = falign;
+	    }
 	}
       return align;
     }
@@ -1926,6 +2003,51 @@ nds32_get_longjmp_target (struct frame_info *frame, CORE_ADDR *pc)
   *pc = extract_unsigned_integer (buf, 4, byte_order);
   return 1;
 }
+
+/* Implement the "overlay_update" gdbarch method.  */
+
+static void
+nds32_simple_overlay_update (struct obj_section *osect)
+{
+  struct bound_minimal_symbol minsym;
+
+  minsym = lookup_minimal_symbol (".nds32.fixed.size", NULL, NULL);
+  if (minsym.minsym != NULL && osect != NULL)
+    {
+      bfd *obfd = osect->objfile->obfd;
+      asection *bsect = osect->the_bfd_section;
+      if (bfd_section_vma (obfd, bsect) < BMSYMBOL_VALUE_ADDRESS (minsym))
+	{
+	  osect->ovly_mapped = 1;
+	  return;
+	}
+    }
+
+  simple_overlay_update (osect);
+}
+
+/* Implement the "print_insn" gdbarch method.  */
+
+static int
+gdb_print_insn_nds32 (bfd_vma memaddr, disassemble_info *info)
+{
+  struct obj_section *s = find_pc_section (memaddr);
+
+  /* When disassembling ex9 instructions, annotating them with
+     the original instructions at the end of line.  For example,
+
+	0x00500122 <+82>:    ex9.it #4		! movi $r13, 10
+
+     Disassembler uses .ex9.itable section info to locate _ITB_BASE_ table
+     and extract the original instruction from it.  If the object file is
+     changed, reload symbol table.  */
+
+  if (s != NULL)
+    info->section = s->the_bfd_section;
+
+done:
+  return print_insn_nds32 (memaddr, info);
+}
 
 /* Validate the given TDESC, and fixed-number some registers in it.
    Return 0 if the given TDESC does not contain the required feature
@@ -1964,6 +2086,17 @@ nds32_validate_tdesc_p (const struct target_desc *tdesc,
   /* Fixed-number R11-R27.  */
   for (i = NDS32_R0_REGNUM + 11; i <= NDS32_R0_REGNUM + 27; i++)
     tdesc_numbered_register (feature, tdesc_data, i, nds32_register_names[i]);
+
+  feature = tdesc_find_feature (tdesc, "org.gnu.gdb.nds32.linux.system");
+  if (feature != NULL)
+    {
+      valid_p = tdesc_numbered_register (feature, tdesc_data,
+					 NDS32_ORIG_R0_REGNUM,
+					 "orig_r0");
+
+      if (!valid_p)
+	return 0;
+    }
 
   feature = tdesc_find_feature (tdesc, "org.gnu.gdb.nds32.fpu");
   if (feature != NULL)
@@ -2018,6 +2151,73 @@ nds32_validate_tdesc_p (const struct target_desc *tdesc,
     }
 
   return 1;
+}
+
+/* Find the dynamically created acr_type for given @BITSIZE in the vector
+   acr_type_vec, if the acr_type is not found, create it and insert it into
+   vector acr_type_vec.  */
+
+static struct type *
+nds32_acr_type (struct gdbarch *gdbarch, int bitsize)
+{
+  char buf[20];
+  struct type *bit_int_type;
+  acr_type new_acr_type;
+  acr_type *p_acr_type = NULL;
+  int adj_bitsize = align_up (bitsize, 8);
+  unsigned len;
+  int ix;
+
+  len = VEC_length (acr_type, acr_type_vec);
+  for (ix = 0; ix < len; ix++)
+    {
+      p_acr_type = VEC_index (acr_type, acr_type_vec, ix);
+      if (p_acr_type->adj_bitsize == adj_bitsize)
+	break;
+    }
+
+  if (ix == len)
+    {
+      /* Not found, so create it.  */
+      sprintf (buf, "acr_%d_t", adj_bitsize);
+      bit_int_type = arch_integer_type(gdbarch, adj_bitsize, 1, buf);
+
+      new_acr_type.adj_bitsize = adj_bitsize;
+      new_acr_type.type = bit_int_type;
+      VEC_safe_push (acr_type, acr_type_vec, &new_acr_type);
+      return bit_int_type;
+    }
+  else
+    {
+      /* Found, so use it.  */
+      return p_acr_type->type;
+    }
+}
+
+struct type*
+nds32_register_type (struct gdbarch *gdbarch, int regnum)
+{
+  /* type temporarily used to identify acr register.  */
+  struct type *acr_temp_type = builtin_type (gdbarch)->builtin_uint8;
+  struct type *type = NULL;
+  const struct tdesc_feature *feature = NULL;
+  const char *regname;
+
+  type = tdesc_register_type (gdbarch, regnum);
+  if (type == acr_temp_type)
+    {
+      feature = tdesc_find_feature (target_current_description (),
+				    "org.gnu.gdb.nds32.ace");
+      if (feature != NULL)
+	{
+	  /* This may be ace register.  */
+	  regname = gdbarch_register_name (gdbarch, regnum);
+	  type = nds32_acr_type (gdbarch,
+				 tdesc_register_size (feature, regname));
+	}
+    }
+
+  return type;
 }
 
 /* Initialize the current architecture based on INFO.  If possible,
@@ -2141,6 +2341,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   /* Override tdesc_register callbacks for system registers.  */
   set_gdbarch_register_reggroup_p (gdbarch, nds32_register_reggroup_p);
+  set_gdbarch_register_type (gdbarch, nds32_register_type);
 
   set_gdbarch_sp_regnum (gdbarch, NDS32_SP_REGNUM);
   set_gdbarch_pc_regnum (gdbarch, NDS32_PC_REGNUM);
@@ -2160,7 +2361,9 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_frame_align (gdbarch, nds32_frame_align);
   frame_base_set_default (gdbarch, &nds32_frame_base);
 
-  set_gdbarch_print_insn (gdbarch, print_insn_nds32);
+  set_gdbarch_print_insn (gdbarch, gdb_print_insn_nds32);
+  /* Support simple overlay manager.  */
+  set_gdbarch_overlay_update (gdbarch, nds32_simple_overlay_update);
 
   /* Handle longjmp.  */
   set_gdbarch_get_longjmp_target (gdbarch, nds32_get_longjmp_target);
@@ -2173,9 +2376,25 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   return gdbarch;
 }
 
+/* Callback for "nds" command.  */
+
+static void
+nds32_command (char *arg, int from_tty)
+{
+  printf_unfiltered (_("\"nds\" must be followed by arguments\n"));
+}
+
+struct cmd_list_element *nds32_cmdlist;
+
 void
 _initialize_nds32_tdep (void)
 {
+  add_prefix_cmd ("nds", no_class, nds32_command,
+		  _("Various NDS specific commands."), &nds32_cmdlist,
+		  "nds ", 0, &cmdlist);
+
+  nds32_init_remote_cmds ();
+
   /* Initialize gdbarch.  */
   register_gdbarch_init (bfd_arch_nds32, nds32_gdbarch_init);
 

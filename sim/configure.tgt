@@ -76,6 +76,9 @@ case "${target}" in
    msp430*-*-*)
        SIM_ARCH(msp430)
        ;;
+   nds32*-*-*)
+       SIM_ARCH(nds32)
+       ;;
    rl78-*-*)
        SIM_ARCH(rl78)
        ;;

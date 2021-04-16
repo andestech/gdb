@@ -34,6 +34,9 @@ enum nds32_regnum
 
   NDS32_PC_REGNUM = 32,		/* Program counter.  */
 
+  NDS32_ORIG_R0_REGNUM,
+
+  /* The number of registers with constant regnum (GPR, PC, ORIG_R0).  */
   NDS32_NUM_REGS,
 
   /* The first double precision floating-point register.  */

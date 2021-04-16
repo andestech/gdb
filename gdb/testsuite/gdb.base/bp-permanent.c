@@ -26,6 +26,8 @@
 
 #if defined(__s390__) || defined(__s390x__)
 #define NOP asm("nopr 0")
+#elif defined(__nds32__)
+#define NOP asm("nop16")
 #else
 #define NOP asm("nop")
 #endif

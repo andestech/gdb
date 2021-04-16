@@ -1,0 +1,14 @@
+# NDS32 simulator instruction tests
+
+# unset_currtarget_info ldscript
+
+# Only test nds32*-*
+if {[istarget nds32*-*]} {
+
+    # all machines
+    set all_machs "all"
+
+    foreach src [lsort [glob -nocomplain $srcdir/$subdir/*.\[csS\]]] {
+	run_sim_test $src $all_machs
+    }
+}

@@ -217,6 +217,28 @@ case "${target}" in
 			srv_linux_usrregs=yes
 			srv_linux_thread_db=yes
 			;;
+  nds32*-*-linux*)	srv_regobj="nds32-linux.o"
+			srv_regobj="${srv_regobj} nds32-freg2-linux.o"
+			srv_regobj="${srv_regobj} nds32-freg3-linux.o"
+			srv_regobj="${srv_regobj} nds32-zol-linux.o"
+			srv_regobj="${srv_regobj} nds32-zol-freg2-linux.o"
+			srv_regobj="${srv_regobj} nds32-zol-freg3-linux.o"
+			srv_tgtobj="$srv_linux_obj linux-nds32-low.o"
+			srv_xmlfiles="nds32-linux.xml"
+			srv_xmlfiles="${srv_xmlfiles} nds32-freg2-linux.xml"
+			srv_xmlfiles="${srv_xmlfiles} nds32-freg3-linux.xml"
+			srv_xmlfiles="${srv_xmlfiles} nds32-zol-linux.xml"
+			srv_xmlfiles="${srv_xmlfiles} nds32-zol-freg2-linux.xml"
+			srv_xmlfiles="${srv_xmlfiles} nds32-zol-freg3-linux.xml"
+			srv_xmlfiles="${srv_xmlfiles} nds32-core.xml"
+			srv_xmlfiles="${srv_xmlfiles} nds32-linux-system.xml"
+			srv_xmlfiles="${srv_xmlfiles} nds32-zol.xml"
+			srv_xmlfiles="${srv_xmlfiles} nds32-freg2.xml"
+			srv_xmlfiles="${srv_xmlfiles} nds32-freg3.xml"
+			srv_linux_usrregs=yes
+			srv_linux_regsets=yes
+			srv_linux_thread_db=yes
+			;;
   powerpc*-*-linux*)	srv_regobj="powerpc-32l.o"
 			srv_regobj="${srv_regobj} powerpc-altivec32l.o"
 			srv_regobj="${srv_regobj} powerpc-cell32l.o"

@@ -1,0 +1,127 @@
+# Copyright 2004, 2005, 2007, 2008, 2009, 2010, 2011
+# Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Please email any bugs, comments, and/or additions to this file to:
+# bug-gdb@gnu.org
+
+# This file is part of the gdb testsuite.
+
+if { ![istarget nds32*-*-*] } {
+    verbose "Skipping nds32 IFC tests."
+    return
+}
+
+set testfile "nds32-ifc"
+set srcfile ${testfile}.S
+set binfile [standard_output_file ${testfile}]
+
+if [get_compiler_info] {
+    return -1
+}
+
+set additional_flags "-Wa,-g"
+
+if { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable [list debug $additional_flags]] != "" } {
+    unsupported "compiler does not support ifcall"
+    return
+}
+
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+send_gdb "file ${binfile}\n"
+
+# sid will set sim,protocol to "sid", and set protocol to "sim"
+if { [board_info target sim,protocol] == "sid" } {
+    gdb_target_sid
+} else {
+    # sim will set protocol to "sim"
+    if { [board_info target protocol] != "sim" } {
+	gdb_target_ice
+    }
+}
+
+# Check IFC support manually.
+# The executable is not `file' yet before `gdb_load',
+# so we can only check it here.
+send_gdb "nds32 query target\n"
+gdb_expect { -re ".*$gdb_prompt $" {} }
+send_gdb "set prompt $gdb_prompt \n"
+gdb_expect { -re ".*$gdb_prompt $" {} }
+
+gdb_test_multiple "nds32 elf-check" "elf-check" {
+    -re "ELF and CPU mismatch" {
+	unsupported "target does not support ifcall (elf-check)"
+	return
+    }
+    -re "$gdb_prompt $" {
+	# done
+    }
+}
+
+gdb_load ${binfile}
+
+if ![runto_main] then {
+    gdb_suppress_tests
+}
+
+# Step until ifcall.
+set test "step until ifcall"
+gdb_test_multiple "step" "$test" {
+    -re "ifcall.*\n$gdb_prompt $" {
+	# found
+        pass "$test"
+    }
+    -re "$inferior_exited_re" {
+        fail "$test (program exited)"
+    }
+    -re ".*The program is not being run.*" {
+        fail "$test (program not loaded)"
+    }
+    -re ".*Cannot find bounds of current function.*" {
+        fail "$test (program not loaded)"
+    }
+    -re ".*signal SIG.*" {
+	# e.g., SIGILL
+        fail "$test (spurious signal)"
+    }
+    -re "$gdb_prompt $" {
+	# continue to find ifcall
+	send_gdb "step\n"
+	exp_continue
+    }
+}
+
+# Force return when stepping into common block.
+set test "force return in common block"
+gdb_test_multiple "stepi" "$test" {
+    -re "FAIL MARKER" {
+        fail "$test"
+    }
+    -re "PASS MARKER" {
+        pass "$test"
+    }
+    -re "$inferior_exited_re" {
+        fail "$test (program exited)"
+    }
+    -re ".*signal SIG.*" {
+	# e.g., SIGILL
+        fail "$test (spurious signal)"
+    }
+    -re "$gdb_prompt $" {
+	# done
+    }
+}

@@ -394,9 +394,17 @@ mt-*-*)
 	gdb_target_obs="mt-tdep.o"
 	;;
 
+nds32*-*-linux*)
+	# Target: AndesTech NDS32 running GNU/Linux
+	gdb_target_obs="nds32-tdep.o nds32-linux-tdep.o nds32-remote.o \
+			linux-tdep.o glibc-tdep.o solib-svr4.o symfile-mem.o"
+	gdb_sim=../sim/nds32/libsim.a
+	build_gdbserver=yes
+	;;
 nds32*-*-elf)
 	# Target: AndesTech NDS32 core
-	gdb_target_obs="nds32-tdep.o"
+	gdb_target_obs="nds32-tdep.o nds32-remote.o"
+	gdb_sim=../sim/nds32/libsim.a
 	;;
 
 nios2*-*-linux*)

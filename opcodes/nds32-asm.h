@@ -1,5 +1,5 @@
 /* NDS32-specific support for 32-bit ELF.
-   Copyright (C) 2012-2016 Free Software Foundation, Inc.
+   Copyright (C) 2012-2013 Free Software Foundation, Inc.
    Contributed by Andes Technology Corporation.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -77,6 +77,8 @@ enum
   NASM_ATTR_SATURATION_EXT	= 0x0400000,
   NASM_ATTR_PCREL		= 0x0800000,
   NASM_ATTR_GPREL		= 0x1000000,
+  NASM_ATTR_DSP_ISAEXT		= 0x2000000,
+  NASM_ATTR_ZOL			= (1 << 26),
 
   /* Attributes for relocations.  */
   NASM_ATTR_HI20		= 0x10000000,
@@ -84,22 +86,30 @@ enum
   NASM_ATTR_LO20		= 0x40000000,
 
   /* Attributes for registers.  */
-  NASM_ATTR_RDREG		= 0x000100
+  NASM_ATTR_RDREG		= 0x000100,
+
 };
+
+#define NDS32_CORE_COUNT	6
+#define NDS32_MAIN_CORE		0
+#define NDS32_ACE		1
+#define NDS32_COP0		2
+#define NDS32_COP1		3
+#define NDS32_COP2		4
+#define NDS32_COP3		5
 
 enum
 {
-  /* This is a field (operand) of just a separator char.  */
-  SYN_FIELD = 0x100,
-
   /* This operand is used for input or output.  (define or use)  */
-  SYN_INPUT = 0x1000,
-  SYN_OUTPUT = 0x2000,
-  SYN_LOPT = 0x4000,
-  SYN_ROPT = 0x8000,
+  SYN_INPUT = 0x10000,
+  SYN_OUTPUT = 0x20000,
+  SYN_LOPT = 0x40000,
+  SYN_ROPT = 0x80000,
 
-  /* Hardware resources.  */
-  HW_GPR = 0,
+  /* Hardware resources:                                       */
+  /* Current set up allows up to 256 resources for each class  */
+  /* defined above.                                            */
+  HW_GPR = NDS32_MAIN_CORE << 8,
   HW_USR,
   HW_DXR,
   HW_SR,
@@ -128,10 +138,16 @@ enum
   HW_AEXT_ARIDX,
   HW_AEXT_ARIDX2,
   HW_AEXT_ARIDXI,
+  HW_AEXT_ARIDXI_MX,
   _HW_LAST,
   /* TODO: Maybe we should add a new type to distinguish address and
 	   const int.  Only the former allows symbols and relocations.  */
-  HW_INT,
+  HW_ACE_BASE = NDS32_ACE << 8,
+  HW_COP0_BASE = NDS32_COP0 << 8,
+  HW_COP1_BASE = NDS32_COP1 << 8,
+  HW_COP2_BASE = NDS32_COP2 << 8,
+  HW_COP3_BASE = NDS32_COP3 << 8,
+  HW_INT = 0x1000,
   HW_UINT
 };
 
@@ -159,7 +175,7 @@ enum
   N32_AEXT_AMBBS,
   N32_AEXT_AMBTS,
   N32_AEXT_AMTBS,
-  N32_AEXT_AMTTS
+  N32_AEXT_AMTTS,
 };
 
 /* Macro for instruction attribute.  */
@@ -235,9 +251,9 @@ typedef struct nds32_asm_desc
 {
   /* The callback provided by assembler user for parse an operand,
      e.g., parse integer.  */
-  int (*parse_operand) (struct nds32_asm_desc *,
-			struct nds32_asm_insn *,
-			char **, int64_t *);
+  int (*parse_operand) (struct nds32_asm_desc *desc,
+			struct nds32_asm_insn *insn,
+			char **str, int64_t *value);
 
   /* Result of assembling.  */
   int result;
@@ -259,13 +275,19 @@ typedef struct nds32_field
   int shift;
   int hw_res;
 
-  int (*parse) (struct nds32_asm_desc *,
-		struct nds32_asm_insn *,
-		char **, int64_t *);
+  int (*parse) (struct nds32_asm_desc *desc,
+		struct nds32_asm_insn *insn,
+		char **str, int64_t *value);
 } field_t;
 
-extern void nds32_assemble (nds32_asm_desc_t *, nds32_asm_insn_t *, char *);
-extern void nds32_asm_init (nds32_asm_desc_t *, int);
+void nds32_assemble (nds32_asm_desc_t *pdesc, nds32_asm_insn_t *pinsn,
+		     char *str);
+void nds32_asm_init (nds32_asm_desc_t *pdesc, int flags);
+int nds32_parse_udi (char *str);
+int nds32_parse_cop0 (char *str);
+int nds32_parse_cop1 (char *str);
+int nds32_parse_cop2 (char *str);
+int nds32_parse_cop3 (char *str);
 
 #define OP6(op6)	(N32_OP6_ ## op6 << 25)
 
@@ -277,6 +299,9 @@ extern void nds32_asm_init (nds32_asm_desc_t *, int);
 #define SIMD(sub)	(OP6 (SIMD) | N32_SIMD_ ## sub)
 #define ALU1(sub)	(OP6 (ALU1) | N32_ALU1_ ## sub)
 #define ALU2(sub)	(OP6 (ALU2) | N32_ALU2_ ## sub)
+#define ALU2_1(sub)	(OP6 (ALU2) | __BIT (6) | N32_ALU2_ ## sub)
+#define ALU2_2(sub)	(OP6 (ALU2) | __BIT (7) | N32_ALU2_ ## sub)
+#define ALU2_3(sub)	(OP6 (ALU2) | __BIT (6) | __BIT (7) | N32_ALU2_ ## sub)
 #define MISC(sub)	(OP6 (MISC) | N32_MISC_ ## sub)
 #define MEM(sub)	(OP6 (MEM) | N32_MEM_ ## sub)
 #define FPU_RA_IMMBI(sub)	(OP6 (sub) | __BIT (12))

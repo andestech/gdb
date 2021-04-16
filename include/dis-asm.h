@@ -326,6 +326,7 @@ extern disassembler_ftype rl78_get_disassembler (bfd *);
 extern void print_aarch64_disassembler_options (FILE *);
 extern void print_i386_disassembler_options (FILE *);
 extern void print_mips_disassembler_options (FILE *);
+extern void print_nds32_disassembler_options (FILE *);
 extern void print_ppc_disassembler_options (FILE *);
 extern void print_arm_disassembler_options (FILE *);
 extern void print_arc_disassembler_options (FILE *);
@@ -336,6 +337,9 @@ extern int  set_arm_regname_option (int);
 extern int  get_arm_regnames (int, const char **, const char **, const char *const **);
 extern bfd_boolean aarch64_symbol_is_valid (asymbol *, struct disassemble_info *);
 extern bfd_boolean arm_symbol_is_valid (asymbol *, struct disassemble_info *);
+extern bfd_boolean nds32_symbol_is_valid (asymbol *, struct disassemble_info *);
+extern void nds32_add_opcode_hash_table (unsigned indx);
+extern void disassemble_init_for_nds32 (struct disassemble_info *);
 extern void disassemble_init_powerpc (struct disassemble_info *);
 
 /* Fetch the disassembler for a given BFD, if that support is available.  */

@@ -87,6 +87,9 @@ initialize_tdesc_nds32 (void)
   tdesc_create_reg (feature, "ir0", 65, 1, NULL, 32, "int");
   tdesc_create_reg (feature, "itb", 66, 1, NULL, 32, "int");
   tdesc_create_reg (feature, "ifc_lp", 67, 1, NULL, 32, "int");
+  tdesc_create_reg (feature, "lb", 68, 1, NULL, 32, "int");
+  tdesc_create_reg (feature, "le", 69, 1, NULL, 32, "int");
+  tdesc_create_reg (feature, "lc", 70, 1, NULL, 32, "int");
 
   tdesc_nds32 = result;
 }

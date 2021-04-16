@@ -1,5 +1,5 @@
 /* NDS32-specific support for 32-bit ELF.
-   Copyright (C) 2012-2016 Free Software Foundation, Inc.
+   Copyright (C) 2012-2013 Free Software Foundation, Inc.
    Contributed by Andes Technology Corporation.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -26,7 +26,9 @@
 extern "C" {
 #endif
 
-/* Relocation flags encoded in r_addend.  */
+/*
+ * Relocation flags encoded in r_addend.
+ */
 
 /* Relocation flags for R_NDS32_ERLAX_ENTRY.  */
 
@@ -46,6 +48,13 @@ extern "C" {
 #define R_NDS32_RELAX_ENTRY_EX9_FLAG				(1 << 2)
 /* Enable IFC optimization for this section.  */
 #define R_NDS32_RELAX_ENTRY_IFC_FLAG				(1 << 3)
+/* Two bits for ICT to comply with files without directive.  */
+/* ICT small model.  */
+#define R_NDS32_RELAX_ENTRY_ICT_SMALL				(0x2 << 4)
+/* ICT large model.  */
+#define R_NDS32_RELAX_ENTRY_ICT_LARGE				(0x3 << 4)
+/* Mask for get ict bits.  */
+#define R_NDS32_RELAX_ENTRY_ICT_MASK				(0x3 << 4)
 
 
 /* Relocation flags for R_NDS32_INSN16.  */
@@ -71,6 +80,8 @@ extern "C" {
 /* A Innermost loop region.  Some optimizations is suppressed
    in this region due to performance drop.  */
 #define R_NDS32_RELAX_REGION_INNERMOST_LOOP_FLAG		(1 << 4)
+/* Suppress IFC optimization in the region.  */
+#define R_NDS32_RELAX_REGION_NO_IFC_FLAG			(1 << 5)
 
 /* Tag range for LOADSTORE relocation.  */
 enum
@@ -91,35 +102,69 @@ enum
   NDS32_RELAX_NONE_ROUND = 0,
   NDS32_RELAX_NORMAL_ROUND,
   NDS32_RELAX_JUMP_IFC_ROUND,
+  NDS32_RELAX_IFC_ROUND,
   NDS32_RELAX_EX9_BUILD_ROUND,
   NDS32_RELAX_EX9_REPLACE_ROUND,
   NDS32_RELAX_EMPTY_ROUND
 };
 
+/* Security tag.  */
+enum
+{
+  NDS32_SECURITY_NONE = 0,
+  NDS32_SECURITY_START,
+  NDS32_SECURITY_RESTART,
+  NDS32_SECURITY_END
+};
+
+/* There are two state in IFC optimization including general ifc (post-opt)
+   and jump ifc (j and jal).  Therefore, we have to use two different mask to
+   distinguish them.  */
 /* Optimization status mask.  */
 #define NDS32_RELAX_JUMP_IFC_DONE	(1 << 0)
 #define NDS32_RELAX_EX9_DONE		(1 << 1)
+#define NDS32_RELAX_IFC_DONE		(1 << 2)
 
 /* Optimization turn on mask.  */
-#define NDS32_RELAX_JUMP_IFC_ON		(1 << 0)
+#define NDS32_RELAX_IFC_ON		(1 << 0)
 #define NDS32_RELAX_EX9_ON		(1 << 1)
 
-extern void nds32_insertion_sort
-  (void *, size_t, size_t, int (*) (const void *, const void *));
+void nds32_insertion_sort
+  (void *base, size_t nmemb, size_t size,
+   int (*compar) (const void *lhs, const void *rhs));
 
-extern int         nds32_elf_ex9_init (void);
-extern int         nds32_convert_32_to_16 (bfd *, uint32_t, uint16_t *, int *);
-extern int         nds32_convert_16_to_32 (bfd *, uint16_t, uint32_t *);
-extern void        bfd_elf32_nds32_set_target_option (struct bfd_link_info *,
-						      int, int, FILE *, int,
-						      int, int, int, FILE *,
-						      FILE *, int, int,
-						      bfd_boolean, bfd_boolean);
+struct section_id_list_t
+{
+  int id;
+  struct section_id_list_t *next;
+};
+
+struct section_id_list_t *
+  elf32_nds32_lookup_section_id (int id, struct section_id_list_t **lst_ptr);
+int elf32_nds32_check_relax_group (bfd *bfd, asection *sec);
+int elf32_nds32_unify_relax_group (bfd *abfd, asection *asec);
+int nds32_elf_unify_tls_model (bfd *inbfd, asection *insec,
+			       bfd_byte *incontents,
+			       struct bfd_link_info *lnkinfo);
+
+void bfd_elf32_nds32_set_target_option (struct bfd_link_info *, int, int,
+					FILE *, int, int, int, int, FILE *,
+					FILE *, int, int, bfd_boolean,
+					bfd_boolean, bfd_boolean, int);
+void bfd_elf32_nds32_append_section (struct bfd_link_info*, bfd *, int);
+int nds32_convert_32_to_16
+  (bfd *abfd, uint32_t insn, uint16_t *pinsn16, int *pinsn_type);
+int nds32_convert_16_to_32 (bfd *abfd, uint16_t insn16, uint32_t *pinsn);
 
 #define nds32_elf_hash_table(info) \
   (elf_hash_table_id ((struct elf_link_hash_table *) ((info)->hash)) \
-   == NDS32_ELF_DATA ? \
-   ((struct elf_nds32_link_hash_table *) ((info)->hash)) : NULL)
+   == NDS32_ELF_DATA ? ((struct elf_nds32_link_hash_table *) ((info)->hash)) : NULL)
+
+#define elf32_nds32_compute_jump_table_size(htab) \
+  ((htab)->next_tls_desc_index * 4)
+
+#define elf32_nds32_local_tlsdesc_gotent(bfd) \
+  (elf_nds32_tdata (bfd)->local_tlsdesc_gotent)
 
 /* Hash table structure for target nds32.  There are some members to
    save target options passed from nds32elf.em to bfd.  */
@@ -128,12 +173,7 @@ struct elf_nds32_link_hash_table
 {
   struct elf_link_hash_table root;
 
-  /* Short-cuts to get to dynamic linker sections.  */
-  asection *sgot;
-  asection *sgotplt;
-  asection *srelgot;
-  asection *splt;
-  asection *srelplt;
+  /* ?? Short-cuts to get to dynamic linker sections.  */
   asection *sdynbss;
   asection *srelbss;
 
@@ -155,6 +195,34 @@ struct elf_nds32_link_hash_table
   int ex9_limit;
   bfd_boolean ex9_loop_aware;	/* Ignore ex9 if inside a loop.  */
   bfd_boolean ifc_loop_aware;	/* Ignore ifc if inside a loop.  */
+  bfd_boolean hyper_relax;	/* Relax for symbol not in RW sections.  */
+  int tls_desc_trampoline;	/* --m[no-]tlsdesc-trampoline.  */
+
+  /* The offset into splt of the PLT entry for the TLS descriptor
+   resolver.  Special values are 0, if not necessary (or not found
+   to be necessary yet), and -1 if needed but not determined
+   yet.  */
+  bfd_vma dt_tlsdesc_plt;
+
+  /* The offset into sgot of the GOT entry used by the PLT entry
+   above.  */
+  bfd_vma dt_tlsdesc_got;
+
+  /* Offset in .plt section of tls_nds32_trampoline.  */
+  bfd_vma tls_trampoline;
+
+  /* The index of the next unused R_NDS32_TLS_DESC slot in .rel.plt.  */
+  bfd_vma next_tls_desc_index;
+
+  /* How many R_NDS32_TLS_DESC relocations were generated so far.  */
+  bfd_vma num_tls_desc;
+
+  /* The amount of space used by the reserved portion of the sgotplt
+     section, plus whatever space is used by the jump slots.  */
+  bfd_vma sgotplt_jump_table_size;
+
+  /* True if the target uses REL relocations.  */
+  int use_rel;
 };
 
 #ifdef __cplusplus

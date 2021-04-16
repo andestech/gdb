@@ -11,4 +11,7 @@
 
   <reg name="itb" bitsize="32"/>
   <reg name="ifc_lp" bitsize="32"/>
+  <reg name="lb" bitsize="32"/>
+  <reg name="le" bitsize="32"/>
+  <reg name="lc" bitsize="32"/>
 </feature>

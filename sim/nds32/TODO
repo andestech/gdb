@@ -1,0 +1,10 @@
+* Allocate BRK at once to improve performance of HEAP.
+* Use RLIMIT_DATA to limit the size of BRK
+* Bookkeep attached memory region, region can be properly removed.
+
+* Instruction implementation summary
+  Unimplemented:
+  * v1: svs, jr-with-sr-update (e.g., jr.itoff),
+    MMU instructions (tlbop, ld_vlpt), teqz, tnez, iret, ret.*toff,
+  * perf-ext: pbsad, pbsada
+  * fpu: IVO exception, fui2s, fui2d

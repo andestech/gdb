@@ -1,0 +1,28 @@
+2013-07-08  Wei-cheng Wang  <cole945@gmail.com>
+	    Sabrina Ni <sabrinanitw@gmail.com>
+
+	* 000-sanity.s: New file.
+	* 010-lmwzb.s: New file.
+	* 010-smwzb.s: New file.
+	* 010-unaligned.s: New file.
+	* 020-beqc.s: New file.
+	* 020-ffbi.s: New file.
+	* 020-ffb.s: New file.
+	* 020-ffmism.s: New file.
+	* 020-ffzmism.s: New file.
+	* 020-flmism.s: New file.
+	* 020-signext-load.s: New file.
+	* 020-signext.s: New file.
+	* 030-setend.s: New file.
+	* 040-ifcall.s: New file.
+	* 040-ifret.s: New file.
+	* 041-ifcall-chaining.s: New file.
+	* 041-ifcall-jal.s: New file.
+	* 041-ifcall-j.s: New file.
+	* 050-ex5.it.s: New file.
+	* 050-ex9.it.s: New file.
+	* 100-bse.s: New file.
+	* 100-bsp.s: New file.
+	* allinsn.exp: New file.
+	* smwzb.s: New file.
+	* utils.inc: New file.
