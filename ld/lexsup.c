@@ -892,7 +892,14 @@ parse_args (unsigned argc, char **argv)
 	  config.map_filename = "-";
 	  break;
 	case 'm':
-	  /* Ignore.  Was handled in a pre-parse.   */
+	  /* Ignore "-m" emulation options. Was handled in a pre-parse. */
+#ifdef ENABLE_PLUGINS
+	  if (strncmp(optarg, "ace=", 4) == 0)
+	    {
+	      if (plugin_opt_plugin_arg (argv[last_optind]))
+		einfo (_("%P%F: failed to set plugin argument: %s\n"), argv[last_optind]);
+	    }
+#endif /* ENABLE_PLUGINS */
 	  break;
 	case OPTION_MAP:
 	  config.map_filename = optarg;
@@ -1867,17 +1874,15 @@ nds_ld_list_options (FILE *file)
 {
   fprintf (file, _("\
 \nNDS specific command line options:\n\
-  --mno-target-aligned        Disable target aligned\n\
-  --m[no-]gp-insn             Support gp relative instructions\n\
   --mexport-symbols=FILE      Exporting global symbols into linker script\n\
-  --m[no-]avoid-btb-miss      Avoid btb miss \n\
-  --m[no-]ex9                 Disable/enable link-time EX9 relaxation\n\
-  --mexport-ex9=FILE          Export EX9 table after linking\n\
-  --mimport-ex9=FILE          Import Ex9 table for EX9 relaxation\n\
-  --mkeep-import-ex9          Keep import Ex9 table\n\
-  --mupdate-ex9               Update existing EX9 table\n\
-  --mex9-limit=NUM            Set maximum number of entries in ex9 table\n\
-  --mex9-loop-aware           Avoid generate EX9 instruction inside loop\n\
+  --m[no-]relax-cross-section-call Disable/enable cross-section relaxations\n\
+  --m[no-]execit              Disable/enable link-time EXECIT relaxation\n\
+  --mexport-execit=FILE       Export .exec.itable after linking\n\
+  --mimport-execit=FILE       Import .exec.itable for EXECIT relaxation\n\
+  --mkeep-import-execit       Keep imported .exec.itable\n\
+  --mupdate-execit            Update existing .exec.itable\n\
+  --mexecit-limit=NUM         Set maximum number of entries in .exec.itable for this times\n\
+  --mexecit-loop-aware        Avoid generate exec.it instruction inside loop\n\
   "));
 }
 

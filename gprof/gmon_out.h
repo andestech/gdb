@@ -39,7 +39,11 @@ struct gmon_hdr
 /* Types of records in this file.  */
 typedef enum
   {
-    GMON_TAG_TIME_HIST = 0, GMON_TAG_CG_ARC = 1, GMON_TAG_BB_COUNT = 2
+    GMON_TAG_TIME_HIST = 0, GMON_TAG_CG_ARC = 1, GMON_TAG_BB_COUNT = 2,
+// the following 3 entries are defined for timeline based monitor data
+    GMON_TAG_TL_1 = 3, GMON_TAG_TL_2 = 4, GMON_TAG_TL_3 = 5,
+    GMON_TAG_TL_4 = 6, GMON_TAG_TL_5 = 7, GMON_TAG_TL_6 = 8,
+    GMON_TAG_TL_7 = 9, GMON_TAG_TL_8 = 10, GMON_TAG_TL_9 = 11
   }
 GMON_Record_Tag;
 

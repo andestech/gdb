@@ -30,7 +30,9 @@
 
 #include "bfd_stdint.h"
 #include <ctype.h>
+#ifndef __MINGW32__
 #include <dlfcn.h>
+#endif
 
 struct riscv_private_data
 {
@@ -47,12 +49,12 @@ static int
 riscv_parse_opcode (bfd_vma, insn_t, disassemble_info *,
 		    struct riscv_private_data *, uint32_t);
 
-#define RISCV_PARSE_EX9IT       0x04
-#define RISCV_PARSE_EX9TAB      0x08
+#define RISCV_PARSE_EXECIT      0x04
+#define RISCV_PARSE_EXECIT_TAB  0x08
 
 static void
-riscv_ex9_info (bfd_vma pc ATTRIBUTE_UNUSED,
-		disassemble_info *info, uint32_t ex9_index)
+riscv_execit_info (bfd_vma pc ATTRIBUTE_UNUSED,
+		   disassemble_info *info, uint32_t execit_index)
 {
   uint32_t insn;
   static asection *section = NULL;
@@ -60,7 +62,7 @@ riscv_ex9_info (bfd_vma pc ATTRIBUTE_UNUSED,
   int insnlen;
   struct riscv_private_data *pd = info->private_data;
 
-  /* If no section info can be related to this ex9 insn, this may be just
+  /* If no section info can be related to this exec.it insn, this may be just
      a uninitial memory content, so not to decode it.  */
   if (info->section == NULL)
     return;
@@ -68,9 +70,9 @@ riscv_ex9_info (bfd_vma pc ATTRIBUTE_UNUSED,
   /* Lookup section in which itb is located.  */
   if (!section)
     {
-      section = bfd_get_section_by_name (info->section->owner, ".ex9.itable");
+      section = bfd_get_section_by_name (info->section->owner, ".exec.itable");
 
-      /* Lookup it only once, in case .ex9.itable doesn't exist at all.  */
+      /* Lookup it only once, in case .exec.itable doesn't exist at all.  */
       if (section == NULL)
 	section = (void *) -1;
     }
@@ -82,16 +84,16 @@ riscv_ex9_info (bfd_vma pc ATTRIBUTE_UNUSED,
     return;
 
   bfd_get_section_contents (section->owner, section, buffer,
-			    ex9_index * 4, 4);
+			    execit_index * 4, 4);
   insn = bfd_get_32 (section->owner, buffer);
   insnlen = riscv_insn_length (insn);
 
-  /* 16-bit instructions in ex9 table.  */
+  /* 16-bit instructions in .exec.itable.  */
   if (insnlen == 2)
-    riscv_parse_opcode (pc, (insn & 0x0000FFFF), info, pd, RISCV_PARSE_EX9IT);
-  /* 32-bit instructions in ex9 table.  */
+    riscv_parse_opcode (pc, (insn & 0x0000FFFF), info, pd, RISCV_PARSE_EXECIT);
+  /* 32-bit instructions in .exec.itable.  */
   else
-    riscv_parse_opcode (pc, insn, info, pd, RISCV_PARSE_EX9IT);
+    riscv_parse_opcode (pc, insn, info, pd, RISCV_PARSE_EXECIT);
 }
 
 /* Data structures used by ACE */
@@ -110,7 +112,9 @@ enum
   HW_GPR,
   HW_UINT,
   HW_INT,
-  HW_ACR
+  HW_ACR,
+  HW_FPR,
+  HW_VR
 };
 
 /* Pointers for storing symbols from ACE shared library */
@@ -121,6 +125,10 @@ bfd_boolean ace_lib_load_success = FALSE;
 
 /* Other options.  */
 static int no_aliases;	/* If set disassemble as most general inst.  */
+/* Debugging mode:
+ * Display ex9 table with ID.
+ * Show the ACE insn even if the ACE library is loaded fail.  */
+static int debugging;
 
 static void
 set_default_riscv_dis_options (void)
@@ -129,12 +137,15 @@ set_default_riscv_dis_options (void)
   riscv_fpr_names = riscv_fpr_names_abi;
   riscv_vecr_names = riscv_vecr_names_numeric;
   no_aliases = 0;
+  debugging = 0;
 }
 
 static void
 parse_riscv_dis_option (const char *option)
 {
-  if (strcmp (option, "no-aliases") == 0)
+  if (strcmp (option, "debugging") == 0)
+    debugging = 1;
+  else if (strcmp (option, "no-aliases") == 0)
     no_aliases = 1;
   else if (strcmp (option, "numeric") == 0)
     {
@@ -149,6 +160,7 @@ parse_riscv_dis_option (const char *option)
   /* Load ACE shared library if ACE option is enable */
   else if (strncmp (option, "ace=", 4) == 0)
     {
+#ifndef __MINGW32__
       char *ace_lib_path = malloc (strlen (option) - 4);
       strcpy (ace_lib_path, option + 4);
 
@@ -163,7 +175,7 @@ parse_riscv_dis_option (const char *option)
 	  err = (char *) dlerror ();
 	  if (err == NULL)
 	    {
-	      ace_opcs = (struct riscv_opcode *) dlsym (dlc, "ace_opcodes");
+	      ace_opcs = (struct riscv_opcode *) dlsym (dlc, "ace_opcodes_2");
 	      err = (char *) dlerror ();
 	    }
 	}
@@ -172,6 +184,7 @@ parse_riscv_dis_option (const char *option)
 	ace_lib_load_success = TRUE;
       else
 	fprintf (stderr, _("Fault to load ACE shared library: %s\n"), err);
+#endif
     }
   else
     {
@@ -322,6 +335,14 @@ print_ace_args (const char **args, insn_t l, disassemble_info * info)
 	  print (info->stream, "%s", riscv_gpr_names[bit_value]);
 	  break;
 
+	case HW_FPR:
+	  print (info->stream, "%s", riscv_fpr_names[bit_value]);
+	  break;
+
+	case HW_VR:
+	  print (info->stream, "%s", riscv_vecr_names[bit_value]);
+	  break;
+
 	case HW_UINT:
 	  if (is_discrete)
 	    bit_value = ace_get_discrete_bit_value(l, op_name_discrete, "imm");
@@ -349,6 +370,31 @@ print_ace_args (const char **args, insn_t l, disassemble_info * info)
       *args = pch;
       print (info->stream, ",");
     }
+}
+
+#define MAX_KEYWORD_LEN 32
+
+/* Parse the field defined for nds v5 extension.  */
+
+static bfd_boolean
+parse_nds_v5_field (const char **str, char name[MAX_KEYWORD_LEN])
+{
+  char *p = name;
+  const char *str_t;
+
+  str_t = *str;
+  str_t--;
+  while (isalnum (*str_t) || *str_t == '.' || *str_t == '_')
+    *p++ = *str_t++;
+  *p = '\0';
+
+  if (strncmp (name, "nds_", 4) == 0)
+    {
+      *str = str_t;
+      return TRUE;
+    }
+  else
+    return FALSE;
 }
 
 /* Print insn arguments for 32/64-bit code.  */
@@ -404,15 +450,11 @@ print_insn_args (const char *d, insn_t l, bfd_vma pc,
 		{
 		case 'i':
 		  print (info->stream, "#%d	!", (int)EXTRACT_RVC_EX9IT_IMM (l) >> 2);
-		  riscv_ex9_info (pc, info, (int)EXTRACT_RVC_EX9IT_IMM (l) >> 2);
-		  break;
-		case 'c':
-		  print (info->stream, "%x",
-			 (unsigned int)((unsigned int)EXTRACT_RVC_EX9CS_IMM (l) + pc));
+		  riscv_execit_info (pc, info, (int)EXTRACT_RVC_EX9IT_IMM (l) >> 2);
 		  break;
 		case 't':
-		  print (info->stream, "#%d       !", (int)EXTRACT_RVC_EX10_IMM (l));
-		  riscv_ex9_info (pc, info, (int)EXTRACT_RVC_EX10_IMM (l));
+		  print (info->stream, "#%d     !", (int)EXTRACT_RVC_EXECIT_IMM (l) >> 2);
+		  riscv_execit_info (pc, info, (int)EXTRACT_RVC_EXECIT_IMM (l) >> 2);
 		  break;
 		}
 	      break;
@@ -533,18 +575,18 @@ print_insn_args (const char *d, insn_t l, bfd_vma pc,
 	  break;
 
 	case 'a':
-	  if (parse_mode & RISCV_PARSE_EX9IT)
+	  if (parse_mode & RISCV_PARSE_EXECIT)
 	    {
-	      /* Check instruction in ex9 table.  */
-	      info->target = EXTRACT_UJTYPE_IMM_EX9TAB (l);
+	      /* Check instruction in .exec.itable.  */
+	      info->target = EXTRACT_UJTYPE_IMM_EXECIT_TAB (l);
 	      info->target |= (pc & 0xffe00000);
 	      (*info->print_address_func) (info->target, info);
 	    }
-	  else if (parse_mode & RISCV_PARSE_EX9TAB)
+	  else if (parse_mode & RISCV_PARSE_EXECIT_TAB)
 	    {
-	      /* Check if decode ex9 table.  */
-	      info->target = EXTRACT_UJTYPE_IMM_EX9TAB (l);
-	      print (info->stream, "PC(31,21)|#0x%lx", info->target);
+	      /* Check if decode .exec.itable.  */
+	      info->target = EXTRACT_UJTYPE_IMM_EXECIT_TAB (l);
+	      print (info->stream, "PC(31,21)|#0x%lx", (long) info->target);
 	    }
 	  else
 	    {
@@ -786,6 +828,42 @@ print_insn_args (const char *d, insn_t l, bfd_vma pc,
 	    }
 	  break;
 
+	/* Handle operand fields of V5 extension.  */
+	case 'n':
+	  {
+	    d++;
+	    char field_name[MAX_KEYWORD_LEN];
+	    if (parse_nds_v5_field (&d, field_name))
+	      {
+		if (strcmp (field_name, "nds_rc") == 0)
+		  print (info->stream, "%s",
+			 riscv_gpr_names[EXTRACT_OPERAND (RC, l)]);
+		else if (strcmp (field_name, "nds_rdp") == 0)
+		  print (info->stream, "%s", riscv_gpr_names[rd]);
+		else if (strcmp (field_name, "nds_rsp") == 0)
+		  print (info->stream, "%s", riscv_gpr_names[rs1]);
+		else if (strcmp (field_name, "nds_rtp") == 0)
+		  print (info->stream, "%s",
+			 riscv_gpr_names[EXTRACT_OPERAND (RS2, l)]);
+		else if (strcmp (field_name, "nds_i3u") == 0)
+		  print (info->stream, "%d", (int)EXTRACT_PTYPE_IMM3U (l));
+		else if (strcmp (field_name, "nds_i4u") == 0)
+		  print (info->stream, "%d", (int)EXTRACT_PTYPE_IMM4U (l));
+		else if (strcmp (field_name, "nds_i5u") == 0)
+		  print (info->stream, "%d", (int)EXTRACT_PTYPE_IMM5U (l));
+		else if (strcmp (field_name, "nds_i6u") == 0)
+		  print (info->stream, "%d", (int)EXTRACT_PTYPE_IMM6U (l));
+		else if (strcmp (field_name, "nds_i15s") == 0)
+		  print (info->stream, "%d", (int)EXTRACT_PTYPE_IMM15S (l));
+		else
+		  print (info->stream,
+			 _("# internal error, undefined nds v5 field (%s)"),
+			 field_name);
+	      }
+	    d--;
+	  }
+	  break;
+
 	default:
 	  /* xgettext:c-format */
 	  print (info->stream, _("# internal error, undefined modifier (%c)"),
@@ -830,7 +908,7 @@ riscv_parse_opcode (bfd_vma memaddr, insn_t word, disassemble_info *info,
 	  if (no_aliases && (op->pinfo & INSN_ALIAS))
 	    continue;
 	  /* Is this instruction restricted to a certain value of XLEN?  */
-	  if (isdigit (op->subset[0]) && atoi (op->subset) != xlen)
+	  if (isdigit (op->subset[0][0]) && atoi (op->subset[0]) != xlen)
 	    continue;
 
 	  /* It's a match.  */
@@ -852,6 +930,45 @@ riscv_parse_opcode (bfd_vma memaddr, insn_t word, disassemble_info *info,
   return 0;
 }
 
+/* get architecture attributes from input BFD to test if V + XV5  */
+
+static bfd_boolean
+has_extension (char ext, disassemble_info *info)
+{
+  bfd_boolean has = FALSE;
+  obj_attribute *attr = NULL;
+  char extlo = tolower(ext);
+
+  if (info && info->section && info->section->owner)
+    attr = &elf_known_obj_attributes (info->section->owner)[OBJ_ATTR_PROC][Tag_RISCV_arch];
+
+  if (attr && attr->s)
+    {
+      const char *p = attr->s;
+      if ((tolower(p[0]) == 'r') &&
+	  (tolower(p[1]) == 'v') &&
+	  (isdigit(p[2])) &&
+	  (isdigit(p[3])))
+	{
+	  p += 4;
+	  while (*p)
+	    {
+	      if (tolower(*p) == 'x') /* before non-std  */
+		break;
+	      if ((tolower(*p) == extlo) &&
+		  ((extlo != 'p') || !isdigit(*(p-1))))
+		{
+		  has = TRUE;
+		  break;
+		}
+	      ++p;;
+	    }
+	}
+    }
+
+  return has;
+}
+
 /* Print the RISC-V instruction at address MEMADDR in debugged memory,
    on using INFO.  Returns length of the instruction, in bytes.
    BIGENDIAN must be 1 if this is big-endian code, 0 if
@@ -865,15 +982,32 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
   struct riscv_private_data *pd;
   int insnlen;
   int match;
+  static int execit_id = 0;
+  static struct riscv_opcode reordered_op[] =
+    {
+      {0, 0, {0}, 0, 0, 1, 0, 0},
+      {0, 0, {0}, 0, 0, 1, 0, 0},
+      {0, 0, {0}, 0, 0, 1, 0, 0},
+    };
 
 #define OP_HASH_IDX(i) ((i) & (riscv_insn_length (i) == 2 ? 0x3 : OP_MASK_OP))
 
   /* Build a hash table to shorten the search time.  */
   if (!init)
     {
+      bfd_boolean has_v = has_extension ('v', info);
       for (op = riscv_opcodes; op->name; op++)
 	if (!riscv_hash[OP_HASH_IDX (op->match)])
-	  riscv_hash[OP_HASH_IDX (op->match)] = op;
+	  {
+	    /* patch hash to favor vector instructions if has v-ext.  */
+	    if (has_v && (op->mask == 0x707f))
+	      if (!strcmp(op->name, "flhw") || !strcmp(op->name, "fshw"))
+		{
+		  reordered_op[init++] = *op;
+		  continue;
+		}
+	    riscv_hash[OP_HASH_IDX (op->match)] = op;
+	  }
 
       /* Insert ACE opcode attributes into hash table if exist */
       if (ace_lib_load_success && ace_opcs != NULL && ace_ops != NULL)
@@ -935,7 +1069,11 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
 	{
 	  /* Does the opcode match?  */
 	  if (! (op->match_func) (op, word))
-	    continue;
+	    {
+	      if (!op[1].name && !op[1].mask && reordered_op[0].name)
+	        op = reordered_op - 1;
+	      continue;
+	    }
 	  /* Is this a pseudo-instruction and may we print it as such?  */
 	  if (no_aliases && (op->pinfo & INSN_ALIAS))
 	    continue;
@@ -987,16 +1125,35 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
     }
 
   if (info->section
-      && strstr (info->section->name, ".ex9.itable") != NULL)
-    match = riscv_parse_opcode (memaddr, word, info, pd, RISCV_PARSE_EX9TAB);
+      && strstr (info->section->name, ".exec.itable") != NULL)
+    {
+      match = riscv_parse_opcode (memaddr, word, info, pd, RISCV_PARSE_EXECIT_TAB);
+      if (debugging)
+	(*info->fprintf_func) (info->stream, "\t/* %d */", execit_id++);
+    }
   else
     match = riscv_parse_opcode (memaddr, word, info, pd, 0);
 
   if (!match)
     {
-      /* We did not find a match, so just print the instruction bits.  */
-      info->insn_type = dis_noninsn;
-      (*info->fprintf_func) (info->stream, "0x%llx", (unsigned long long)word);
+      /* We did not find a match above. */
+      /* It may be ACE insn but the ACE shared library is
+	 failed to load.  */
+      if (debugging
+	  && !ace_lib_load_success
+	  && (word & 0x7f) == 0x7b)
+	{
+	  info->insn_type = dis_noninsn;
+	  (*info->fprintf_func) (info->stream,
+				 "ACE insn (0x%llx)",
+				 (unsigned long long)word);
+	}
+      else
+	{
+	  /* Just print the instruction bits.  */
+	  info->insn_type = dis_noninsn;
+	  (*info->fprintf_func) (info->stream, "0x%llx", (unsigned long long)word);
+	}
     }
 
   return insnlen;

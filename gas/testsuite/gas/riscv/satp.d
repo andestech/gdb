@@ -1,5 +1,5 @@
 #as:
-#objdump: -dr
+#objdump: -d
 
 .*:[ 	]+file format .*
 

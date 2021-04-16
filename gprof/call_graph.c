@@ -30,6 +30,56 @@
 #include "gmon_out.h"
 #include "sym_ids.h"
 
+// ============================================================================
+// tl_cg_tally
+//
+// This function increments arc call count when call and updates arc time
+// counts when return.
+// ============================================================================
+void
+tl_cg_tally (bfd_vma from_pc,
+             bfd_vma self_pc,
+             unsigned int count, // 0 when return and 1 when call
+             unsigned int icnt,  // 0 when call
+             unsigned int ccnt)  // 0 when call
+{   Sym *parent;
+    Sym *child;
+
+    parent = sym_lookup (&symtab, from_pc);
+    child = sym_lookup (&symtab, self_pc);
+
+    if (child == NULL || parent == NULL)
+        return;
+
+    // If we're doing line-by-line profiling, both the parent and the
+    // child will probably point to line symbols instead of function
+    // symbols.  For the parent this is fine, since this identifies the
+    // line number in the calling routing, but the child should always
+    // point to a function entry point, so we back up in the symbol
+    // table until we find it.
+    // For normal profiling, is_func will be set on all symbols, so this
+    // code will do nothing.
+    while (child >= symtab.base && ! child->is_func)
+        --child;
+
+    if (child < symtab.base)
+        return;
+
+    // Keep arc if it is on INCL_ARCS table or if the INCL_ARCS table
+    // is empty and it is not in the EXCL_ARCS table.
+    if (sym_id_arc_is_present (&syms[INCL_ARCS], parent, child)
+      ||(syms[INCL_ARCS].len == 0
+       &&!sym_id_arc_is_present (&syms[EXCL_ARCS], parent, child)))
+    {   // do it once when count==1 (when call)
+        // but not when count==0 (when return)
+        child->ncalls+=count;
+        DBG (TALLYDEBUG,
+             printf (_("[tl_cg_tally] arc from %s to %s traversed instruction count=%u and cycle count=%u\n"),
+                     parent->name, child->name, icnt, ccnt));
+        tl_arc_add (parent, child, count, icnt, ccnt);
+    }
+} // tl_cg_tally
+
 void
 cg_tally (bfd_vma from_pc, bfd_vma self_pc, unsigned long count)
 {

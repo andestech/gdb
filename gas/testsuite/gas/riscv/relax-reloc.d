@@ -1,10 +1,11 @@
-#as:
+#as: -march=rv32ic
 #objdump: -r
 
 .*:[ 	]+file format .*
 
 RELOCATION RECORDS FOR .*
 .*
+.*R_RISCV_RELAX_ENTRY.*
 0+0 R_RISCV_HI20.*
 0+0 R_RISCV_RELAX.*
 0+4 R_RISCV_LO12_I.*

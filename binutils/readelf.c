@@ -3915,6 +3915,16 @@ get_solaris_segment_type (unsigned long type)
 }
 
 static const char *
+get_riscv_segment_type (unsigned long type)
+{
+  switch (type)
+    {
+    case PT_RISCV_ATTRIBUTES: return "RISCV_ATTRIBUTES";
+    default:         return NULL;
+    }
+}
+
+static const char *
 get_segment_type (Filedata * filedata, unsigned long p_type)
 {
   static char buff[32];
@@ -3968,6 +3978,9 @@ get_segment_type (Filedata * filedata, unsigned long p_type)
 	    case EM_S390:
 	    case EM_S390_OLD:
 	      result = get_s390_segment_type (p_type);
+	      break;
+	    case EM_RISCV:
+	      result = get_riscv_segment_type (p_type);
 	      break;
 	    default:
 	      result = NULL;
@@ -15390,6 +15403,17 @@ static struct riscv_attr_tag_t riscv_attr_tag[] =
   T(unaligned_access),
   T(stack_align),
 #undef T
+
+#define T(tag) {"Tag_" #tag, Tag_##tag}
+  T(arch),
+  T(priv_spec),
+  T(priv_spec_minor),
+  T(priv_spec_revision),
+  T(strict_align),
+  T(stack_align),
+  T(ict_version),
+  T(ict_model),
+#undef T
 };
 
 static unsigned char *
@@ -15425,6 +15449,7 @@ display_riscv_attribute (unsigned char *p,
     case Tag_RISCV_priv_spec:
     case Tag_RISCV_priv_spec_minor:
     case Tag_RISCV_priv_spec_revision:
+    case Tag_RISCV_ict_version:
       val = read_uleb128 (p, &len, end);
       p += len;
       printf (_("%d\n"), val);
@@ -15448,6 +15473,36 @@ display_riscv_attribute (unsigned char *p,
       printf (_("%d-bytes\n"), val);
       break;
     case Tag_RISCV_arch:
+    case Tag_RISCV_ict_model:
+      p = display_tag_value (-1, p, end);
+      break;
+
+    case Tag_priv_spec + Tag_shfit:
+    case Tag_ict_version + Tag_shfit:
+      val = read_uleb128 (p, &len, end);
+      p += len;
+      printf (_("%d\n"), val);
+      break;
+    case Tag_strict_align + Tag_shfit:
+      val = read_uleb128 (p, &len, end);
+      p += len;
+      switch (val)
+	{
+	case 0:
+	  printf (_("Non-strict align\n"));
+	  break;
+	case 1:
+	  printf (_("Strict align\n"));
+	  break;
+	}
+      break;
+    case Tag_stack_align + Tag_shfit:
+      val = read_uleb128 (p, &len, end);
+      p += len;
+      printf (_("%d-bytes\n"), val);
+      break;
+    case Tag_arch + Tag_shfit:
+    case Tag_ict_model + Tag_shfit:
       p = display_tag_value (-1, p, end);
       break;
     default:

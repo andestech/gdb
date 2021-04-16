@@ -32,10 +32,10 @@ COMMONPAGESIZE="CONSTANT (COMMONPAGESIZE)"
 
 DATA_START_SYMBOLS="${CREATE_SHLIB-__DATA_BEGIN__ = .;}"
 
-SDATA_START_SYMBOLS="${CREATE_SHLIB-__SDATA_BEGIN__ = .;}
+SDATA_START_SYMBOLS=". = ALIGN ($ELFSIZE / 8);
+    ${CREATE_SHLIB-__SDATA_BEGIN__ = .;}
+    ${CREATE_SHLIB-__global_pointer$ = __SDATA_BEGIN__ + 0x800;}
     *(.srodata.cst16) *(.srodata.cst8) *(.srodata.cst4) *(.srodata.cst2) *(.srodata .srodata.*)"
-DATA_START_SYMBOLS='__data_start = .;'
-OTHER_END_SYMBOLS='PROVIDE (_stack = 0x3000000);'
 
 INITIAL_READONLY_SECTIONS=".interp         : { *(.interp) } ${CREATE_PIE-${INITIAL_READONLY_SECTIONS}}"
 INITIAL_READONLY_SECTIONS="${RELOCATING+${CREATE_SHLIB-${INITIAL_READONLY_SECTIONS}}}"
@@ -46,5 +46,4 @@ INITIAL_READONLY_SECTIONS="${RELOCATING+${CREATE_SHLIB-${INITIAL_READONLY_SECTIO
 # the address of variables in rodata may change during relaxation, so we start
 # from data in that case.
 OTHER_END_SYMBOLS="${CREATE_SHLIB-__BSS_END__ = .;
-    __global_pointer$ = MIN(__SDATA_BEGIN__ + 0x800,
-		            MAX(__DATA_BEGIN__ + 0x800, __BSS_END__ - 0x800));}"
+  PROVIDE (_stack = 0x3000000);}"

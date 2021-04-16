@@ -8,6 +8,7 @@ Disassembly of section .text:
 
 0+000 <.text>:
 [ 	]+0:[ 	]+4005[ 	]+c.li[ 	]+zero,1
+.*R_RISCV_RELAX_ENTRY.*
 [ 	]+2:[ 	]+6009[ 	]+c.lui[ 	]+zero,0x2
 [ 	]+4:[ 	]+000e[ 	]+c.slli[ 	]+zero,0x3
 [ 	]+6:[ 	]+8006[ 	]+c.mv[ 	]+zero,ra

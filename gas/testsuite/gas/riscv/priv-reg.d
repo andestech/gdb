@@ -8,6 +8,9 @@ Disassembly of section .text:
 
 0+000 <.text>:
 [ 	]+0:[ 	]+00002573[ 	]+csrr[ 	]+a0,ustatus
+.*R_RISCV_RELAX_ENTRY.*
+.*R_RISCV_NO_RVC_REGION_BEGIN.*
+.*R_RISCV_RELAX_REGION_BEGIN.*
 [ 	]+4:[ 	]+00402573[ 	]+csrr[ 	]+a0,uie
 [ 	]+8:[ 	]+00502573[ 	]+csrr[ 	]+a0,utvec
 [ 	]+c:[ 	]+04002573[ 	]+csrr[ 	]+a0,uscratch
@@ -224,7 +227,7 @@ Disassembly of section .text:
 [ 	]+358:[ 	]+7a302573[ 	]+csrr[ 	]+a0,tdata3
 [ 	]+35c:[ 	]+7b002573[ 	]+csrr[ 	]+a0,dcsr
 [ 	]+360:[ 	]+7b102573[ 	]+csrr[ 	]+a0,dpc
-[ 	]+364:[ 	]+7b202573[ 	]+csrr[ 	]+a0,dscratch
+[ 	]+364:[ 	]+7b202573[ 	]+csrr[ 	]+a0,dscratch0
 [ 	]+368:[ 	]+04302573[ 	]+csrr[ 	]+a0,utval
 [ 	]+36c:[ 	]+10602573[ 	]+csrr[ 	]+a0,scounteren
 [ 	]+370:[ 	]+14302573[ 	]+csrr[ 	]+a0,stval
