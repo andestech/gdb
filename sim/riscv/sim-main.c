@@ -8331,6 +8331,8 @@ execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int 
       return execute_i (cpu, iw, op, ex9);
     case INSN_CLASS_M:
       return execute_m (cpu, iw, op, ex9);
+    case INSN_CLASS_P:
+      return execute_p (cpu, iw, op, ex9);
     case INSN_CLASS_XANDES:
       return execute_andes(cpu, iw, op, ex9);
     default:
