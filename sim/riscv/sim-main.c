@@ -8879,12 +8879,12 @@ execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int 
       return execute_i (cpu, iw, op, ex9);
     case 'M':
       return execute_m (cpu, iw, op, ex9);
+    case 'P':
+      return execute_p (cpu, iw, op, ex9);
     case 'X':
       subset++;
       if (strncmp(subset, "ANDES", 5) == 0)
         return execute_andes(cpu, iw, op, ex9);
-      if (strncmp (subset, "DSP", 3) == 0)
-	return execute_p (cpu, iw, op, ex9);
       if (strncmp (subset, "EBFHW", 5) == 0)
         return execute_xebfhw(cpu, iw, op, ex9);
     case 'Z':
