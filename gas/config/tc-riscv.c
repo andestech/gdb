@@ -4833,7 +4833,7 @@ md_assemble (char *str)
   expressionS imm_expr;
   bfd_reloc_code_real_type imm_reloc = BFD_RELOC_UNUSED;
   imm_expr.X_md = 0;
-  insn.cmodel.method = 0;
+  insn.cmodel.method = METHOD_DEFAULT;
 
   /* Set the first rvc info for the the current fragmant.  */
   if (!frag_now->tc_frag_data.rvc)
