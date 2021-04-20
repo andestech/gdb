@@ -5002,6 +5002,7 @@ md_parse_option (int c, const char *arg)
 	riscv_set_abi (64, FLOAT_ABI_QUAD, FALSE);
       else
 	return 0;
+      explicit_mabi = TRUE;
       break;
 
     case OPTION_RELAX:
