@@ -118,6 +118,8 @@ enum cmodel_subtype_index
   CSI_REFERENCE_SYMBOL = 1,
   CSI_LARGE_CODE = 2,
   CSI_DEFAULT_CODE = 3,
+  CSI_B22827,
+  CSI_B22827_1,
 };
 
 static const char default_arch[] = DEFAULT_ARCH;
@@ -151,6 +153,152 @@ static int optimize_for_space = 0;
 /* Save option -mict-model for ICT model setting.  */
 static const char *m_ict_model = NULL;
 static bfd_boolean pre_insn_is_a_cond_br = 0;
+
+/* { # Andes  */
+static void
+macro_build (expressionS *ep, const char *name, const char *fmt, ...);
+
+#define MASK_RM (0x7u << 12)
+
+static bfd_boolean
+is_insn_fdiv_or_fsqrt (const struct riscv_opcode *insn)
+{
+  static insn_t insns[] = {
+    MATCH_FDIV_D, MATCH_FSQRT_D,
+    MATCH_FDIV_S, MATCH_FSQRT_S,
+    0
+  };
+  bfd_boolean rz = FALSE;
+  if (insn)
+    {
+      insn_t x;
+      insn_t match = insn->match & ~MASK_RM; /* all rounding mode  */
+      int i = 0;
+      while ((x = insns[i++]))
+	{
+	  if (x == match)
+	    {
+	      rz = TRUE;
+	      break;
+	    }
+	}
+    }
+  return rz;
+}
+
+static inline int
+insn_fp_rd (insn_t insn)
+{
+  int rd = 0x1fu & (insn >> 7);
+  return rd;
+}
+
+static bfd_boolean
+is_insn_in_b22827_list (const struct riscv_opcode *insn,
+			insn_t prev, insn_t curr)
+{
+  static insn_t insns[] = {
+    /* unconditional  */
+    MATCH_FSUB_S, MATCH_FADD_S, MATCH_FMUL_S, MATCH_FMADD_S,
+    MATCH_FSQRT_S, MATCH_FDIV_S,
+    MATCH_FSUB_D, MATCH_FADD_D, MATCH_FMUL_D, MATCH_FMADD_D,
+    MATCH_FSQRT_D, MATCH_FDIV_D,
+    MATCH_FSUB_Q, MATCH_FADD_Q, MATCH_FMUL_Q, MATCH_FMADD_Q,
+    MATCH_FSQRT_Q, MATCH_FDIV_Q,
+    0
+  };
+
+  bfd_boolean rz = FALSE;
+  insn_t x;
+  insn_t match = insn->match & ~MASK_RM; /* all rounding mode  */
+  int i = 0;
+  while ((x = insns[i++]))
+    {
+      if (x == match)
+	{
+	  rz = TRUE;
+	  return !rz;
+	}
+    }
+
+  /* RD(FDIV/FSQRT) has to be in fa0-7 to exclude jal/ret  */
+  if ((((insn->match & MASK_JAL) == MATCH_JAL)
+       && (curr & (0x1fu << 7))) // JAL RD != 0 (not J)
+      || (insn->match == (MATCH_JAL|(0x1u << 7)))   // JAL RA
+      || ((insn->match & MASK_JALR) == MATCH_JALR)  // JALR|JR
+      || (insn->match == MATCH_C_JAL)               // C.JAL
+      || ((insn->match & MASK_C_JR) == MATCH_C_JR)  // C.JR
+      || (insn->match == MATCH_C_JALR))             // C.JALR
+    {
+      int rd = insn_fp_rd (prev);
+      rz = (10 <= rd) && (rd <= 17); /* rd in fa0 .. fa7  */
+    }
+
+  return !rz;
+}
+
+static inline bfd_boolean
+is_insn_fmt_s (insn_t insn)
+{
+  int fmt = 0x3u & (insn >> 25);
+  return fmt == 0; /* 0:s, 1:d, 2:h, 3:q  */
+}
+
+static inline bfd_boolean
+is_insn_fshw (const struct riscv_opcode *insn)
+{
+  return insn && (insn->match == MATCH_FSHW);
+}
+
+static bfd_boolean
+is_insn_of_std_type (const struct riscv_opcode *insn, const char *type)
+{
+  bfd_boolean rz = FALSE;
+  int idx = 0;
+  const char *sub;
+  const char *p;
+  while ((sub = insn->subset[idx++]) && !rz) /* iter subsets */
+    {
+      p = type;
+      while (*p) /* iter type */
+	{
+	  if (*p++ == sub[0])
+	    {
+	      rz = TRUE;
+	      break;
+	    }
+	}
+    }
+  return rz;
+}
+
+static bfd_boolean
+is_insn_of_fp_types (const struct riscv_opcode *insn)
+{
+  bfd_boolean rz = FALSE;
+  if (insn)
+    {
+      if (insn->match == MATCH_FSHW
+	  || insn->match == MATCH_FLHW)
+	rz = TRUE;
+      else
+	rz = is_insn_of_std_type (insn, "FDQ");
+    }
+  return rz;
+}
+
+#if TO_REMOVE
+static bfd_boolean
+is_insn_of_i_type (const struct riscv_opcode *insn)
+{
+  bfd_boolean rz = FALSE;
+  if (insn)
+    rz = is_insn_of_std_type (insn, "I");
+  return rz;
+}
+#endif
+
+/* } # Andes  */
 
 /* Set the default_isa_spec.  Return 0 if the input spec string isn't
    supported.  Otherwise, return 1.  */
@@ -534,6 +682,8 @@ enum cmodel_type
   TYPE_LD,
   TYPE_ST,
   TYPE_IS, /* indirect symbol  */
+  TYPE_B22827,
+  TYPE_B22827_1,
 };
 
 enum branch_range
@@ -572,8 +722,8 @@ static char *expr_end;
 static struct
 {
   /* riscv_opts.b22827  */
-  const struct riscv_opcode *prev_insn_op;
-  insn_t prev_insn;
+  struct riscv_cl_insn prev_insn;
+  fragS *frag_b22827;
 } nds;
 
 /* The default target format to use.  */
@@ -800,6 +950,11 @@ relaxed_cmodel_length (fragS *fragp, asection *sec)
 	default:
 	  as_fatal (_("internal error: invalid CModel type!"));
 	}
+      break;
+    case CSI_B22827:
+    case CSI_B22827_1:
+      if (fragp->fr_var == 0) length = 0;
+      else if (fragp->fr_var == 1) length = 4;
       break;
     default:
       as_fatal (_("internal error: invalid CModel index!"));
@@ -1925,17 +2080,56 @@ append_insn (struct riscv_cl_insn *ip, expressionS *address_expr,
     }
 
   if (ip->cmodel.method == METHOD_DEFAULT)
-    add_fixed_insn (ip);
+    {
+      add_fixed_insn (ip);
+      if (riscv_opts.workaround)
+	{
+	  if ((riscv_opts.b22827 || riscv_opts.b22827_1)
+	      && !riscv_subset_supports ("v"))
+	    {
+	      const struct riscv_opcode *insn = ip->insn_mo;
+
+	      /* insert “fclass.x x0, RD(FDIV/FSQRT)” after FDIV/FSQRT unless
+	       * the next immediate instruction is
+	       * “fsub/fadd/fmul/fmadd/fsqrt/fdiv/jal/ret and their 16bit variants”
+	       * NOTE: by jal I mean jal and jral. Ret includes jr.
+	       * If you can accept more complex conditions, RD(FDIV/FSQRT) has to be
+	       * in fa0-7 to exclude jal/ret.
+	       */
+	      if (riscv_opts.b22827 && is_insn_fdiv_or_fsqrt (insn))
+		{
+		  const char *mne = "fclass.d";
+		  if (is_insn_fmt_s (ip->insn_opcode))
+		    mne = "fclass.s";
+		  nds.frag_b22827 = frag_now;
+		  macro_build(NULL, mne, "d,s,C", 0, insn_fp_rd(ip->insn_opcode),
+			      0, TYPE_B22827, CSI_B22827, 0);
+		}
+
+	      /* to provide a separate flag to turn it off, with the following rule:
+	       * If FSHW is followed by any floating-point instructions (including
+	       * FSHW and FLHW), insert a NOP after it.
+	       */
+	      else if (riscv_opts.b22827_1 && is_insn_fshw (insn))
+		{
+		  nds.frag_b22827 = frag_now;
+		  macro_build(NULL, "nop", "C",
+			      0, TYPE_B22827_1, CSI_B22827_1, 0);
+		}
+	    }
+	}
+    }
   else if  (ip->cmodel.method == METHOD_VARIABLE)
     {
       add_insn_grow (ip);
       if (ip->cmodel.state == 0)
 	{
 	  int length = ip->cmodel.offset + 4;
+	  symbolS *symbol = address_expr ? address_expr->X_add_symbol : NULL;
+	  offsetT offset = address_expr ? address_expr->X_add_number : 0;
 	  add_insn_grow_done (ip, length, 0,
 			      RELAX_CMODEL_ENCODE (ip->cmodel.type, length, ip->cmodel.index),
-			      address_expr->X_add_symbol,
-			      address_expr->X_add_number);
+			      symbol, offset);
 	}
       return;
     }
@@ -3006,146 +3200,6 @@ is_conditional_branch (struct riscv_opcode *insn)
   }
   return rz;
 }
-
-#define MASK_RM (0x7u << 12)
-
-static bfd_boolean
-is_insn_fdiv_or_fsqrt (const struct riscv_opcode *insn)
-{
-  static insn_t insns[] = {
-    MATCH_FDIV_D, MATCH_FSQRT_D,
-    MATCH_FDIV_S, MATCH_FSQRT_S,
-    0
-  };
-  bfd_boolean rz = FALSE;
-  if (insn)
-    {
-      insn_t x;
-      insn_t match = insn->match & ~MASK_RM; /* all rounding mode  */
-      int i = 0;
-      while ((x = insns[i++]))
-	{
-	  if (x == match)
-	    {
-	      rz = TRUE;
-	      break;
-	    }
-	}
-    }
-  return rz;
-}
-
-static inline int
-insn_fp_rd (insn_t insn)
-{
-  int rd = 0x1fu & (insn >> 7);
-  return rd;
-}
-
-static bfd_boolean
-is_insn_in_b22827_list (const struct riscv_opcode *insn,
-			insn_t prev, insn_t curr)
-{
-  static insn_t insns[] = {
-    /* unconditional  */
-    MATCH_FSUB_S, MATCH_FADD_S, MATCH_FMUL_S, MATCH_FMADD_S,
-    MATCH_FSQRT_S, MATCH_FDIV_S,
-    MATCH_FSUB_D, MATCH_FADD_D, MATCH_FMUL_D, MATCH_FMADD_D,
-    MATCH_FSQRT_D, MATCH_FDIV_D,
-    MATCH_FSUB_Q, MATCH_FADD_Q, MATCH_FMUL_Q, MATCH_FMADD_Q,
-    MATCH_FSQRT_Q, MATCH_FDIV_Q,
-    0
-  };
-
-  bfd_boolean rz = FALSE;
-  insn_t x;
-  insn_t match = insn->match & ~MASK_RM; /* all rounding mode  */
-  int i = 0;
-  while ((x = insns[i++]))
-    {
-      if (x == match)
-	{
-	  rz = TRUE;
-	  return !rz;
-	}
-    }
-
-  /* RD(FDIV/FSQRT) has to be in fa0-7 to exclude jal/ret  */
-  if ((((insn->match & MASK_JAL) == MATCH_JAL)
-       && (curr & (0x1fu << 7))) // JAL RD != 0 (not J)
-      || (insn->match == (MATCH_JAL|(0x1u << 7)))   // JAL RA
-      || ((insn->match & MASK_JALR) == MATCH_JALR)  // JALR|JR
-      || (insn->match == MATCH_C_JAL)               // C.JAL
-      || ((insn->match & MASK_C_JR) == MATCH_C_JR)  // C.JR
-      || (insn->match == MATCH_C_JALR))             // C.JALR
-    {
-      int rd = insn_fp_rd (prev);
-      rz = (10 <= rd) && (rd <= 17); /* rd in fa0 .. fa7  */
-    }
-
-  return !rz;
-}
-
-static inline bfd_boolean
-is_insn_fmt_s (insn_t insn)
-{
-  int fmt = 0x3u & (insn >> 25);
-  return fmt == 0; /* 0:s, 1:d, 2:h, 3:q  */
-}
-
-static inline bfd_boolean
-is_insn_fshw (const struct riscv_opcode *insn)
-{
-  return insn && (insn->match == MATCH_FSHW);
-}
-
-static bfd_boolean
-is_insn_of_std_type (const struct riscv_opcode *insn, const char *type)
-{
-  bfd_boolean rz = FALSE;
-  int idx = 0;
-  const char *sub;
-  const char *p;
-  while ((sub = insn->subset[idx++]) && !rz) /* iter subsets */
-    {
-      p = type;
-      while (*p) /* iter type */
-	{
-	  if (*p++ == sub[0])
-	    {
-	      rz = TRUE;
-	      break;
-	    }
-	}
-    }
-  return rz;
-}
-
-static bfd_boolean
-is_insn_of_fp_types (const struct riscv_opcode *insn)
-{
-  bfd_boolean rz = FALSE;
-  if (insn)
-    {
-      if (insn->match == MATCH_FSHW
-	  || insn->match == MATCH_FLHW)
-	rz = TRUE;
-      else
-	rz = is_insn_of_std_type (insn, "FDQ");
-    }
-  return rz;
-}
-
-#if TO_REMOVE
-static bfd_boolean
-is_insn_of_i_type (const struct riscv_opcode *insn)
-{
-  bfd_boolean rz = FALSE;
-  if (insn)
-    rz = is_insn_of_std_type (insn, "I");
-  return rz;
-}
-#endif
 
 /* This routine assembles an instruction into its binary format.  As a
    side effect, it sets the global variable imm_reloc to the type of
@@ -4415,7 +4469,9 @@ out:
       if ((riscv_opts.b22827 || riscv_opts.b22827_1)
 	  && !riscv_subset_supports ("v"))
 	{
-	  insn_t curr_insn = ip->insn_opcode;
+	  const struct riscv_opcode *prev_insn = nds.prev_insn.insn_mo;
+	  insn_t prev_insn_co = nds.prev_insn.insn_opcode;
+	  insn_t curr_insn_co = ip->insn_opcode;
 
 	/* insert “fclass.x x0, RD(FDIV/FSQRT)” after FDIV/FSQRT unless 
 	 * the next immediate instruction is 
@@ -4425,29 +4481,25 @@ out:
 	 * in fa0-7 to exclude jal/ret.
 	 */
 	  if (riscv_opts.b22827
-	      && is_insn_fdiv_or_fsqrt (nds.prev_insn_op)
-	      && is_insn_in_b22827_list (insn, nds.prev_insn, curr_insn))
+	      && is_insn_fdiv_or_fsqrt (prev_insn)
+	      && is_insn_in_b22827_list (insn, prev_insn_co, curr_insn_co))
 	    {
-	      const char *mne = "fclass.d";
-	      if (is_insn_fmt_s (nds.prev_insn))
-		mne = "fclass.s";
-	      macro_build(NULL, mne, "d,s", 0, insn_fp_rd(nds.prev_insn));
+	      nds.frag_b22827->fr_var = 1;
 	    }
 
 	/* to provide a separate flag to turn it off, with the following rule:
 	 * If FSHW is followed by any floating-point instructions (including 
 	 * FSHW and FLHW), insert a NOP after it.
 	 */
-	  if (riscv_opts.b22827_1
-	      && is_insn_fshw (nds.prev_insn_op)
+	  else if (riscv_opts.b22827_1
+	      && is_insn_fshw (prev_insn)
 	      && is_insn_of_fp_types (insn))
 	    {
-	      macro_build(NULL, "nop", "");
+	      nds.frag_b22827->fr_var = 1;
 	    }
 
-	    /* update previous insns  */
-	    nds.prev_insn_op = insn;
-	    nds.prev_insn = curr_insn;
+	  /* update previous insns  */
+	  nds.prev_insn = *ip;
 	}
     }
 
@@ -6387,6 +6439,10 @@ md_convert_frag_cmodel (fragS *fragp, segT sec)
     default:
       as_fatal (_("internal error: invalid CModel type!"));
     }
+    break;
+  case CSI_B22827:
+  case CSI_B22827_1: /* TODO: relax nop to c.nop if has RVC  */
+    /* blank  */
     break;
   default:
     as_fatal (_("internal error: invalid CModel index!"));
