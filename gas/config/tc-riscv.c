@@ -174,6 +174,9 @@ enum cmodel_subtype_index
   CSI_REFERENCE_SYMBOL = 1,
   CSI_LARGE_CODE = 2,
   CSI_DEFAULT_CODE = 3,
+  /* workaround borrow variable frag used by cmodel.  */
+  CSI_B22827,
+  CSI_B22827_1,
 };
 /* } Andes  */
 
@@ -188,8 +191,8 @@ static bool pre_insn_is_a_cond_br = false;
 static struct andes_as_states
 {
   /* b22827 */
-  const struct riscv_opcode *prev_insn_op;
-  insn_t prev_insn;
+  struct riscv_cl_insn prev_insn;
+  fragS *frag_b22827;
 } nsta;
 /* } Andes  */
 
@@ -229,6 +232,8 @@ static bool
 is_insn_of_std_type (const struct riscv_opcode *insn, const char *type);
 static bool
 is_insn_of_fp_types (const struct riscv_opcode *insn);
+static void
+macro_build (expressionS *ep, const char *name, const char *fmt, ...);
 /* } Andes */
 
 /* Set the default_isa_spec.  Return 0 if the spec isn't supported.
@@ -556,6 +561,9 @@ enum cmodel_type
   TYPE_LD,
   TYPE_ST,
   TYPE_IS, /* indirect symbol  */
+  /* workaround borrow variable frag used by cmodel.  */
+  TYPE_B22827,
+  TYPE_B22827_1,
 };
 
 enum branch_range
@@ -973,6 +981,11 @@ relaxed_cmodel_length (fragS *fragp, asection *sec)
 	default:
 	  as_fatal (_("internal error: invalid CModel type!"));
 	}
+      break;
+    case CSI_B22827:
+    case CSI_B22827_1:
+      if (fragp->fr_var == 0) length = 0;
+      else if (fragp->fr_var == 1) length = 4;
       break;
     default:
       as_fatal (_("internal error: invalid CModel index!"));
@@ -1819,18 +1832,57 @@ append_insn (struct riscv_cl_insn *ip, expressionS *address_expr,
     }
 
   if (ip->cmodel.method == METHOD_DEFAULT)
-    add_fixed_insn (ip);
+    {
+      add_fixed_insn (ip);
+      if (riscv_opts.workaround)
+	{
+	  if ((riscv_opts.b22827 || riscv_opts.b22827_1)
+	      && !riscv_subset_supports (&riscv_rps_as, "v"))
+	    {
+	      const struct riscv_opcode *insn = ip->insn_mo;
+
+	      /* insert “fclass.x x0, RD(FDIV/FSQRT)” after FDIV/FSQRT unless
+	       * the next immediate instruction is
+	       * “fsub/fadd/fmul/fmadd/fsqrt/fdiv/jal/ret and their 16bit variants”
+	       * NOTE: by jal I mean jal and jral. Ret includes jr.
+	       * If you can accept more complex conditions, RD(FDIV/FSQRT) has to be
+	       * in fa0-7 to exclude jal/ret.
+	       */
+	      if (riscv_opts.b22827 && is_insn_fdiv_or_fsqrt (insn))
+		{
+		  const char *mne = "fclass.d";
+		  if (is_insn_fmt_s (ip->insn_opcode))
+		    mne = "fclass.s";
+		  nsta.frag_b22827 = frag_now;
+		  macro_build (NULL, mne, "d,s,C", 0, insn_fp_rd(ip->insn_opcode),
+			       0, TYPE_B22827, CSI_B22827, 0);
+		}
+
+	      /* to provide a separate flag to turn it off, with the following rule:
+	       * If FSHW is followed by any floating-point instructions (including
+	       * FSHW and FLHW), insert a NOP after it.
+	       */
+	      else if (riscv_opts.b22827_1 && is_insn_fshw (insn))
+		{
+		  nsta.frag_b22827 = frag_now;
+		  macro_build (NULL, "nop", "C",
+			       0, TYPE_B22827_1, CSI_B22827_1, 0);
+		}
+	    }
+	}
+    }
   else if (ip->cmodel.method == METHOD_VARIABLE)
     {
       add_insn_grow (ip);
       if (ip->cmodel.state == 0)
 	{
 	  int length = ip->cmodel.offset + 4;
+	  symbolS *symbol = address_expr ? address_expr->X_add_symbol : NULL;
+	  offsetT offset = address_expr ? address_expr->X_add_number : 0;
 	  add_insn_grow_done (ip, length, 0,
 			      RELAX_CMODEL_ENCODE (ip->cmodel.type, length,
 						   ip->cmodel.index),
-			      address_expr->X_add_symbol,
-			      address_expr->X_add_number);
+			      symbol, offset);
 	}
       return;
     }
@@ -4132,7 +4184,9 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
       if ((riscv_opts.b22827 || riscv_opts.b22827_1)
 	  && !riscv_subset_supports (&riscv_rps_as, "v"))
 	{
-	  insn_t curr_insn = ip->insn_opcode;
+	  const struct riscv_opcode *prev_insn = nsta.prev_insn.insn_mo;
+	  insn_t prev_insn_co = nsta.prev_insn.insn_opcode;
+	  insn_t curr_insn_co = ip->insn_opcode;
 
 	  /* insert “fclass.x x0, RD(FDIV/FSQRT)” after FDIV/FSQRT unless 
 	   * the next immediate instruction is 
@@ -4142,29 +4196,25 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 	   * in fa0-7 to exclude jal/ret.
 	   */
 	  if (riscv_opts.b22827
-	      && is_insn_fdiv_or_fsqrt (nsta.prev_insn_op)
-	      && is_insn_in_b22827_list (insn, nsta.prev_insn, curr_insn))
+	      && is_insn_fdiv_or_fsqrt (prev_insn)
+	      && is_insn_in_b22827_list (insn, prev_insn_co, curr_insn_co))
 	    {
-	      const char *mne = "fclass.d";
-	      if (is_insn_fmt_s (nsta.prev_insn))
-		mne = "fclass.s";
-	      macro_build (NULL, mne, "d,s", 0, insn_fp_rd (nsta.prev_insn));
+	      nsta.frag_b22827->fr_var = 1;
 	    }
 
 	  /* to provide a separate flag to turn it off, with the following rule:
 	   * If FSHW is followed by any floating-point instructions (including 
 	   * FSHW and FLHW), insert a NOP after it.
 	   */
-	  if (riscv_opts.b22827_1
-	      && is_insn_fshw (nsta.prev_insn_op)
+	  else if (riscv_opts.b22827_1
+	      && is_insn_fshw (prev_insn)
 	      && is_insn_of_fp_types (insn))
 	    {
-	      macro_build (NULL, "nop", "");
+	      nsta.frag_b22827->fr_var = 1;
 	    }
 
-	    /* update previous insns  */
-	    nsta.prev_insn_op = insn;
-	    nsta.prev_insn = curr_insn;
+	  /* update previous insns  */
+	  nsta.prev_insn = *ip;
 	}
     }
 
@@ -5692,6 +5742,10 @@ md_convert_frag_cmodel (fragS *fragp, segT sec)
     default:
       as_fatal (_("internal error: invalid CModel type!"));
     }
+    break;
+  case CSI_B22827:
+  case CSI_B22827_1: /* TODO: relax nop to c.nop if has RVC  */
+    /* blank  */
     break;
   default:
     as_fatal (_("internal error: invalid CModel index!"));
