@@ -3507,6 +3507,32 @@ riscv_skip_trampoline_code (struct frame_info *frame, CORE_ADDR pc)
   return 0;
 }
 
+/* Implement the gdbarch_overlay_update method.  */
+
+static void
+riscv_simple_overlay_update (struct obj_section *osect)
+{
+  struct bound_minimal_symbol msymbol;
+
+  msymbol = lookup_minimal_symbol (".nds32.fixed.size", NULL, NULL);
+  if (!msymbol.minsym)
+    return;
+  if (msymbol.minsym != NULL && osect != NULL)
+    {
+      bfd *obfd = osect->objfile->obfd;
+      asection *bsect = osect->the_bfd_section;
+      //fprintf_unfiltered (gdb_stdlog, "bfd_section_vma (obfd, bsect) (0x%x)\n", bfd_section_vma (obfd, bsect));
+      //fprintf_unfiltered (gdb_stdlog, "BMSYMBOL_VALUE_ADDRESS (msymbol) (0x%x)\n", BMSYMBOL_VALUE_ADDRESS (msymbol));
+      if (bfd_section_vma (obfd, bsect) < BMSYMBOL_VALUE_ADDRESS (msymbol))
+	{
+	  osect->ovly_mapped = 1;
+	  return;
+	}
+    }
+
+  simple_overlay_update (osect);
+}
+
 /* Implement the "get_longjmp_target" gdbarch method.  */
 
 static int
@@ -3914,6 +3940,9 @@ riscv_gdbarch_init (struct gdbarch_info info,
   set_gdbarch_in_solib_return_trampoline
     (gdbarch, riscv_in_solib_return_trampoline);
   set_gdbarch_skip_trampoline_code (gdbarch, riscv_skip_trampoline_code);
+
+  /* Support simple overlay manager.  */
+  set_gdbarch_overlay_update (gdbarch, riscv_simple_overlay_update);
 
   /* Handle longjmp.  */
   set_gdbarch_get_longjmp_target (gdbarch, riscv_get_longjmp_target);
