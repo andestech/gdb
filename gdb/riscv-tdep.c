@@ -3512,23 +3512,16 @@ riscv_skip_trampoline_code (struct frame_info *frame, CORE_ADDR pc)
 static void
 riscv_simple_overlay_update (struct obj_section *osect)
 {
-  struct bound_minimal_symbol msymbol;
-
-  msymbol = lookup_minimal_symbol (".nds32.fixed.size", NULL, NULL);
-  if (!msymbol.minsym)
-    return;
-  if (msymbol.minsym != NULL && osect != NULL)
-    {
-      bfd *obfd = osect->objfile->obfd;
-      asection *bsect = osect->the_bfd_section;
-      //fprintf_unfiltered (gdb_stdlog, "bfd_section_vma (obfd, bsect) (0x%x)\n", bfd_section_vma (obfd, bsect));
-      //fprintf_unfiltered (gdb_stdlog, "BMSYMBOL_VALUE_ADDRESS (msymbol) (0x%x)\n", BMSYMBOL_VALUE_ADDRESS (msymbol));
-      if (bfd_section_vma (obfd, bsect) < BMSYMBOL_VALUE_ADDRESS (msymbol))
-	{
-	  osect->ovly_mapped = 1;
-	  return;
-	}
+  if (osect != NULL) {
+    /* bfd *obfd = osect->objfile->obfd; */
+    asection *bsect = osect->the_bfd_section;
+    const char *name = bfd_section_name (bsect);
+    /* fprintf_unfiltered (gdb_stdlog, "riscv_simple_overlay_update: name: %s\n", name); */
+    if (strstr (name, "ovly.tbl") != 0) {
+      /* fprintf_unfiltered (gdb_stdlog, "skip doing simple_overlay_update()...\n"); */
+      return;
     }
+  }
 
   simple_overlay_update (osect);
 }
