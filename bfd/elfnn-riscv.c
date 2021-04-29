@@ -8596,6 +8596,10 @@ andes_execit_hash_insn (bfd *abfd, asection *sec,
 	  off += (data_flag >> 24);
 	  continue;
 	}
+      else if (data_flag & RELAX_REGION_END)
+	{
+	  continue;
+	}
 
       /* filter out some sorts of pattern unsafe or hard to exec.it  */
       insn = bfd_get_32 (abfd, contents + off);
