@@ -72,6 +72,7 @@ static int riscv_relocation_check (struct bfd_link_info *, Elf_Internal_Rela **,
 				   bfd_byte *, int);
 static bfd_boolean riscv_init_global_pointer (bfd *, struct bfd_link_info *);
 
+/* { # Andes  */
 /* declarations for EXECIT  */
 #define EXECIT_INSN 0x8000
 #define EXECIT_SECTION ".exec.itable"
@@ -79,7 +80,7 @@ static bfd_boolean riscv_init_global_pointer (bfd *, struct bfd_link_info *);
 #define EXECIT_HASH_OK (0)
 #define EXECIT_HASH_NG (1)
 #define EXECIT_COUNT_MAX ((unsigned)(-1))
-#define EXECIT_HW_ENTRY_MAX (1024)  /* exe10  */
+#define EXECIT_HW_ENTRY_MAX (1024)  /* exec.it (ex10)  */
 
 typedef struct { void *next; } list_entry_t;
 typedef int (*list_iter_cb_t)(void *list_pp, void *obj, void *a, void *b);
@@ -128,6 +129,7 @@ typedef struct execit_hash_entry
   unsigned int is_chosen:1;
   unsigned int is_final:1;
   unsigned int is_relocated:1;
+  unsigned int is_imported:1;
 } execit_hash_t;
 
 typedef struct execit_rank_list_entry
@@ -151,7 +153,6 @@ typedef struct execit_context
   char buf[0x400];
 } execit_context_t;
 
-static int andes_execit_init (void);
 static bfd_boolean andes_execit_hash_insn (bfd *, asection *,
 					      struct bfd_link_info *);
 static bfd_boolean riscv_elf_execit_itb_base (struct bfd_link_info *);
@@ -173,6 +174,84 @@ riscv_elf_execit_reloc_insn (execit_itable_t *ptr,
 
 
 static execit_hash_t **execit_itable_array = NULL;
+/* EXECIT hash table, used to store all patterns of code.  */
+static struct bfd_hash_table execit_code_hash;
+
+// #define DEBUG_EXECIT
+// #define DEBUG_EXECIT_LUI
+
+static struct {
+  int raw_itable_entries;
+  int next_itable_index;
+#ifdef DEBUG_EXECIT
+  int render_hash_count;
+  int render_hash_ng_count;
+  int repplace_insn_count;
+  int repplace_insn_ng_count;
+  int relocate_itable_count;
+  int relocate_itable_do_count;
+  int hash_count;
+  int rank_count;
+#endif /* DEBUG_EXECIT */
+  unsigned int relocate_itable_done:1;
+  unsigned int is_determining_lui:1;
+} execit;
+
+static execit_rank_t *execit_rank_list = NULL;
+
+/* Exec.it hash function.  */
+
+static struct bfd_hash_entry *
+riscv_elf_code_hash_newfunc (struct bfd_hash_entry *entry,
+			     struct bfd_hash_table *table,
+			     const char *string ATTRIBUTE_UNUSED)
+{
+  const size_t sz_entry = sizeof (execit_hash_t);
+  const size_t sz_head = sizeof (struct bfd_hash_entry);
+  const size_t sz_body = sz_entry - sz_head;
+
+  /* Allocate the structure if it has not already been
+     allocated by a subclass.  */
+  if (entry == NULL)
+    {
+      entry = (void *)
+	bfd_hash_allocate (table, sz_entry);
+
+      if (entry == NULL)
+	return entry;
+    }
+
+#ifdef TO_REVIEW
+  /* Call the allocation method of the superclass.  */
+  entry = bfd_hash_newfunc (entry, table, string);
+  if (entry == NULL)
+    return entry;
+#endif
+
+  memset ((void *) entry + sz_head, 0, sz_body);
+
+  return entry;
+}
+
+/* Initialize EXECIT hash table.  */
+
+static int
+andes_execit_init (void)
+{
+  /* init execit code hash  */
+  if (!bfd_hash_table_init_n (&execit_code_hash, riscv_elf_code_hash_newfunc,
+			      sizeof (execit_hash_t),
+			      1023))
+    {
+      (*_bfd_error_handler) (_("Linker: cannot init EXECIT hash table error \n"));
+      return FALSE;
+    }
+
+  /* init execit stuff here  */
+  memset (&execit, 0, sizeof (execit));
+
+  return TRUE;
+}
 
 static
 int list_iterate(list_entry_t **lst, void *obj,
@@ -250,25 +329,41 @@ find_vma_final_cb(void *l ATTRIBUTE_UNUSED, bfd_vma *j ATTRIBUTE_UNUSED, void *p
 #define LIST_APPEND(list_pp, obj) LIST_ITER(list_pp, obj, NULL, append_final_cb)
 #define LIST_LEN(list_pp) LIST_ITER(list_pp, NULL, NULL, NULL)
 
-// #define DEBUG_EXECIT
-// #define DEBUG_EXECIT_LUI
+/* Examine each insn hash entry for imported exec.itable instructions
+   NOTE: always return TRUE to continue traversing
+*/
+static int
+andes_execit_rank_imported_insn (execit_hash_t *he)
+{
+  execit_rank_t *re, *p, *pp;
 
-struct {
-  int raw_itable_entries;
-  int next_itable_index;
-#ifdef DEBUG_EXECIT
-  int render_hash_count;
-  int render_hash_ng_count;
-  int repplace_insn_count;
-  int repplace_insn_ng_count;
-  int relocate_itable_count;
-  int relocate_itable_do_count;
-  int hash_count;
-  int rank_count;
-#endif /* DEBUG_EXECIT */
-  unsigned int relocate_itable_done:1;
-  unsigned int is_determining_lui:1;
-} execit;
+  if (! he->is_imported)
+    return TRUE;
+
+  re = bfd_zmalloc (sizeof (execit_rank_t));
+  re->he = he;
+  he->is_worthy = TRUE;
+
+  /* insert imported exec.it entries  */
+  pp = NULL;
+  p = execit_rank_list;
+  while (p)
+    {
+      if ((! p->he->is_imported) ||
+	  (p->he->ie.itable_index > he->ie.itable_index))
+	break;
+      pp = p;
+      p = p->root.next;
+    }
+
+  re->root.next = p;
+  if (pp)
+    pp->root.next = re;
+  else
+    execit_rank_list = re;
+
+  return TRUE;
+}
 
 /* end of declarations for EXECIT  */
 
@@ -315,6 +410,7 @@ static FILE *ict_table_file = NULL;
 static struct bfd_hash_table indirect_call_table;
 /* The exported indirect call table.  */
 static struct riscv_elf_ict_table_entry *exported_ict_table_head = NULL;
+/* } # Andes  */
 
 #define ARCH_SIZE NN
 
@@ -6247,10 +6343,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	  (output_bfd) &&
 	  (elf_elfheader (output_bfd)->e_flags & EF_RISCV_RVC))
 	{
-	  /* No need to build EXECIT hash table when only EXECIT import is setting.  */
-	  if (htab->execit_import_file == NULL
-	      || htab->update_execit_table)
-	    andes_execit_init ();
+	  andes_execit_init ();
 	  /* For EXECIT update, we replace execit candiadtes to exec.it
 	     according to the imported table first. After that,
 	     we build the EXECIT hash table for the remaining patterns
@@ -6320,16 +6413,20 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	{
 	  /* rank instruction patterns.  */
 	  andes_execit_traverse_insn_hash (andes_execit_rank_insn);
+	  if (htab->execit_import_file)
+	    andes_execit_traverse_insn_hash (andes_execit_rank_imported_insn);
 
 	  andes_execit_build_itable (abfd, info);
 	  execit_build_finish = 1;
 
+#if TO_REMOVE
 	  if (htab->update_execit_table)
 	    {
 	      BFD_ASSERT (0); /* TODO */
 	      info->relax_pass = 6;
 	      *again = TRUE;
 	    }
+#endif
 	}
       return TRUE;
     case 6:
@@ -6801,10 +6898,6 @@ typedef struct execit_blank_abfd
 /* Helper functions for EXECIT.  */
 static int andes_execit_render_hash (execit_context_t *ctx);
 
-/* EXECIT hash table, used to store all patterns of code.  */
-static struct bfd_hash_table execit_code_hash;
-/* EXECIT insn table.  */
-static execit_rank_t *execit_rank_list = NULL;
 /* After EXECIT relaxation, the high 20 bits of symbol may be
    changed, we may reserve more than one EXECIT entries at
    andes_execit_replace_insn, and then fixed the
@@ -6816,7 +6909,7 @@ static execit_blank_abfd_t *execit_blank_list = NULL;
 // static size_t execit_relax_size = 0;
 static asection *execit_section = NULL;
 /* Use to store the number of imported entries.  */
-// static int execit_import_number = 0;
+static int execit_import_number = 0;
 /* number of valid execit itable entries  */
 // static int execit_itable_list_next_index = 0;
 
@@ -7021,40 +7114,6 @@ andes_execit_mark_irel (Elf_Internal_Rela *irel, int index)
       irel->r_info = ELFNN_R_INFO (ELFNN_R_SYM (irel->r_info), R_RISCV_NONE);
     }
   return TRUE;
-}
-
-/* Exec.it hash function.  */
-
-static struct bfd_hash_entry *
-riscv_elf_code_hash_newfunc (struct bfd_hash_entry *entry,
-			     struct bfd_hash_table *table,
-			     const char *string ATTRIBUTE_UNUSED)
-{
-  const size_t sz_entry = sizeof (execit_hash_t);
-  const size_t sz_head = sizeof (struct bfd_hash_entry);
-  const size_t sz_body = sz_entry - sz_head;
-
-  /* Allocate the structure if it has not already been
-     allocated by a subclass.  */
-  if (entry == NULL)
-    {
-      entry = (void *)
-	bfd_hash_allocate (table, sz_entry);
-
-      if (entry == NULL)
-	return entry;
-    }
-
-#ifdef TO_REVIEW
-  /* Call the allocation method of the superclass.  */
-  entry = bfd_hash_newfunc (entry, table, string);
-  if (entry == NULL)
-    return entry;
-#endif
-
-  memset ((void *) entry + sz_head, 0, sz_body);
-
-  return entry;
 }
 
 /* EXECIT LUI list helpers  */
@@ -7642,9 +7701,23 @@ andes_execit_build_itable (bfd *abfd, struct bfd_link_info *info)
 	  exit (1);
     }
 
+  /* skip if itable is imported and not to keep or to update  */
+  if (table->execit_import_file &&
+      ! table->keep_import_execit &&
+      ! table->update_execit_table)
+    {
+      table_sec->size = 0;
+      return;
+    }
+
   /* TODO: change the e_flag for EXECIT.  */
 
   limit = table->execit_limit;
+  /* odd old definition (v5_toolmisc_test)  */
+  if (table->execit_import_file &&
+      table->update_execit_table &&
+      table->execit_limit >= 0)
+    limit += execit.next_itable_index;
   if ((limit < 0) || (limit > EXECIT_HW_ENTRY_MAX))
     limit = EXECIT_HW_ENTRY_MAX;
 
@@ -7657,6 +7730,8 @@ andes_execit_build_itable (bfd *abfd, struct bfd_link_info *info)
   /* Write EXECIT candidates into .exec.itable. We will
      relocate the patterns with relocations later
      into the andes_execit_relocate_itable.  */
+
+  /* might have imported some  */
   total = count = order = index = 0;
   for (p = execit_rank_list;
        p && index < limit;
@@ -7938,26 +8013,6 @@ andes_execit_replace_insn (struct bfd_link_info *link_info,
   return TRUE;
 }
 
-/* Initialize EXECIT hash table.  */
-
-static int
-andes_execit_init (void)
-{
-  /* init execit code hash  */
-  if (!bfd_hash_table_init_n (&execit_code_hash, riscv_elf_code_hash_newfunc,
-			      sizeof (execit_hash_t),
-			      1023))
-    {
-      (*_bfd_error_handler) (_("Linker: cannot init EXECIT hash table error \n"));
-      return FALSE;
-    }
-
-  /* init execit stuff here  */
-  memset (&execit, 0, sizeof (execit));
-
-  return TRUE;
-}
-
 #ifdef TO_REMOVE
 /* Predict how many bytes will be relaxed for exec.it.  */
 
@@ -8093,8 +8148,8 @@ riscv_elf_execit_reloc_insn (execit_itable_t *ptr,
 static void
 riscv_elf_execit_import_table (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info ATTRIBUTE_UNUSED)
 {
-#ifdef TO_REVIEW
   int num = 0;
+  bfd_byte buf[0x10];
   bfd_byte *contents;
   unsigned long insn;
   FILE *execit_import_file;
@@ -8104,39 +8159,51 @@ riscv_elf_execit_import_table (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info 
   execit_import_file = table->execit_import_file;
   rewind (table->execit_import_file);
 
-  contents = bfd_malloc (sizeof (bfd_byte) * 4);
+  contents = &buf[0];
 
   /* Read instructions from the input file, and then build the list.  */
   while (!feof (execit_import_file))
     {
-      char *code;
-      execit_rank_entry_t *ptr;
+      /* insert exec.it entry to hash  */
+      execit_context_t ctx;
+      execit_hash_t *he;
       size_t nread;
+
+      const char *hash = ctx.buf;
+      memset (&ctx, 0, sizeof (ctx));
 
       nread = fread (contents, sizeof (bfd_byte) * 4, 1, execit_import_file);
       /* Ignore the final byte 0x0a.  */
       if (nread < 1)
 	break;
-      insn = (*(contents + 3) << 24) | (*(contents + 2) << 16)
-	| (*(contents + 1) << 8) | (*(contents));
-      code = bfd_malloc (sizeof (char) * 9);
-      snprintf (code, 9, "%08lx", insn);
-      ptr = bfd_zmalloc (sizeof (execit_rank_entry_t));
-#ifdef TO_REMOVE
-      ptr->string = code;
-      ptr->order = num;
-      ptr->times = -1;
-      ptr->sec = NULL;
-      ptr->local_sym_value = 0;
-      ptr->m_list = NULL;
-      ptr->ex_reserve = 0;
-      ptr->rel_backup.r_offset = 0;
-      ptr->rel_backup.r_info = 0;
-      ptr->rel_backup.r_addend = 0;
-      ptr->irel = NULL;
-      ptr->next = NULL;
-      andes_execit_rank_insert (ptr);
-#endif
+      insn = bfd_getl32 (contents);
+
+      ctx.ie.insn = insn;
+      if (andes_execit_render_hash (&ctx) != EXECIT_HASH_OK)
+	{
+	  BFD_ASSERT (0);
+	  continue;
+	}
+
+      /* add hash entry.  */
+      he = (execit_hash_t*)
+	bfd_hash_lookup (&execit_code_hash, hash, TRUE, TRUE);
+      if (he == NULL)
+	{
+	  (*_bfd_error_handler)
+	    (_("Linker: failed import exec.it %s hash table\n"), hash);
+	  continue;
+	}
+      else
+	{
+	  he->is_imported = 1;
+	  he->is_chosen = 1;
+	  he->ie.entries = 1;
+	  he->ie.itable_index = execit.next_itable_index++;
+	  /* to pass andes_execit_itable_lookup  */
+	  he->ie.fixed = ctx.ie.fixed;
+	}
+
       num++;
     }
   fclose (execit_import_file);
@@ -8147,11 +8214,12 @@ riscv_elf_execit_import_table (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info 
   execit_import_number = num;
   if (table->update_execit_table
       && table->execit_limit != -1
-      && (execit_import_number + table->execit_limit) > 1024)
+      && (execit_import_number + table->execit_limit) > EXECIT_HW_ENTRY_MAX)
     (*_bfd_error_handler)
       (_("Warning: There are only %d entries of .exec.itable left for this time."),
-       (1024 - execit_import_number));
+       (EXECIT_HW_ENTRY_MAX - execit_import_number));
 
+#if TO_REMOVE
   /* We will run andes_execit_build_itable for EXECIT update
      in the andes_execit_hash_insn_finish.  */
   if (!table->update_execit_table && table->keep_import_execit)
@@ -8390,7 +8458,7 @@ andes_execit_render_hash (execit_context_t *ctx)
   int rz = EXECIT_HASH_NG;
   BFD_ASSERT (ctx->ie.fixed || ctx->ie.relocation == 0);
   ctx->buf[0] = 0;
-  ctx->ie.pc = sec_addr(sec) + off;
+  ctx->ie.pc = off + (sec ? sec_addr(sec) : 0);
   ctx->ie.sec = sec;
 
   if (irel)
@@ -8496,12 +8564,12 @@ andes_execit_render_hash (execit_context_t *ctx)
 	  ctx->ie.irel_copy = *ctx->irel;
 	  rz = EXECIT_HASH_OK;
 	}
-      }
-     else
-      { /* has no reloc  */
-	ctx->ie.fixed = ctx->ie.insn;
-	rz = EXECIT_HASH_OK;
-      }
+    }
+  else
+    { /* has no reloc  */
+      ctx->ie.fixed = ctx->ie.insn;
+      rz = EXECIT_HASH_OK;
+    }
 
   if (rz == EXECIT_HASH_OK)
     snprintf (ctx->buf, sizeof(ctx->buf), "%08x|%08llx|%08llx|%s",
