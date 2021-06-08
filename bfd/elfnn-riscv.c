@@ -7803,6 +7803,7 @@ riscv_elf_execit_check_insn_available (uint32_t insn)
      ECALL and EBREAK. Their encoding and functionality are unchanged.  */
   /* Invalid insns: ecall, ebreak, ACE, ret.  */
   if ((insn & MASK_ECALL) == MATCH_ECALL
+      || (insn) == MATCH_ADDI
       || (insn & MASK_EBREAK) == MATCH_EBREAK
       || (insn & 0x7f) == 0x7b
       || ((insn & (MASK_JALR | MASK_RD | MASK_RS1 | MASK_IMM))
