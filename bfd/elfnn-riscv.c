@@ -2042,6 +2042,7 @@ riscv_elf_relocate_section (bfd *output_bfd,
       bfd_boolean resolved_to_zero;
 
       if (howto == NULL
+	  || r_type == R_RISCV_NDS_MISC
 	  || r_type == R_RISCV_GNU_VTINHERIT
 	  || r_type == R_RISCV_GNU_VTENTRY
 	  || r_type == R_RISCV_DATA
@@ -5466,7 +5467,7 @@ _bfd_riscv_relax_align (bfd *abfd, asection *sec,
      R_RISCV_ALIGN here. Unfortunately, we can only assure 4-byte aligned for
      EXECIT so far. Therefore, we reserve R_RISCV_ALIGN only for 4-byte aligned. */
   if (rel->r_addend != 2)
-    rel->r_info = ELFNN_R_INFO (0, R_RISCV_NONE);
+    rel->r_info = ELFNN_R_INFO (rel->r_addend + 2, R_RISCV_NDS_MISC);
 
   /* TODO: Implement n-byte aligned.  */
   int data_flag;
@@ -7010,6 +7011,19 @@ riscv_elf_execit_replace_instruction (struct bfd_link_info *link_info,
 	  && !(irel->r_addend & R_RISCV_RELAX_ENTRY_EXECIT_FLAG)))
     return TRUE;
 
+  /* check if alignment > 4 within, skip execit on it. (bug-23237)  */
+  if (1)
+    {
+      Elf_Internal_Rela *r;
+      for (r = internal_relocs; r < irelend; r++)
+	{
+	  if (ELFNN_R_TYPE (r->r_info) != R_RISCV_NDS_MISC)
+	    continue;
+	  if (r->r_addend > 4) /* refer to x  */
+	    return TRUE;
+	}
+    }
+
   irel = internal_relocs;
   /* Check alignment and fetch proper relocation.  */
   while (off < sec->size)
@@ -7881,6 +7895,19 @@ riscv_elf_execit_build_hash_table (bfd *abfd, asection *sec,
       || (ELFNN_R_TYPE (irel->r_info) == R_RISCV_RELAX_ENTRY
 	  && !(irel->r_addend & R_RISCV_RELAX_ENTRY_EXECIT_FLAG)))
     return TRUE;
+
+  /* check if alignment > 4 within, skip execit on it. (bug-23237)  */
+  if (1)
+    {
+      Elf_Internal_Rela *r;
+      for (r = internal_relocs; r < irelend; r++)
+	{
+	  if (ELFNN_R_TYPE (r->r_info) != R_RISCV_NDS_MISC)
+	    continue;
+	  if (r->r_addend > 4)
+	    return TRUE;
+	}
+    }
 
   irel = internal_relocs;
   table = riscv_elf_hash_table (link_info);
@@ -8873,6 +8900,7 @@ riscv_relocation_check (struct bfd_link_info *info,
 	default:
 	  /* Relocation not supported.  */
 	  if (ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_RELAX
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_NDS_MISC
 	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_NONE
 	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_RELAX_ENTRY
 	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_ADD8
