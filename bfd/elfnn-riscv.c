@@ -7677,6 +7677,10 @@ andes_execit_build_itable (bfd *abfd, struct bfd_link_info *info)
   int order; /* rank order of (raw) hash  */
   int index; /* next entry index  */
 
+  /* skip ITB checking if there is no candidate. bug#23317  */
+  if (execit_rank_list == NULL)
+    return;
+
   /* Find the section .exec.itable, and put all entries into it.  */
   table_sec = riscv_elf_execit_get_section (info->input_bfds);
   if (table_sec == NULL)
