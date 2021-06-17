@@ -899,9 +899,24 @@ static reloc_howto_type howto_table[] =
   EMPTY_HOWTO (218), EMPTY_HOWTO (219), EMPTY_HOWTO (220), EMPTY_HOWTO (221),
   EMPTY_HOWTO (222), EMPTY_HOWTO (223), EMPTY_HOWTO (224), EMPTY_HOWTO (225),
   EMPTY_HOWTO (226), EMPTY_HOWTO (227), EMPTY_HOWTO (228), EMPTY_HOWTO (229),
-  EMPTY_HOWTO (230), EMPTY_HOWTO (231),
+  EMPTY_HOWTO (230),
 
   /* Relocations for NDS V5.  */
+
+  /* Mark the end of the region that can not do some linker relaxations.  */
+  HOWTO (R_RISCV_NDS_MISC,		/* type */
+         0,				/* rightshift */
+         2,				/* size */
+         32,				/* bitsize */
+         FALSE,				/* pc_relative */
+         0,				/* bitpos */
+         complain_overflow_dont,	/* complain_on_overflow */
+         bfd_elf_generic_reloc,		/* special_function */
+         "R_RISCV_NDS_MISC",		/* name */
+         FALSE,				/* partial_inplace */
+         0,				/* src_mask */
+         MINUS_ONE,			/* dst_mask */
+         FALSE),			/* pcrel_offset */
 
   /* Jump-patch table relocations.  */
   /* High 20 bits of 32-bit 32-bit absolute address for jump-patch table.  */
@@ -1329,6 +1344,7 @@ static const struct elf_reloc_map riscv_reloc_map[] =
   { BFD_RELOC_RISCV_SET16, R_RISCV_SET16 },
   { BFD_RELOC_RISCV_SET32, R_RISCV_SET32 },
   { BFD_RELOC_RISCV_32_PCREL, R_RISCV_32_PCREL },
+  { BFD_RELOC_RISCV_NDS_MISC, R_RISCV_NDS_MISC },
   { BFD_RELOC_RISCV_ICT_HI20, R_RISCV_ICT_HI20 },
   { BFD_RELOC_RISCV_ICT_LO12_I, R_RISCV_ICT_LO12_I },
   { BFD_RELOC_RISCV_PCREL_ICT_HI20, R_RISCV_PCREL_ICT_HI20 },
