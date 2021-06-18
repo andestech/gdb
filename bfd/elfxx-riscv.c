@@ -906,8 +906,8 @@ static reloc_howto_type howto_table[] =
   /* Mark the end of the region that can not do some linker relaxations.  */
   HOWTO (R_RISCV_NDS_MISC,		/* type */
          0,				/* rightshift */
-         2,				/* size */
-         32,				/* bitsize */
+         0,				/* size */
+         0,				/* bitsize */
          FALSE,				/* pc_relative */
          0,				/* bitpos */
          complain_overflow_dont,	/* complain_on_overflow */
@@ -915,7 +915,7 @@ static reloc_howto_type howto_table[] =
          "R_RISCV_NDS_MISC",		/* name */
          FALSE,				/* partial_inplace */
          0,				/* src_mask */
-         MINUS_ONE,			/* dst_mask */
+         0,				/* dst_mask */
          FALSE),			/* pcrel_offset */
 
   /* Jump-patch table relocations.  */

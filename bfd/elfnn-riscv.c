@@ -5467,7 +5467,10 @@ _bfd_riscv_relax_align (bfd *abfd, asection *sec,
      R_RISCV_ALIGN here. Unfortunately, we can only assure 4-byte aligned for
      EXECIT so far. Therefore, we reserve R_RISCV_ALIGN only for 4-byte aligned. */
   if (rel->r_addend != 2)
-    rel->r_info = ELFNN_R_INFO (rel->r_addend + 2, R_RISCV_NDS_MISC);
+    {
+      /* 0 to bypass discarded seciton check bug #23336  */
+      rel->r_info = ELFNN_R_INFO (0, R_RISCV_NDS_MISC);
+    }
 
   /* TODO: Implement n-byte aligned.  */
   int data_flag;
@@ -7017,9 +7020,10 @@ riscv_elf_execit_replace_instruction (struct bfd_link_info *link_info,
       Elf_Internal_Rela *r;
       for (r = internal_relocs; r < irelend; r++)
 	{
+	  /* refer to _bfd_riscv_relax_align  */
 	  if (ELFNN_R_TYPE (r->r_info) != R_RISCV_NDS_MISC)
 	    continue;
-	  if (r->r_addend > 4) /* refer to x  */
+	  if (r->r_addend > (4 - 2))
 	    return TRUE;
 	}
     }
@@ -7902,9 +7906,10 @@ riscv_elf_execit_build_hash_table (bfd *abfd, asection *sec,
       Elf_Internal_Rela *r;
       for (r = internal_relocs; r < irelend; r++)
 	{
+	  /* refer to _bfd_riscv_relax_align  */
 	  if (ELFNN_R_TYPE (r->r_info) != R_RISCV_NDS_MISC)
 	    continue;
-	  if (r->r_addend > 4)
+	  if (r->r_addend > (4 - 2))
 	    return TRUE;
 	}
     }
