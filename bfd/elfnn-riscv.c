@@ -2495,7 +2495,7 @@ riscv_elf_relocate_section (bfd *output_bfd,
 		    for (i = 0; i < ie->entries; ++i)
 		      {
 #ifdef DEBUG_EXECIT_LUI
-			printf("%s: %c hash[%d].relocation=%08lx\n", __FUNCTION__, he->is_final ? 'V':'X', he->ie.itable_index, he->ie.relocation);
+			printf("%s: [%d/%d] %c hash[%d].relocation=%08lx\n", __FUNCTION__, i, ie->entries, he->is_final ? 'V':'X', he->ie.itable_index, he->ie.relocation);
 #endif
 			if (he->is_final)
 			  {
@@ -7147,7 +7147,11 @@ estimate_relocation_each_cb(void *l ATTRIBUTE_UNUSED, void *j ATTRIBUTE_UNUSED, 
   /* hi20  */
   hi20 = ENCODE_UTYPE_IMM (RISCV_CONST_HIGH_PART (addr));
 #ifdef DEBUG_EXECIT_LUI
-  printf("%s: hi20/addr=%08lx/%08lx, relocation=%08lx\n", __FUNCTION__, hi20, addr, p->ie.relocation);
+  if (sec)
+    printf("%s: %s:%s\n", __FUNCTION__, sec->owner ? sec->owner->filename ? sec->owner->filename : "?" : "?",  sec->name ? sec->name: "?");
+  else
+    printf("%s: %s:%s\n", __FUNCTION__, "?", "?");
+  printf("%s: hi20/addr=%08lx/%08lx, relocation=%08lx, addend=%08lx\n", __FUNCTION__, hi20, addr, p->ie.relocation, irel->r_addend);
 #endif
   p->ie.relocation = hi20;
 
@@ -7418,7 +7422,6 @@ andes_execit_rank_insn (execit_hash_t *he)
 #endif
       andes_execit_estimate_lui (he, &lst);
       he->ie.entries = LIST_LEN(&lst);
-      he->ie.entries++; /* hack */
 #ifdef DEBUG_EXECIT_LUI
       printf("%s: entries=%d\n", __FUNCTION__, he->ie.entries);
 #endif
@@ -8560,8 +8563,23 @@ andes_execit_render_hash (execit_context_t *ctx)
 	  else if (ELFNN_R_TYPE (irel->r_info) == R_RISCV_HI20)
 	    {
 	      /* LUI might associated with multiple symbols */
-	      relocation_for_hash = 0;
-	      addend_for_hash = 0;
+	      /* but mergeable section might change location later.  */
+	      if (ctx->ie.isec->flags & SEC_MERGE)
+		{/* mergeable section can only be grouped intra section. bug#23375  */
+		 /* symbol seems to be merged seperately, give up by now.
+		  * TODO: add mergeable symbol support
+		  */
+		  return rz; /* give up  */
+		#ifdef SUPPORT_MERGEABLE_SYMBOLS
+		  relocation_for_hash = (intptr_t) ctx->ie.isec;
+		  addend_for_hash = 0;
+		#endif
+		}
+	       else
+		{
+		  relocation_for_hash = 0;
+		  addend_for_hash = 0;
+		}
 	    }
 
 	  ctx->ie.irel = ctx->irel;
