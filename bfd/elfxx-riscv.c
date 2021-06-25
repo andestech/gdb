@@ -899,7 +899,6 @@ static reloc_howto_type howto_table[] =
   EMPTY_HOWTO (218), EMPTY_HOWTO (219), EMPTY_HOWTO (220), EMPTY_HOWTO (221),
   EMPTY_HOWTO (222), EMPTY_HOWTO (223), EMPTY_HOWTO (224), EMPTY_HOWTO (225),
   EMPTY_HOWTO (226), EMPTY_HOWTO (227), EMPTY_HOWTO (228), EMPTY_HOWTO (229),
-  EMPTY_HOWTO (230),
 
   /* Relocations for NDS V5.  */
   /* EXEC.IT itable entry index.  */

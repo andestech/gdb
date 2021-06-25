@@ -2022,8 +2022,8 @@ perform_relocation (const reloc_howto_type *howto,
 
     case R_RISCV_EXECIT_ITE:
       /* r_addend is borrowed and contains no info  */
-      value -= rel->r_addend;
-      value = ENCODE_RVC_EXECIT_IMM (value);
+      value -= rel->r_addend; /* restore origin value  */
+      value = ENCODE_RVC_EXECIT_IMM (value << 2); /* imm[11:2]  */
       break;
 
     case R_RISCV_32:
@@ -2549,7 +2549,7 @@ riscv_elf_relocate_section (bfd *output_bfd,
 		      }
 		  }
 		/* "he" is now the one for the relocation  */
-		relocation = he->ie.itable_index << 2; /* TODO: explain why shift  */
+		relocation = he->ie.itable_index;
 	      }
 	    else if (ELFNN_R_TYPE (he->ie.irel_copy.r_info) == R_RISCV_JAL)
 	      { /* sanity check only  */
