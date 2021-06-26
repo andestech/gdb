@@ -5853,7 +5853,10 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
   /* Initialization for EXECIT.  */
   if (!execit_init)
     {
-      if (htab->target_optimize & RISCV_RELAX_EXECIT_ON)
+      bfd *output_bfd = info->output_bfd;
+      if ((htab->target_optimize & RISCV_RELAX_EXECIT_ON) &&
+	  (output_bfd) &&
+	  (elf_elfheader (output_bfd)->e_flags & EF_RISCV_RVC))
 	{
 	  /* No need to build EXECIT hash table when only EXECIT import is setting.  */
 	  if (htab->execit_import_file == NULL
@@ -8700,6 +8703,8 @@ riscv_relocation_check (struct bfd_link_info *info,
   bfd_vma off_from = *off;
   bfd_boolean nested_execit, nested_loop;
   bfd_boolean execit_loop_aware;
+  bfd_boolean pre_nested_execit, pre_nested_loop;
+  int nested_execit_depth;
 
   struct riscv_elf_link_hash_table *table;
 
@@ -8716,6 +8721,7 @@ riscv_relocation_check (struct bfd_link_info *info,
 	  /* Ignore code block.  */
 	  nested_execit = FALSE;
 	  nested_loop = FALSE;
+	  nested_execit_depth = 0;
 	  if (optimize
 	      && (((*irel)->r_addend & R_RISCV_RELAX_REGION_NO_EXECIT_FLAG)
 		  || (execit_loop_aware
@@ -8733,13 +8739,20 @@ riscv_relocation_check (struct bfd_link_info *info,
 		  (*irel)++;
 		  if (ELFNN_R_TYPE ((*irel)->r_info) == R_RISCV_RELAX_REGION_BEGIN)
 		    {
-		      (*_bfd_error_handler)(_("Warning: Nested relax region!\n"));
-		      /* There may be nested region.  */
+		      /* nested region.  */
+		      nested_execit_depth++;
+		      if (nested_execit_depth > 1)
+			(*_bfd_error_handler)(_("Warning: Deep nested relax region!\n"));
+		      pre_nested_execit = nested_execit;
+		      pre_nested_loop = nested_loop;
 		      if (((*irel)->r_addend & R_RISCV_RELAX_REGION_NO_EXECIT_FLAG) != 0)
 			nested_execit = TRUE;
 		      else if (execit_loop_aware
 			       && ((*irel)->r_addend & R_RISCV_RELAX_REGION_LOOP_FLAG))
 			nested_loop = TRUE;
+		      /* outter setting is still valid  */
+		      nested_execit |= pre_nested_execit;
+		      nested_loop |= pre_nested_loop;
 		    }
 		  else if (ELFNN_R_TYPE ((*irel)->r_info) == R_RISCV_RELAX_REGION_END)
 		    {
@@ -8749,6 +8762,12 @@ riscv_relocation_check (struct bfd_link_info *info,
 		      else if (execit_loop_aware
 			       && ((*irel)->r_addend & R_RISCV_RELAX_REGION_LOOP_FLAG))
 			nested_loop = FALSE;
+		      if (nested_execit_depth--)
+			{
+			  nested_execit |= pre_nested_execit;
+			  nested_loop |= pre_nested_loop;
+			}
+		      else
 			result |= RELAX_REGION_END;
 		    }
 		  else if (ELFNN_R_TYPE ((*irel)->r_info) == R_RISCV_ALIGN
