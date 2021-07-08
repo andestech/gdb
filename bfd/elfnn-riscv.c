@@ -5624,6 +5624,7 @@ _bfd_riscv_relax_pc  (bfd *abfd,
   /* Chain the _LO relocs to their cooresponding _HI reloc to compute the
    * actual target address.  */
   riscv_pcgp_hi_reloc hi_reloc;
+  riscv_pcgp_hi_reloc *hi = NULL;
   memset (&hi_reloc, 0, sizeof (hi_reloc));
   switch (ELFNN_R_TYPE (rel->r_info))
     {
@@ -5635,8 +5636,7 @@ _bfd_riscv_relax_pc  (bfd *abfd,
 	   hi part instruction.  So we must subtract it here for the lookup.
 	   It is still used below in the final symbol address.  */
 	bfd_vma hi_sec_off = symval - sec_addr (sym_sec) - rel->r_addend;
-	riscv_pcgp_hi_reloc *hi = riscv_find_pcgp_hi_reloc (pcgp_relocs,
-							    hi_sec_off);
+	hi = riscv_find_pcgp_hi_reloc (pcgp_relocs, hi_sec_off);
 	if (hi == NULL)
 	  {
 	    riscv_record_pcgp_lo_reloc (pcgp_relocs, hi_sec_off);
@@ -5678,6 +5678,21 @@ _bfd_riscv_relax_pc  (bfd *abfd,
 	bfd_link_hash_lookup (link_info->hash, RISCV_GP_SYMBOL, FALSE, FALSE, TRUE);
       if (h->u.def.section->output_section == sym_sec->output_section)
 	max_alignment = (bfd_vma) 1 << sym_sec->output_section->alignment_power;
+      if (TRUE)
+	{ /* check if cross section boundary local symbol.
+	   *   cross section local symbols might "cheat" gp-relative logic
+	   *   when estimating gp-offsets, and later overflow the relocation
+	   *   slots.
+	   */
+	  Elf_Internal_Shdr *symtab_hdr = &elf_symtab_hdr (abfd);
+	  unsigned hi_sym = hi ? hi->hi_sym : ELFNN_R_SYM (rel->r_info);
+	  if (hi_sym < symtab_hdr->sh_info)
+	    {  /* local symbols  */
+	      bfd_vma boundary = sym_sec->output_section->vma + sym_sec->output_offset + sym_sec->size;
+	      if (symval > boundary)
+		return TRUE;
+	    }
+	}
     }
 
   /* Is the reference in range of x0 or gp?
