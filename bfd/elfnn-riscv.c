@@ -8405,10 +8405,13 @@ andes_execit_relocate_itable (struct bfd_link_info *link_info, bfd *abfd)
 #define MASK_RS1 (OP_MASK_RS1 << OP_SH_RS1)
 #define MASK_RD (OP_MASK_RD << OP_SH_RD)
 #define MASK_MAJOR_OP OP_MASK_OP
+#define MATCH_OP_P (0x7f)
 #define MATCH_OP_V (0x57)
 #define MATCH_OP_AMO (0x2f)
 #define MATCH_OP_LOAD_FP (0x07)
 #define MATCH_OP_STORE_FP (0x27)
+#define MASK_OP_RVP_A  (0xfff0007f)
+#define MATCH_OP_RVP_A (0x80100073)
 
 static bfd_boolean
 riscv_elf_execit_check_insn_available (uint32_t insn)
@@ -8445,6 +8448,13 @@ riscv_elf_execit_check_insn_available (uint32_t insn)
 	}
     }
 
+  /* excluding RVP from exec.it candidates.  */
+  if ((insn & MASK_MAJOR_OP) == MATCH_OP_P)
+    return FALSE;
+  if ((insn & MASK_OP_RVP_A) == MATCH_OP_RVP_A)
+    return FALSE;
+
+  /* others  */
   return TRUE;
 }
 
