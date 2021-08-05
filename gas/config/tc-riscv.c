@@ -7268,6 +7268,13 @@ andes_post_s_riscv_attribute (int tag)
 			      TAG_VALUE_BEGIN_V5] = 1;
 }
 
+static void
+andes_ignore_input (void)
+{
+  while (!is_end_of_line[(unsigned char) *input_line_pointer])
+    ++input_line_pointer;
+}
+
 /* Pseudo-op table.  */
 
 static const pseudo_typeS riscv_pseudo_table[] =
@@ -7297,6 +7304,8 @@ static const pseudo_typeS riscv_pseudo_table[] =
   {"no_execit_end", riscv_no_execit, 0},
   {"innermost_loop_begin", riscv_innermost_loop, 1},
   {"innermost_loop_end", riscv_innermost_loop, 0},
+  {"addrsig", andes_ignore_input, 0},
+  {"addrsig_sym", andes_ignore_input, 0},
 
   { NULL, NULL, 0 },
 };
