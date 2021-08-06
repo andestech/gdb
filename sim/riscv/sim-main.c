@@ -8645,6 +8645,43 @@ execute_zfh (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op,
 }
 
 static sim_cia
+execute_b (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex9)
+{
+  SIM_DESC sd = CPU_STATE (cpu);
+  int rd = (iw >> OP_SH_RD) & OP_MASK_RD;
+  int rs1 = (iw >> OP_SH_RS1) & OP_MASK_RS1;
+  int rs2 = (iw >> OP_SH_RS2) & OP_MASK_RS2;
+  const char *rd_name = riscv_gpr_names_abi[rd];
+  const char *rs1_name = riscv_gpr_names_abi[rs1];
+  const char *rs2_name = riscv_gpr_names_abi[rs2];
+  sim_cia pc = cpu->pc + 4;
+  if (ex9)
+    pc -= 2;
+
+  switch (op->match)
+    {
+    case MATCH_SH1ADD:
+      TRACE_INSN (cpu, "sh1add %s, %s, %s", rd_name, rs1_name, rs2_name);
+      store_rd (cpu, rd, cpu->regs[rs2].u + (cpu->regs[rs1].u << 1));
+      break;
+    case MATCH_SH2ADD:
+      TRACE_INSN (cpu, "sh2add %s, %s, %s", rd_name, rs1_name, rs2_name);
+      store_rd (cpu, rd, cpu->regs[rs2].u + (cpu->regs[rs1].u << 2));
+      break;
+    case MATCH_SH3ADD:
+      TRACE_INSN (cpu, "sh3add %s, %s, %s", rd_name, rs1_name, rs2_name);
+      store_rd (cpu, rd, cpu->regs[rs2].u + (cpu->regs[rs1].u << 3));
+      break;
+
+    default:
+      TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
+      sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
+    }
+
+  return pc;
+}
+
+static sim_cia
 execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex9)
 {
   SIM_DESC sd = CPU_STATE (cpu);
@@ -8684,6 +8721,8 @@ execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int 
     case INSN_CLASS_F_AND_ZFH:
     case INSN_CLASS_D_AND_ZFH:
       return execute_zfh (cpu, iw, op, ex9);
+    case INSN_CLASS_ZBA:
+      return execute_b (cpu, iw, op, ex9);
     default:
       TRACE_INSN (cpu, "UNHANDLED EXTENSION: %d", op->insn_class);
       sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
