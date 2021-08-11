@@ -385,6 +385,7 @@ PARSE_AND_LIST_LONGOPTS='
   { "mexecit-noji", no_argument, NULL, OPTION_EXECIT_NO_JI},
   { "mexecit-nols", no_argument, NULL, OPTION_EXECIT_NO_LS},
   { "mexecit-norel", no_argument, NULL, OPTION_EXECIT_NO_REL},
+  { "mno-execit-jal", no_argument, NULL, OPTION_EXECIT_NO_JI},
   /* Obsolete options for EXECIT.  */
   { "mex9", no_argument, NULL, OPTION_EX9_TABLE},
   { "mno-ex9", no_argument, NULL, OPTION_NO_EXECIT_TABLE},
