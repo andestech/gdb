@@ -180,7 +180,10 @@ static struct bfd_hash_table execit_code_hash;
 // #define DEBUG_EXECIT
 // #define DEBUG_EXECIT_LUI
 
+#define MASK_2M ((1u << 21) - 1)
+
 static struct {
+  bfd_vma execit_jal_window_end;
   int raw_itable_entries;
   int next_itable_index;
 #ifdef DEBUG_EXECIT
@@ -236,7 +239,7 @@ riscv_elf_code_hash_newfunc (struct bfd_hash_entry *entry,
 /* Initialize EXECIT hash table.  */
 
 static int
-andes_execit_init (void)
+andes_execit_init (struct bfd_link_info *info)
 {
   /* init execit code hash  */
   if (!bfd_hash_table_init_n (&execit_code_hash, riscv_elf_code_hash_newfunc,
@@ -249,6 +252,40 @@ andes_execit_init (void)
 
   /* init execit stuff here  */
   memset (&execit, 0, sizeof (execit));
+
+  /* get the first 2M-windown base for JAL  */
+  /* Traverse all output sections and return the min SHF_EXECINSTR addr.
+     the sh_flags of output bfd by now is not finalized,
+     check input bfd's instead.  */
+  if (TRUE)
+    {
+      bfd_vma min_execinstr_addr = -1u;
+      bfd *ibfd;
+      for (ibfd = info->input_bfds; ibfd ; ibfd = ibfd->link.next)
+	{
+	  asection *isec, *osec;
+	  bfd_vma base;
+	  for (isec = ibfd->sections; isec != NULL; isec = isec->next)
+	    {
+	      Elf_Internal_Shdr *shdr = &(elf_section_data(isec)->this_hdr);
+	      if ((shdr->sh_flags & SHF_EXECINSTR) == 0)
+		continue;
+	      /* osec->output_offset is 0 by now, while
+	       * isec->output_offset is the addr before relaxation.
+	       */
+	      osec = isec->output_section;
+	      base = osec->vma + isec->output_offset;
+	      if (min_execinstr_addr > base)
+		min_execinstr_addr = base;
+	    }
+	}
+	execit.execit_jal_window_end = MASK_2M | min_execinstr_addr;
+    }
+
+  /* sanity check  */
+  BFD_ASSERT (execit.execit_jal_window_end);
+  if (!execit.execit_jal_window_end)
+    execit.execit_jal_window_end = MASK_2M;
 
   return TRUE;
 }
@@ -2364,7 +2401,9 @@ riscv_elf_relocate_section (bfd *output_bfd,
 	{
 	  sym = local_syms + r_symndx;
 	  sec = local_sections[r_symndx];
-	  relocation = _bfd_elf_rela_local_sym (output_bfd, sym, &sec, rel);
+	  relocation = r_symndx ?
+	    _bfd_elf_rela_local_sym (output_bfd, sym, &sec, rel) :
+	    howto->pc_relative ? pc : 0;
 	}
       else
 	{
@@ -6346,7 +6385,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	  (output_bfd) &&
 	  (elf_elfheader (output_bfd)->e_flags & EF_RISCV_RVC))
 	{
-	  andes_execit_init ();
+	  andes_execit_init (info);
 	  /* For EXECIT update, we replace execit candiadtes to exec.it
 	     according to the imported table first. After that,
 	     we build the EXECIT hash table for the remaining patterns
@@ -7872,14 +7911,13 @@ execit_check_pchi_for_jal (bfd_vma relocation, bfd_vma insn_pc)
 {
   /* after relocation, EXECIT_JALs might be distributed across 2M window,
    * which would fail the execit relaxation.
-   * so far, only the first 2M window, [0~2M), are accepted.
-   * 
-   * TODO: replcase accept reange [0~2M) with [WINDOW(START_VMA(code)), +2M)
+   * so far, only the first 2M window are accepted.
    */
-  if ((relocation < 0x200000) && (insn_pc < 0x200000))
-    return TRUE;
+  if ((relocation > execit.execit_jal_window_end) ||
+      (insn_pc > execit.execit_jal_window_end))
+    return FALSE;
 
-  return FALSE;
+  return TRUE;
 }
 
 /* Replace input file instruction which is in the .exec.itable.  */
