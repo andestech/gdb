@@ -6748,13 +6748,17 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 
       symval += sec_addr (sym_sec);
 
-      /* if symbol value exceeds output section end, it would break current
-       * pcgp relaxation algorithm. skip it over by now.
+      /* bug #23443: if symbol value exceeds "input" section end, it
+       * would fail current relaxation algorithm. skip it over by now.
        */
       if (relax_func == _bfd_riscv_relax_pc && sym_sec->output_section)
 	{
-	  bfd_vma secend = sec_addr (sym_sec) + sym_sec->output_section->rawsize;
-	  if (symval >= secend)
+#ifdef TO_REMOVE
+	  bfd_vma out_sec_end = sec_addr (sym_sec) +
+				  sym_sec->output_section->rawsize;
+#endif
+	  bfd_vma in_sec_end = sec_addr (sym_sec) + sym_sec->size;
+	  if (symval >= in_sec_end)
 	    continue;
 	}
 
