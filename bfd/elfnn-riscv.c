@@ -9931,6 +9931,7 @@ andes_relax_pc_gp_insn (
   bfd_boolean undefined_weak,
   bfd_boolean rvc ATTRIBUTE_UNUSED)
 {
+  struct riscv_elf_link_hash_table *htab = riscv_elf_hash_table (info);
   bfd_vma gp = riscv_global_pointer_value (info);
 
   BFD_ASSERT (rel->r_offset + 4 <= sec->size);
@@ -9970,7 +9971,9 @@ andes_relax_pc_gp_insn (
 
     case R_RISCV_PCREL_HI20:
       /* Mergeable symbols and code might later move out of range.  */
-      if (sym_sec->flags & (SEC_MERGE | SEC_CODE))
+      if (htab->set_relax_aggressive)
+	; /* blank  */
+      else if (sym_sec->flags & (SEC_MERGE | SEC_CODE))
 	return TRUE;
 
       /* If the cooresponding lo relocation has already been seen then it's not

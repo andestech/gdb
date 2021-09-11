@@ -44,6 +44,8 @@ static int set_relax_pc = 1;		/* Defalut do relax pc.  */
 static int set_relax_call = 1;		/* Defalut do relax call.  */
 static int set_relax_tls_le = 1;	/* Defalut do relax tls le.  */
 static int set_relax_cross_section_call = $D4_RCSC;	/* Defalut do relax cross section call.  */
+static int set_workaround = 1;		/* Defalut do workaround.  */
+static int set_relax_aggressive = 0;	/* Defalut no aggressive.  */
 
 #define RISCV_EXECIT_EXT
 static int target_optimize = 0;		/* Switch optimization.  */
@@ -80,6 +82,8 @@ riscv_elf_set_target_option (struct bfd_link_info *info)
   table->set_relax_call = set_relax_call;
   table->set_relax_tls_le = set_relax_tls_le;
   table->set_relax_cross_section_call = set_relax_cross_section_call;
+  table->set_workaround = set_workaround;
+  table->set_relax_aggressive = set_relax_aggressive;
 
   table->target_optimize = target_optimize;
   table->relax_status = relax_status;
@@ -320,6 +324,8 @@ PARSE_AND_LIST_PROLOGUE='
 #define OPTION_NO_RELAX_TLS_LE		(OPTION_INTERNAL_BASELINE + 10)
 #define OPTION_RELAX_CROSS_SECTION_CALL		(OPTION_INTERNAL_BASELINE + 11)
 #define OPTION_NO_RELAX_CROSS_SECTION_CALL		(OPTION_INTERNAL_BASELINE + 12)
+#define OPTION_NO_WORKAROUND		(OPTION_INTERNAL_BASELINE + 13)
+#define OPTION_RELAX_AGGRESSIVE		(OPTION_INTERNAL_BASELINE + 14)
 
 /* These are only available to EXECIT.  */
 #if defined RISCV_EXECIT_EXT
@@ -371,6 +377,8 @@ PARSE_AND_LIST_LONGOPTS='
   { "mno-relax-tls", no_argument, NULL, OPTION_NO_RELAX_TLS_LE},
   { "mrelax-cross-section-call", no_argument, NULL, OPTION_RELAX_CROSS_SECTION_CALL},
   { "mno-relax-cross-section-call", no_argument, NULL, OPTION_NO_RELAX_CROSS_SECTION_CALL},
+  { "mno-workaround", no_argument, NULL, OPTION_NO_WORKAROUND},
+  { "mrelax-aggressive", no_argument, NULL, OPTION_RELAX_AGGRESSIVE},
 
 /* These are specific optioins for EXECIT support.  */
 #if defined RISCV_EXECIT_EXT
@@ -478,7 +486,12 @@ PARSE_AND_LIST_ARGS_CASES='
   case OPTION_NO_RELAX_CROSS_SECTION_CALL:
     set_relax_cross_section_call = 0;
     break;
-
+  case OPTION_NO_WORKAROUND:
+    set_workaround = 0;
+    break;
+  case OPTION_RELAX_AGGRESSIVE:
+    set_relax_aggressive = 1;
+    break;
 #if defined RISCV_EXECIT_EXT
   case OPTION_EX9_TABLE:
     if (execit_limit == -1

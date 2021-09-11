@@ -149,6 +149,8 @@ struct riscv_elf_link_hash_table
   int set_relax_call;
   int set_relax_tls_le;
   int set_relax_cross_section_call;
+  int set_workaround;
+  int set_relax_aggressive;
   /* For EXECIT.  */
   int target_optimize;
   int relax_status;
