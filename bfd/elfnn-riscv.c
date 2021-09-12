@@ -7704,41 +7704,52 @@ andes_execit_build_itable (bfd *abfd, struct bfd_link_info *info)
   int count; /* total insns to be replaced  */
   int order; /* rank order of (raw) hash  */
   int index; /* next entry index  */
+  int has_entry = FALSE;
 
-  /* skip ITB checking if there is no candidate. bug#23317  */
-  if (execit_rank_list == NULL)
-    return;
-
-  /* Find the section .exec.itable, and put all entries into it.  */
-  table_sec = riscv_elf_execit_get_section (info->input_bfds);
-  if (table_sec == NULL)
-    return;
-
-  table = riscv_elf_hash_table (info);
-  if (!riscv_get_section_contents (table_sec->owner, table_sec,
-				   &contents, TRUE))
-    return;
-
-  /* Check ITB register if set.  */
-  if (!table->execit_import_file
-      && !bfd_link_hash_lookup (info->hash, "_ITB_BASE_",
-				FALSE, FALSE, TRUE))
+  while (TRUE)
     {
-      (*_bfd_error_handler)
-	(_("\nError: Instruction Table(IT) is used, but Instruction "
-	   "Table Base($ITB) isn't set.\nPlease add the following "
-	   "instructions in _start of the startup code"
-	   "(crt0.S or start.S):\n"
-	   "\"la a0, _ITB_BASE_; csrrw x0, uitb, a0\""));
+      /* Find the section .exec.itable, and put all entries into it.  */
+      table_sec = riscv_elf_execit_get_section (info->input_bfds);
+      if (table_sec == NULL)
+	break;
+
+      table = riscv_elf_hash_table (info);
+      if (!riscv_get_section_contents (table_sec->owner, table_sec,
+				       &contents, TRUE))
+	break;
+
+      /* skip ITB checking if there is no candidate. bug#23317  */
+      if (execit_rank_list == NULL)
+	break;
+
+      /* Check ITB register if set.  */
+      if (!table->execit_import_file
+	  && !bfd_link_hash_lookup (info->hash, "_ITB_BASE_",
+				    FALSE, FALSE, TRUE))
+	{
+	  (*_bfd_error_handler) (_(
+	    "\nError: Instruction Table(IT) is used, but Instruction "
+	    "Table Base($ITB) isn't set.\nPlease add the following "
+	    "instructions in _start of the startup code"
+	    "(crt0.S or start.S):\n"
+	    "\"la a0, _ITB_BASE_; csrrw x0, uitb, a0\""));
 	  exit (1);
-    }
+	}
 
-  /* skip if itable is imported and not to keep or to update  */
-  if (table->execit_import_file &&
-      ! table->keep_import_execit &&
-      ! table->update_execit_table)
+      /* skip if itable is imported and not to keep or to update  */
+      if (table->execit_import_file &&
+	  ! table->keep_import_execit &&
+	  ! table->update_execit_table)
+	break;
+
+      has_entry = TRUE;
+      break;
+    };
+
+  if (has_entry == FALSE)
     {
-      table_sec->size = 0;
+      if (table_sec)
+	table_sec->size = 0;
       return;
     }
 
