@@ -6305,18 +6305,26 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
      excluded section or
      non-code section or
      empty content or
-     no reloc entry or
-     disable relaxation.  */
+     no reloc entry.  */
   if (bfd_link_relocatable (info)
       || sec->sec_flg0
       || (sec->flags & SEC_RELOC) == 0
       || (sec->flags & SEC_EXCLUDE) == SEC_EXCLUDE
       || (sec->flags & SEC_CODE) == 0
       || sec->size == 0
-      || sec->reloc_count == 0
-      || (info->disable_target_specific_optimizations
-	  && (info->relax_pass < 7)))
+      || sec->reloc_count == 0)
     return TRUE;
+  /* pass 0 for init stuff; don't skip it.  */
+  if (info->relax_pass > 0)
+    { /* skip pass 1~4 if -mno-relax
+       * skip pass 5~6 if --mno-execit
+       */
+      if ((info->disable_target_specific_optimizations
+	   && (info->relax_pass < 5))
+	  || ((htab->target_optimize & RISCV_RELAX_EXECIT_ON) == 0
+	   && ((info->relax_pass >= 5) && (info->relax_pass <= 6))))
+	return TRUE;
+    }
 
   riscv_init_pcgp_relocs (&pcgp_relocs);
 

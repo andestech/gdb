@@ -6763,14 +6763,8 @@ riscv_insert_relax_entry (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
 
   if (!riscv_opts.relax)
     X_add_number |= R_RISCV_RELAX_ENTRY_DISABLE_RELAX_FLAG;
-  else
-    {
-      /* These flags are only enabled when global relax is enabled.
-	 Maybe we can check DISABLE_RELAX_FLAG at link-time,
-	 so we set them anyway.  */
-      if (riscv_opts.execit)
-	X_add_number |= R_RISCV_RELAX_ENTRY_EXECIT_FLAG;
-    }
+  if (riscv_opts.execit)
+    X_add_number |= R_RISCV_RELAX_ENTRY_EXECIT_FLAG;
 
   fixp = fix_at_start (frch->frch_root, 0, abs_section_sym, X_add_number,
 		       0, BFD_RELOC_RISCV_RELAX_ENTRY);
