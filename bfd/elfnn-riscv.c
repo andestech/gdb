@@ -162,7 +162,8 @@ static void andes_execit_relocate_itable (struct bfd_link_info *, bfd *);
 static bfd_boolean andes_execit_replace_insn (struct bfd_link_info *,
 							 bfd *, asection *);
 // static void riscv_elf_execit_save_local_symbol_value (void);
-static bfd_boolean riscv_elf_execit_check_insn_available (uint32_t insn);
+static bfd_boolean riscv_elf_execit_check_insn_available (uint32_t insn,
+  struct riscv_elf_link_hash_table *htab);
 static void andes_execit_delete_blank (struct bfd_link_info *info);
 static void andes_execit_traverse_insn_hash (int (*func) (execit_hash_t*));
 static int andes_execit_rank_insn (execit_hash_t *he);
@@ -7928,6 +7929,7 @@ andes_execit_replace_insn (struct bfd_link_info *link_info,
 {
   bfd_byte *contents = NULL;
   Elf_Internal_Sym *isym = NULL;
+  struct riscv_elf_link_hash_table *htab = riscv_elf_hash_table (link_info);
   bfd_vma off = 0;
   Elf_Internal_Rela *internal_relocs;
   Elf_Internal_Rela *irelend;
@@ -8007,7 +8009,7 @@ andes_execit_replace_insn (struct bfd_link_info *link_info,
 
       /* filter out some sorts of pattern unsafe or hard to exec.it  */
       insn = bfd_get_32 (abfd, contents + off);
-      if (!riscv_elf_execit_check_insn_available (insn))
+      if (!riscv_elf_execit_check_insn_available (insn, htab))
 	{
 	  off += 4;
 	  continue;
@@ -8443,54 +8445,72 @@ andes_execit_relocate_itable (struct bfd_link_info *link_info, bfd *abfd)
 #define MASK_RS1 (OP_MASK_RS1 << OP_SH_RS1)
 #define MASK_RD (OP_MASK_RD << OP_SH_RD)
 #define MASK_MAJOR_OP OP_MASK_OP
-#define MATCH_OP_P (0x7f)
 #define MATCH_OP_V (0x57)
+#define MATCH_OP_P (0x77)
+#define MATCH_OP_XDSP (0x7f)
 #define MATCH_OP_AMO (0x2f)
 #define MATCH_OP_LOAD_FP (0x07)
 #define MATCH_OP_STORE_FP (0x27)
-#define MASK_OP_RVP_A  (0xfff0007f)
-#define MATCH_OP_RVP_A (0x80100073)
+#define MASK_OP_XDSP_A  (0xfff0007f)
+#define MATCH_OP_XDSP_A (0x80100073)
 
 static bfd_boolean
-riscv_elf_execit_check_insn_available (uint32_t insn)
+riscv_elf_execit_check_insn_available (uint32_t insn,
+				       struct riscv_elf_link_hash_table *htab)
 {
   /* For bug-11621, system call should not be replaced by exec.it.  */
   /* According to spec, SCALL and SBREAK have been renamed to
      ECALL and EBREAK. Their encoding and functionality are unchanged.  */
   /* Invalid insns: ecall, ebreak, ACE, ret.  */
   if ((insn & MASK_ECALL) == MATCH_ECALL
-      || (insn) == MATCH_ADDI
+      || (insn) == MATCH_ADDI /* NOP (not c.nop)  */
       || (insn & MASK_EBREAK) == MATCH_EBREAK
       || (insn & 0x7f) == 0x7b /* ACE  */
       || ((insn & (MASK_JALR | MASK_RD | MASK_RS1 | MASK_IMM))
 	  == (MATCH_JALR | (X_RA << OP_SH_RS1)))) /* ret  */
     return FALSE;
 
-  /* RVV is not exec.it supported by now.  */
+  /* configurable sets  */
   uint32_t major = insn & MASK_MAJOR_OP;
-  if (major == MATCH_OP_V)
-    return FALSE;
-  else
-    {
-      uint32_t width = (insn >> 12) & 0x7;
-      if (major == MATCH_OP_AMO)
-        {
-	  if (width > 5)
+  uint32_t width = (insn >> 12) & 0x7;
+  if (!htab->execit.rvv)
+    { /* RVV is excluded.  */
+      if (major == MATCH_OP_V)
+	return FALSE;
+      else
+	{
+	  /* Zvamo is removed, TODO: review this  */
+	  if ((major == MATCH_OP_AMO) && (width > 5))
 	    return FALSE;
-	}
-      else if ((major == MATCH_OP_LOAD_FP) ||
-	       (major == MATCH_OP_STORE_FP))
-        {
-	  if ((width == 0) || (width > 4))
+	  /* partial FLS  */
+	  if (((major == MATCH_OP_LOAD_FP) ||
+	       (major == MATCH_OP_STORE_FP)) &&
+	      ((width == 0) || (width > 4)))
 	    return FALSE;
 	}
     }
 
-  /* excluding RVP from exec.it candidates.  */
-  if ((insn & MASK_MAJOR_OP) == MATCH_OP_P)
-    return FALSE;
-  if ((insn & MASK_OP_RVP_A) == MATCH_OP_RVP_A)
-    return FALSE;
+  if (!htab->execit.rvp)
+    { /* RVP is excluded.  */
+      if (major == MATCH_OP_P)
+	return FALSE;
+    }
+
+  if (!htab->execit.fls)
+    { /* Float Load/Store. is excluded.  */
+      /* Standard scalar FP  */
+      if (((major == MATCH_OP_LOAD_FP) ||
+	   (major == MATCH_OP_STORE_FP)) &&
+	  ((width > 0) && (width < 5)))
+	return FALSE;
+    }
+
+  if (!htab->execit.xdsp)
+    { /* Andes Xdsp is excluded.  */
+      if ((major == MATCH_OP_XDSP) ||
+          ((insn & MASK_OP_XDSP_A) == MATCH_OP_XDSP_A))
+	return FALSE;
+    }
 
   /* others  */
   return TRUE;
@@ -8667,6 +8687,7 @@ andes_execit_hash_insn (bfd *abfd, asection *sec,
 {
   bfd_byte *contents = NULL;
   Elf_Internal_Sym *isym = NULL;
+  struct riscv_elf_link_hash_table *htab = riscv_elf_hash_table (link_info);
   bfd_vma off = 0;
   Elf_Internal_Rela *internal_relocs;
   Elf_Internal_Rela *irelend;
@@ -8749,7 +8770,7 @@ andes_execit_hash_insn (bfd *abfd, asection *sec,
 
       /* filter out some sorts of pattern unsafe or hard to exec.it  */
       insn = bfd_get_32 (abfd, contents + off);
-      if (!riscv_elf_execit_check_insn_available (insn))
+      if (!riscv_elf_execit_check_insn_available (insn, htab))
 	{
 	  off += 4;
 	  continue;

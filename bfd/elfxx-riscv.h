@@ -162,6 +162,13 @@ struct riscv_elf_link_hash_table
   int execit_loop_aware;
   bfd_boolean execit_noji; /* Forbid JI insn convert to execit.  */
   bfd_boolean execit_nols; /* Forbid load-store insn convert to execit.  */
+  struct
+  {
+    int rvv:1;
+    int rvp:1;
+    int fls:1;
+    int xdsp:1;
+  } execit;
 };
 
 /* Get the RISC-V ELF linker hash table from a link_info structure.  */

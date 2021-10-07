@@ -60,6 +60,26 @@ static int execit_loop_aware = 0;	/* --mexecit-loop-aware.  */
 static bfd_boolean execit_noji = 0;
 static bfd_boolean execit_nols = 0;
 
+static struct
+{
+  struct
+  {
+    int rvv:1;
+    int rvp:1;
+    int fls:1;
+    int xdsp:1;
+  } execit;
+} andes =
+{
+  .execit =
+  {
+    .rvv = 0,
+    .rvp = 0,
+    .fls = 0,
+    .xdsp = 0,
+  }
+};
+
 /* Put target dependent option into info hash table.  */
 
 static void
@@ -95,6 +115,10 @@ riscv_elf_set_target_option (struct bfd_link_info *info)
   table->execit_loop_aware = execit_loop_aware;
   table->execit_noji = execit_noji;
   table->execit_nols = execit_nols;
+  table->execit.rvv = andes.execit.rvv;
+  table->execit.rvp = andes.execit.rvp;
+  table->execit.fls = andes.execit.fls;
+  table->execit.xdsp = andes.execit.xdsp;
 }
 
 /* Save the target options into output bfd to avoid using to many global
@@ -342,6 +366,10 @@ PARSE_AND_LIST_PROLOGUE='
 #define OPTION_EXECIT_NO_JI		(OPTION_EXECIT_BASELINE + 10)
 #define OPTION_EXECIT_NO_LS		(OPTION_EXECIT_BASELINE + 11)
 #define OPTION_EXECIT_NO_REL		(OPTION_EXECIT_BASELINE + 12)
+#define OPTION_EXECIT_RVV		(OPTION_EXECIT_BASELINE + 13)
+#define OPTION_EXECIT_FLS		(OPTION_EXECIT_BASELINE + 14)
+#define OPTION_EXECIT_RVP		(OPTION_EXECIT_BASELINE + 15)
+#define OPTION_EXECIT_XDSP		(OPTION_EXECIT_BASELINE + 16)
 #endif
 
 /* These are only for lld internal usage and not affected for bfd.  */
@@ -394,6 +422,10 @@ PARSE_AND_LIST_LONGOPTS='
   { "mexecit-nols", no_argument, NULL, OPTION_EXECIT_NO_LS},
   { "mexecit-norel", no_argument, NULL, OPTION_EXECIT_NO_REL},
   { "mno-execit-jal", no_argument, NULL, OPTION_EXECIT_NO_JI},
+  { "mexecit-rvv", no_argument, NULL, OPTION_EXECIT_RVV},
+  { "mexecit-fls", no_argument, NULL, OPTION_EXECIT_FLS},
+  { "mexecit-rvp", no_argument, NULL, OPTION_EXECIT_RVP},
+  { "mexecit-xdsp", no_argument, NULL, OPTION_EXECIT_XDSP},
   /* Obsolete options for EXECIT.  */
   { "mex9", no_argument, NULL, OPTION_EX9_TABLE},
   { "mno-ex9", no_argument, NULL, OPTION_NO_EXECIT_TABLE},
@@ -432,6 +464,10 @@ fprintf (file, _("\
     --mupdate-execit            Update existing .exec.itable\n\
     --mexecit-limit=NUM         Set maximum number of entries in .exec.itable for this times\n\
     --mexecit-loop-aware        Avoid generate exec.it instruction inside loop\n\
+    --mexecit-rvv               Enable exec.it of RVV\n\
+    --mexecit-fls               Enable exec.it of floating load/store\n\
+    --mexecit-rvp               Enable exec.it of RVP\n\
+    --mexecit-xdsp              Enable exec.it of XDSP\n\
 "));
 #endif
 '
@@ -556,6 +592,18 @@ PARSE_AND_LIST_ARGS_CASES='
   case OPTION_EXECIT_NO_REL:
     execit_noji = 1;
     execit_nols = 1;
+    break;
+  case OPTION_EXECIT_RVV:
+    andes.execit.rvv = 1;
+    break;
+  case OPTION_EXECIT_RVP:
+    andes.execit.rvp = 1;
+    break;
+  case OPTION_EXECIT_FLS:
+    andes.execit.fls = 1;
+    break;
+  case OPTION_EXECIT_XDSP:
+    andes.execit.xdsp = 1;
     break;
 #endif
   case OPTION_DEBUG_EXECIT_LIMIT:
