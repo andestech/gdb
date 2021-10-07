@@ -327,6 +327,10 @@ PARSE_AND_LIST_PROLOGUE='
 #define OPTION_EXECIT_NO_AUIPC		(OPTION_EXECIT_BASELINE + 13)
 #define OPTION_EXECIT_JAL_OVER_2M	(OPTION_EXECIT_BASELINE + 14)
 #define OPTION_NO_EXECIT_JAL_OVER_2M	(OPTION_EXECIT_BASELINE + 15)
+#define OPTION_EXECIT_RVV		(OPTION_EXECIT_BASELINE + 16)
+#define OPTION_EXECIT_FLS		(OPTION_EXECIT_BASELINE + 17)
+#define OPTION_EXECIT_RVP		(OPTION_EXECIT_BASELINE + 18)
+#define OPTION_EXECIT_XDSP		(OPTION_EXECIT_BASELINE + 19)
 #endif
 
 /* These are only for lld internal usage and not affected for bfd.  */
@@ -380,6 +384,10 @@ PARSE_AND_LIST_LONGOPTS='
   { "mexecit-no-auipc", no_argument, NULL, OPTION_EXECIT_NO_AUIPC},
   { "mexecit-jal-over-2mib", no_argument, NULL, OPTION_EXECIT_JAL_OVER_2M},
   { "mno-execit-jal-over-2mib", no_argument, NULL, OPTION_NO_EXECIT_JAL_OVER_2M},
+  { "mexecit-rvv", no_argument, NULL, OPTION_EXECIT_RVV},
+  { "mexecit-fls", no_argument, NULL, OPTION_EXECIT_FLS},
+  { "mexecit-rvp", no_argument, NULL, OPTION_EXECIT_RVP},
+  { "mexecit-xdsp", no_argument, NULL, OPTION_EXECIT_XDSP},
   /* Obsolete options for EXECIT.  */
   { "mex9", no_argument, NULL, OPTION_EX9_TABLE},
   { "mno-ex9", no_argument, NULL, OPTION_NO_EXECIT_TABLE},
@@ -422,6 +430,10 @@ fprintf (file, _("\
     --mupdate-execit            Update existing .exec.itable\n\
     --mexecit-limit=NUM         Set maximum number of entries in .exec.itable for this times\n\
     --mexecit-loop-aware        Avoid generate exec.it instruction inside loop\n\
+    --mexecit-rvv               Enable exec.it of RVV\n\
+    --mexecit-fls               Enable exec.it of floating load/store\n\
+    --mexecit-rvp               Enable exec.it of RVP\n\
+    --mexecit-xdsp              Enable exec.it of XDSP\n\
 "));
 #endif
 '
@@ -554,6 +566,18 @@ PARSE_AND_LIST_ARGS_CASES='
     break;
   case OPTION_NO_EXECIT_JAL_OVER_2M:
     andes.execit_jal_over_2m = 0;
+    break;
+  case OPTION_EXECIT_RVV:
+    andes.execit_flags.rvv = 1;
+    break;
+  case OPTION_EXECIT_RVP:
+    andes.execit_flags.rvp = 1;
+    break;
+  case OPTION_EXECIT_FLS:
+    andes.execit_flags.fls = 1;
+    break;
+  case OPTION_EXECIT_XDSP:
+    andes.execit_flags.xdsp = 1;
     break;
 #endif
   case OPTION_DEBUG_EXECIT_LIMIT:
