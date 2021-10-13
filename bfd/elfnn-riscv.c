@@ -8517,11 +8517,13 @@ riscv_elf_execit_check_insn_available (uint32_t insn,
 }
 
 /* Generate EXECIT hash from insn and its relocation.
- * key: "{pattern:08x}|{offset:08x}|{symbol}" 
- *   pattern: 32-bit opcode|registers
- *   offset:  32-bit offset (lui, auipc), local symbol VMA
- *   symbol:  # name (jal)
- *            # constant (-)
+ * key: "{code_pattern:x}|{rel_section:x}|{rel_offset:x}|{symbol:s}" 
+ *   code_pattern: opcode|registers
+ *   rel_section:  vma of symbol
+ *   rel_offset:   offset of symbol, or offset/(lui, auipc)
+ *   symbol:       # SYM/global, LAB/local, ABS/constant
+ * relocation is separated into section and offset instead of VMA
+ * to merge aliases.
  */
 static int
 andes_execit_render_hash (execit_context_t *ctx)
@@ -8529,13 +8531,13 @@ andes_execit_render_hash (execit_context_t *ctx)
   const bfd_vma off = ctx->off;
   const bfd *abfd = ctx->abfd;
   asection *sec = ctx->sec;
-  const struct bfd_link_info *link_info = ctx->info;
+  const struct bfd_link_info *info = ctx->info;
   const Elf_Internal_Rela *irel = ctx->irel;
   const uint32_t insn = ctx->ie.insn;
-  bfd_vma relocation_for_hash = 0;
-  bfd_vma addend_for_hash = 0;
+  bfd_vma relocation_section = 0;
+  bfd_vma relocation_offset = 0;
 
-  const char *symbol ="-"; /* for constant (without relocation)  */
+  const char *symbol ="ABS";
   int rz = EXECIT_HASH_NG;
   BFD_ASSERT (ctx->ie.fixed || ctx->ie.relocation == 0);
   ctx->buf[0] = 0;
@@ -8546,7 +8548,7 @@ andes_execit_render_hash (execit_context_t *ctx)
     {
       struct riscv_elf_link_hash_table *table;
       Elf_Internal_Shdr *symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
-      table = riscv_elf_hash_table (link_info);
+      table = riscv_elf_hash_table (info);
       riscv_elf_get_insn_with_reg (abfd, irel, insn, &ctx->ie.fixed);
       if ((!table->execit_noji && ELFNN_R_TYPE (irel->r_info) == R_RISCV_JAL)
 	  || (!table->execit_nols
@@ -8562,7 +8564,7 @@ andes_execit_render_hash (execit_context_t *ctx)
 	  if (r_symndx < symtab_hdr->sh_info)
 	    { /* Local symbol.  */
 	      Elf_Internal_Sym *isym = NULL;
-	      symbol ="="; /* local symbol  */
+	      symbol ="LAB";
 	      if (!riscv_get_local_syms (abfd, sec, &isym))
 	      	{
 		  BFD_ASSERT(0);
@@ -8579,16 +8581,13 @@ andes_execit_render_hash (execit_context_t *ctx)
 	      ctx->ie.isym = isym + r_symndx;
 	      ctx->ie.isym_copy = *ctx->ie.isym;
 	      ctx->ie.isec = isec;
-	      /* isec vma might be changed before execit replace stage.
-	         use isym (host) memory address as hashing part.  */
-	      relocation_for_hash = (intptr_t) ctx->ie.isym;
 	    }
 	  else
 	    { /* Global symbol.  */
 	      struct elf_link_hash_entry *h;
 	      struct elf_link_hash_entry **sym_hashes;
 	      unsigned long indx;
-	      symbol ="#"; /* global symbol  */
+	      symbol ="SYM";
 	      sym_hashes = elf_sym_hashes (abfd);
 	      indx = ELFNN_R_SYM (irel->r_info) - symtab_hdr->sh_info;
 	      h = sym_hashes[indx];
@@ -8612,23 +8611,12 @@ andes_execit_render_hash (execit_context_t *ctx)
 	      ctx->ie.addend = h->root.u.def.value + irel->r_addend;
 	      ctx->ie.relocation = sec_addr (ctx->ie.isec) + ctx->ie.addend;
 	      ctx->ie.h = h;
-	      /* *h might be changed before execit replace stage.
-	         use isym (host) memory address as hashing part.  */
-	      relocation_for_hash = (intptr_t) h;
 	    }
 
-#ifdef TO_KILL
-	  if (ELFNN_R_TYPE (irel->r_info) == R_RISCV_GPREL_I
-	      || ELFNN_R_TYPE (irel->r_info) == R_RISCV_GPREL_S
-	      || (ELFNN_R_TYPE (irel->r_info) >= R_RISCV_LGP18S0
-		  && ELFNN_R_TYPE (irel->r_info) <= R_RISCV_SGP17S3))
-	    {
-	      bfd_vma gp = riscv_global_pointer_value (link_info);
-	      relocation -= gp;
-	    }
-#endif
-
-	  addend_for_hash = ctx->ie.addend;
+	  /* section start address might be changed before execit replace stage.
+	   * use section/offset as hashing elements. (b23753)  */
+	  relocation_section = (intptr_t) ctx->ie.isec;
+	  relocation_offset = ctx->ie.addend;
 
 	  /* special treaments for certain types of relocations.  */
 	  if ((ELFNN_R_TYPE (irel->r_info) == R_RISCV_JAL) &&
@@ -8646,13 +8634,13 @@ andes_execit_render_hash (execit_context_t *ctx)
 		  return rz; /* give up  */
 		#ifdef SUPPORT_MERGEABLE_SYMBOLS
 		  relocation_for_hash = (intptr_t) ctx->ie.isec;
-		  addend_for_hash = 0;
+		  relocation_offset = 0;
 		#endif
 		}
 	       else
 		{
-		  relocation_for_hash = 0;
-		  addend_for_hash = 0;
+		  relocation_section = 0;
+		  relocation_offset = 0;
 		}
 	    }
 
@@ -8668,10 +8656,10 @@ andes_execit_render_hash (execit_context_t *ctx)
     }
 
   if (rz == EXECIT_HASH_OK)
-    snprintf (ctx->buf, sizeof(ctx->buf), "%08x|%08llx|%08llx|%s",
+    snprintf (ctx->buf, sizeof(ctx->buf), "%x|%llx|%llx|%s",
 	      ctx->ie.fixed,
-	      (long long unsigned int)relocation_for_hash,
-	      (long long unsigned int)addend_for_hash,
+	      (long long unsigned int)relocation_section,
+	      (long long unsigned int)relocation_offset,
 	      symbol);
   else
     BFD_ASSERT (irel);
