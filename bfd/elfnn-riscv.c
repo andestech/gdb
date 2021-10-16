@@ -1925,7 +1925,7 @@ riscv_global_pointer_value (struct bfd_link_info *info)
 /* Return the symbol DATA_START_SYMBOLS value, or 0 if it is not in use.  */
 
 static bfd_vma
-riscv_data_start_value (struct bfd_link_info *info)
+riscv_data_start_value (const struct bfd_link_info *info)
 {
   struct bfd_link_hash_entry *h;
 
@@ -7151,39 +7151,25 @@ andes_execit_mark_irel (Elf_Internal_Rela *irel, int index)
 /* EXECIT LUI list helpers  */
 
 static int 
-estimate_relocation_each_cb(void *l ATTRIBUTE_UNUSED, void *j ATTRIBUTE_UNUSED, execit_irel_t *p, void *q ATTRIBUTE_UNUSED)
+andes_execit_estimate_lui_each_cb(void *l ATTRIBUTE_UNUSED,
+				  void *j ATTRIBUTE_UNUSED,
+				  execit_irel_t *p,
+				  void *q ATTRIBUTE_UNUSED)
 {
   bfd_vma addr, hi20;
-  asection *sec;
-  Elf_Internal_Rela *irel = &p->ie.irel_copy;
-
-  BFD_ASSERT (p && p->ie.irel);
-
-  /* estimate symbol address at current phase (might not determined yet)  */
-  if (p->ie.h)
-    { /* global symbol  */
-      struct elf_link_hash_entry *h = p->ie.h;
-      sec = h->root.u.def.section;
-      addr = (sec == NULL) ? 0 : sec_addr(sec);
-      addr += (h->root.u.def.value + irel->r_addend);
-    }
-  else
-    { /* local symbol  */
-      sec = p->ie.isec;
-      addr = (sec == NULL) ? 0 : sec_addr(sec);
-      addr += (p->ie.isym->st_value + irel->r_addend);
-    }
-
+  BFD_ASSERT (p);
+  addr = p->ie.relocation;
   if (ARCH_SIZE > 32)
-    BFD_ASSERT (!VALID_UTYPE_IMM (RISCV_CONST_HIGH_PART (addr)));
-  /* hi20  */
+    BFD_ASSERT (VALID_UTYPE_IMM (RISCV_CONST_HIGH_PART (addr)));
   hi20 = ENCODE_UTYPE_IMM (RISCV_CONST_HIGH_PART (addr));
+
 #ifdef DEBUG_EXECIT_LUI
+  asection *sec = p->ie.isec;
   if (sec)
     printf("%s: %s:%s\n", __FUNCTION__, sec->owner ? sec->owner->filename ? sec->owner->filename : "?" : "?",  sec->name ? sec->name: "?");
   else
     printf("%s: %s:%s\n", __FUNCTION__, "?", "?");
-  printf("%s: hi20/addr=%08lx/%08lx, relocation=%08lx, addend=%08lx\n", __FUNCTION__, hi20, addr, p->ie.relocation, irel->r_addend);
+  printf("%s: hi20/addr=%08lx/%08lx, relocation=%08lx, addend=%08lx\n", __FUNCTION__, hi20, addr, p->ie.relocation, p->ie.irel_copy.r_addend);
 #endif
   p->ie.relocation = hi20;
 
@@ -7283,7 +7269,7 @@ dump_vma_each_cb(void *l ATTRIBUTE_UNUSED, void *j ATTRIBUTE_UNUSED, execit_vma_
 static void
 andes_execit_estimate_lui (execit_hash_t *he, execit_vma_t **lst_pp)
 {
-  LIST_EACH(&he->irels, estimate_relocation_each_cb);
+  LIST_EACH(&he->irels, andes_execit_estimate_lui_each_cb);
   /* count itable entries are required  */
   collect_lui_vma_each_cb(NULL, NULL, NULL, NULL); /* reset cache  */
   LIST_EACH1(&he->irels, collect_lui_vma_each_cb, lst_pp);
@@ -8529,7 +8515,7 @@ static int
 andes_execit_render_hash (execit_context_t *ctx)
 {
   const bfd_vma off = ctx->off;
-  const bfd *abfd = ctx->abfd;
+  bfd *abfd = ctx->abfd;
   asection *sec = ctx->sec;
   const struct bfd_link_info *info = ctx->info;
   const Elf_Internal_Rela *irel = ctx->irel;
@@ -8546,12 +8532,13 @@ andes_execit_render_hash (execit_context_t *ctx)
 
   if (irel)
     {
-      struct riscv_elf_link_hash_table *table;
       Elf_Internal_Shdr *symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
-      table = riscv_elf_hash_table (info);
+      asection *sym_sec;
+      bfd_vma symval;
+      char symtype;
       riscv_elf_get_insn_with_reg (abfd, irel, insn, &ctx->ie.fixed);
-      if ((!table->execit_noji && ELFNN_R_TYPE (irel->r_info) == R_RISCV_JAL)
-	  || (!table->execit_nols
+      if ((!andes.htab->execit_noji && ELFNN_R_TYPE (irel->r_info) == R_RISCV_JAL)
+	  || (!andes.htab->execit_nols
 	      && (ELFNN_R_TYPE (irel->r_info) == R_RISCV_HI20
 	      || ELFNN_R_TYPE (irel->r_info) == R_RISCV_LO12_I
 	      || ELFNN_R_TYPE (irel->r_info) == R_RISCV_LO12_S
@@ -8571,8 +8558,8 @@ andes_execit_render_hash (execit_context_t *ctx)
 		  return rz;
 		}
 	      asection *isec;
-	      int shndx = isym[r_symndx].st_shndx;
-	      bfd_vma st_value = (isym + r_symndx)->st_value;
+	      unsigned int shndx = isym[r_symndx].st_shndx;
+	      bfd_vma st_value = isym[r_symndx].st_value;
 	      isec = elf_elfsections (abfd)[shndx]->bfd_section;
 
 	      ctx->ie.addend = st_value + irel->r_addend;
@@ -8581,6 +8568,16 @@ andes_execit_render_hash (execit_context_t *ctx)
 	      ctx->ie.isym = isym + r_symndx;
 	      ctx->ie.isym_copy = *ctx->ie.isym;
 	      ctx->ie.isec = isec;
+
+	      if (shndx == SHN_UNDEF)
+		sym_sec = sec, symval = irel->r_offset;
+	      else
+		{
+		  BFD_ASSERT (shndx < elf_numsections (abfd));
+		  sym_sec = isec;
+		  symval = st_value;
+		}
+	      symtype = ELF_ST_TYPE (isym[r_symndx].st_info);
 	    }
 	  else
 	    { /* Global symbol.  */
@@ -8600,48 +8597,74 @@ andes_execit_render_hash (execit_context_t *ctx)
 	      if (h->root.u.def.section->output_section == NULL
 		  || (h->root.type != bfd_link_hash_defined
 		      && h->root.type != bfd_link_hash_defweak
-//		      && h->root.type != bfd_link_hash_undefined
-//		      && h->root.type != bfd_link_hash_undefweak
+		      && h->root.type != bfd_link_hash_undefined
+		      && h->root.type != bfd_link_hash_undefweak
 		      ))
 		  {
-		//     printf("%s: skip global symbol.\n", __FUNCTION__);
+		#ifdef DEBUG_EXECIT
+		    printf("%s: skip global symbol.\n", __FUNCTION__);
+		#endif
 		    return rz;
 		  }
 	      ctx->ie.isec = h->root.u.def.section; /* TODO: rename isec  */
 	      ctx->ie.addend = h->root.u.def.value + irel->r_addend;
 	      ctx->ie.relocation = sec_addr (ctx->ie.isec) + ctx->ie.addend;
 	      ctx->ie.h = h;
+
+	      if (h->plt.offset != MINUS_ONE)
+		{
+		  sym_sec = andes.htab->elf.splt;
+		  symval = h->plt.offset;
+		}
+	      else
+		{
+		  symval = h->root.u.def.value;
+		  sym_sec = h->root.u.def.section;
+		}
+	      symtype = h->type;
 	    }
 
+	  if (sym_sec->sec_info_type == SEC_INFO_TYPE_MERGE
+	      && (sym_sec->flags & SEC_MERGE))
+	    {
+	      if (symtype == STT_SECTION)
+		symval += irel->r_addend;
+
+	      symval = _bfd_merged_section_offset (abfd, &sym_sec,
+				elf_section_data (sym_sec)->sec_info,
+				symval);
+
+	      if (symtype != STT_SECTION)
+		symval += irel->r_addend;
+	    }
+	  else
+	    symval += irel->r_addend;
+
 	  /* section start address might be changed before execit replace stage.
-	   * use section/offset as hashing elements. (b23753)  */
+	   * use HOST_ADDR(section)/offset as hashing elements.
+	   * Why not use relocation/VMA as it?
+	   * the same relocations are not necessary aliases but of the same
+	   * section and offset are (almost?) (b23753)  */
 	  relocation_section = (intptr_t) ctx->ie.isec;
 	  relocation_offset = ctx->ie.addend;
+
+	  symval += sec_addr (sym_sec);
+	  ctx->ie.relocation = symval;
 
 	  /* special treaments for certain types of relocations.  */
 	  if ((ELFNN_R_TYPE (irel->r_info) == R_RISCV_JAL) &&
 	      !execit_check_pchi_for_jal (ctx->ie.relocation, ctx->ie.pc))
 	    return rz;
 	  else if (ELFNN_R_TYPE (irel->r_info) == R_RISCV_HI20)
-	    {
-	      /* LUI might associated with multiple symbols */
-	      /* but mergeable section might change location later.  */
-	      if (ctx->ie.isec->flags & SEC_MERGE)
-		{/* mergeable section can only be grouped intra section. bug#23375  */
-		 /* symbol seems to be merged seperately, give up by now.
-		  * TODO: add mergeable symbol support
-		  */
-		  return rz; /* give up  */
-		#ifdef SUPPORT_MERGEABLE_SYMBOLS
-		  relocation_for_hash = (intptr_t) ctx->ie.isec;
-		  relocation_offset = 0;
-		#endif
-		}
-	       else
-		{
-		  relocation_section = 0;
-		  relocation_offset = 0;
-		}
+	    { /* LUI symbols having the same HI20 part can be exec.ited.
+	       * # Spliting LUIs into 2 groups by __DATA_BEGIN__ to avoid to
+	       * the DATA_SEGMENT_ALIGN issue  */
+	      if (ARCH_SIZE > 32 &&
+		  !VALID_UTYPE_IMM (RISCV_CONST_HIGH_PART (ctx->ie.relocation)))
+		return rz;
+	      bfd_vma data_start = riscv_data_start_value (info);
+	      relocation_section = 0;
+	      relocation_offset = (ctx->ie.relocation >= data_start) ? 1 : 0;
 	    }
 
 	  ctx->ie.irel = ctx->irel;
