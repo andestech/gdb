@@ -451,27 +451,15 @@ static FILE *ict_table_file = NULL;
 static struct bfd_hash_table indirect_call_table;
 /* The exported indirect call table.  */
 static struct riscv_elf_ict_table_entry *exported_ict_table_head = NULL;
+
+typedef struct andes_context
+{
+  struct riscv_elf_link_hash_table *htab;
+  int is_init:1;
+} andes_context_t;
+
+static andes_context_t andes = {.is_init = 0};
 /* } # Andes  */
-
-#define ARCH_SIZE NN
-
-#define MINUS_ONE ((bfd_vma)0 - 1)
-
-#define RISCV_ELF_LOG_WORD_BYTES (ARCH_SIZE == 32 ? 2 : 3)
-
-#define RISCV_ELF_WORD_BYTES (1 << RISCV_ELF_LOG_WORD_BYTES)
-
-/* The name of the dynamic interpreter.  This is put in the .interp
-   section.  */
-
-#define ELF64_DYNAMIC_INTERPRETER "/lib/ld.so.1"
-#define ELF32_DYNAMIC_INTERPRETER "/lib32/ld.so.1"
-
-#define ELF_ARCH			bfd_arch_riscv
-#define ELF_TARGET_ID			RISCV_ELF_DATA
-#define ELF_MACHINE_CODE		EM_RISCV
-#define ELF_MAXPAGESIZE			0x1000
-#define ELF_COMMONPAGESIZE		0x1000
 
 typedef struct riscv_pcgp_relocs riscv_pcgp_relocs;
 
@@ -492,7 +480,7 @@ andes_relax_pc_gp_insn (
 
 static bfd_boolean
 andes_relax_gp_insn (uint32_t *insn, Elf_Internal_Rela *rel,
-		     bfd_signed_vma bias, int sym);
+		     bfd_signed_vma bias, int sym, asection *sym_sec);
 
 static void
 andes_relax_pc_gp_insn_final (riscv_pcgp_relocs *p);
@@ -4599,6 +4587,8 @@ struct riscv_pcgp_hi_reloc
   bfd_boolean undefined_weak;
   Elf_Internal_Rela *rel;
   riscv_pcgp_hi_reloc *next;
+  int is_deleted:1;
+  int is_marked:1;  /* by the lo12 pal  */
 };
 
 typedef struct riscv_pcgp_lo_reloc riscv_pcgp_lo_reloc;
@@ -4660,7 +4650,7 @@ riscv_record_pcgp_hi_reloc (riscv_pcgp_relocs *p, bfd_vma hi_sec_off,
 			    bfd_boolean undefined_weak,
 			    Elf_Internal_Rela *rel)
 {
-  riscv_pcgp_hi_reloc *new = bfd_malloc (sizeof(*new));
+  riscv_pcgp_hi_reloc *new = bfd_zmalloc (sizeof(*new));
   if (!new)
     return FALSE;
   new->hi_sec_off = hi_sec_off;
@@ -4697,7 +4687,10 @@ riscv_delete_pcgp_hi_reloc(riscv_pcgp_relocs *p, bfd_vma hi_sec_off)
 
   for (c = p->hi; c != NULL; c = c->next)
       if (c->hi_sec_off == hi_sec_off)
-	out = TRUE;
+	{
+	  c->is_deleted = 1;
+	  out = TRUE;
+	}
 
   return out;
 }
@@ -4745,11 +4738,22 @@ riscv_find_pcgp_lo_reloc (riscv_pcgp_relocs *p, bfd_vma hi_sec_off)
 }
 
 static bfd_boolean
-riscv_delete_pcgp_lo_reloc (riscv_pcgp_relocs *p ATTRIBUTE_UNUSED,
-			    bfd_vma lo_sec_off ATTRIBUTE_UNUSED,
+riscv_delete_pcgp_lo_reloc (riscv_pcgp_relocs *p,
+			    bfd_vma lo_sec_off,
 			    size_t bytes ATTRIBUTE_UNUSED)
 {
-  return TRUE;
+  bfd_boolean out = FALSE;
+  bfd_vma hi_sec_off = lo_sec_off - 4;
+  riscv_pcgp_hi_reloc *c;
+
+  for (c = p->hi; c != NULL; c = c->next)
+    if (c->hi_sec_off == hi_sec_off)
+      {
+	out = TRUE;
+	c->is_marked = 1;
+      }
+
+  return out;
 }
 
 typedef bfd_boolean (*relax_func_t) (bfd *, asection *, asection *,
@@ -4970,18 +4974,24 @@ _bfd_riscv_relax_lui_gp_insn (bfd *abfd,
   bfd_byte *contents = elf_section_data (sec)->this_hdr.contents;
   bfd_vma gp = riscv_global_pointer_value (link_info);
   bfd_vma data_start = riscv_data_start_value (link_info);
-  struct riscv_elf_link_hash_table *table = riscv_elf_hash_table (link_info);
-  int gp_relative_insn = table->gp_relative_insn;
+  struct riscv_elf_link_hash_table *htab = riscv_elf_hash_table (link_info);
   Elf_Internal_Shdr *symtab_hdr = &elf_symtab_hdr (abfd);
   Elf_Internal_Sym *isym = NULL;
   struct elf_link_hash_entry *h = NULL;
+  bfd_vma guard_size = 0;
 
+#if 0
   /* Mergeable symbols and code might later move out of range.  */
+  /* TODO: get vma after merged  */
+  if (sym_sec->flags & (SEC_MERGE | SEC_CODE)
+    return TRUE;
+#endif
+
   /* For bug-14274, symbols defined in the .rodata (the sections
      before .data, may also later move out of range.  */
-  if (sym_sec->flags & (SEC_MERGE | SEC_CODE)
-      || (data_start && sec_addr (sym_sec) < data_start))
-    return TRUE;
+  /* reserved one page size in worst case  */
+  if (data_start && (sec_addr (sym_sec) < data_start))
+    guard_size += htab->set_relax_page_size;
 
   BFD_ASSERT (rel->r_offset + 4 <= sec->size);
 
@@ -4998,12 +5008,13 @@ _bfd_riscv_relax_lui_gp_insn (bfd *abfd,
 
   /* For the gp relative insns, gp must be set to 4/8 bytes aligned
      address (Bug-14634).  */
+  /* TODO: check once  */
   int gp_align;
   if ((ARCH_SIZE == 64))
     gp_align = 8;
   else
     gp_align = 4;
-  if (gp_relative_insn
+  if (htab->gp_relative_insn
       && ((gp % gp_align) != 0))
     {
       (*_bfd_error_handler) (_("error: Please set gp to %x-byte aligned address "
@@ -5046,12 +5057,12 @@ _bfd_riscv_relax_lui_gp_insn (bfd *abfd,
   /* Enable nds v5 gp relative insns.  */
   int do_replace = 0;
   uint32_t insn = bfd_get_32 (abfd, contents + rel->r_offset);
+  const int max_range = 0x20000;
+  guard_size += max_alignment + reserve_size;
   /* For Bug-16488, check if gp-relative offset is in range.  */
   if (undefined_weak
-      || (symval >= gp
-	  && (symval - gp + max_alignment + reserve_size) < 0x20000)
-      || (symval < gp
-	  && (gp - symval + max_alignment + reserve_size) <= 0x20000))
+      || ((symval >= gp) && ((symval - gp) < (max_range - guard_size)))
+      || ((symval < gp) && ((gp - symval) <= (max_range - guard_size))))
     {
       do_replace = 1;
       unsigned sym = ELFNN_R_SYM (rel->r_info);
@@ -5066,7 +5077,7 @@ _bfd_riscv_relax_lui_gp_insn (bfd *abfd,
       else
 	{
 	  bfd_signed_vma bias = symval - gp;
-	  do_replace = andes_relax_gp_insn (&insn, rel, bias, sym);
+	  do_replace = andes_relax_gp_insn (&insn, rel, bias, sym, sym_sec);
 	}
 
       if (do_replace)
@@ -6328,6 +6339,17 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
     }
 
   riscv_init_pcgp_relocs (&pcgp_relocs);
+
+  /* init andes context  */
+  if (andes.is_init == 0)
+    {
+      andes.htab = riscv_elf_hash_table (info);
+      andes.is_init = 1;
+    }
+
+  /* init page size if not yet  */
+  if (htab->set_relax_page_size == 0)
+    htab->set_relax_page_size = ELF_MAXPAGESIZE;
 
   /* Check and init '__global_pointer$'.  */
   if (!gp_init && !bfd_link_pic (info))
@@ -9982,8 +10004,17 @@ andes_relax_pc_gp_insn (
   bfd_boolean undefined_weak,
   bfd_boolean rvc ATTRIBUTE_UNUSED)
 {
-  struct riscv_elf_link_hash_table *htab = riscv_elf_hash_table (info);
+  bfd_byte *contents = elf_section_data (sec)->this_hdr.contents;
   bfd_vma gp = riscv_global_pointer_value (info);
+  bfd_vma data_start = riscv_data_start_value (info);
+  struct riscv_elf_link_hash_table *htab = riscv_elf_hash_table (info);
+  bfd_vma guard_size = 0;
+
+  /* For bug-14274, symbols defined in the .rodata (the sections
+     before .data, may also later move out of range.  */
+  /* reserved one page size in worst case  */
+  if (data_start && (sec_addr (sym_sec) < data_start))
+    guard_size += htab->set_relax_page_size;
 
   BFD_ASSERT (rel->r_offset + 4 <= sec->size);
 
@@ -10021,12 +10052,13 @@ andes_relax_pc_gp_insn (
       break;
 
     case R_RISCV_PCREL_HI20:
+#ifdef TO_REMOVE    
       /* Mergeable symbols and code might later move out of range.  */
       if (htab->set_relax_aggressive)
 	; /* blank  */
       else if (sym_sec->flags & (SEC_MERGE | SEC_CODE))
 	return TRUE;
-
+#endif
       /* If the cooresponding lo relocation has already been seen then it's not
        * safe to relax this relocation.  */
       if (riscv_find_pcgp_lo_reloc (pcgp_relocs, rel->r_offset))
@@ -10051,13 +10083,12 @@ andes_relax_pc_gp_insn (
   /* TODO: do this check once  */
   /* For the gp relative insns, gp must be set to 4/8 bytes aligned
      address (Bug-14634).  */
-  struct riscv_elf_link_hash_table *table = riscv_elf_hash_table (info);
   int gp_align;
   if ((ARCH_SIZE == 64))
     gp_align = 8;
   else
     gp_align = 4;
-  if (table->gp_relative_insn
+  if (htab->gp_relative_insn
       && ((gp % gp_align) != 0))
     {
       (*_bfd_error_handler) (_("error: Please set gp to %x-byte aligned address "
@@ -10068,17 +10099,12 @@ andes_relax_pc_gp_insn (
 
   /* Enable nds v5 gp relative insns.  */
   int do_replace = 0;
-  bfd_byte *contents = elf_section_data (sec)->this_hdr.contents;
   uint32_t insn = bfd_get_32 (abfd, contents + rel->r_offset);
   /* For Bug-16488, check if gp-relative offset is in range.  */
-
   const int max_range = 0x20000;
-  /* TODO: find actual alignment size at runtime  */
-  const int rsrv_dsa = ELF_MAXPAGESIZE; /* for DATA_SEGMENT_ALIGN  */
-  bfd_signed_vma bias = symval - gp;
-  bfd_signed_vma rsrv = max_alignment + reserve_size;
-  if (((symval < gp) && (-bias <= (max_range - rsrv - rsrv_dsa))) ||
-      ((symval >= gp) && (bias < (max_range - rsrv))))
+  guard_size += max_alignment + reserve_size;
+  if (((symval >= gp) && ((symval - gp) < (max_range - guard_size))) ||
+      ((symval < gp) && ((gp - symval) <= (max_range - guard_size))))
     {
       unsigned sym = hi_reloc.hi_sym;
       do_replace = 1;
@@ -10090,7 +10116,8 @@ andes_relax_pc_gp_insn (
 	    return TRUE;
 	}
       else
-	do_replace = andes_relax_gp_insn (&insn, rel, bias, sym);
+	do_replace = andes_relax_gp_insn (&insn, rel, symval - gp,
+					  sym, sym_sec);
 
       if (do_replace)
 	{
@@ -10111,8 +10138,15 @@ andes_relax_pc_gp_insn (
 
 static int
 andes_relax_gp_insn (uint32_t *insn, Elf_Internal_Rela *rel,
-		     bfd_signed_vma bias, int sym)
+		     bfd_signed_vma bias, int sym, asection *sym_sec)
 {
+  int is_code = 0;
+
+  /* symbols within code sections are not necessary aligned to data lenght.
+     byte-align presumed  */
+  if (sym_sec->flags & SEC_CODE)
+    is_code = 1;
+
   /* For Bug-16488, we don not need to consider max_alignment and
   reserve_size here, since they may cause the alignment checking
   fail.  */
@@ -10131,27 +10165,32 @@ andes_relax_gp_insn (uint32_t *insn, Elf_Internal_Rela *rel,
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP18S0);
       *insn = (*insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LBUGP;
     }
-  else if ((*insn & MASK_LH) == MATCH_LH && VALID_GPTYPE_LH_IMM (bias))
+  else if ((*insn & MASK_LH) == MATCH_LH && VALID_GPTYPE_LH_IMM (bias)
+	   && !is_code)
     {
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S1);
       *insn = (*insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LHGP;
     }
-  else if ((*insn & MASK_LHU) == MATCH_LHU && VALID_GPTYPE_LH_IMM (bias))
+  else if ((*insn & MASK_LHU) == MATCH_LHU && VALID_GPTYPE_LH_IMM (bias)
+	   && !is_code)
     {
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S1);
       *insn = (*insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LHUGP;
     }
-  else if ((*insn & MASK_LW) == MATCH_LW && VALID_GPTYPE_LW_IMM (bias))
+  else if ((*insn & MASK_LW) == MATCH_LW && VALID_GPTYPE_LW_IMM (bias)
+	   && !is_code)
     {
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S2);
       *insn = (*insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LWGP;
     }
-  else if ((*insn & MASK_LWU) == MATCH_LWU && VALID_GPTYPE_LW_IMM (bias))
+  else if ((*insn & MASK_LWU) == MATCH_LWU && VALID_GPTYPE_LW_IMM (bias)
+	   && !is_code)
     {
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S2);
       *insn = (*insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LWUGP;
     }
-  else if ((*insn & MASK_LD) == MATCH_LD && VALID_GPTYPE_LD_IMM (bias))
+  else if ((*insn & MASK_LD) == MATCH_LD && VALID_GPTYPE_LD_IMM (bias)
+	   && !is_code)
     {
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S3);
       *insn = (*insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LDGP;
@@ -10161,17 +10200,20 @@ andes_relax_gp_insn (uint32_t *insn, Elf_Internal_Rela *rel,
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_SGP18S0);
       *insn = (*insn & (OP_MASK_RS2 << OP_SH_RS2)) | MATCH_SBGP;
     }
-  else if ((*insn & MASK_SH) == MATCH_SH && VALID_GPTYPE_SH_IMM (bias))
+  else if ((*insn & MASK_SH) == MATCH_SH && VALID_GPTYPE_SH_IMM (bias)
+	   && !is_code)
     {
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_SGP17S1);
       *insn = (*insn & (OP_MASK_RS2 << OP_SH_RS2)) | MATCH_SHGP;
     }
-  else if ((*insn & MASK_SW) == MATCH_SW && VALID_GPTYPE_SW_IMM (bias))
+  else if ((*insn & MASK_SW) == MATCH_SW && VALID_GPTYPE_SW_IMM (bias)
+	   && !is_code)
     {
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_SGP17S2);
       *insn = (*insn & (OP_MASK_RS2 << OP_SH_RS2)) | MATCH_SWGP;
     }
-  else if ((*insn & MASK_SD) == MATCH_SD && VALID_GPTYPE_SD_IMM (bias))
+  else if ((*insn & MASK_SD) == MATCH_SD && VALID_GPTYPE_SD_IMM (bias)
+	   && !is_code)
     {
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_SGP17S3);
       *insn = (*insn & (OP_MASK_RS2 << OP_SH_RS2)) | MATCH_SDGP;
@@ -10189,7 +10231,7 @@ andes_relax_pc_gp_insn_final (riscv_pcgp_relocs *p)
 
   for (c = p->hi; c != NULL; c = c->next)
     {
-      if (c->rel)
+      if (c->rel && c->is_marked)
 	{ /* We can delete the unnecessary AUIPC and reloc.  */
 	  c->rel->r_info = ELFNN_R_INFO (0, R_RISCV_DELETE);
 	  c->rel->r_addend = 4;

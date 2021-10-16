@@ -46,6 +46,7 @@ static int set_relax_tls_le = 1;	/* Defalut do relax tls le.  */
 static int set_relax_cross_section_call = $D4_RCSC;	/* Defalut do relax cross section call.  */
 static int set_workaround = 1;		/* Defalut do workaround.  */
 static int set_relax_aggressive = 0;	/* Defalut no aggressive.  */
+static int set_relax_page_size = 0;	/* Defalut page size non-initialized.  */
 
 #define RISCV_EXECIT_EXT
 static int target_optimize = 0;		/* Switch optimization.  */
@@ -104,6 +105,7 @@ riscv_elf_set_target_option (struct bfd_link_info *info)
   table->set_relax_cross_section_call = set_relax_cross_section_call;
   table->set_workaround = set_workaround;
   table->set_relax_aggressive = set_relax_aggressive;
+  table->set_relax_page_size = set_relax_page_size;
 
   table->target_optimize = target_optimize;
   table->relax_status = relax_status;
@@ -350,6 +352,7 @@ PARSE_AND_LIST_PROLOGUE='
 #define OPTION_NO_RELAX_CROSS_SECTION_CALL		(OPTION_INTERNAL_BASELINE + 12)
 #define OPTION_NO_WORKAROUND		(OPTION_INTERNAL_BASELINE + 13)
 #define OPTION_RELAX_AGGRESSIVE		(OPTION_INTERNAL_BASELINE + 14)
+#define OPTION_RELAX_PAGE_SIZE		(OPTION_INTERNAL_BASELINE + 15)
 
 /* These are only available to EXECIT.  */
 #if defined RISCV_EXECIT_EXT
@@ -407,6 +410,7 @@ PARSE_AND_LIST_LONGOPTS='
   { "mno-relax-cross-section-call", no_argument, NULL, OPTION_NO_RELAX_CROSS_SECTION_CALL},
   { "mno-workaround", no_argument, NULL, OPTION_NO_WORKAROUND},
   { "mrelax-aggressive", no_argument, NULL, OPTION_RELAX_AGGRESSIVE},
+  { "mrelax-page-size", required_argument, NULL, OPTION_RELAX_PAGE_SIZE},
 
 /* These are specific optioins for EXECIT support.  */
 #if defined RISCV_EXECIT_EXT
@@ -528,6 +532,13 @@ PARSE_AND_LIST_ARGS_CASES='
   case OPTION_RELAX_AGGRESSIVE:
     set_relax_aggressive = 1;
     break;
+  case OPTION_RELAX_PAGE_SIZE:
+    if (!optarg)
+      einfo (_("Missing value for --mrelax-page-size.\n"));
+    else
+      set_relax_page_size = strtol(optarg, NULL, 0);
+    break;
+
 #if defined RISCV_EXECIT_EXT
   case OPTION_EX9_TABLE:
     if (execit_limit == -1
