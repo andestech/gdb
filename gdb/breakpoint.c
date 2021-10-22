@@ -3666,7 +3666,7 @@ detach_breakpoints (ptid_t ptid)
 static int
 remove_breakpoint_1 (struct bp_location *bl, enum remove_bp_reason reason)
 {
-  int val;
+  int val=0;
 
   /* BL is never in moribund_locations by our callers.  */
   gdb_assert (bl->owner != NULL);
@@ -3748,6 +3748,16 @@ remove_breakpoint_1 (struct bp_location *bl, enum remove_bp_reason reason)
 	      if (bl->loc_type == bp_loc_hardware_breakpoint
 		  || section_is_mapped (bl->section))
 		val = bl->owner->ops->remove_location (bl, reason);
+
+    /* overlay debugging updated for breakpoints */
+    else if (bl->loc_type == bp_loc_software_breakpoint) {
+        if ((section_is_overlay (bl->section)) &&
+            (!section_is_mapped (bl->section))) {
+            fprintf_unfiltered (gdb_stdlog, "remove_breakpoint_1, section is overlay & unmapped\n");
+            val = bl->owner->ops->remove_location (bl, reason);
+            fprintf_unfiltered (gdb_stdlog, "remove_breakpoint_1, SW remove_breakpoint, bl->address: 0x%lx, val: 0x%x\n", bl->address, val);
+        }
+    }
 	      else
 		val = 0;
 	    }
@@ -12436,6 +12446,25 @@ bkpt_remove_location (struct bp_location *bl, enum remove_bp_reason reason)
     return target_remove_breakpoint (bl->gdbarch, &bl->target_info, reason);
 }
 
+/* overlay debugging updated for breakpoints */
+int
+bkpt_update_overlay_breakpoints (void)
+{
+  struct bp_location *bl, **blp_tmp;
+  int val = 0;
+
+  ALL_BP_LOCATIONS (bl, blp_tmp)
+  {
+    fprintf_unfiltered (gdb_stdlog, "bkpt_update_overlay_breakpoints, bl->address: 0x%lx\n", bl->address);
+    if ((section_is_overlay (bl->section)) &&
+        (!section_is_mapped (bl->section))) {
+        val |= remove_breakpoint (bl);
+        fprintf_unfiltered (gdb_stdlog, "bkpt_update_overlay_breakpoints, remove_breakpoint, NOT mapped bl->address: 0x%lx\n", bl->address);
+    }
+  }
+  return val;
+}
+
 static int
 bkpt_breakpoint_hit (const struct bp_location *bl,
 		     const address_space *aspace, CORE_ADDR bp_addr,
@@ -12448,6 +12477,14 @@ bkpt_breakpoint_hit (const struct bp_location *bl,
   if (!breakpoint_address_match (bl->pspace->aspace, bl->address,
 				 aspace, bp_addr))
     return 0;
+
+  /* overlay debugging updated for breakpoints */
+  struct breakpoint *b = bl->owner;
+  if (b->type == bp_overlay_event) {
+      fprintf_unfiltered (gdb_stdlog, "bp_overlay_event, bl->address: 0x%lx\n", bl->address);
+      simple_overlay_update(NULL);
+      bkpt_update_overlay_breakpoints();
+  }
 
   if (overlay_debugging		/* unmapped overlay section */
       && section_is_overlay (bl->section)
