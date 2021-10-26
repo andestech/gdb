@@ -7353,23 +7353,29 @@ andes_execit_itable_lookup (execit_context_t *ctx,
   execit_itable_t *a = &ctx->ie;
   execit_itable_t *b = &h->ie;
 
-  if (a->irel && (ELFNN_R_TYPE(a->irel_copy.r_info) == R_RISCV_HI20))
+  while (TRUE)
     {
-      if (b->irel && ELFNN_R_TYPE(b->irel_copy.r_info) == R_RISCV_HI20)
-	return b;
-      else
-	return NULL;
+      if (a->fixed != b->fixed)
+	break;
+      /* relocation might be changed  *//*
+      if (a->relocation != b->relocation)
+	break;  */
+      if ((a->irel == NULL) ^ (b->irel == NULL))
+        break;
+      if (a->irel) /* skip b->irel (checked above)  */
+	{
+	  if ((ELFNN_R_TYPE(a->irel_copy.r_info) == R_RISCV_HI20)
+	       && (ELFNN_R_TYPE(b->irel_copy.r_info) == R_RISCV_HI20))
+	    return b; /* skip future check  */
+	  if ((ELFNN_R_SYM(a->irel_copy.r_info)
+		!= ELFNN_R_SYM(b->irel_copy.r_info))
+	      && a->isec != b->isec)
+	    break;
+	}
+      return b; /* Pass  */
     }
 
-  if ((a->fixed == b->fixed) &&
-//    (a->relocation == b->relocation) &&  /* TODO: to reason why  */
-      (a->addend == b->addend) &&
-      (((a->irel == NULL) && (b->irel == NULL)) || (
-	  (ELFNN_R_TYPE(a->irel_copy.r_info) == ELFNN_R_TYPE(b->irel_copy.r_info)) &&
-	  (a->irel_copy.r_addend == b->irel_copy.r_addend))
-      ))
-    return b;
-
+  /* NG  */
   printf("ctx  = %s, off = %08lx, abfd = %s\n", ctx->buf, a->pc - sec_addr(a->sec), a->sec->owner->filename);
   printf("hash = %s, off = %08lx, abfd = %s\n", h->root.string, b->pc, b->sec->owner->filename);
   printf("fixed = %08x:%08x\n", a->fixed, b->fixed);
@@ -7380,68 +7386,9 @@ andes_execit_itable_lookup (execit_context_t *ctx,
   printf("r_offset = %08lx:%08lx\n", a->irel_copy.r_offset, b->irel_copy.r_offset);
   printf("h = %08lx:%08lx\n", (intptr_t)a->h, (intptr_t)b->h);
   printf("isym = %08lx:%08lx\n", (intptr_t)a->isym, (intptr_t)b->isym);
-
   BFD_ASSERT (0);
+
   return NULL;
-
-#ifdef TO_REMOVE
-  /* allocate itable entry if necessary  */
-  execit_insn_list_entry_t *p, *q;
-  p = execit_itable_list;
-  q = NULL;
-  while (p)
-    {
-      execit_itable_t *e = &p->ihentry;
-      if ((e->fixed == entry->fixed) &&
-	  (e->address == entry->address) &&
-	  (e->immediate == entry->immediate) &&
-	  ( (e->irel.r_offset == entry->irel.r_offset) &&
-	    (e->irel.r_info == entry->irel.r_info) &&
-	    (e->irel.r_addend == entry->irel.r_addend)
-	  ))
-	break;
-      q = p;
-      p = p->next;
-    }
-
-  if (p == NULL)
-    {
-      BFD_ASSERT (p);
-    }
-
-  return p;
-#endif
-#ifdef TO_REMOVE
-  /* estimate final code as ID.  */
-  /* lookup existed entries  */
-  /* new an entry if not existed  */
-  /* return the entry  */
-  uint32_t insn_id = 0;
-  execit_itable_array_entry_t *p = execit_itable_list;
-  if (hash->itable_entry){}
-  if (p == NULL)
-    {
-      BFD_ASSERT (execit_itable_array_next_index == 0);
-      if (is_create)
-	{
-	  p = bfd_zmalloc (sizeof (execit_itable_array_entry_t));
-	  p->hash = hash;
-	  execit_itable_list = p;
-	  execit_itable_array_next_index++;
-	}
-    }
-  else
-    {
-	while (p && p->hash->times)
-	{
-	if (0 == strcmp (hash, p->hash->root.string))
-		return p;
-	p = p->next;
-	}
-    }
-
-  return p;
-#endif
 }
 
 /* Examine each insn times in hash table.
