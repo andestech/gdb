@@ -4906,7 +4906,7 @@ _bfd_riscv_relax_lui_gp_insn (bfd *abfd,
   /* For bug-14274, symbols defined in the .rodata (the sections
      before .data, may also later move out of range.  */
   /* reserved one page size in worst case  */
-  if (data_start && (sec_addr (sym_sec) < data_start))
+  if ((data_start == 0) || (sec_addr (sym_sec) < data_start))
     guard_size += htab->set_relax_page_size;
 
   BFD_ASSERT (rel->r_offset + 4 <= sec->size);
@@ -9908,7 +9908,7 @@ andes_relax_pc_gp_insn (
   /* For bug-14274, symbols defined in the .rodata (the sections
      before .data, may also later move out of range.  */
   /* reserved one page size in worst case  */
-  if (data_start && (sec_addr (sym_sec) < data_start))
+  if ((data_start == 0) || (sec_addr (sym_sec) < data_start))
     guard_size += htab->set_relax_page_size;
 
   BFD_ASSERT (rel->r_offset + 4 <= sec->size);
