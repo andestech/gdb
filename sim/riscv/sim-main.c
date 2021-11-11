@@ -8645,7 +8645,7 @@ execute_zfh (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op,
 }
 
 static sim_cia
-execute_b (SIM_CPU * cpu, unsigned_word iw, const struct riscv_opcode *op,
+execute_b (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op,
 	   int ex9)
 {
   SIM_DESC sd = CPU_STATE (cpu);
@@ -8658,321 +8658,245 @@ execute_b (SIM_CPU * cpu, unsigned_word iw, const struct riscv_opcode *op,
   unsigned_word shamt_imm = ((iw >> OP_SH_SHAMT) & OP_MASK_SHAMT);
   unsigned_word i_imm = EXTRACT_ITYPE_IMM (iw);
   sim_cia pc = cpu->pc + 4;
-  if (ex9)
-    pc -= 2;
 
   int xlen = RISCV_XLEN (cpu);
+  uint32_t rs1u;
+  int shamt;
+  uint64_t rs1u_64;
+  int64_t result;
+
+  if (ex9)
+    pc -= 2;
 
   switch (op->match)
     {
     case MATCH_CLZ:
-	{
-	  TRACE_INSN (cpu, "clz %s, %s", rd_name, rs1_name);
-	  if (cpu->regs[rs1].u == 0)
-	    store_rd (cpu, rd, RISCV_XLEN (cpu));
-	  else if (RISCV_XLEN (cpu) == 32)
-	    store_rd (cpu, rd, __builtin_clz (cpu->regs[rs1].u));
-	  else
-	    store_rd (cpu, rd, __builtin_clzll (cpu->regs[rs1].u));
-	  break;
-	}
+      TRACE_INSN (cpu, "clz %s, %s", rd_name, rs1_name);
+      if (cpu->regs[rs1].u == 0)
+	store_rd (cpu, rd, RISCV_XLEN (cpu));
+      else if (RISCV_XLEN (cpu) == 32)
+	store_rd (cpu, rd, __builtin_clz (cpu->regs[rs1].u));
+      else
+	store_rd (cpu, rd, __builtin_clzll (cpu->regs[rs1].u));
+      break;
     case MATCH_CLZW:
-	{
-	  TRACE_INSN (cpu, "clzw %s, %s", rd_name, rs1_name);
-	  uint32_t rs1u = (uint32_t) cpu->regs[rs1].u;
-	  if (cpu->regs[rs1].u == 0)
-	    store_rd (cpu, rd, 32);
-	  else
-	    store_rd (cpu, rd, __builtin_clz (rs1u));
-	  break;
-	}
+      TRACE_INSN (cpu, "clzw %s, %s", rd_name, rs1_name);
+      rs1u = cpu->regs[rs1].u & 0xffffffff;
+      if (cpu->regs[rs1].u == 0)
+	store_rd (cpu, rd, 32);
+      else
+	store_rd (cpu, rd, __builtin_clz (rs1u));
+      break;
 
     case MATCH_CTZ:
-	{
-	  TRACE_INSN (cpu, "ctz %s, %s", rd_name, rs1_name);
-	  if (cpu->regs[rs1].u == 0)
-	    store_rd (cpu, rd, RISCV_XLEN (cpu));
-	  else if (RISCV_XLEN (cpu) == 32)
-	    store_rd (cpu, rd, __builtin_ctz (cpu->regs[rs1].u));
-	  else
-	    store_rd (cpu, rd, __builtin_ctzll (cpu->regs[rs1].u));
-	  break;
-	}
+      TRACE_INSN (cpu, "ctz %s, %s", rd_name, rs1_name);
+      if (cpu->regs[rs1].u == 0)
+	store_rd (cpu, rd, RISCV_XLEN (cpu));
+      else if (RISCV_XLEN (cpu) == 32)
+	store_rd (cpu, rd, __builtin_ctz (cpu->regs[rs1].u));
+      else
+	store_rd (cpu, rd, __builtin_ctzll (cpu->regs[rs1].u));
+      break;
     case MATCH_CTZW:
-	{
-	  TRACE_INSN (cpu, "ctzw %s, %s", rd_name, rs1_name);
-	  uint32_t rs1u = (uint32_t) cpu->regs[rs1].u;
-	  if (cpu->regs[rs1].u == 0)
-	    store_rd (cpu, rd, 32);
-	  else
-	    store_rd (cpu, rd, __builtin_ctz (rs1u));
-	  break;
-	}
-    case MATCH_PCNT:
-	{
-	  TRACE_INSN (cpu, "pcnt %s, %s", rd_name, rs1_name);
-	  if (RISCV_XLEN (cpu) == 32)
-	    store_rd (cpu, rd, __builtin_popcount (cpu->regs[rs1].u));
-	  else
-	    store_rd (cpu, rd, __builtin_popcountll (cpu->regs[rs1].u));
-	  break;
-	}
-    case MATCH_PCNTW:
-	{
-	  TRACE_INSN (cpu, "pcntw %s, %s", rd_name, rs1_name);
-	  uint32_t rs1u = (uint32_t) cpu->regs[rs1].u;
-	  store_rd (cpu, rd, __builtin_popcount (rs1u));
-	  break;
-	}
+      TRACE_INSN (cpu, "ctzw %s, %s", rd_name, rs1_name);
+      rs1u = cpu->regs[rs1].u & 0xffffffff;
+      if (cpu->regs[rs1].u == 0)
+	store_rd (cpu, rd, 32);
+      else
+	store_rd (cpu, rd, __builtin_ctz (rs1u));
+      break;
+    case MATCH_CPOP:
+      TRACE_INSN (cpu, "pcnt %s, %s", rd_name, rs1_name);
+      if (RISCV_XLEN (cpu) == 32)
+	store_rd (cpu, rd, __builtin_popcount (cpu->regs[rs1].u));
+      else
+	store_rd (cpu, rd, __builtin_popcountll (cpu->regs[rs1].u));
+      break;
+    case MATCH_CPOPW:
+      TRACE_INSN (cpu, "pcntw %s, %s", rd_name, rs1_name);
+      rs1u = (uint32_t) cpu->regs[rs1].u;
+      store_rd (cpu, rd, __builtin_popcount (rs1u));
+      break;
     case MATCH_MIN:
-	{
-	  TRACE_INSN (cpu, "min %s, %s, %s", rd_name, rs1_name, rs2_name);
-	  if (cpu->regs[rs1].s < cpu->regs[rs2].s)
-	    store_rd (cpu, rd, cpu->regs[rs1].s);
-	  else
-	    store_rd (cpu, rd, cpu->regs[rs2].s);
-	  break;
-	}
+      TRACE_INSN (cpu, "min %s, %s, %s", rd_name, rs1_name, rs2_name);
+      if (cpu->regs[rs1].s < cpu->regs[rs2].s)
+	store_rd (cpu, rd, cpu->regs[rs1].s);
+      else
+	store_rd (cpu, rd, cpu->regs[rs2].s);
+      break;
     case MATCH_MINU:
-	{
-	  TRACE_INSN (cpu, "minu %s, %s, %s", rd_name, rs1_name, rs2_name);
-	  if (cpu->regs[rs1].u < cpu->regs[rs2].u)
-	    store_rd (cpu, rd, cpu->regs[rs1].u);
-	  else
-	    store_rd (cpu, rd, cpu->regs[rs2].u);
-	  break;
-	}
+      TRACE_INSN (cpu, "minu %s, %s, %s", rd_name, rs1_name, rs2_name);
+      if (cpu->regs[rs1].u < cpu->regs[rs2].u)
+	store_rd (cpu, rd, cpu->regs[rs1].u);
+      else
+	store_rd (cpu, rd, cpu->regs[rs2].u);
+      break;
     case MATCH_MAX:
-	{
-	  TRACE_INSN (cpu, "max %s, %s, %s", rd_name, rs1_name, rs2_name);
-	  if (cpu->regs[rs1].s > cpu->regs[rs2].s)
-	    store_rd (cpu, rd, cpu->regs[rs1].s);
-	  else
-	    store_rd (cpu, rd, cpu->regs[rs2].s);
-	  break;
-	}
+      TRACE_INSN (cpu, "max %s, %s, %s", rd_name, rs1_name, rs2_name);
+      if (cpu->regs[rs1].s > cpu->regs[rs2].s)
+	store_rd (cpu, rd, cpu->regs[rs1].s);
+      else
+	store_rd (cpu, rd, cpu->regs[rs2].s);
+      break;
     case MATCH_MAXU:
-	{
-	  TRACE_INSN (cpu, "maxu %s, %s, %s", rd_name, rs1_name, rs2_name);
-	  if (cpu->regs[rs1].u > cpu->regs[rs2].u)
-	    store_rd (cpu, rd, cpu->regs[rs1].u);
-	  else
-	    store_rd (cpu, rd, cpu->regs[rs2].u);
-	  break;
-	}
+      TRACE_INSN (cpu, "maxu %s, %s, %s", rd_name, rs1_name, rs2_name);
+      if (cpu->regs[rs1].u > cpu->regs[rs2].u)
+	store_rd (cpu, rd, cpu->regs[rs1].u);
+      else
+	store_rd (cpu, rd, cpu->regs[rs2].u);
+      break;
     case MATCH_SEXT_B:
-	{
-	  TRACE_INSN (cpu, "sext.b %s, %s", rd_name, rs1_name);
-	  store_rd (cpu, rd,
-		    cpu->regs[rs1].s << (RISCV_XLEN (cpu) -
-					 8) >> (RISCV_XLEN (cpu) - 8));
-	  break;
-	}
+      TRACE_INSN (cpu, "sext.b %s, %s", rd_name, rs1_name);
+      store_rd (cpu, rd, (int8_t) (cpu->regs[rs1].s));
+      break;
     case MATCH_SEXT_H:
-	{
-	  TRACE_INSN (cpu, "sext.h %s, %s", rd_name, rs1_name);
-	  store_rd (cpu, rd,
-		    cpu->regs[rs1].s << (RISCV_XLEN (cpu) -
-					 16) >> (RISCV_XLEN (cpu) - 16));
-	  break;
-	}
-    case MATCH_ZEXT_H:
-	{
-	  TRACE_INSN(cpu, "zext.h %s, %s", rd_name, rs1_name);
-	  store_rd(cpu, rd, ((cpu->regs[rs1].u << xlen / 2) >> xlen / 2) | 0);
-	  break;
-	}
+      TRACE_INSN (cpu, "sext.h %s, %s", rd_name, rs1_name);
+      store_rd (cpu, rd, (int16_t) (cpu->regs[rs1].s));
+      break;
+    case MATCH_ZEXT_H_32:
+    case MATCH_ZEXT_H_64:
+      TRACE_INSN (cpu, "zext.h %s, %s", rd_name, rs1_name);
+      store_rd (cpu, rd, ((uint16_t) (cpu->regs[rs1].u)));
+      break;
     case MATCH_ROR:
-	{
-	  TRACE_INSN (cpu, "ror %s, %s, %s", rd_name, rs1_name, rs2_name);
-	  int shamt = cpu->regs[rs2].u & (RISCV_XLEN (cpu) - 1);
-	  store_rd (cpu, rd,
-		    (cpu->regs[rs1].u >> shamt) | (cpu->regs[rs1].
-						   u <<
-						   ((RISCV_XLEN (cpu) -
-						     shamt) & (RISCV_XLEN (cpu)
-							       - 1))));
-	  break;
-	}
+      TRACE_INSN (cpu, "ror %s, %s, %s", rd_name, rs1_name, rs2_name);
+      shamt = cpu->regs[rs2].u & (RISCV_XLEN (cpu) - 1);
+      store_rd (cpu, rd, ((cpu->regs[rs1].u >> shamt)
+			  | (cpu->regs[rs1].u << (xlen - shamt))));
+      break;
     case MATCH_RORI:
-	{
-	  TRACE_INSN (cpu, "rori %s, %s, %" PRIiTW, rd_name, rs1_name,
-		      shamt_imm);
-	  int shamt = shamt_imm & (RISCV_XLEN (cpu) - 1);
-	  store_rd (cpu, rd,
-		    (cpu->regs[rs1].u >> shamt) | (cpu->regs[rs1].
-						   u <<
-						   ((RISCV_XLEN (cpu) -
-						     shamt) & (RISCV_XLEN (cpu)
-							       - 1))));
-	  break;
-	}
+      TRACE_INSN (cpu, "rori %s, %s, %" PRIiTW, rd_name, rs1_name, shamt_imm);
+      shamt = shamt_imm & (RISCV_XLEN (cpu) - 1);
+      store_rd (cpu, rd, ((cpu->regs[rs1].u >> shamt)
+			  | (cpu->regs[rs1].u << (xlen - shamt))));
+      break;
     case MATCH_RORIW:
-	{
-	  TRACE_INSN (cpu, "roriw %s, %s, %" PRIiTW, rd_name, rs1_name,
-		      shamt_imm);
-	  uint32_t rs1u = (uint32_t) cpu->regs[rs1].u;	//RV64 only
-	  int shamt = shamt_imm & (RISCV_XLEN (cpu) - 1);
-	  int64_t result =
-	    (rs1u >> shamt) | (rs1u <<
-			       ((RISCV_XLEN (cpu) - shamt) & (RISCV_XLEN (cpu) -
-							      1)));
-	  store_rd (cpu, rd, result);
-	  break;
-	}
+      /* RV64 only.  */
+      TRACE_INSN (cpu, "roriw %s, %s, %" PRIiTW, rd_name, rs1_name, shamt_imm);
+      rs1u = (uint32_t) cpu->regs[rs1].u;
+      shamt = shamt_imm & 31;
+      result = (rs1u >> shamt) | (rs1u << (32 - shamt));
+      store_rd (cpu, rd, result);
+      break;
     case MATCH_RORW:
-	{
-	  TRACE_INSN (cpu, "rorw %s, %s, %s", rd_name, rs1_name, rs2_name);
-	  uint32_t rs1u = (uint32_t) cpu->regs[rs1].u;	//RV64 only
-	  int shamt = cpu->regs[rs2].u & 31;
-	  int64_t result = (rs1u >> shamt) | (rs1u << (32 - shamt));
-	  store_rd (cpu, rd, result);
-	  break;
-	}
+      /* RV64 only.  */
+      TRACE_INSN (cpu, "rorw %s, %s, %s", rd_name, rs1_name, rs2_name);
+      rs1u = (uint32_t) cpu->regs[rs1].u;
+      shamt = cpu->regs[rs2].u & 31;
+      result = (rs1u >> shamt) | (rs1u << (32 - shamt));
+      store_rd (cpu, rd, result);
+      break;
     case MATCH_ROL:
-	{
-	  TRACE_INSN (cpu, "rol %s, %s, %s", rd_name, rs1_name, rs2_name);
-	  int shamt = cpu->regs[rs2].u & (RISCV_XLEN (cpu) - 1);
-	  store_rd (cpu, rd,
-		    (cpu->regs[rs1].u << shamt) | (cpu->regs[rs1].
-						   u >>
-						   ((RISCV_XLEN (cpu) -
-						     shamt) & (RISCV_XLEN (cpu)
-							       - 1))));
-	  break;
-	}
+      TRACE_INSN (cpu, "rol %s, %s, %s", rd_name, rs1_name, rs2_name);
+      shamt = cpu->regs[rs2].u & (RISCV_XLEN (cpu) - 1);
+      store_rd (cpu, rd,
+		(cpu->regs[rs1].u << shamt)
+		| (cpu->regs[rs1].u >> (xlen - shamt)));
+      break;
     case MATCH_ROLW:
-	{
-	  TRACE_INSN (cpu, "rolw %s, %s, %s", rd_name, rs1_name, rs2_name);
-	  uint32_t rs1u = (uint32_t) cpu->regs[rs1].u;
-	  int shamt = cpu->regs[rs2].u & 31;
-	  int64_t result = (rs1u << shamt) | (rs1u >> (32 - shamt));
-	  store_rd (cpu, rd, result);
-	  break;
-	}
+      TRACE_INSN (cpu, "rolw %s, %s, %s", rd_name, rs1_name, rs2_name);
+      rs1u = (uint32_t) cpu->regs[rs1].u;
+      shamt = cpu->regs[rs2].u & 31;
+      result = (rs1u << shamt) | (rs1u >> (32 - shamt));
+      store_rd (cpu, rd, result);
+      break;
     case MATCH_CLMUL:
+      TRACE_INSN (cpu, "clmul %s, %s, %s", rd_name, rs1_name, rs2_name);
+      if (xlen == 32)
 	{
-	  TRACE_INSN (cpu, "clmul %s, %s, %s", rd_name, rs1_name, rs2_name);
-	  if (xlen == 32)
-	    {
-	      uint32_t x = 0;
-	      for (int i = 0; i < xlen; i++)
-		if ((cpu->regs[rs2].u >> i) & 1)
-		  x ^= cpu->regs[rs1].u << i;
-	      store_rd (cpu, rd, x);
-	    }
-	  else
-	    {
-	      uint64_t x = 0;
-	      for (int i = 0; i < xlen; i++)
-		if ((cpu->regs[rs2].u >> i) & 1)
-		  x ^= cpu->regs[rs1].u << i;
-	      store_rd (cpu, rd, x);
-	    }
-	  break;
+	  uint32_t x = 0;
+	  for (int i = 0; i < xlen; i++)
+	    if ((cpu->regs[rs2].u >> i) & 1)
+	      x ^= cpu->regs[rs1].u << i;
+	  store_rd (cpu, rd, x);
 	}
+      else
+	{
+	  uint64_t x = 0;
+	  for (int i = 0; i < xlen; i++)
+	    if ((cpu->regs[rs2].u >> i) & 1)
+	      x ^= cpu->regs[rs1].u << i;
+	  store_rd (cpu, rd, x);
+	}
+      break;
     case MATCH_CLMULH:
+      TRACE_INSN (cpu, "clmulh %s, %s, %s", rd_name, rs1_name, rs2_name);
+      if (xlen == 32)
 	{
-	  TRACE_INSN (cpu, "clmulh %s, %s, %s", rd_name, rs1_name, rs2_name);
-	  if (xlen == 32)
-	    {
-	      uint32_t x = 0;
-	      for (int i = 1; i < xlen; i++)
-		if ((cpu->regs[rs2].u >> i) & 1)
-		  x ^= cpu->regs[rs1].u >> (xlen - i);
-	      store_rd (cpu, rd, x);
-	    }
-	  else
-	    {
-	      uint64_t x = 0;
-	      for (int i = 1; i < xlen; i++)
-		if ((cpu->regs[rs2].u >> i) & 1)
-		  x ^= cpu->regs[rs1].u >> (xlen - i);
-	      store_rd (cpu, rd, x);
-	    }
-	  break;
+	  uint32_t x = 0;
+	  for (int i = 1; i < xlen; i++)
+	    if ((cpu->regs[rs2].u >> i) & 1)
+	      x ^= cpu->regs[rs1].u >> (xlen - i);
+	  store_rd (cpu, rd, x);
 	}
+      else
+	{
+	  uint64_t x = 0;
+	  for (int i = 1; i < xlen; i++)
+	    if ((cpu->regs[rs2].u >> i) & 1)
+	      x ^= cpu->regs[rs1].u >> (xlen - i);
+	  store_rd (cpu, rd, x);
+	}
+      break;
     case MATCH_CLMULR:
+      TRACE_INSN (cpu, "clmulr %s, %s, %s", rd_name, rs1_name, rs2_name);
+      if (xlen == 32)
 	{
-	  TRACE_INSN (cpu, "clmulr %s, %s, %s", rd_name, rs1_name, rs2_name);
-	  if (xlen == 32)
-	    {
-	      uint32_t x = 0;
-	      for (int i = 0; i < xlen; i++)
-		if ((cpu->regs[rs2].u >> i) & 1)
-		  x ^= cpu->regs[rs1].u >> (xlen - i - 1);
-	      store_rd (cpu, rd, x);
-	    }
-	  else
-	    {
-	      uint64_t x = 0;
-	      for (int i = 0; i < xlen; i++)
-		if ((cpu->regs[rs2].u >> i) & 1)
-		  x ^= cpu->regs[rs1].u >> (xlen - i - 1);
-	      store_rd (cpu, rd, x);
-	    }
-	  break;
+	  uint32_t x = 0;
+	  for (int i = 0; i < xlen; i++)
+	    if ((cpu->regs[rs2].u >> i) & 1)
+	      x ^= cpu->regs[rs1].u >> (xlen - i - 1);
+	  store_rd (cpu, rd, x);
 	}
-    case MATCH_SBCLR:
+      else
 	{
-	  TRACE_INSN (cpu, "sbclr %s, %s, %s", rd_name, rs1_name, rs2_name);
-	  int shamt = cpu->regs[rs2].u & (xlen - 1);
-	  store_rd (cpu, rd, cpu->regs[rs1].u & ~(1 << shamt));
-	  break;
+	  uint64_t x = 0;
+	  for (int i = 0; i < xlen; i++)
+	    if ((cpu->regs[rs2].u >> i) & 1)
+	      x ^= cpu->regs[rs1].u >> (xlen - i - 1);
+	  store_rd (cpu, rd, x);
 	}
-    case MATCH_SBCLRI:
-	{
-	  TRACE_INSN (cpu, "sbclri %s, %s, %" PRIiTW, rd_name, rs1_name,
-		      shamt_imm);
-	  int shamt = shamt_imm & (xlen - 1);
-	  store_rd (cpu, rd, cpu->regs[rs1].u & ~(1 << shamt));
-	  break;
-	}
+      break;
+    case MATCH_BCLR:
+      TRACE_INSN (cpu, "bclr %s, %s, %s", rd_name, rs1_name, rs2_name);
+      shamt = cpu->regs[rs2].u & (xlen - 1);
+      store_rd (cpu, rd, cpu->regs[rs1].u & ~(1 << shamt));
+      break;
+    case MATCH_BCLRI:
+      TRACE_INSN (cpu, "bclri %s, %s, %" PRIiTW, rd_name, rs1_name, shamt_imm);
+      shamt = shamt_imm & (xlen - 1);
+      store_rd (cpu, rd, cpu->regs[rs1].u & ~(1 << shamt));
+      break;
     case MATCH_BEXT:
-	{
-	  TRACE_INSN (cpu, "bext %s, %s, %s", rd_name, rs1_name, rs2_name);
-	  int shamt = cpu->regs[rs2].u & (xlen - 1);
-	  store_rd (cpu, rd, 1 & (cpu->regs[rs1].u >> shamt));
-	  break;
-	}
-    case MATCH_SBEXTI:
-	{
-	  TRACE_INSN (cpu, "sbexti %s, %s, %" PRIiTW, rd_name, rs1_name,
-		      shamt_imm);
-	  int shamt = shamt_imm & (xlen - 1);
-	  store_rd (cpu, rd, 1 & (cpu->regs[rs1].u >> shamt));
-	  break;
-	}
-    case MATCH_SBINV:
-	{
-	  TRACE_INSN (cpu, "sbinv %s, %s, %s", rd_name, rs1_name, rs2_name);
-	  int shamt = cpu->regs[rs2].u & (xlen - 1);
-	  store_rd (cpu, rd, cpu->regs[rs1].u ^ (1 << shamt));
-	  break;
-	}
-    case MATCH_SBINVI:
-	{
-	  TRACE_INSN (cpu, "sbinvi %s, %s, %" PRIiTW, rd_name, rs1_name,
-		      shamt_imm);
-	  int shamt = shamt_imm & (xlen - 1);
-	  store_rd (cpu, rd, cpu->regs[rs1].u ^ (1 << shamt));
-	  break;
-	}
-    case MATCH_SBSET:
-	{
-	  TRACE_INSN (cpu, "sbset %s, %s, %s", rd_name, rs1_name, rs2_name);
-	  int shamt = cpu->regs[rs2].u & (xlen - 1);
-	  store_rd (cpu, rd, cpu->regs[rs1].u | (1 << shamt));
-	  break;
-	}
-    case MATCH_SBSETI:
-	{
-	  TRACE_INSN (cpu, "sbseti %s, %s, %" PRIiTW, rd_name, rs1_name,
-		      shamt_imm);
-	  int shamt = shamt_imm & (xlen - 1);
-	  store_rd (cpu, rd, cpu->regs[rs1].u | (1 << shamt));
-	  break;
-	}
+      TRACE_INSN (cpu, "bext %s, %s, %s", rd_name, rs1_name, rs2_name);
+      shamt = cpu->regs[rs2].u & (xlen - 1);
+      store_rd (cpu, rd, 1 & (cpu->regs[rs1].u >> shamt));
+      break;
+    case MATCH_BEXTI:
+      TRACE_INSN (cpu, "bexti %s, %s, %" PRIiTW, rd_name, rs1_name, shamt_imm);
+      shamt = shamt_imm & (xlen - 1);
+      store_rd (cpu, rd, 1 & (cpu->regs[rs1].u >> shamt));
+      break;
+    case MATCH_BINV:
+      TRACE_INSN (cpu, "binv %s, %s, %s", rd_name, rs1_name, rs2_name);
+      shamt = cpu->regs[rs2].u & (xlen - 1);
+      store_rd (cpu, rd, cpu->regs[rs1].u ^ (1 << shamt));
+      break;
+    case MATCH_BINVI:
+      TRACE_INSN (cpu, "binvi %s, %s, %" PRIiTW, rd_name, rs1_name, shamt_imm);
+      shamt = shamt_imm & (xlen - 1);
+      store_rd (cpu, rd, cpu->regs[rs1].u ^ (1 << shamt));
+      break;
+    case MATCH_BSET:
+      TRACE_INSN (cpu, "bset %s, %s, %s", rd_name, rs1_name, rs2_name);
+      shamt = cpu->regs[rs2].u & (xlen - 1);
+      store_rd (cpu, rd, cpu->regs[rs1].u | (1 << shamt));
+      break;
+    case MATCH_BSETI:
+      TRACE_INSN (cpu, "bseti %s, %s, %" PRIiTW, rd_name, rs1_name, shamt_imm);
+      shamt = shamt_imm & (xlen - 1);
+      store_rd (cpu, rd, cpu->regs[rs1].u | (1 << shamt));
+      break;
     case MATCH_ANDN:
       TRACE_INSN (cpu, "andn %s, %s, %s", rd_name, rs1_name, rs2_name);
       store_rd (cpu, rd, cpu->regs[rs1].u & ~cpu->regs[rs2].u);
@@ -8985,160 +8909,50 @@ execute_b (SIM_CPU * cpu, unsigned_word iw, const struct riscv_opcode *op,
       TRACE_INSN (cpu, "xnor %s, %s, %s", rd_name, rs1_name, rs2_name);
       store_rd (cpu, rd, cpu->regs[rs1].u ^ ~cpu->regs[rs2].u);
       break;
-    case MATCH_PACK:
-	{
-	  TRACE_INSN (cpu, "pack %s, %s, %s", rd_name, rs1_name, rs2_name);
-	  if (xlen == 32)
-	    {
-	      uint32_t lower = (cpu->regs[rs1].u << xlen / 2) >> xlen / 2;
-	      uint32_t upper = cpu->regs[rs2].u << xlen / 2;
-	      store_rd (cpu, rd, lower | upper);
-	    }
-	  else
-	    {
-	      uint64_t lower = (cpu->regs[rs1].u << xlen / 2) >> xlen / 2;
-	      uint64_t upper = cpu->regs[rs2].u << xlen / 2;
-	      store_rd (cpu, rd, lower | upper);
-	    }
-	  break;
-	}
-    case MATCH_PACKU:
-	{
-	  TRACE_INSN (cpu, "packu %s, %s, %s", rd_name, rs1_name, rs2_name);
-	  if (xlen == 32)
-	    {
-	      uint32_t lower = cpu->regs[rs1].u >> xlen / 2;
-	      uint32_t upper = (cpu->regs[rs2].u >> xlen / 2) << xlen / 2;
-	      store_rd (cpu, rd, lower | upper);
-	    }
-	  else
-	    {
-	      uint64_t lower = cpu->regs[rs1].u >> xlen / 2;
-	      uint64_t upper = (cpu->regs[rs2].u >> xlen / 2) << xlen / 2;
-	      store_rd (cpu, rd, lower | upper);
-	    }
-	  break;
-	}
-    case MATCH_PACKW:
-	{
-	  TRACE_INSN (cpu, "packw %s, %s, %s", rd_name, rs1_name, rs2_name);
-	  uint64_t lower = cpu->regs[rs1].u & 65535;
-	  uint64_t upper = (cpu->regs[rs2].u & 65535) << 16;
-	  store_rd (cpu, rd, lower | upper);
-	  break;
-	}
-    case MATCH_XPERMN:
-	{
-	  TRACE_INSN (cpu, "xperm.n %s, %s, %s", rd_name, rs1_name, rs2_name);
-	  if (xlen == 32)
-	    {
-	      uint32_t r = 0;
-	      uint32_t sz = 1LL << 2;
-	      uint32_t mask = (1LL << sz) - 1;
-	      for (int i = 0; i < xlen; i += sz)
-		{
-		  uint32_t pos = ((cpu->regs[rs2].u >> i) & mask) << 2;
-		  if (pos < xlen)
-		    r |= ((cpu->regs[rs1].u >> pos) & mask) << i;
-		}
-	      store_rd (cpu, rd, r);
-	    }
-	  else
-	    {
-	      uint64_t r = 0;
-	      uint64_t sz = 1LL << 2;
-	      uint64_t mask = (1LL << sz) - 1;
-	      for (int i = 0; i < xlen; i += sz)
-		{
-		  uint64_t pos = ((cpu->regs[rs2].u >> i) & mask) << 2;
-		  if (pos < xlen)
-		    r |= ((cpu->regs[rs1].u >> pos) & mask) << i;
-		}
-	      store_rd (cpu, rd, r);
-	    }
-	  break;
-	}
-    case MATCH_XPERMB:
-	{
-	  TRACE_INSN (cpu, "xperm.b %s, %s, %s", rd_name, rs1_name, rs2_name);
-	  if (xlen == 32)
-	    {
-	      uint32_t r = 0;
-	      uint32_t sz = 1LL << 3;
-	      uint32_t mask = (1LL << sz) - 1;
-	      for (int i = 0; i < xlen; i += sz)
-		{
-		  uint32_t pos = ((cpu->regs[rs2].u >> i) & mask) << 3;
-		  if (pos < xlen)
-		    r |= ((cpu->regs[rs1].u >> pos) & mask) << i;
-		}
-	      store_rd (cpu, rd, r);
-	    }
-	  else
-	    {
-	      uint64_t r = 0;
-	      uint64_t sz = 1LL << 3;
-	      uint64_t mask = (1LL << sz) - 1;
-	      for (int i = 0; i < xlen; i += sz)
-		{
-		  uint64_t pos = ((cpu->regs[rs2].u >> i) & mask) << 3;
-		  if (pos < xlen)
-		    r |= ((cpu->regs[rs1].u >> pos) & mask) << i;
-		}
-	      store_rd (cpu, rd, r);
-	    }
-	  break;
-	}
-    case MATCH_ADDU_W:
-	{
-	  TRACE_INSN (cpu, "addu.w %s, %s, %s", rd_name, rs1_name, rs2_name);
-	  uint64_t rs1u = (uint32_t) cpu->regs[rs1].u;	//RV64 only
-	  store_rd (cpu, rd, rs1u + cpu->regs[rs2].u);
-	  break;
-	}
+    case MATCH_ADD_UW:
+      /* RV64 Only.  */
+      TRACE_INSN (cpu, "add_uw %s, %s, %s", rd_name, rs1_name, rs2_name);
+      rs1u_64 = cpu->regs[rs1].u & 0xffffffff;
+      store_rd (cpu, rd, rs1u_64 + cpu->regs[rs2].u);
+      break;
     case MATCH_SH1ADD:
       TRACE_INSN (cpu, "sh1add %s, %s, %s", rd_name, rs1_name, rs2_name);
       store_rd (cpu, rd, cpu->regs[rs2].u + (cpu->regs[rs1].u << 1));
       break;
-    case MATCH_SH1ADDU_W:
-	{
-	  TRACE_INSN (cpu, "sh1addu.w %s, %s, %s", rd_name, rs1_name, rs2_name);
-	  uint64_t rs1z = cpu->regs[rs1].u & 0xFFFFFFFF;
-	  store_rd (cpu, rd, cpu->regs[rs2].u + (rs1z << 1));
-	  break;
-	}
+    case MATCH_SH1ADD_UW:
+      {
+	uint64_t rs1u_64 = cpu->regs[rs1].u & 0xffffffff;
+	TRACE_INSN (cpu, "sh1add.uw %s, %s, %s", rd_name, rs1_name, rs2_name);
+	store_rd (cpu, rd, cpu->regs[rs2].u + (rs1u_64 << 1));
+      }
+      break;
     case MATCH_SH2ADD:
       TRACE_INSN (cpu, "sh2add %s, %s, %s", rd_name, rs1_name, rs2_name);
       store_rd (cpu, rd, cpu->regs[rs2].u + (cpu->regs[rs1].u << 2));
       break;
-    case MATCH_SH2ADDU_W:
-	{
-	  TRACE_INSN (cpu, "sh2addu.w %s, %s, %s", rd_name, rs1_name, rs2_name);
-	  uint64_t rs1z = cpu->regs[rs1].u & 0xFFFFFFFF;
-	  store_rd (cpu, rd, cpu->regs[rs2].u + (rs1z << 2));
-	  break;
-	}
+    case MATCH_SH2ADD_UW:
+      TRACE_INSN (cpu, "sh2add.uw %s, %s, %s", rd_name, rs1_name, rs2_name);
+      rs1u_64 = cpu->regs[rs1].u & 0xffffffff;
+      store_rd (cpu, rd, cpu->regs[rs2].u + (rs1u_64 << 2));
+      break;
     case MATCH_SH3ADD:
       TRACE_INSN (cpu, "sh3add %s, %s, %s", rd_name, rs1_name, rs2_name);
       store_rd (cpu, rd, cpu->regs[rs2].u + (cpu->regs[rs1].u << 3));
       break;
-    case MATCH_SH3ADDU_W:
-	{
-	  TRACE_INSN (cpu, "sh3addu.w %s, %s, %s", rd_name, rs1_name, rs2_name);
-	  uint64_t rs1z = cpu->regs[rs1].u & 0xFFFFFFFF;
-	  store_rd (cpu, rd, cpu->regs[rs2].u + (rs1z << 3));
-	  break;
-	}
-    case MATCH_SLLIU_W:
-	{
-	  TRACE_INSN (cpu, "slliu.w %s, %s, %" PRIiTW,
-		      rd_name, rs1_name, shamt_imm);
-	  uint64_t rs1u = (uint32_t) cpu->regs[rs1].u;	//RV64 only
-	  int shamt = shamt_imm & (xlen - 1);
-	  store_rd (cpu, rd, rs1u << shamt);
-	  break;
-	}
-
+    case MATCH_SH3ADD_UW:
+      TRACE_INSN (cpu, "sh3add.uw %s, %s, %s", rd_name, rs1_name, rs2_name);
+      rs1u_64 = cpu->regs[rs1].u & 0xffffffff;
+      store_rd (cpu, rd, cpu->regs[rs2].u + (rs1u_64 << 3));
+      break;
+    case MATCH_SLLI_UW:
+      {
+	int shamt = shamt_imm & (xlen - 1);
+	TRACE_INSN (cpu, "slli.uw %s, %s, %" PRIiTW, rd_name, rs1_name,
+		    shamt_imm);
+	rs1u_64 = (uint32_t) cpu->regs[rs1].u;
+	store_rd (cpu, rd, rs1u_64 << shamt);
+      }
+      break;
     default:
       TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
       sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
