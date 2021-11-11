@@ -2507,6 +2507,46 @@ static void
     }
 }
 
+/* Build an instruction created by a macro expansion.  Like md_assemble but
+   accept a printf-style format string and arguments.  */
+
+static void
+md_assemblef (const char *format, ...)
+{
+  char *buf = NULL;
+  va_list ap;
+  int r;
+
+  va_start (ap, format);
+
+  r = vasprintf (&buf, format, ap);
+
+  if (r < 0)
+    as_fatal (_("internal: vasprintf failed"));
+
+  md_assemble (buf);
+  free(buf);
+
+  va_end (ap);
+}
+
+/* Zero extend and sign extend byte/half-word/word.  */
+
+static void
+riscv_ext (int destreg, int srcreg, unsigned shift, bfd_boolean sign)
+{
+  if (sign)
+    {
+      md_assemblef ("slli x%d, x%d, 0x%x", destreg, srcreg, shift);
+      md_assemblef ("srai x%d, x%d, 0x%x", destreg, destreg, shift);
+    }
+  else
+    {
+      md_assemblef ("slli x%d, x%d, 0x%x", destreg, srcreg, shift);
+      md_assemblef ("srli x%d, x%d, 0x%x", destreg, destreg, shift);
+    }
+}
+
 /* Load an integer constant into a register.  */
 
 static void
@@ -2790,6 +2830,10 @@ macro (struct riscv_cl_insn *ip, expressionS *imm_expr,
     case M_VMSGE:
     case M_VMSGEU:
       vector_macro (ip);
+      break;
+
+    case M_ZEXTH:
+      riscv_ext (rd, rs1, xlen - 16, FALSE);
       break;
 
     default:
