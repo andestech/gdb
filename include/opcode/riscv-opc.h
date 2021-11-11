@@ -441,6 +441,9 @@
 #define MASK_SEXT_B  0xfff0707f
 #define MATCH_SEXT_H 0x60501013
 #define MASK_SEXT_H  0xfff0707f
+#define MATCH_ZEXT_H_32 0x8004033
+#define MATCH_ZEXT_H_64 0x800403b
+#define MASK_ZEXT_H  0xfff0707f
 #define MATCH_PACK 0x8004033
 #define MASK_PACK  0xfe00707f
 #define MATCH_PACKH 0x8007033
