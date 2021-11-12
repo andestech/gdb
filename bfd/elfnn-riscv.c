@@ -4905,9 +4905,11 @@ _bfd_riscv_relax_lui_gp_insn (bfd *abfd,
 
   /* For bug-14274, symbols defined in the .rodata (the sections
      before .data, may also later move out of range.  */
-  /* reserved one page size in worst case  */
+  /* reserved one page size in worst case
+     or two (refer to riscv_relax_lui_to_rvc)  */
   if ((data_start == 0) || (sec_addr (sym_sec) < data_start))
-    guard_size += htab->set_relax_page_size;
+    guard_size += link_info->relro ? htab->set_relax_page_size * 2
+				   : htab->set_relax_page_size;
 
   BFD_ASSERT (rel->r_offset + 4 <= sec->size);
 
@@ -9905,12 +9907,6 @@ andes_relax_pc_gp_insn (
   struct riscv_elf_link_hash_table *htab = riscv_elf_hash_table (info);
   bfd_vma guard_size = 0;
 
-  /* For bug-14274, symbols defined in the .rodata (the sections
-     before .data, may also later move out of range.  */
-  /* reserved one page size in worst case  */
-  if ((data_start == 0) || (sec_addr (sym_sec) < data_start))
-    guard_size += htab->set_relax_page_size;
-
   BFD_ASSERT (rel->r_offset + 4 <= sec->size);
 
   /* Chain the _LO relocs to their cooresponding _HI reloc to compute the
@@ -9964,6 +9960,14 @@ andes_relax_pc_gp_insn (
     default:
       abort ();
     }
+
+  /* For bug-14274, symbols defined in the .rodata (the sections
+     before .data, may also later move out of range.  */
+  /* reserved one page size in worst case
+     or two (refer to riscv_relax_lui_to_rvc)  */
+  if ((data_start == 0) || (sec_addr (sym_sec) < data_start))
+    guard_size += info->relro ? htab->set_relax_page_size * 2
+				   : htab->set_relax_page_size;
 
   if (gp)
     {
