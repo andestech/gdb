@@ -412,7 +412,7 @@ static struct riscv_set_options riscv_opts =
   0,	/* rve */
   1,	/* relax */
   DEFAULT_RISCV_ATTR, /* arch_attr */
-  0,	/* check_constraints */
+  1,	/* check_constraints */
   0, 	/* csr_check */
   0,	/* no_16_bit */
   0,	/* execit */
