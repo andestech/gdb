@@ -1150,7 +1150,8 @@ riscv_csr_class_check (enum riscv_csr_class csr_class)
 	      || riscv_subset_supports ("zvlsseg"));
     case CSR_CLASS_I_32:
       return (xlen == 32 && riscv_subset_supports ("i"));
-
+    case CSR_CLASS_ZKR:
+      return riscv_subset_supports ("zkr");
     default:
       return FALSE;
     }
@@ -1386,6 +1387,8 @@ validate_riscv_insn (const struct riscv_opcode *opc, int length)
       case 'P':	USE_BITS (OP_MASK_PRED,		OP_SH_PRED);	break;
       case 'Q':	USE_BITS (OP_MASK_SUCC,		OP_SH_SUCC);	break;
       case 'v': USE_BITS (OP_MASK_SV,		OP_SH_SV);	break;
+      case 'y': USE_BITS (OP_MASK_BS,	OP_SH_BS); break;
+      case 'Y': USE_BITS (OP_MASK_RNUM, OP_SH_RNUM); break;
       case 'o':
       case 'j': used_bits |= ENCODE_ITYPE_IMM (-1U); break;
       case 'a':	used_bits |= ENCODE_UJTYPE_IMM (-1U); break;
@@ -4018,6 +4021,28 @@ jump:
 		  as_bad (_("bad FUNCT field specifier 'F%c'\n"), *args);
 		}
 	      break;
+
+	    case 'y':        /* bs immediate */
+	      my_getExpression (imm_expr, asarg);
+	      check_absolute_expr (ip, imm_expr, FALSE);
+	      if ((unsigned long)imm_expr->X_add_number > 3)
+		      as_bad(_("Improper bs immediate (%lu)"),
+		        (unsigned long)imm_expr->X_add_number);
+	      INSERT_OPERAND(BS, *ip, imm_expr->X_add_number);
+	      imm_expr->X_op = O_absent;
+	      asarg = expr_end;
+	      continue;
+            
+	    case 'Y':        /* rnum immediate */
+	      my_getExpression (imm_expr, asarg);
+	      check_absolute_expr (ip, imm_expr, FALSE);
+	      if ((unsigned long)imm_expr->X_add_number > 10)
+		      as_bad(_("Improper rnum immediate (%lu)"),
+		        (unsigned long)imm_expr->X_add_number);
+	      INSERT_OPERAND(RNUM, *ip, imm_expr->X_add_number);
+	      imm_expr->X_op = O_absent;
+	      asarg = expr_end;
+	      continue;
 
 	    case 'z':
 	      if (my_getSmallExpression (imm_expr, imm_reloc, s, p)

@@ -468,6 +468,13 @@ static const char * const riscv_vma[2] =
 #define OP_MASK_VWD		0x1
 #define OP_SH_VWD		26
 
+/* Scalar crypto fields. */
+
+#define OP_SH_BS        30
+#define OP_MASK_BS      3
+#define OP_SH_RNUM      20
+#define OP_MASK_RNUM    0xf
+
 /* ABI names for selected x-registers.  */
 
 #define X_RA 1
@@ -582,6 +589,7 @@ enum riscv_csr_class
   CSR_CLASS_I_32,      /* rv32 only */
   CSR_CLASS_F,         /* f-ext only */
   CSR_CLASS_V,         /* v-ext only */
+  CSR_CLASS_ZKR,       /* zkr only */
   CSR_CLASS_DEBUG      /* debug CSR */
 };
 
