@@ -4766,16 +4766,15 @@ andes_execit_render_hash (execit_context_t *ctx)
       asection *sym_sec;
       bfd_vma symval;
       char symtype;
+      int rtype = ELFNN_R_TYPE (irel->r_info);
       riscv_elf_get_insn_with_reg (abfd, irel, insn, &ctx->ie.fixed);
-      if ((!andes->execit_flags.noji && ELFNN_R_TYPE (irel->r_info) == R_RISCV_JAL)
+      if ((!andes->execit_flags.noji && rtype == R_RISCV_JAL)
 	  || (!andes->execit_flags.nols
-	      && (ELFNN_R_TYPE (irel->r_info) == R_RISCV_HI20
-	      || ELFNN_R_TYPE (irel->r_info) == R_RISCV_LO12_I
-	      || ELFNN_R_TYPE (irel->r_info) == R_RISCV_LO12_S
-	      || ELFNN_R_TYPE (irel->r_info) == R_RISCV_GPREL_I
-	      || ELFNN_R_TYPE (irel->r_info) == R_RISCV_GPREL_S
-	      || (ELFNN_R_TYPE (irel->r_info) >= R_RISCV_LGP18S0
-		  && ELFNN_R_TYPE (irel->r_info) <= R_RISCV_SGP17S3))))
+	      && (rtype == R_RISCV_HI20 || rtype == R_RISCV_LO12_I
+		  || rtype == R_RISCV_LO12_S || rtype == R_RISCV_GPREL_I
+		  || rtype == R_RISCV_GPREL_S
+		  || (rtype >= R_RISCV_LGP18S0 && rtype <= R_RISCV_SGP17S3)))
+	  || (!andes->execit_flags.no_auipc && rtype == R_RISCV_CALL))
 	{
 	  unsigned long r_symndx = ELFNN_R_SYM (irel->r_info);
 	  if (r_symndx < symtab_hdr->sh_info)
@@ -4893,19 +4892,22 @@ andes_execit_render_hash (execit_context_t *ctx)
 	  ctx->ie.relocation = symval;
 
 	  /* special treaments for certain types of relocations.  */
-	  if ((ELFNN_R_TYPE (irel->r_info) == R_RISCV_JAL) &&
+	  if (rtype == R_RISCV_JAL &&
 	      !execit_check_pchi_for_jal (ctx->ie.relocation, ctx->ie.pc))
 	    return rz;
-	  else if (ELFNN_R_TYPE (irel->r_info) == R_RISCV_HI20)
-	    { /* LUI symbols having the same HI20 part can be exec.ited.
-	       * # Spliting LUIs into 2 groups by __DATA_BEGIN__ to avoid to
+	  else if (rtype == R_RISCV_HI20 || rtype == R_RISCV_CALL)
+	    { /* LUI/AUIPC symbols having the same HI20 part can be exec.ited.
+	       * # spliting LUIs into 2 groups by __DATA_BEGIN__ to avoid to
 	       * the DATA_SEGMENT_ALIGN issue  */
 	      if (ARCH_SIZE > 32 &&
 		  !VALID_UTYPE_IMM (RISCV_CONST_HIGH_PART (ctx->ie.relocation)))
 		return rz;
+
 	      bfd_vma data_start = riscv_data_start_value (info);
 	      relocation_section = 0;
 	      relocation_offset = (ctx->ie.relocation >= data_start) ? 1 : 0;
+	      if (rtype == R_RISCV_CALL)
+		ctx->ie.relocation -= ctx->ie.pc;
 	    }
 
 	  ctx->ie.irel = ctx->irel;
@@ -7072,7 +7074,9 @@ andes_execit_hash_insn (bfd *abfd, asection *sec,
       /* special handlings:
        *  LUI: log addresses to calcute itable entries to reserve.
        */
-      if (ctx.irel && (ELFNN_R_TYPE (ctx.irel->r_info) == R_RISCV_HI20))
+      if (ctx.irel
+	  && ((ELFNN_R_TYPE (ctx.irel->r_info) == R_RISCV_HI20)
+	      || (ELFNN_R_TYPE (ctx.irel->r_info) == R_RISCV_CALL)))
 	{
 	  execit_irel_t *e = bfd_zmalloc (sizeof (execit_irel_t));
 	  e->ie = ctx.ie;
@@ -7126,18 +7130,14 @@ andes_execit_rank_insn (execit_hash_t *he)
 {
   execit_itable_t *ie = &he->ie;
   Elf_Internal_Rela *irel = ie->irel;
+  int rtype = irel ? ELFNN_R_TYPE (irel->r_info) : 0;
 
-  if (irel && ELFNN_R_TYPE (irel->r_info) == R_RISCV_HI20)
+  if (irel && (rtype == R_RISCV_HI20 || rtype == R_RISCV_CALL))
     {
       execit_vma_t *lst = NULL;
-#ifdef DEBUG_EXECIT_LUI
-      printf("%s: hash=%s\n", __FUNCTION__, he->root.string);
-#endif
+      execit.is_determining_auipc = (rtype == R_RISCV_CALL) ? 1 : 0;
       andes_execit_estimate_lui (he, &lst);
       he->ie.entries = LIST_LEN(&lst);
-#ifdef DEBUG_EXECIT_LUI
-      printf("%s: entries=%d\n", __FUNCTION__, he->ie.entries);
-#endif
       LIST_EACH(&lst, free_each_cb);
       if (ie->est_count <= ie->entries * 2)
 	return true;
@@ -7580,6 +7580,9 @@ riscv_relocation_check (struct bfd_link_info *info,
 			asection *sec, bfd_vma *off,
 			bfd_byte *contents, int optimize)
 {
+  /* to track R_RISCV_CALL pals  */
+  static Elf_Internal_Rela *last_rel = NULL;
+  static asection *last_sec = NULL;
   /* We use the highest 1 byte of result to record
      how many bytes location counter has to move.  */
   int result = 0;
@@ -7593,6 +7596,19 @@ riscv_relocation_check (struct bfd_link_info *info,
   table = riscv_elf_hash_table (info);
   andes = &table->andes;
   execit_loop_aware = andes->execit_loop_aware;
+
+  /* if last insn is tagged with R_RISCV_CALL  */
+  if (last_rel && ELFNN_R_TYPE (last_rel->r_info) == R_RISCV_CALL)
+    {
+      BFD_ASSERT (sec == last_sec);
+      BFD_ASSERT (*off == (last_rel->r_offset + 4));
+      BFD_ASSERT ((*irel == NULL) || (*irel == irelend)
+		  || ((*irel)->r_offset > *off));
+      last_rel = NULL;
+      last_sec = NULL;
+      result |= (4 << 24);
+      result |= DATA_EXIST;
+    }
 
   while ((*irel) != NULL && (*irel) < irelend && (*off) == (*irel)->r_offset)
     {
@@ -7741,12 +7757,21 @@ riscv_relocation_check (struct bfd_link_info *info,
 	  break;
 	case R_RISCV_64:
 	case R_RISCV_SUB64:
-	case R_RISCV_CALL:
-	  /* skip auipc/jalr for R_RISCV_CALL
-	   * TODO: auipc should be replaced with EXECIT
-	   */
 	  result |= (8 << 24);
 	  result |= DATA_EXIST;
+	  break;
+	case R_RISCV_CALL:
+	  if (optimize)
+	    {
+	      irel_save = *irel;
+	      last_rel = *irel;
+	      last_sec = sec;
+	    }
+	  else
+	    {
+	      result |= (8 << 24);
+	      result |= DATA_EXIST;
+	    }
 	  break;
 	case R_RISCV_RELATIVE:
 	case R_RISCV_COPY:
@@ -8026,9 +8051,10 @@ collect_lui_vma_each_cb(void *l, void *j_pp, execit_irel_t *p, void *q ATTRIBUTE
       /* reserve one more entry in case crossing range.
        * NOT doing so when determining final relocations. 
        */
-      if (!execit.is_determining_lui && p->ie.relocation)
+      if (execit.is_determining_auipc
+	  || (p->ie.relocation > SIZE_4K))
 	{
-	  e.vma = p->ie.relocation - (1u << 12);
+	  e.vma = p->ie.relocation - SIZE_4K;
 	  LIST_ITER(j_pp, &e, insert_vma_each_cb, insert_vma_final_cb);
 	}
       e.vma = p->ie.relocation;
@@ -8078,6 +8104,9 @@ andes_execit_itable_lookup (execit_context_t *ctx,
 	{
 	  if ((ELFNN_R_TYPE(a->irel_copy.r_info) == R_RISCV_HI20)
 	       && (ELFNN_R_TYPE(b->irel_copy.r_info) == R_RISCV_HI20))
+	    return b; /* skip future check  */
+	  if ((ELFNN_R_TYPE(a->irel_copy.r_info) == R_RISCV_CALL)
+	       && (ELFNN_R_TYPE(b->irel_copy.r_info) == R_RISCV_CALL))
 	    return b; /* skip future check  */
 	  if ((ELFNN_R_SYM(a->irel_copy.r_info)
 		!= ELFNN_R_SYM(b->irel_copy.r_info))
@@ -8338,12 +8367,12 @@ andes_execit_relocate_itable (struct bfd_link_info *link_info)
   for (int index = 0; index < execit.raw_itable_entries; ++index)
     {
       execit_hash_t *he = itable[index];
-      bfd_vma relocation; //, min_relocation = 0xffffffff;
+      bfd_vma relocation;
+      int rtype = ELFNN_R_TYPE (he->ie.irel_copy.r_info);
 
       BFD_ASSERT (he->is_chosen);
 
-      if ((he->is_relocated) &&
-	  (ELFNN_R_TYPE (he->ie.irel_copy.r_info) != R_RISCV_HI20))
+      if (he->is_relocated && (rtype != R_RISCV_HI20 || rtype != R_RISCV_CALL))
 	continue;
 
       insn = he->ie.insn;
@@ -8351,65 +8380,62 @@ andes_execit_relocate_itable (struct bfd_link_info *link_info)
 	{
 	  rel_backup = he->ie.irel_copy;
 	  insn_with_reg = he->ie.fixed;
-	if (ELFNN_R_TYPE (rel_backup.r_info) == R_RISCV_JAL)
-	  {
-	    /* TODO: check est/ref counts for JAL window crossing.  */
-	    bfd_vma insn_pc = sec_addr(he->ie.sec) + he->ie.irel->r_offset;
-	    relocation = riscv_elf_execit_reloc_insn (&he->ie, link_info);
-	    he->ie.relocation = relocation; /* keep for later sanity check  */
-	    BFD_ASSERT ((relocation & 0xffe00000) == (insn_pc & 0xffe00000));
-	    relocation &= 0x001fffffu;
-	    insn = insn_with_reg
-	      | riscv_elf_encode_relocation (abfd, &rel_backup, relocation);
-	    bfd_put_32 (abfd, insn, contents + (he->ie.itable_index) * 4);
-	  }
-	else if (ELFNN_R_TYPE (rel_backup.r_info) == R_RISCV_LO12_I ||
-		 ELFNN_R_TYPE (rel_backup.r_info) == R_RISCV_LO12_S)
-	  {
-	    relocation = riscv_elf_execit_reloc_insn (&he->ie, link_info);
-	    insn = insn_with_reg
-	      | riscv_elf_encode_relocation (abfd, &rel_backup, relocation);
-	    bfd_put_32 (abfd, insn, contents + (he->ie.itable_index) * 4);
-	  }
-	else if (ELFNN_R_TYPE (rel_backup.r_info) == R_RISCV_GPREL_I
-		 || ELFNN_R_TYPE (rel_backup.r_info) == R_RISCV_GPREL_S)
-	  {
-	    relocation = riscv_elf_execit_reloc_insn (&he->ie, link_info) - gp;
-	    insn = insn_with_reg & ~(OP_MASK_RS1 << OP_SH_RS1);
-	    insn |= X_GP << OP_SH_RS1;
-	    insn |= riscv_elf_encode_relocation (abfd, &rel_backup, relocation);
-	    bfd_put_32 (abfd, insn, contents + (he->ie.itable_index) * 4);
-	  }
-	else if (ELFNN_R_TYPE (rel_backup.r_info) >= R_RISCV_LGP18S0
-		 && ELFNN_R_TYPE (rel_backup.r_info) <= R_RISCV_SGP17S3)
-	  {
-	    relocation = riscv_elf_execit_reloc_insn (&he->ie, link_info) - gp;
-	    insn = insn_with_reg
-	      | riscv_elf_encode_relocation (abfd, &rel_backup, relocation);
-	    bfd_put_32 (abfd, insn, contents + (he->ie.itable_index) * 4);
-	  }
-	else if (ELFNN_R_TYPE (rel_backup.r_info) == R_RISCV_HI20)
-	  {
-	    /* estimate lui relocation again (final).  */
-	//     andes_execit_determine_lui (he, &he->vmas, link_info);
-	    for (int i = 0; i < he->ie.entries; ++i)
-	      {
-		if (he->is_final == false)
-		  break;
-		relocation = he->ie.relocation;
-		insn = insn_with_reg
-		  | riscv_elf_encode_relocation (abfd, &rel_backup, relocation);
-		bfd_put_32 (abfd, insn, contents + (he->ie.itable_index << 2));
-		he->is_relocated = true;
-		if (he->next == 0)
-		  break;
-		he = itable[he->next];
-	      }
-	  }
+	  rtype = ELFNN_R_TYPE (rel_backup.r_info); /* reuse variable  */
+	  if (rtype == R_RISCV_JAL)
+	    {
+	      /* TODO: check est/ref counts for JAL window crossing.  */
+	      bfd_vma insn_pc = sec_addr(he->ie.sec) + he->ie.irel->r_offset;
+	      relocation = riscv_elf_execit_reloc_insn (&he->ie, link_info);
+	      he->ie.relocation = relocation; /* keep for later sanity check  */
+	      BFD_ASSERT ((relocation & 0xffe00000) == (insn_pc & 0xffe00000));
+	      relocation &= 0x001fffffu;
+	      insn = insn_with_reg
+		| riscv_elf_encode_relocation (abfd, &rel_backup, relocation);
+	      bfd_put_32 (abfd, insn, contents + (he->ie.itable_index) * 4);
+	    }
+	  else if (rtype == R_RISCV_LO12_I || rtype == R_RISCV_LO12_S)
+	    {
+	      relocation = riscv_elf_execit_reloc_insn (&he->ie, link_info);
+	      insn = insn_with_reg
+		| riscv_elf_encode_relocation (abfd, &rel_backup, relocation);
+	      bfd_put_32 (abfd, insn, contents + (he->ie.itable_index) * 4);
+	    }
+	  else if (rtype == R_RISCV_GPREL_I || rtype == R_RISCV_GPREL_S)
+	    {
+	      relocation = riscv_elf_execit_reloc_insn (&he->ie, link_info) - gp;
+	      insn = insn_with_reg & ~(OP_MASK_RS1 << OP_SH_RS1);
+	      insn |= X_GP << OP_SH_RS1;
+	      insn |= riscv_elf_encode_relocation (abfd, &rel_backup, relocation);
+	      bfd_put_32 (abfd, insn, contents + (he->ie.itable_index) * 4);
+	    }
+	  else if (rtype >= R_RISCV_LGP18S0 && rtype <= R_RISCV_SGP17S3)
+	    {
+	      relocation = riscv_elf_execit_reloc_insn (&he->ie, link_info) - gp;
+	      insn = insn_with_reg
+		| riscv_elf_encode_relocation (abfd, &rel_backup, relocation);
+	      bfd_put_32 (abfd, insn, contents + (he->ie.itable_index) * 4);
+	    }
+	  else if (rtype == R_RISCV_HI20)
+	    {
+	      /* estimate lui relocation again (final).  */
+	      for (int i = 0; i < he->ie.entries; ++i)
+		{
+		  if (he->is_final == false)
+		    break;
+		  relocation = he->ie.relocation;
+		  insn = insn_with_reg
+		    | riscv_elf_encode_relocation (abfd, &rel_backup, relocation);
+		  bfd_put_32 (abfd, insn, contents + (he->ie.itable_index << 2));
+		  he->is_relocated = true;
+		  if (he->next == 0)
+		    break;
+		  he = itable[he->next];
+		}
+	    }
 
-	  if (ELFNN_R_TYPE (rel_backup.r_info) != R_RISCV_HI20)
+	  if (rtype != R_RISCV_HI20)
 	    he->is_final = he->is_relocated = true;
-      }
+	}
       else
 	{
 	  /* No need to do relocation for insn without relocation.*/
@@ -8537,6 +8563,7 @@ riscv_elf_encode_relocation (bfd *abfd,
     {
     case R_RISCV_HI20:
     case R_RISCV_PCREL_HI20:
+    case R_RISCV_CALL:
       if (ARCH_SIZE > 32 && !VALID_UTYPE_IMM (RISCV_CONST_HIGH_PART (relocation)))
 	return 0;
       relocation = ENCODE_UTYPE_IMM (RISCV_CONST_HIGH_PART (relocation));
@@ -8940,11 +8967,14 @@ andes_relax_execit_ite (
   bfd_vma pc = sec_addr (sec) + rel->r_offset;
   execit_hash_t *he = execit.itable_array[execit_index];
   execit_itable_t *ie = &he->ie;
-  if (ELFNN_R_TYPE (ie->irel_copy.r_info) == R_RISCV_HI20)
-    { /* handle multiple reloction LUIs  */
+  int rtype = ELFNN_R_TYPE (ie->irel_copy.r_info);
+  if (rtype == R_RISCV_HI20 || rtype == R_RISCV_CALL)
+    { /* handle multiple reloction LUI/AUIPCs  */
       int i;
       Elf_Internal_Rela reduction = *rel;
-      reduction.r_info = ELFNN_R_INFO (ELFNN_R_SYM (rel->r_info), R_RISCV_HI20);
+      if (rtype == R_RISCV_CALL)
+	relocation -= pc;
+      reduction.r_info = ELFNN_R_INFO (ELFNN_R_SYM (rel->r_info), rtype);
       bfd_vma hi20 = riscv_elf_encode_relocation (abfd, &reduction, relocation);
       if (he->is_final == false)
         {
@@ -9007,6 +9037,14 @@ andes_relax_execit_ite (
       bfd_byte *contents = elf_section_data (sec)->this_hdr.contents;
       uint16_t insn16 = (uint16_t)EXECIT_INSN | ENCODE_RVC_EXECIT_IMM (ie->itable_index << 2);
       bfd_put_16 (abfd, insn16, contents + rel->r_offset);
+      if (rtype == R_RISCV_CALL)
+	{ /* relocate the following JALR  */
+	  Elf_Internal_Rela irel = {.r_info = ELFNN_R_INFO (0, R_RISCV_LO12_I)};
+	  bfd_vma insn = bfd_get_32 (abfd, contents + rel->r_offset + 2);
+	  bfd_vma value = riscv_elf_encode_relocation (abfd, &irel, relocation);
+	  insn |= value;
+	  bfd_put_32 (abfd, insn, contents + rel->r_offset + 2);
+	}
     }
   else if (ELFNN_R_TYPE (he->ie.irel_copy.r_info) == R_RISCV_JAL)
     { /* sanity check only  */

@@ -137,8 +137,9 @@ extern const unsigned int number_of_howto_table;
 #define EXECIT_SECTION ".exec.itable"
 #define EXECIT_HASH_OK (0)
 #define EXECIT_HASH_NG (1)
-#define MASK_2M ((1u << 21) - 1)
 #define EXECIT_HW_ENTRY_MAX (1024)
+#define MASK_2M ((1u << 21) - 1)
+#define SIZE_4K (1u << 12)
 
 #define RISCV_RELAX_EXECIT_ON	(1u << 0)
 #define RISCV_RELAX_EXECIT_DONE	(1u << 1)
@@ -225,16 +226,17 @@ typedef struct andes_ld_options
   int execit_limit;
   struct
   {
-    int noji; /* Forbid JI insn convert to execit.  */
-    int nols; /* Forbid load-store insn convert to execit.  */
-    int rvv:1;
-    int rvp:1;
-    int fls:1;
-    int xdsp:1;
+    uint noji:1;      /* exclude JI insns.  */
+    uint nols:1;      /* exclude load-store insns.  */
+    uint no_auipc:1;  /* exclude AUIPC insns.  */
+    uint rvv:1;
+    uint rvp:1;
+    uint fls:1;
+    uint xdsp:1;
   } execit_flags;
-  int update_execit_table:1;
-  int keep_import_execit:1;
-  int execit_loop_aware:1;
+  uint update_execit_table:1;
+  uint keep_import_execit:1;
+  uint execit_loop_aware:1;
 } andes_ld_options_t;
 
 /* exec.it */
@@ -279,11 +281,11 @@ typedef struct execit_hash_entry
   execit_vma_t *vmas;
   int next; /* next itable index associated  */
   int id; /* for determined itable entries  */
-  unsigned int is_worthy:1;
-  unsigned int is_chosen:1;
-  unsigned int is_final:1;
-  unsigned int is_relocated:1;
-  unsigned int is_imported:1;
+  uint is_worthy:1;
+  uint is_chosen:1;
+  uint is_final:1;
+  uint is_relocated:1;
+  uint is_imported:1;
 } execit_hash_t;
 
 typedef struct execit_rank_entry
@@ -331,7 +333,7 @@ typedef struct execit_context
 
 typedef struct ict_state
 {
-  unsigned int is_init:1;
+  uint is_init:1;
 } ict_state_t;
 
 struct riscv_elf_link_hash_table
@@ -442,15 +444,15 @@ typedef struct execit_state
   int raw_itable_entries;
   int next_itable_index;
   int import_number;
-  unsigned int is_init:1;
-  unsigned int is_built:1;
-  unsigned int is_replaced:1;
-  unsigned int relocate_itable_done:1;
-  unsigned int is_itable_finalized:1;
-  unsigned int is_determining_lui:1;
-  unsigned int is_itb_base_set:1;
-  unsigned int is_replace_again:1;
-  unsigned int is_import_ranked:1;
+  uint is_init:1;
+  uint is_built:1;
+  uint is_replaced:1;
+  uint relocate_itable_done:1;
+  uint is_itable_finalized:1;
+  uint is_determining_auipc:1;
+  uint is_itb_base_set:1;
+  uint is_replace_again:1;
+  uint is_import_ranked:1;
 } execit_state_t;
 
 typedef struct andes_linker_state

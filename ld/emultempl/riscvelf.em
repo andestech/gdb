@@ -323,6 +323,7 @@ PARSE_AND_LIST_PROLOGUE='
 #define OPTION_EXECIT_NO_JI		(OPTION_EXECIT_BASELINE + 10)
 #define OPTION_EXECIT_NO_LS		(OPTION_EXECIT_BASELINE + 11)
 #define OPTION_EXECIT_NO_REL		(OPTION_EXECIT_BASELINE + 12)
+#define OPTION_EXECIT_NO_AUIPC		(OPTION_EXECIT_BASELINE + 13)
 #endif
 
 /* These are only for lld internal usage and not affected for bfd.  */
@@ -373,6 +374,7 @@ PARSE_AND_LIST_LONGOPTS='
   { "mexecit-nols", no_argument, NULL, OPTION_EXECIT_NO_LS},
   { "mexecit-norel", no_argument, NULL, OPTION_EXECIT_NO_REL},
   { "mno-execit-jal", no_argument, NULL, OPTION_EXECIT_NO_JI},
+  { "mexecit-no-auipc", no_argument, NULL, OPTION_EXECIT_NO_AUIPC},
   /* Obsolete options for EXECIT.  */
   { "mex9", no_argument, NULL, OPTION_EX9_TABLE},
   { "mno-ex9", no_argument, NULL, OPTION_NO_EXECIT_TABLE},
@@ -538,6 +540,9 @@ PARSE_AND_LIST_ARGS_CASES='
   case OPTION_EXECIT_NO_REL:
     andes.execit_flags.noji = 1;
     andes.execit_flags.nols = 1;
+    break;
+  case OPTION_EXECIT_NO_AUIPC:
+    andes.execit_flags.no_auipc = 1;
     break;
 #endif
   case OPTION_DEBUG_EXECIT_LIMIT:
