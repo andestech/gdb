@@ -1,4 +1,4 @@
-#as: -march=rv32iafv -mno-check-constraints
+#as: -march=rv32iafv
 #objdump: -d
 
 .*:[ 	]+file format .*
