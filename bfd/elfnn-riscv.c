@@ -2291,6 +2291,7 @@ riscv_elf_relocate_section (bfd *output_bfd,
       const char *msg = NULL;
       char *msg_buf = NULL;
       bool resolved_to_zero;
+      bool is_execited = 0;
 
       if (howto == NULL
 	  /* { Andes */
@@ -2838,6 +2839,13 @@ riscv_elf_relocate_section (bfd *output_bfd,
 	  }
 
 	case R_RISCV_PCREL_HI20:
+	  /* if annotated within andes_relax_execit_ite  */
+	  is_execited = rel->r_offset & 1;
+	  if (is_execited)
+	    { /* un-annotation for processing.  */
+	      rel->r_offset ^= 1;
+	      pc ^= 1;
+	    }
 	  absolute = riscv_zero_pcrel_hi_reloc (rel, info, pc, relocation,
 						contents, howto);
 	  /* Update howto if relocation is changed.  */
@@ -2849,6 +2857,8 @@ riscv_elf_relocate_section (bfd *output_bfd,
 						 relocation + rel->r_addend,
 						 r_type, absolute))
 	    r = bfd_reloc_overflow;
+	  if (is_execited)
+	    rel->r_offset ^= 1; /* restore the annotation.  */
 	  break;
 
 	case R_RISCV_PCREL_LO12_I:
@@ -3167,7 +3177,9 @@ riscv_elf_relocate_section (bfd *output_bfd,
 	}
 
  do_relocation:
-      if (r == bfd_reloc_ok)
+      if (is_execited)
+	is_execited = 0;
+      else if (r == bfd_reloc_ok)
 	r = perform_relocation (howto, rel, relocation, input_section,
 				input_bfd, contents);
 
@@ -4774,7 +4786,8 @@ andes_execit_render_hash (execit_context_t *ctx)
 		  || rtype == R_RISCV_LO12_S || rtype == R_RISCV_GPREL_I
 		  || rtype == R_RISCV_GPREL_S
 		  || (rtype >= R_RISCV_LGP18S0 && rtype <= R_RISCV_SGP17S3)))
-	  || (!andes->execit_flags.no_auipc && rtype == R_RISCV_CALL))
+	  || (!andes->execit_flags.no_auipc
+	      && (rtype == R_RISCV_CALL || rtype == R_RISCV_PCREL_HI20)))
 	{
 	  unsigned long r_symndx = ELFNN_R_SYM (irel->r_info);
 	  if (r_symndx < symtab_hdr->sh_info)
@@ -4895,7 +4908,8 @@ andes_execit_render_hash (execit_context_t *ctx)
 	  if (rtype == R_RISCV_JAL &&
 	      !execit_check_pchi_for_jal (ctx->ie.relocation, ctx->ie.pc))
 	    return rz;
-	  else if (rtype == R_RISCV_HI20 || rtype == R_RISCV_CALL)
+	  else if (rtype == R_RISCV_HI20 || rtype == R_RISCV_CALL
+		   || rtype == R_RISCV_PCREL_HI20)
 	    { /* LUI/AUIPC symbols having the same HI20 part can be exec.ited.
 	       * # spliting LUIs into 2 groups by __DATA_BEGIN__ to avoid to
 	       * the DATA_SEGMENT_ALIGN issue  */
@@ -4906,7 +4920,7 @@ andes_execit_render_hash (execit_context_t *ctx)
 	      bfd_vma data_start = riscv_data_start_value (info);
 	      relocation_section = 0;
 	      relocation_offset = (ctx->ie.relocation >= data_start) ? 1 : 0;
-	      if (rtype == R_RISCV_CALL)
+	      if (rtype == R_RISCV_CALL || rtype == R_RISCV_PCREL_HI20)
 		ctx->ie.relocation -= ctx->ie.pc;
 	    }
 
@@ -6970,10 +6984,11 @@ andes_execit_hash_insn (bfd *abfd, asection *sec,
   Elf_Internal_Rela *internal_relocs;
   Elf_Internal_Rela *irelend;
   Elf_Internal_Rela *irel;
+  execit_context_t ctx;
   uint32_t insn;
   int data_flag;
   int is_on_relocation;
-  execit_context_t ctx;
+  int rtype;
   const char *hash = ctx.buf;
 
   ctx.abfd = abfd;
@@ -6994,10 +7009,9 @@ andes_execit_hash_insn (bfd *abfd, asection *sec,
 				 R_RISCV_RELAX_ENTRY);
 
   /* Check this input section trigger EXECIT relaxation.  */
-  if (irel == NULL
-      || irel >= irelend
-      || ELFNN_R_TYPE (irel->r_info) != R_RISCV_RELAX_ENTRY
-      || (ELFNN_R_TYPE (irel->r_info) == R_RISCV_RELAX_ENTRY
+  rtype = ELFNN_R_TYPE (irel->r_info);
+  if (irel == NULL || irel >= irelend || rtype != R_RISCV_RELAX_ENTRY
+      || (rtype == R_RISCV_RELAX_ENTRY
 	  && !(irel->r_addend & R_RISCV_RELAX_ENTRY_EXECIT_FLAG)))
     return true;
 
@@ -7049,14 +7063,8 @@ andes_execit_hash_insn (bfd *abfd, asection *sec,
       ctx.ie.insn = insn;
       ctx.irel = is_on_relocation ? irel : NULL;
       ctx.off = off;
-#ifdef DEBUG_EXECIT
-	  execit.render_hash_count++;
-#endif /* DEBUG_EXECIT */
       if (andes_execit_render_hash (&ctx) != EXECIT_HASH_OK)
 	{
-#ifdef DEBUG_EXECIT
-	  execit.render_hash_ng_count++;
-#endif /* DEBUG_EXECIT */
 	  off += 4;
 	  continue;
 	}
@@ -7072,11 +7080,12 @@ andes_execit_hash_insn (bfd *abfd, asection *sec,
 	}
 
       /* special handlings:
-       *  LUI: log addresses to calcute itable entries to reserve.
+       *  LUI/AUIPC: log addresses to calcute itable entries to reserve.
        */
+      rtype = ctx.irel ? ELFNN_R_TYPE (ctx.irel->r_info) : 0;
       if (ctx.irel
-	  && ((ELFNN_R_TYPE (ctx.irel->r_info) == R_RISCV_HI20)
-	      || (ELFNN_R_TYPE (ctx.irel->r_info) == R_RISCV_CALL)))
+	  && (rtype == R_RISCV_HI20 || rtype == R_RISCV_CALL
+	      || rtype == R_RISCV_PCREL_HI20))
 	{
 	  execit_irel_t *e = bfd_zmalloc (sizeof (execit_irel_t));
 	  e->ie = ctx.ie;
@@ -7085,10 +7094,6 @@ andes_execit_hash_insn (bfd *abfd, asection *sec,
 
       if (he->ie.est_count == 0)
 	{
-#ifdef DEBUG_EXECIT
-	  //printf("hash[%d]: %08lx, size=%d\n", execit.hash_count, (intptr_t)he, execit_code_hash.count);
-	  execit.hash_count++;
-#endif /* DEBUG_EXECIT */
 	  he->ie = ctx.ie;
 	}
 
@@ -7132,10 +7137,12 @@ andes_execit_rank_insn (execit_hash_t *he)
   Elf_Internal_Rela *irel = ie->irel;
   int rtype = irel ? ELFNN_R_TYPE (irel->r_info) : 0;
 
-  if (irel && (rtype == R_RISCV_HI20 || rtype == R_RISCV_CALL))
+  if (irel && (rtype == R_RISCV_HI20
+	       || rtype == R_RISCV_CALL
+	       || rtype == R_RISCV_PCREL_HI20))
     {
       execit_vma_t *lst = NULL;
-      execit.is_determining_auipc = (rtype == R_RISCV_CALL) ? 1 : 0;
+      execit.is_determining_auipc = (rtype == R_RISCV_HI20) ? 0 : 1;
       andes_execit_estimate_lui (he, &lst);
       he->ie.entries = LIST_LEN(&lst);
       LIST_EACH(&lst, free_each_cb);
@@ -7597,7 +7604,7 @@ riscv_relocation_check (struct bfd_link_info *info,
   andes = &table->andes;
   execit_loop_aware = andes->execit_loop_aware;
 
-  /* if last insn is tagged with R_RISCV_CALL  */
+  /* if last insn is tagged with R_RISCV_CALL, skip the jarl  */
   if (last_rel && ELFNN_R_TYPE (last_rel->r_info) == R_RISCV_CALL)
     {
       BFD_ASSERT (sec == last_sec);
@@ -7708,15 +7715,15 @@ riscv_relocation_check (struct bfd_link_info *info,
 	  break;
 	case R_RISCV_32:
 	case R_RISCV_SUB32:
-	case R_RISCV_PCREL_HI20:
 	case R_RISCV_PCREL_LO12_I:
 	case R_RISCV_PCREL_LO12_S:
 	  result |= (4 << 24);
 	  result |= DATA_EXIST;
 	  break;
+	case R_RISCV_PCREL_HI20:
 	case R_RISCV_10_PCREL:
 	case R_RISCV_BRANCH:
-	    irel_save = *irel;
+	  irel_save = *irel;
 	  if (!optimize)
 	    {
 	      result |= (4 << 24);
@@ -8101,15 +8108,15 @@ andes_execit_itable_lookup (execit_context_t *ctx,
       if ((a->irel == NULL) ^ (b->irel == NULL))
         break;
       if (a->irel) /* skip b->irel (checked above)  */
-	{
-	  if ((ELFNN_R_TYPE(a->irel_copy.r_info) == R_RISCV_HI20)
-	       && (ELFNN_R_TYPE(b->irel_copy.r_info) == R_RISCV_HI20))
-	    return b; /* skip future check  */
-	  if ((ELFNN_R_TYPE(a->irel_copy.r_info) == R_RISCV_CALL)
-	       && (ELFNN_R_TYPE(b->irel_copy.r_info) == R_RISCV_CALL))
-	    return b; /* skip future check  */
-	  if ((ELFNN_R_SYM(a->irel_copy.r_info)
-		!= ELFNN_R_SYM(b->irel_copy.r_info))
+	{ /* skip future check for some relocs  */
+	  int rta = ELFNN_R_TYPE (a->irel_copy.r_info);
+	  int rtb = ELFNN_R_TYPE (b->irel_copy.r_info);
+	  if ((rta == R_RISCV_HI20 && rtb == R_RISCV_HI20)
+	      || (rta == R_RISCV_CALL && rtb == R_RISCV_CALL)
+	      || (rta == R_RISCV_PCREL_HI20 && rtb == R_RISCV_PCREL_HI20))
+	    return b;
+	  if ((ELFNN_R_SYM (a->irel_copy.r_info)
+	       != ELFNN_R_SYM (b->irel_copy.r_info))
 	      && a->isec != b->isec)
 	    break;
 	}
@@ -8175,8 +8182,9 @@ execit_push_blank (execit_context_t *ctx, bfd_vma delta, bfd_vma size)
 static bool
 andes_execit_mark_irel (Elf_Internal_Rela *irel, int index)
 {
-  if ((ELFNN_R_TYPE (irel->r_info) == R_RISCV_HI20)
-      || (ELFNN_R_TYPE (irel->r_info) == R_RISCV_JAL))
+  int rtype = ELFNN_R_TYPE (irel->r_info);
+  if (rtype == R_RISCV_HI20 || rtype == R_RISCV_CALL
+      || rtype == R_RISCV_PCREL_HI20 || rtype == R_RISCV_JAL)
     {
       andes_irelx_t *irel_ext =
 	andes_extend_irel(irel, R_RISCV_EXECIT_ITE, &execit.irelx_list);
@@ -8415,9 +8423,9 @@ andes_execit_relocate_itable (struct bfd_link_info *link_info)
 		| riscv_elf_encode_relocation (abfd, &rel_backup, relocation);
 	      bfd_put_32 (abfd, insn, contents + (he->ie.itable_index) * 4);
 	    }
-	  else if (rtype == R_RISCV_HI20)
-	    {
-	      /* estimate lui relocation again (final).  */
+	  else if (rtype == R_RISCV_HI20 || rtype == R_RISCV_CALL
+		   || rtype == R_RISCV_PCREL_HI20)
+	    { /* estimate lui relocation again (final).  */
 	      for (int i = 0; i < he->ie.entries; ++i)
 		{
 		  if (he->is_final == false)
@@ -8967,12 +8975,13 @@ andes_relax_execit_ite (
   bfd_vma pc = sec_addr (sec) + rel->r_offset;
   execit_hash_t *he = execit.itable_array[execit_index];
   execit_itable_t *ie = &he->ie;
+  Elf_Internal_Rela reduction = *rel;
   int rtype = ELFNN_R_TYPE (ie->irel_copy.r_info);
-  if (rtype == R_RISCV_HI20 || rtype == R_RISCV_CALL)
+  if (rtype == R_RISCV_HI20 || rtype == R_RISCV_CALL
+      || rtype == R_RISCV_PCREL_HI20)
     { /* handle multiple reloction LUI/AUIPCs  */
       int i;
-      Elf_Internal_Rela reduction = *rel;
-      if (rtype == R_RISCV_CALL)
+      if (rtype == R_RISCV_CALL || rtype == R_RISCV_PCREL_HI20)
 	relocation -= pc;
       reduction.r_info = ELFNN_R_INFO (ELFNN_R_SYM (rel->r_info), rtype);
       bfd_vma hi20 = riscv_elf_encode_relocation (abfd, &reduction, relocation);
@@ -8986,9 +8995,6 @@ andes_relax_execit_ite (
 	  int is_found = false;
 	  for (i = 0; i < ie->entries; ++i)
 	    {
-	    #ifdef DEBUG_EXECIT_LUI
-	      printf("%s: [%d/%d] %c hash[%d].relocation=%08lx\n", __FUNCTION__, i, ie->entries, he->is_final ? 'V':'X', he->ie.itable_index, he->ie.relocation);
-	    #endif
 	      if (he->is_final)
 		{
 		  is_found = (ie->relocation == hi20);
@@ -9055,10 +9061,21 @@ andes_relax_execit_ite (
       BFD_ASSERT ((pc >> 21) == (he->ie.relocation >> 21));
     }
 
-  /* execit.itable_array index tagged in addend has be cleared here.
-   * so the relocation R_RISCV_EXECIT_ITE must be clear here, too
+  /* execit_itable_array index tagged in addend has be cleared here.
+   * so the relocation R_RISCV_EXECIT_ITE must be clear here, too.
+   * but R_RISCV_PCREL_HI20 pals needs it to relocate, restore it with
+   * an annotation.
    */
-  rel->r_info = ELFNN_R_INFO (0, R_RISCV_NONE);
+  if (rtype == R_RISCV_PCREL_HI20)
+    {
+      rel->r_info = reduction.r_info;
+      BFD_ASSERT ((rel->r_offset & 1) == 0);
+      rel->r_offset |= 1; /* annotation  */
+    }
+  else
+    {
+      rel->r_info = ELFNN_R_INFO (0, R_RISCV_NONE);
+    }
 
   return true;
 }
