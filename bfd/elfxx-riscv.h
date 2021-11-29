@@ -237,6 +237,7 @@ typedef struct andes_ld_options
   uint update_execit_table:1;
   uint keep_import_execit:1;
   uint execit_loop_aware:1;
+  uint execit_jal_over_2m:1; /* enable JAL over first 2M window.  */
 } andes_ld_options_t;
 
 /* exec.it */
@@ -457,6 +458,7 @@ typedef struct execit_state
 
 typedef struct andes_linker_state
 {
+  andes_ld_options_t *opt;
   andes_irelx_t *ext_irel_list;
   bfd_vma prev_aligned_offset;
   int check_start_export_sym : 1;

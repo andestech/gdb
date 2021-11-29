@@ -57,6 +57,7 @@ static andes_ld_options_t andes =
   .update_execit_table = 0,
   .keep_import_execit = 0,
   .execit_loop_aware = 0,
+  .execit_jal_over_2m = 1,
 };
 /* } Andes  */
 
@@ -324,6 +325,8 @@ PARSE_AND_LIST_PROLOGUE='
 #define OPTION_EXECIT_NO_LS		(OPTION_EXECIT_BASELINE + 11)
 #define OPTION_EXECIT_NO_REL		(OPTION_EXECIT_BASELINE + 12)
 #define OPTION_EXECIT_NO_AUIPC		(OPTION_EXECIT_BASELINE + 13)
+#define OPTION_EXECIT_JAL_OVER_2M	(OPTION_EXECIT_BASELINE + 14)
+#define OPTION_NO_EXECIT_JAL_OVER_2M	(OPTION_EXECIT_BASELINE + 15)
 #endif
 
 /* These are only for lld internal usage and not affected for bfd.  */
@@ -375,6 +378,8 @@ PARSE_AND_LIST_LONGOPTS='
   { "mexecit-norel", no_argument, NULL, OPTION_EXECIT_NO_REL},
   { "mno-execit-jal", no_argument, NULL, OPTION_EXECIT_NO_JI},
   { "mexecit-no-auipc", no_argument, NULL, OPTION_EXECIT_NO_AUIPC},
+  { "mexecit-jal-over-2mib", no_argument, NULL, OPTION_EXECIT_JAL_OVER_2M},
+  { "mno-execit-jal-over-2mib", no_argument, NULL, OPTION_NO_EXECIT_JAL_OVER_2M},
   /* Obsolete options for EXECIT.  */
   { "mex9", no_argument, NULL, OPTION_EX9_TABLE},
   { "mno-ex9", no_argument, NULL, OPTION_NO_EXECIT_TABLE},
@@ -543,6 +548,12 @@ PARSE_AND_LIST_ARGS_CASES='
     break;
   case OPTION_EXECIT_NO_AUIPC:
     andes.execit_flags.no_auipc = 1;
+    break;
+  case OPTION_EXECIT_JAL_OVER_2M:
+    andes.execit_jal_over_2m = 1;
+    break;
+  case OPTION_NO_EXECIT_JAL_OVER_2M:
+    andes.execit_jal_over_2m = 0;
     break;
 #endif
   case OPTION_DEBUG_EXECIT_LIMIT:

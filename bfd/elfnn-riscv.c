@@ -5000,15 +5000,24 @@ riscv_get_local_syms (const bfd *abfd, asection *sec ATTRIBUTE_UNUSED,
 static bool
 execit_check_pchi_for_jal (bfd_vma relocation, bfd_vma insn_pc)
 {
-  /* after relocation, EXECIT_JALs might be distributed across 2M window,
-   * which would fail the execit relaxation.
-   * so far, only the first 2M window are accepted.
-   */
-  if ((relocation > execit.jal_window_end) ||
-      (insn_pc > execit.jal_window_end))
-    return false;
+  bool result = true;
 
-  return true;
+  if (nsta.opt->execit_jal_over_2m)
+    {
+      result = ((insn_pc >> 21) == (relocation >> 21));
+    }
+  else
+    {
+      /* after relocation, EXECIT_JALs might be distributed across 2M window,
+       * which would fail the execit relaxation.
+       * so far, only the first 2M window are accepted.
+       */
+      if ((relocation > execit.jal_window_end) ||
+	  (insn_pc > execit.jal_window_end))
+	result = false;
+    }
+
+  return result;
 }
 
 /* } Andes  */
@@ -5917,6 +5926,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
   if (is_init == 0)
     { /* init states  */
       memset (&nsta, 0, sizeof (nsta));
+      nsta.opt = &htab->andes;
       memset (&ict, 0, sizeof (ict));
       /* init execit state here  */
       memset (&execit, 0, sizeof (execit));
@@ -9052,13 +9062,26 @@ andes_relax_execit_ite (
 	  bfd_put_32 (abfd, insn, contents + rel->r_offset + 2);
 	}
     }
-  else if (ELFNN_R_TYPE (he->ie.irel_copy.r_info) == R_RISCV_JAL)
+  else if (rtype == R_RISCV_JAL)
     { /* sanity check only  */
-      BFD_ASSERT ((pc >> 21) == (he->ie.relocation >> 21));
+      BFD_ASSERT ((pc >> 21) == (ie->relocation >> 21));
+      if (nsta.opt->execit_jal_over_2m
+	  && ((pc >> 21) != (ie->relocation >> 21)))
+	{
+	  reloc_howto_type * r = riscv_elf_rtype_to_howto (abfd, rtype);
+	  struct elf_link_hash_entry *h = ie->h;
+	  (*_bfd_error_handler)
+	    (_("%pB: relocation %s against `%s' crosses the 2M window of PC."
+	       "Disable JAL over 2M to workaround."),
+	     abfd, r ? r->name : _("<unknown>"),
+	     h != NULL ? h->root.root.string : "a local symbol");
+	  bfd_set_error (bfd_error_bad_value);
+	  return false;
+	}
     }
   else
     {
-      BFD_ASSERT ((pc >> 21) == (he->ie.relocation >> 21));
+      BFD_ASSERT ((pc >> 21) == (ie->relocation >> 21));
     }
 
   /* execit_itable_array index tagged in addend has be cleared here.
@@ -9071,6 +9094,10 @@ andes_relax_execit_ite (
       rel->r_info = reduction.r_info;
       BFD_ASSERT ((rel->r_offset & 1) == 0);
       rel->r_offset |= 1; /* annotation  */
+    }
+  else if (rtype == R_RISCV_JAL && nsta.opt->execit_jal_over_2m)
+    { /* TODO: keep reloc to check in final relocation phase.  */
+      rel->r_info = ELFNN_R_INFO (0, R_RISCV_NONE);
     }
   else
     {
