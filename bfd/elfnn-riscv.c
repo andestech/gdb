@@ -153,6 +153,13 @@ typedef struct execit_context
   char buf[0x400];
 } execit_context_t;
 
+typedef struct andes_extended_irel
+{
+  void *next;
+  Elf_Internal_Rela saved_irel;
+  bfd_vma annotation;
+} andes_extended_irel_t;
+
 static bfd_boolean andes_execit_hash_insn (bfd *, asection *,
 					      struct bfd_link_info *);
 static bfd_boolean riscv_elf_execit_itb_base (struct bfd_link_info *);
@@ -174,6 +181,8 @@ riscv_elf_execit_reloc_insn (execit_itable_t *ptr,
 			     struct bfd_link_info *link_info);
 static asection*
 riscv_elf_execit_get_section (bfd *input_bfds);
+static andes_extended_irel_t*
+andes_extend_irel(Elf_Internal_Rela *irel, int subtype, andes_extended_irel_t **list);
 
 static execit_hash_t **execit_itable_array = NULL;
 /* EXECIT hash table, used to store all patterns of code.  */
@@ -204,6 +213,7 @@ static struct {
 } execit;
 
 static execit_rank_t *execit_rank_list = NULL;
+static andes_extended_irel_t *nds_ext_irel_list = NULL;
 
 /* Exec.it hash function.  */
 
@@ -2089,6 +2099,7 @@ perform_relocation (const reloc_howto_type *howto,
       value = ENCODE_GPTYPE_SD_IMM (value);
       break;
 
+    case R_RISCV_ANDES_MISC:
     case R_RISCV_EXECIT_ITE:
       BFD_ASSERT (0); /* shall be all cleared in relaxation phases  */
       break;
@@ -2114,7 +2125,6 @@ perform_relocation (const reloc_howto_type *howto,
     case R_RISCV_ICT_64:
       break;
 
-    case R_RISCV_NDS_MISC:
     case R_RISCV_DELETE:
       return bfd_reloc_ok;
 
@@ -2399,7 +2409,7 @@ riscv_elf_relocate_section (bfd *output_bfd,
       bfd_boolean resolved_to_zero;
 
       if (howto == NULL
-	  || r_type == R_RISCV_NDS_MISC
+	  || r_type == R_RISCV_ANDES_MISC
 	  || r_type == R_RISCV_GNU_VTINHERIT
 	  || r_type == R_RISCV_GNU_VTENTRY
 	  || r_type == R_RISCV_DATA
@@ -5821,19 +5831,8 @@ _bfd_riscv_relax_align (bfd *abfd, asection *sec,
       return FALSE;
     }
 
-#ifdef TO_REVIEW
-  /* Since EXECIT needs the information about alignment later, we can not delete
-     R_RISCV_ALIGN here. Unfortunately, we can only assure 4-byte aligned for
-     EXECIT so far. Therefore, we reserve R_RISCV_ALIGN only for 4-byte aligned. */
-  if (rel->r_addend != 2)
-    {
-      /* 0 to bypass discarded seciton check bug #23336  */
-      rel->r_info = ELFNN_R_INFO (0, R_RISCV_NDS_MISC);
-    }
-#else
   /* now EXECIT is done before ALIGNMENT relaxation  */
   rel->r_info = ELFNN_R_INFO (0, R_RISCV_NONE); /* TODO: remove this line  */
-#endif
 
   /* TODO: Implement n-byte aligned.  */
   int data_flag;
@@ -6556,10 +6555,17 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 		   || type == R_RISCV_ALIGN_BTB))
 	relax_func = _bfd_riscv_relax_align;
       else if (info->relax_pass == 8
-	       && (type == R_RISCV_EXECIT_ITE))
-	{ /* TODO: any better way to pass exec.it index  */
-	  max_alignment = rel->r_addend >> 20; /* execit_index  */
-	  rel->r_addend &= ((1u << 20) - 1);
+	       && (type == R_RISCV_ANDES_MISC)
+	       && (ELFNN_R_SYM (rel->r_info) == R_RISCV_EXECIT_ITE))
+	{ /* convert relocation to execit_ite from andes_misc  */
+	  andes_extended_irel_t *irel_ext =
+				(andes_extended_irel_t *) rel->r_addend;
+	  max_alignment = irel_ext->annotation; /* execit_index  */
+	  /* rel->r_offset might be changed!  */
+	  rel->r_info = irel_ext->saved_irel.r_info;
+	  /* TODO: assert addend unchanged?  */
+	  rel->r_addend = irel_ext->saved_irel.r_addend;
+/*	  rel->r_info = ELFNN_R_INFO (ELFNN_R_SYM (rel->r_info), R_RISCV_EXECIT_ITE); */
 	  relax_func = andes_relax_execit_ite;
 	}
       else
@@ -7084,33 +7090,15 @@ andes_execit_delete_blank (struct bfd_link_info *info)
 static bfd_boolean
 andes_execit_mark_irel (Elf_Internal_Rela *irel, int index)
 {
-  if (ELFNN_R_TYPE (irel->r_info) == R_RISCV_HI20)
+  if ((ELFNN_R_TYPE (irel->r_info) == R_RISCV_HI20)
+      || (ELFNN_R_TYPE (irel->r_info) == R_RISCV_JAL))
     {
-      /* TODO: keep itable index in hi12 part of r_addend by now
-       *   maybe a stuct pointer is better replacement.
-       *   exec.it max entry limit is current 1024
-       */
-      BFD_ASSERT ((irel->r_addend >> 20) == 0);
-#ifdef xDEBUG_EXECIT_LUI
-      if (irel->r_addend)
-        printf("%s: R_RISCV_HI20.r_addend=%ld\n", __FUNCTION__, irel->r_addend);
-#endif
-      irel->r_info = ELFNN_R_INFO (ELFNN_R_SYM (irel->r_info), R_RISCV_EXECIT_ITE);
-      irel->r_addend |= (index << 20);
-    }
-  else if (ELFNN_R_TYPE (irel->r_info) == R_RISCV_JAL)
-    {
-      /* TODO: keep itable index in hi12 part of r_addend by now
-       *   maybe a stuct pointer is better replacement.
-       *   exec.it max entry limit is current 1024
-       *   JAL's r_addend looks like always 0
-       */
-      BFD_ASSERT ((irel->r_addend >> 20) == 0);
-      irel->r_info = ELFNN_R_INFO (ELFNN_R_SYM (irel->r_info), R_RISCV_EXECIT_ITE);
-      irel->r_addend |= (index << 20);
+      andes_extended_irel_t *irel_ext =
+	andes_extend_irel(irel, R_RISCV_EXECIT_ITE, &nds_ext_irel_list);
+      irel_ext->annotation = index;
     }
   else
-    {
+    { /* replaced insns has no neeed to relocate  */
       irel->r_info = ELFNN_R_INFO (ELFNN_R_SYM (irel->r_info), R_RISCV_NONE);
     }
   return TRUE;
@@ -7865,22 +7853,6 @@ andes_execit_replace_insn (struct bfd_link_info *link_info,
       || (ELFNN_R_TYPE (irel->r_info) == R_RISCV_RELAX_ENTRY
 	  && !(irel->r_addend & R_RISCV_RELAX_ENTRY_EXECIT_FLAG)))
     return TRUE;
-
-  /* check if alignment > 4 within, skip execit on it. (bug-23237)  */
-  if (1)
-    {
-      Elf_Internal_Rela *r;
-      for (r = internal_relocs; r < irelend; r++)
-	{
-	  /* refer to _bfd_riscv_relax_align  */
-	  if (ELFNN_R_TYPE (r->r_info) != R_RISCV_NDS_MISC)
-	    continue;
-	  if (r->r_addend > (4 - 2))
-	    return TRUE;
-	}
-    }
-
-  irel = internal_relocs;
 
   /* hash insn. in andes_gen_execit_hash()  */
   char *hash = ctx.buf;
@@ -8652,22 +8624,6 @@ andes_execit_hash_insn (bfd *abfd, asection *sec,
       || (ELFNN_R_TYPE (irel->r_info) == R_RISCV_RELAX_ENTRY
 	  && !(irel->r_addend & R_RISCV_RELAX_ENTRY_EXECIT_FLAG)))
     return TRUE;
-
-  /* check if alignment > 4 within, skip execit on it. (bug-23237)  */
-  if (1)
-    {
-      Elf_Internal_Rela *r;
-      for (r = internal_relocs; r < irelend; r++)
-	{
-	  /* refer to _bfd_riscv_relax_align  */
-	  if (ELFNN_R_TYPE (r->r_info) != R_RISCV_NDS_MISC)
-	    continue;
-	  if (r->r_addend > (4 - 2))
-	    return TRUE;
-	}
-    }
-
-  irel = internal_relocs;
 
   /* hash insn. in andes_gen_execit_hash()  */
   while (off < sec->size)
@@ -9539,7 +9495,7 @@ riscv_relocation_check (struct bfd_link_info *info,
 	default:
 	  /* Relocation not supported.  */
 	  if (ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_RELAX
-	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_NDS_MISC
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_ANDES_MISC
 	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_NONE
 	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_RELAX_ENTRY
 	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_ADD8
@@ -10245,6 +10201,25 @@ andes_relax_execit_ite (
 
   return TRUE;
 }
+
+/* TODO: free allocated memory at a proper timing  */
+static andes_extended_irel_t*
+andes_extend_irel(Elf_Internal_Rela *irel, int subtype, andes_extended_irel_t **list)
+{  /* new one  */
+  andes_extended_irel_t *one = bfd_zmalloc (sizeof (andes_extended_irel_t));
+  BFD_ASSERT (one);
+  /* init  */
+  one->saved_irel = *irel;
+  irel->r_addend = (bfd_vma) one;
+  irel->r_info = ELFNN_R_INFO (subtype, R_RISCV_ANDES_MISC);
+  /* link  */
+  if (*list)
+    (*list)->next = one;
+  else
+    (*list) = one;
+  return one;
+}
+
 /* } # Andes addon  */
 
 #define TARGET_LITTLE_SYM		riscv_elfNN_vec

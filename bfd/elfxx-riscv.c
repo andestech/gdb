@@ -902,7 +902,7 @@ static reloc_howto_type howto_table[] =
 
   /* Relocations for NDS V5.  */
   /* Andes misc. info. (alignment info so far)  */
-  HOWTO (R_RISCV_NDS_MISC,		/* type */
+  HOWTO (R_RISCV_ANDES_MISC,		/* type */
          0,				/* rightshift */
          0,				/* size */
          0,				/* bitsize */
@@ -910,7 +910,7 @@ static reloc_howto_type howto_table[] =
          0,				/* bitpos */
          complain_overflow_dont,	/* complain_on_overflow */
          bfd_elf_generic_reloc,		/* special_function */
-         "R_RISCV_NDS_MISC",		/* name */
+         "R_RISCV_ANDES_MISC",		/* name */
          FALSE,				/* partial_inplace */
          0,				/* src_mask */
          0,				/* dst_mask */
@@ -1357,7 +1357,7 @@ static const struct elf_reloc_map riscv_reloc_map[] =
   { BFD_RELOC_RISCV_SET16, R_RISCV_SET16 },
   { BFD_RELOC_RISCV_SET32, R_RISCV_SET32 },
   { BFD_RELOC_RISCV_32_PCREL, R_RISCV_32_PCREL },
-  { BFD_RELOC_RISCV_NDS_MISC, R_RISCV_NDS_MISC },
+  { BFD_RELOC_RISCV_NDS_MISC, R_RISCV_ANDES_MISC },
   { BFD_RELOC_RISCV_EXECIT_ITE, R_RISCV_EXECIT_ITE },
   { BFD_RELOC_RISCV_ICT_HI20, R_RISCV_ICT_HI20 },
   { BFD_RELOC_RISCV_ICT_LO12_I, R_RISCV_ICT_LO12_I },
