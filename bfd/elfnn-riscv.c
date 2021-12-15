@@ -5383,7 +5383,8 @@ riscv_convert_16_to_32 (uint16_t insn16, uint32_t *insn32)
       int rs2 = (insn16 >> 2) & 0x1f;
       if (rd == 0 || rs2 == 0)
 	return 0;
-      *insn32 = RISCV_RTYPE (ADD, rd, 0, rs2); /* add rd, x0, rs2  */
+      /* b24252 */
+      *insn32 = RISCV_RTYPE (ADDI, rd, rs2, 0); /* addi rd, rs2, 0  */
     }
   else if ((insn16 & MASK_C_ADD) == MATCH_C_ADD)
     {
