@@ -2777,10 +2777,15 @@ const struct riscv_ext_version riscv_ext_version_table[] =
 {"xefhw", ISA_SPEC_CLASS_2P2,    1, 0},
 
 {"b",     ISA_SPEC_CLASS_NONE, 1, 0},
-{"zbb",   ISA_SPEC_CLASS_NONE, 1, 0},
-{"zbs",   ISA_SPEC_CLASS_NONE, 1, 0},
+{"b",     ISA_SPEC_CLASS_ANDES, 1, 0},
 {"zba",   ISA_SPEC_CLASS_NONE, 1, 0},
+{"zba",   ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zbb",   ISA_SPEC_CLASS_NONE, 1, 0},
+{"zbb",   ISA_SPEC_CLASS_ANDES, 1, 0},
 {"zbc",   ISA_SPEC_CLASS_NONE, 1, 0},
+{"zbc",   ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zbs",   ISA_SPEC_CLASS_NONE, 1, 0},
+{"zbs",   ISA_SPEC_CLASS_ANDES, 1, 0},
 
 /* Terminate the list.  */
 {NULL, 0, 0, 0}
