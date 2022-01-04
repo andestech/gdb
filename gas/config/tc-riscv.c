@@ -1152,6 +1152,8 @@ riscv_csr_class_check (enum riscv_csr_class csr_class)
       return (xlen == 32 && riscv_subset_supports ("i"));
     case CSR_CLASS_ZKR:
       return riscv_subset_supports ("zkr");
+    case CSR_CLASS_DEBUG:
+      return TRUE;
     default:
       return FALSE;
     }
@@ -4023,25 +4025,25 @@ jump:
 	      break;
 
 	    case 'y':        /* bs immediate */
-	      my_getExpression (imm_expr, asarg);
+	      my_getExpression (imm_expr, s);
 	      check_absolute_expr (ip, imm_expr, FALSE);
 	      if ((unsigned long)imm_expr->X_add_number > 3)
 		      as_bad(_("Improper bs immediate (%lu)"),
 		        (unsigned long)imm_expr->X_add_number);
 	      INSERT_OPERAND(BS, *ip, imm_expr->X_add_number);
 	      imm_expr->X_op = O_absent;
-	      asarg = expr_end;
+	      s = expr_end;
 	      continue;
             
 	    case 'Y':        /* rnum immediate */
-	      my_getExpression (imm_expr, asarg);
+	      my_getExpression (imm_expr, s);
 	      check_absolute_expr (ip, imm_expr, FALSE);
 	      if ((unsigned long)imm_expr->X_add_number > 10)
 		      as_bad(_("Improper rnum immediate (%lu)"),
 		        (unsigned long)imm_expr->X_add_number);
 	      INSERT_OPERAND(RNUM, *ip, imm_expr->X_add_number);
 	      imm_expr->X_op = O_absent;
-	      asarg = expr_end;
+	      s = expr_end;
 	      continue;
 
 	    case 'z':
@@ -7338,7 +7340,7 @@ andes_post_s_riscv_attribute (int tag)
 }
 
 static void
-andes_ignore_input (void)
+andes_ignore_input (int mode ATTRIBUTE_UNUSED)
 {
   while (!is_end_of_line[(unsigned char) *input_line_pointer])
     ++input_line_pointer;

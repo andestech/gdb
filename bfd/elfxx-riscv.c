@@ -1821,7 +1821,7 @@ riscv_parsing_subset_version (riscv_parse_subset_t *rps,
 const char *
 riscv_supported_std_ext (void)
 {
-  return "mafdqlcbjtpvn";
+  return "mafdqlcbkjtpvn";
 }
 
 /* Parsing function for standard extensions.
@@ -2118,7 +2118,9 @@ static const char * const riscv_std_z_ext_strtab[] =
     "zefhw", "zfh", /* Andes Extensions  */
     "zvamo", "zvlsseg", /* RVV  */
     "zicsr", "zifencei", "zihintpause",
-    "zba", "zbb", "zbc", "zbs", NULL
+    "zba", "zbb", "zbc", "zbs",
+    "zbkb", "zbkc", "zbkx", "zknd", "zkne", "zknh", "zkr", "zksed", "zksh", "zkt",
+    NULL
   };
 
 /* Same as `riscv_std_z_ext_strtab', but for S-class extensions.  */
@@ -2291,6 +2293,31 @@ riscv_parse_add_implicit_subsets (riscv_parse_subset_t *rps)
 			      RISCV_UNKNOWN_VERSION,
 			      RISCV_UNKNOWN_VERSION, TRUE);
       riscv_parse_add_subset (rps, "zifencei",
+			      RISCV_UNKNOWN_VERSION,
+			      RISCV_UNKNOWN_VERSION, TRUE);
+    }
+
+  if ((riscv_lookup_subset (rps->subset_list, "zbkb", &subset)))
+    {
+      riscv_parse_add_subset (rps, "zbb",
+			      RISCV_UNKNOWN_VERSION,
+			      RISCV_UNKNOWN_VERSION, TRUE);
+    }
+  if ((riscv_lookup_subset (rps->subset_list, "zbkc", &subset)))
+    {
+      riscv_parse_add_subset (rps, "zbc",
+			      RISCV_UNKNOWN_VERSION,
+			      RISCV_UNKNOWN_VERSION, TRUE);
+    }
+  if ((riscv_lookup_subset (rps->subset_list, "zkne", &subset)))
+    {
+      riscv_parse_add_subset (rps, "zknd",
+			      RISCV_UNKNOWN_VERSION,
+			      RISCV_UNKNOWN_VERSION, TRUE);
+    }
+  if ((riscv_lookup_subset (rps->subset_list, "zknd", &subset)))
+    {
+      riscv_parse_add_subset (rps, "zkne",
 			      RISCV_UNKNOWN_VERSION,
 			      RISCV_UNKNOWN_VERSION, TRUE);
     }
