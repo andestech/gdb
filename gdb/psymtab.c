@@ -1426,7 +1426,6 @@ partial_symtab::expand_dependencies (struct objfile *objfile)
 	      puts_filtered ("and ");
 	      gdb_stdout->wrap_here (0);
 	      printf_filtered ("%s...", dependencies[i]->filename);
-	      gdb_stdout->wrap_here (0);	/* Flush output */
 	      gdb_flush (gdb_stdout);
 	    }
 	  dependencies[i]->expand_psymtab (objfile);

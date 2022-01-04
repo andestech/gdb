@@ -1151,7 +1151,6 @@ captured_main_1 (struct captured_main_args *context)
       print_gdb_version (gdb_stdout, true);
       if (symarg)
 	printf_filtered ("..");
-      gdb_stdout->wrap_here (0);
       printf_filtered ("\n");
       gdb_flush (gdb_stdout);	/* Force to screen during slow
 				   operations.  */
@@ -1172,7 +1171,6 @@ captured_main_1 (struct captured_main_args *context)
       print_gdb_version (gdb_stdout, true);
       if (symarg)
 	printf_filtered ("..");
-      gdb_stdout->wrap_here (0);
       printf_filtered ("\n");
       gdb_flush (gdb_stdout);	/* Force to screen during slow
 				   operations.  */
