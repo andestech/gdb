@@ -64,3 +64,4 @@
 .*Warning: Invalid CSR `mhpmcounter31h' for the current ISA
 .*Warning: Invalid CSR `pmpcfg1' for the current ISA
 .*Warning: Invalid CSR `pmpcfg3' for the current ISA
+.*Warning: Invalid CSR `seed' for the current ISA

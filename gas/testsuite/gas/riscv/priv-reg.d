@@ -260,3 +260,4 @@ Disassembly of section .text:
 [ 	]+3dc+:[ 	]+00f02573[ 	]+csrr[ 	]+a0,vcsr
 [ 	]+3e0+:[ 	]+c2002573[ 	]+csrr[ 	]+a0,vl
 [ 	]+3e4+:[ 	]+c2102573[ 	]+csrr[ 	]+a0,vtype
+[ 	]+3e8+:[ 	]+01502573[ 	]+csrr[ 	]+a0,seed
