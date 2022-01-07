@@ -2119,7 +2119,8 @@ static const char * const riscv_std_z_ext_strtab[] =
     "zvamo", "zvlsseg", /* RVV  */
     "zicsr", "zifencei", "zihintpause",
     "zba", "zbb", "zbc", "zbs",
-    "zbkb", "zbkc", "zbkx", "zknd", "zkne", "zknh", "zkr", "zksed", "zksh", "zkt",
+    "zbkb", "zbkc", "zbkx", "zknd", "zkne", "zknh", "zksed", "zksh", "zkr",
+    "zkn",  "zks", "zk", "zkt",
     NULL
   };
 
@@ -2242,6 +2243,19 @@ riscv_init_ext_order (void)
 
 /* Add the implicit extensions according to the arch string extensions.  */
 
+static char* implicit_isa_table[] =
+{/* isa, flags, implicit_isa  */
+  "zbkb", "a", "zbb", 0,
+  "zbkc", "a", "zbc", 0,
+  "zknd", "a", "zkne", 0,
+  "zkne", "a", "zknd", 0,
+  "zbk3", "r", "zbkb", "zbkc", "zbkx", 0, /* virtual */
+  "zkn", "r", "zbk3", "zkne", "zknd", "zknh", 0,
+  "zks", "r", "zbk3", "zksed", "zksh", 0,
+  "zk", "r", "zkn", "zkr", "zkt", 0,
+  0
+};
+
 static void
 riscv_parse_add_implicit_subsets (riscv_parse_subset_t *rps)
 {
@@ -2297,30 +2311,25 @@ riscv_parse_add_implicit_subsets (riscv_parse_subset_t *rps)
 			      RISCV_UNKNOWN_VERSION, TRUE);
     }
 
-  if ((riscv_lookup_subset (rps->subset_list, "zbkb", &subset)))
-    {
-      riscv_parse_add_subset (rps, "zbb",
-			      RISCV_UNKNOWN_VERSION,
-			      RISCV_UNKNOWN_VERSION, TRUE);
-    }
-  if ((riscv_lookup_subset (rps->subset_list, "zbkc", &subset)))
-    {
-      riscv_parse_add_subset (rps, "zbc",
-			      RISCV_UNKNOWN_VERSION,
-			      RISCV_UNKNOWN_VERSION, TRUE);
-    }
-  if ((riscv_lookup_subset (rps->subset_list, "zkne", &subset)))
-    {
-      riscv_parse_add_subset (rps, "zknd",
-			      RISCV_UNKNOWN_VERSION,
-			      RISCV_UNKNOWN_VERSION, TRUE);
-    }
-  if ((riscv_lookup_subset (rps->subset_list, "zknd", &subset)))
-    {
-      riscv_parse_add_subset (rps, "zkne",
-			      RISCV_UNKNOWN_VERSION,
-			      RISCV_UNKNOWN_VERSION, TRUE);
-    }
+  { /* { handle implicit isa  */
+    int i = 0;
+    while (implicit_isa_table[i])
+      {
+	char *pisa = implicit_isa_table[i++];
+	if ((riscv_lookup_subset (rps->subset_list, pisa, &subset)))
+	  {
+	    i++; /* skip flags for now  */
+	    while (implicit_isa_table[i])
+	      {
+		pisa = implicit_isa_table[i++];
+		riscv_parse_add_subset (rps, pisa,
+					RISCV_UNKNOWN_VERSION,
+					RISCV_UNKNOWN_VERSION, TRUE);
+	      }
+	  }
+	i++;
+      }
+  } /* } handle implicit isa  */
 }
 
 /* Add the implicit extensions according to the arch string extensions.

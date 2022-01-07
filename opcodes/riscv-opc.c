@@ -2873,14 +2873,20 @@ const struct riscv_ext_version riscv_ext_version_table[] =
 {"zkne",   ISA_SPEC_CLASS_DRAFT, 1, 0},
 {"zknh",   ISA_SPEC_CLASS_ANDES, 1, 0},
 {"zknh",   ISA_SPEC_CLASS_DRAFT, 1, 0},
-{"zkr",    ISA_SPEC_CLASS_ANDES, 1, 0},
-{"zkr",    ISA_SPEC_CLASS_DRAFT, 1, 0},
 {"zksed",  ISA_SPEC_CLASS_ANDES, 1, 0},
 {"zksed",  ISA_SPEC_CLASS_DRAFT, 1, 0},
 {"zksh",   ISA_SPEC_CLASS_ANDES, 1, 0},
 {"zksh",   ISA_SPEC_CLASS_DRAFT, 1, 0},
+{"zkr",    ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zkr",    ISA_SPEC_CLASS_DRAFT, 1, 0},
+{"zkn",    ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zkn",    ISA_SPEC_CLASS_DRAFT, 1, 0},
+{"zks",    ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zks",    ISA_SPEC_CLASS_DRAFT, 1, 0},
 {"zkt",    ISA_SPEC_CLASS_ANDES, 1, 0},
 {"zkt",    ISA_SPEC_CLASS_DRAFT, 1, 0},
+{"zk",     ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zk",     ISA_SPEC_CLASS_DRAFT, 1, 0},
 
 /* Terminate the list.  */
 {NULL, 0, 0, 0}
