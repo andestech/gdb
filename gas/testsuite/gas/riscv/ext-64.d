@@ -1,6 +1,6 @@
 #as: -march=rv64i -defsym __64_bit__=1
 #source: ext.s
-#objdump: -d
+#objdump: -d -M_no-prefer
 
 .*:[ 	]+file format .*
 

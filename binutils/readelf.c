@@ -17527,6 +17527,10 @@ static struct riscv_attr_tag_t riscv_attr_tag[] =
   T(priv_spec_revision),
   T(unaligned_access),
   T(stack_align),
+  /* { Andes */
+  T(ict_version),
+  T(ict_model),
+  /* } Andes */
 #undef T
 };
 
@@ -17561,6 +17565,7 @@ display_riscv_attribute (unsigned char *p,
     case Tag_RISCV_priv_spec:
     case Tag_RISCV_priv_spec_minor:
     case Tag_RISCV_priv_spec_revision:
+    case Tag_RISCV_ict_version: /* Andes */
       READ_ULEB (val, p, end);
       printf (_("%u\n"), val);
       break;
@@ -17581,6 +17586,7 @@ display_riscv_attribute (unsigned char *p,
       printf (_("%u-bytes\n"), val);
       break;
     case Tag_RISCV_arch:
+    case Tag_RISCV_ict_model: /* Andes */
       p = display_tag_value (-1, p, end);
       break;
     default:

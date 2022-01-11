@@ -631,6 +631,8 @@ extern void pop_stat_ptr
   (void);
 extern void lang_add_data
   (int type, union etree_union *);
+extern void lang_add_ict_entry
+  (bfd_vma, const char *, union etree_union *);
 extern void lang_add_reloc
   (bfd_reloc_code_real_type, reloc_howto_type *, asection *, const char *,
    union etree_union *);

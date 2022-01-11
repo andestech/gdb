@@ -129,9 +129,21 @@ extern void riscv_elf_final_processing (void);
 extern void riscv_md_end (void);
 extern int riscv_convert_symbolic_attribute (const char *);
 
+#define md_cleanup riscv_md_cleanup
+#define TC_START_LABEL(STR, NUL_CHAR, NEXT_CHAR)	\
+  (NEXT_CHAR == ':' && riscv_md_cleanup ())
+
+extern bfd_boolean riscv_md_cleanup (void);
+
 /* Set mapping symbol states.  */
 #define md_cons_align(nbytes) riscv_mapping_state (MAP_DATA, 0)
 void riscv_mapping_state (enum riscv_seg_mstate, int);
+
+/* { Andes */
+#define md_post_relax_hook riscv_post_relax_hook ()
+extern void riscv_post_relax_hook (void);
+
+/* } Andes */
 
 /* Define target segment type.  */
 #define TC_SEGMENT_INFO_TYPE struct riscv_segment_info_type
@@ -145,6 +157,7 @@ struct riscv_segment_info_type
 struct riscv_frag_type
 {
   symbolS *first_map_symbol, *last_map_symbol;
+  unsigned int rvc:1;
 };
 
 #define TC_FRAG_INIT(fragp, max_bytes) riscv_init_frag (fragp, max_bytes)
@@ -156,5 +169,33 @@ extern void riscv_adjust_symtab (void);
 void riscv_elf_copy_symbol_attributes (symbolS *, symbolS *);
 #define OBJ_COPY_SYMBOL_ATTRIBUTES(DEST, SRC)  \
   riscv_elf_copy_symbol_attributes (DEST, SRC)
+
+/* { Andes */
+#define DEFAULT_ICT_VERSION 1
+
+/* expression  */
+extern int riscv_parse_name (char const *, expressionS *, enum expr_mode, char *);
+#define md_parse_name(name, exprP, mode, nextcharP) \
+  riscv_parse_name (name, exprP, mode, nextcharP)
+
+extern void tc_cons_fix_new_post_riscv (void *, expressionS *);
+#define TC_CONS_FIX_NEW_POST tc_cons_fix_new_post_riscv
+extern void tc_cons_count_check (int);
+#define TC_CONS_COUNT_CHECK tc_cons_count_check
+
+/* fixup  */
+struct riscv_fix_info
+{
+  int ict;
+};
+#define TC_FIX_TYPE struct riscv_fix_info
+
+#define TC_INIT_FIX_DATA(f)			\
+  do						\
+    {						\
+      (f)->tc_fix_data.ict = 0;			\
+    }						\
+  while (0)
+/* } Andes */
 
 #endif /* TC_RISCV */

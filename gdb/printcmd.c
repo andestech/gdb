@@ -442,7 +442,6 @@ print_scalar_formatted (const gdb_byte *valaddr, struct type *type,
        && (options->format == 'o'
 	   || options->format == 'x'
 	   || options->format == 't'
-	   || options->format == 'z'
 	   || options->format == 'd'
 	   || options->format == 'u'))
       || (type->code () == TYPE_CODE_RANGE && type->bounds ()->bias != 0)

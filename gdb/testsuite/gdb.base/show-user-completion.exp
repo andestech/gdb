@@ -15,6 +15,12 @@
 
 # Test tab-completion for the 'show user' command.
 
+global INTERNAL_GDBFLAGS
+if [string match *Andesgdbinit* $INTERNAL_GDBFLAGS] {
+    send_user "UNTESTED: gdb.base/show-user-completion.exp: skipping tests due to loading .Andesgdbinit\n"
+    return
+}
+
 load_lib completion-support.exp
 
 # This test does not require any file to be loaded.

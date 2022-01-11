@@ -1,6 +1,6 @@
 #source: csr-insns-pseudo.s
 #as: -march=rv32if
-#objdump: -dr
+#objdump: -d
 
 .*:[ 	]+file format .*
 
