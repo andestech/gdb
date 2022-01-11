@@ -75,6 +75,11 @@ extern "C" {
 
 /* The word size of the default bfd target.  */
 #define BFD_DEFAULT_TARGET_SIZE @bfd_default_target_size@
+#if BFD_DEFAULT_TARGET_SIZE == 32
+#define VMALEN "8"
+#else
+#define VMALEN "16"
+#endif
 
 #define BFD_HOST_64BIT_LONG @BFD_HOST_64BIT_LONG@
 #define BFD_HOST_64BIT_LONG_LONG @BFD_HOST_64BIT_LONG_LONG@
@@ -137,8 +142,8 @@ typedef BFD_HOST_U_64_BIT symvalue;
 #endif
 
 #ifndef fprintf_vma
-#define sprintf_vma(s,x) sprintf (s, "%016" BFD_VMA_FMT "x", x)
-#define fprintf_vma(f,x) fprintf (f, "%016" BFD_VMA_FMT "x", x)
+#define sprintf_vma(s,x) sprintf (s, "%0" VMALEN BFD_VMA_FMT "x", x)
+#define fprintf_vma(f,x) fprintf (f, "%0" VMALEN BFD_VMA_FMT "x", x)
 #endif
 
 #else /* not BFD64  */
@@ -159,8 +164,8 @@ typedef unsigned long bfd_size_type;
 
 /* Print a bfd_vma x on stream s.  */
 #define BFD_VMA_FMT "l"
-#define fprintf_vma(s,x) fprintf (s, "%08" BFD_VMA_FMT "x", x)
-#define sprintf_vma(s,x) sprintf (s, "%08" BFD_VMA_FMT "x", x)
+#define fprintf_vma(s,x) fprintf (s, "%0" VMALEN BFD_VMA_FMT "x", x)
+#define sprintf_vma(s,x) sprintf (s, "%0" VMALEN BFD_VMA_FMT "x", x)
 
 #endif /* not BFD64  */
 
@@ -4400,6 +4405,32 @@ number for the SBIC, SBIS, SBI and CBI instructions  */
   BFD_RELOC_RISCV_SET16,
   BFD_RELOC_RISCV_SET32,
   BFD_RELOC_RISCV_32_PCREL,
+  BFD_RELOC_RISCV_ANDES_TAG,
+  BFD_RELOC_RISCV_EXECIT_ITE,
+  BFD_RELOC_RISCV_ICT_HI20,
+  BFD_RELOC_RISCV_ICT_LO12_I,
+  BFD_RELOC_RISCV_PCREL_ICT_HI20,
+  BFD_RELOC_RISCV_CALL_ICT,
+  BFD_RELOC_RISCV_ICT_64,
+  BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN,
+  BFD_RELOC_RISCV_NO_RVC_REGION_END,
+  BFD_RELOC_RISCV_DELETE,
+  BFD_RELOC_RISCV_ALIGN_BTB,
+  BFD_RELOC_RISCV_10_PCREL,
+  BFD_RELOC_RISCV_DATA,
+  BFD_RELOC_RISCV_LALO_HI20,
+  BFD_RELOC_RISCV_LALO_LO12_I,
+  BFD_RELOC_RISCV_RELAX_ENTRY,
+  BFD_RELOC_RISCV_LGP18S0,
+  BFD_RELOC_RISCV_LGP17S1,
+  BFD_RELOC_RISCV_LGP17S2,
+  BFD_RELOC_RISCV_LGP17S3,
+  BFD_RELOC_RISCV_SGP18S0,
+  BFD_RELOC_RISCV_SGP17S1,
+  BFD_RELOC_RISCV_SGP17S2,
+  BFD_RELOC_RISCV_SGP17S3,
+  BFD_RELOC_RISCV_RELAX_REGION_BEGIN,
+  BFD_RELOC_RISCV_RELAX_REGION_END,
 
 /* Renesas RL78 Relocations.  */
   BFD_RELOC_RL78_NEG8,

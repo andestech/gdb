@@ -365,6 +365,9 @@ CB_TARGET_DEFS_MAP cb_riscv_syscall_map[] = {
 #ifdef CB_SYS_writev
   { "writev", CB_SYS_writev, TARGET_NEWLIB_RISCV_SYS_writev },
 #endif
+#ifdef CB_SYS_rename
+  { "rename", CB_SYS_rename, TARGET_NEWLIB_RISCV_SYS_rename },
+#endif
   {NULL, -1, -1},
 };
 

@@ -157,6 +157,7 @@ struct objdump_disasm_info
   disassembler_ftype disassemble_fn;
   arelent *reloc;
   const char *symbol;
+  bool is_printing_insn_address;
 };
 
 /* Architecture to disassemble for, or default if NULL.  */
@@ -1535,6 +1536,10 @@ objdump_print_addr_with_sym (bfd *abfd, asection *sec, asymbol *sym,
 {
   if (!no_addresses)
     {
+      struct objdump_disasm_info *aux =
+	(struct objdump_disasm_info *) inf->application_data;
+      if (aux->is_printing_insn_address)
+	(*inf->fprintf_func) (inf->stream, "0x");
       objdump_print_value (vma, inf, skip_zeroes);
       (*inf->fprintf_func) (inf->stream, " ");
     }
@@ -1649,7 +1654,12 @@ objdump_print_addr (bfd_vma vma,
 static void
 objdump_print_address (bfd_vma vma, struct disassemble_info *inf)
 {
+  struct objdump_disasm_info *aux =
+    (struct objdump_disasm_info *) inf->application_data;
+  bool keep = aux->is_printing_insn_address;
+  aux->is_printing_insn_address = true;
   objdump_print_addr (vma, inf, ! prefix_addresses);
+  aux->is_printing_insn_address = keep;
 }
 
 /* Determine if the given address has a symbol associated with it.  */
@@ -3645,6 +3655,8 @@ disassemble_data (bfd *abfd)
     }
 
   init_disassemble_info (&disasm_info, stdout, (fprintf_ftype) fprintf);
+
+  aux.is_printing_insn_address = false;
 
   disasm_info.application_data = (void *) &aux;
   aux.abfd = abfd;

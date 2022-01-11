@@ -1002,7 +1002,7 @@ remove_compiler_suffix (const char *encoded, int *len)
 /* See ada-lang.h.  */
 
 std::string
-ada_decode (const char *encoded, bool wrap)
+ada_decode (const char *encoded, bool wrap, bool operators)
 {
   int i, j;
   int len0;
@@ -1096,7 +1096,7 @@ ada_decode (const char *encoded, bool wrap)
   while (i < len0)
     {
       /* Is this a symbol function?  */
-      if (at_start_name && encoded[i] == 'O')
+      if (operators && at_start_name && encoded[i] == 'O')
 	{
 	  int k;
 
@@ -1233,9 +1233,12 @@ ada_decode (const char *encoded, bool wrap)
   /* Decoded names should never contain any uppercase character.
      Double-check this, and abort the decoding if we find one.  */
 
-  for (i = 0; i < decoded.length(); ++i)
-    if (isupper (decoded[i]) || decoded[i] == ' ')
-      goto Suppress;
+  if (operators)
+    {
+      for (i = 0; i < decoded.length(); ++i)
+	if (isupper (decoded[i]) || decoded[i] == ' ')
+	  goto Suppress;
+    }
 
   /* If the compiler added a suffix, append it now.  */
   if (suffix >= 0)
@@ -3163,7 +3166,7 @@ static void
 ada_print_symbol_signature (struct ui_file *stream, struct symbol *sym,
 			    const struct type_print_options *flags)
 {
-  struct type *type = SYMBOL_TYPE (sym);
+  struct type *type = sym->type ();
 
   fprintf_filtered (stream, "%s", sym->print_name ());
   if (!print_signatures
@@ -3325,7 +3328,7 @@ See set/show multiple-symbol."));
       if (syms[i].symbol == NULL)
 	continue;
 
-      if (SYMBOL_CLASS (syms[i].symbol) == LOC_BLOCK)
+      if (syms[i].symbol->aclass () == LOC_BLOCK)
 	{
 	  struct symtab_and_line sal =
 	    find_function_start_sal (syms[i].symbol, 1);
@@ -3347,28 +3350,28 @@ See set/show multiple-symbol."));
       else
 	{
 	  int is_enumeral =
-	    (SYMBOL_CLASS (syms[i].symbol) == LOC_CONST
-	     && SYMBOL_TYPE (syms[i].symbol) != NULL
-	     && SYMBOL_TYPE (syms[i].symbol)->code () == TYPE_CODE_ENUM);
+	    (syms[i].symbol->aclass () == LOC_CONST
+	     && syms[i].symbol->type () != NULL
+	     && syms[i].symbol->type ()->code () == TYPE_CODE_ENUM);
 	  struct symtab *symtab = NULL;
 
-	  if (SYMBOL_OBJFILE_OWNED (syms[i].symbol))
+	  if (syms[i].symbol->is_objfile_owned ())
 	    symtab = symbol_symtab (syms[i].symbol);
 
-	  if (SYMBOL_LINE (syms[i].symbol) != 0 && symtab != NULL)
+	  if (syms[i].symbol->line () != 0 && symtab != NULL)
 	    {
 	      printf_filtered ("[%d] ", i + first_choice);
 	      ada_print_symbol_signature (gdb_stdout, syms[i].symbol,
 					  &type_print_raw_options);
 	      printf_filtered (_(" at %s:%d\n"),
 			       symtab_to_filename_for_display (symtab),
-			       SYMBOL_LINE (syms[i].symbol));
+			       syms[i].symbol->line ());
 	    }
 	  else if (is_enumeral
-		   && SYMBOL_TYPE (syms[i].symbol)->name () != NULL)
+		   && syms[i].symbol->type ()->name () != NULL)
 	    {
 	      printf_filtered (("[%d] "), i + first_choice);
-	      ada_print_type (SYMBOL_TYPE (syms[i].symbol), NULL,
+	      ada_print_type (syms[i].symbol->type (), NULL,
 			      gdb_stdout, -1, 0, &type_print_raw_options);
 	      printf_filtered (_("'(%s) (enumeral)\n"),
 			       syms[i].symbol->print_name ());
@@ -3467,7 +3470,7 @@ ada_resolve_enum (std::vector<struct block_symbol> &syms,
     {
       /* We already know the name matches, so we're just looking for
 	 an element of the correct enum type.  */
-      if (ada_check_typedef (SYMBOL_TYPE (syms[i].symbol)) == context_type)
+      if (ada_check_typedef (syms[i].symbol->type ()) == context_type)
 	return i;
     }
 
@@ -3491,7 +3494,7 @@ ada_resolve_variable (struct symbol *sym, const struct block *block,
 		   candidates.end (),
 		   [] (block_symbol &bsym)
 		   {
-		     switch (SYMBOL_CLASS (bsym.symbol))
+		     switch (bsym.symbol->aclass ())
 		       {
 		       case LOC_REGISTER:
 		       case LOC_ARG:
@@ -3514,7 +3517,7 @@ ada_resolve_variable (struct symbol *sym, const struct block *block,
 	  candidates.end (),
 	  [] (block_symbol &bsym)
 	  {
-	    return SYMBOL_CLASS (bsym.symbol) == LOC_TYPEDEF;
+	    return bsym.symbol->aclass () == LOC_TYPEDEF;
 	  }),
 	 candidates.end ());
     }
@@ -3526,7 +3529,7 @@ ada_resolve_variable (struct symbol *sym, const struct block *block,
       candidates.end (),
       [] (block_symbol &bsym)
       {
-       return bsym.symbol->artificial;
+	return bsym.symbol->is_artificial ();
       }),
      candidates.end ());
 
@@ -3626,9 +3629,9 @@ static int
 ada_args_match (struct symbol *func, struct value **actuals, int n_actuals)
 {
   int i;
-  struct type *func_type = SYMBOL_TYPE (func);
+  struct type *func_type = func->type ();
 
-  if (SYMBOL_CLASS (func) == LOC_CONST
+  if (func->aclass () == LOC_CONST
       && func_type->code () == TYPE_CODE_ENUM)
     return (n_actuals == 0);
   else if (func_type == NULL || func_type->code () != TYPE_CODE_FUNC)
@@ -3714,7 +3717,7 @@ ada_resolve_function (std::vector<struct block_symbol> &syms,
     {
       for (k = 0; k < syms.size (); k += 1)
 	{
-	  struct type *type = ada_check_typedef (SYMBOL_TYPE (syms[k].symbol));
+	  struct type *type = ada_check_typedef (syms[k].symbol->type ());
 
 	  if (ada_args_match (syms[k].symbol, args, nargs)
 	      && (fallback || return_match (type, context_type)))
@@ -3934,7 +3937,7 @@ ada_parse_renaming (struct symbol *sym,
 
   if (sym == NULL)
     return ADA_NOT_RENAMING;
-  switch (SYMBOL_CLASS (sym)) 
+  switch (sym->aclass ()) 
     {
     default:
       return ADA_NOT_RENAMING;
@@ -4376,7 +4379,7 @@ cache_symbol (const char *name, domain_enum domain, struct symbol *sym,
 
   /* Symbols for builtin types don't have a block.
      For now don't cache such symbols.  */
-  if (sym != NULL && !SYMBOL_OBJFILE_OWNED (sym))
+  if (sym != NULL && !sym->is_objfile_owned ())
     return;
 
   /* If the symbol is a local symbol, then do not cache it, as a search
@@ -4384,9 +4387,9 @@ cache_symbol (const char *name, domain_enum domain, struct symbol *sym,
      the symbol is local or not, we check the block where we found it
      against the global and static blocks of its associated symtab.  */
   if (sym
-      && BLOCKVECTOR_BLOCK (SYMTAB_BLOCKVECTOR (symbol_symtab (sym)),
+      && BLOCKVECTOR_BLOCK (symbol_symtab (sym)->compunit ()->blockvector (),
 			    GLOBAL_BLOCK) != block
-      && BLOCKVECTOR_BLOCK (SYMTAB_BLOCKVECTOR (symbol_symtab (sym)),
+      && BLOCKVECTOR_BLOCK (symbol_symtab (sym)->compunit ()->blockvector (),
 			    STATIC_BLOCK) != block)
     return;
 
@@ -4441,9 +4444,9 @@ static int
 is_nonfunction (const std::vector<struct block_symbol> &syms)
 {
   for (const block_symbol &sym : syms)
-    if (SYMBOL_TYPE (sym.symbol)->code () != TYPE_CODE_FUNC
-	&& (SYMBOL_TYPE (sym.symbol)->code () != TYPE_CODE_ENUM
-	    || SYMBOL_CLASS (sym.symbol) != LOC_CONST))
+    if (sym.symbol->type ()->code () != TYPE_CODE_FUNC
+	&& (sym.symbol->type ()->code () != TYPE_CODE_ENUM
+	    || sym.symbol->aclass () != LOC_CONST))
       return 1;
 
   return 0;
@@ -4477,18 +4480,18 @@ lesseq_defined_than (struct symbol *sym0, struct symbol *sym1)
 {
   if (sym0 == sym1)
     return 1;
-  if (SYMBOL_DOMAIN (sym0) != SYMBOL_DOMAIN (sym1)
-      || SYMBOL_CLASS (sym0) != SYMBOL_CLASS (sym1))
+  if (sym0->domain () != sym1->domain ()
+      || sym0->aclass () != sym1->aclass ())
     return 0;
 
-  switch (SYMBOL_CLASS (sym0))
+  switch (sym0->aclass ())
     {
     case LOC_UNDEF:
       return 1;
     case LOC_TYPEDEF:
       {
-	struct type *type0 = SYMBOL_TYPE (sym0);
-	struct type *type1 = SYMBOL_TYPE (sym1);
+	struct type *type0 = sym0->type ();
+	struct type *type1 = sym1->type ();
 	const char *name0 = sym0->linkage_name ();
 	const char *name1 = sym1->linkage_name ();
 	int len0 = strlen (name0);
@@ -4501,7 +4504,7 @@ lesseq_defined_than (struct symbol *sym0, struct symbol *sym1)
       }
     case LOC_CONST:
       return SYMBOL_VALUE (sym0) == SYMBOL_VALUE (sym1)
-	&& equiv_types (SYMBOL_TYPE (sym0), SYMBOL_TYPE (sym1));
+	&& equiv_types (sym0->type (), sym1->type ());
 
     case LOC_STATIC:
       {
@@ -4561,8 +4564,6 @@ struct bound_minimal_symbol
 ada_lookup_simple_minsym (const char *name)
 {
   struct bound_minimal_symbol result;
-
-  memset (&result, 0, sizeof (result));
 
   symbol_name_match_type match_type = name_match_type_from_name (name);
   lookup_name_info lookup_name (name, match_type);
@@ -4675,7 +4676,7 @@ symbols_are_identical_enums (const std::vector<struct block_symbol> &syms)
 
   /* Quick check: All symbols should have an enum type.  */
   for (i = 0; i < syms.size (); i++)
-    if (SYMBOL_TYPE (syms[i].symbol)->code () != TYPE_CODE_ENUM)
+    if (syms[i].symbol->type ()->code () != TYPE_CODE_ENUM)
       return 0;
 
   /* Quick check: They should all have the same value.  */
@@ -4685,16 +4686,16 @@ symbols_are_identical_enums (const std::vector<struct block_symbol> &syms)
 
   /* Quick check: They should all have the same number of enumerals.  */
   for (i = 1; i < syms.size (); i++)
-    if (SYMBOL_TYPE (syms[i].symbol)->num_fields ()
-	!= SYMBOL_TYPE (syms[0].symbol)->num_fields ())
+    if (syms[i].symbol->type ()->num_fields ()
+	!= syms[0].symbol->type ()->num_fields ())
       return 0;
 
   /* All the sanity checks passed, so we might have a set of
      identical enumeration types.  Perform a more complete
      comparison of the type of each symbol.  */
   for (i = 1; i < syms.size (); i++)
-    if (!ada_identical_enum_types_p (SYMBOL_TYPE (syms[i].symbol),
-				     SYMBOL_TYPE (syms[0].symbol)))
+    if (!ada_identical_enum_types_p (syms[i].symbol->type (),
+				     syms[0].symbol->type ()))
       return 0;
 
   return 1;
@@ -4725,13 +4726,13 @@ remove_extra_symbols (std::vector<struct block_symbol> *syms)
       /* If two symbols have the same name and one of them is a stub type,
 	 the get rid of the stub.  */
 
-      if (SYMBOL_TYPE ((*syms)[i].symbol)->is_stub ()
+      if ((*syms)[i].symbol->type ()->is_stub ()
 	  && (*syms)[i].symbol->linkage_name () != NULL)
 	{
 	  for (j = 0; j < syms->size (); j++)
 	    {
 	      if (j != i
-		  && !SYMBOL_TYPE ((*syms)[j].symbol)->is_stub ()
+		  && !(*syms)[j].symbol->type ()->is_stub ()
 		  && (*syms)[j].symbol->linkage_name () != NULL
 		  && strcmp ((*syms)[i].symbol->linkage_name (),
 			     (*syms)[j].symbol->linkage_name ()) == 0)
@@ -4743,8 +4744,8 @@ remove_extra_symbols (std::vector<struct block_symbol> *syms)
 	 should be identical.  */
 
       else if ((*syms)[i].symbol->linkage_name () != NULL
-	  && SYMBOL_CLASS ((*syms)[i].symbol) == LOC_STATIC
-	  && is_nondebugging_type (SYMBOL_TYPE ((*syms)[i].symbol)))
+	  && (*syms)[i].symbol->aclass () == LOC_STATIC
+	  && is_nondebugging_type ((*syms)[i].symbol->type ()))
 	{
 	  for (j = 0; j < syms->size (); j += 1)
 	    {
@@ -4752,8 +4753,8 @@ remove_extra_symbols (std::vector<struct block_symbol> *syms)
 		  && (*syms)[j].symbol->linkage_name () != NULL
 		  && strcmp ((*syms)[i].symbol->linkage_name (),
 			     (*syms)[j].symbol->linkage_name ()) == 0
-		  && SYMBOL_CLASS ((*syms)[i].symbol)
-		       == SYMBOL_CLASS ((*syms)[j].symbol)
+		  && ((*syms)[i].symbol->aclass ()
+		      == (*syms)[j].symbol->aclass ())
 		  && SYMBOL_VALUE_ADDRESS ((*syms)[i].symbol)
 		  == SYMBOL_VALUE_ADDRESS ((*syms)[j].symbol))
 		remove_p = 1;
@@ -4845,10 +4846,10 @@ is_package_name (const char *name)
 static int
 old_renaming_is_invisible (const struct symbol *sym, const char *function_name)
 {
-  if (SYMBOL_CLASS (sym) != LOC_TYPEDEF)
+  if (sym->aclass () != LOC_TYPEDEF)
     return 0;
 
-  std::string scope = xget_renaming_scope (SYMBOL_TYPE (sym));
+  std::string scope = xget_renaming_scope (sym->type ());
 
   /* If the rename has been defined in a package, then it is visible.  */
   if (is_package_name (scope.c_str ()))
@@ -4924,7 +4925,7 @@ remove_irrelevant_renamings (std::vector<struct block_symbol> *syms,
       const char *name;
       const char *suffix;
 
-      if (sym == NULL || SYMBOL_CLASS (sym) == LOC_TYPEDEF)
+      if (sym == NULL || sym->aclass () == LOC_TYPEDEF)
 	continue;
       name = sym->linkage_name ();
       suffix = strstr (name, "___XR");
@@ -5051,9 +5052,9 @@ match_data::operator() (struct block_symbol *bsym)
     }
   else 
     {
-      if (SYMBOL_CLASS (sym) == LOC_UNRESOLVED)
+      if (sym->aclass () == LOC_UNRESOLVED)
 	return true;
-      else if (SYMBOL_IS_ARGUMENT (sym))
+      else if (sym->is_argument ())
 	arg_sym = sym;
       else
 	{
@@ -5237,7 +5238,7 @@ map_matching_symbols (struct objfile *objfile,
   for (compunit_symtab *symtab : objfile->compunits ())
     {
       const struct block *block
-	= BLOCKVECTOR_BLOCK (COMPUNIT_BLOCKVECTOR (symtab), block_kind);
+	= BLOCKVECTOR_BLOCK (symtab->blockvector (), block_kind);
       if (!iterate_over_symbols_terminated (block, lookup_name,
 					    domain, data))
 	break;
@@ -5266,7 +5267,7 @@ add_nonlocal_symbols (std::vector<struct block_symbol> &result,
       for (compunit_symtab *cu : objfile->compunits ())
 	{
 	  const struct block *global_block
-	    = BLOCKVECTOR_BLOCK (COMPUNIT_BLOCKVECTOR (cu), GLOBAL_BLOCK);
+	    = BLOCKVECTOR_BLOCK (cu->blockvector (), GLOBAL_BLOCK);
 
 	  if (ada_add_block_renamings (result, global_block, lookup_name,
 				       domain))
@@ -5740,11 +5741,11 @@ ada_add_block_symbols (std::vector<struct block_symbol> &result,
        sym != NULL;
        sym = block_iter_match_next (lookup_name, &iter))
     {
-      if (symbol_matches_domain (sym->language (), SYMBOL_DOMAIN (sym), domain))
+      if (symbol_matches_domain (sym->language (), sym->domain (), domain))
 	{
-	  if (SYMBOL_CLASS (sym) != LOC_UNRESOLVED)
+	  if (sym->aclass () != LOC_UNRESOLVED)
 	    {
-	      if (SYMBOL_IS_ARGUMENT (sym))
+	      if (sym->is_argument ())
 		arg_sym = sym;
 	      else
 		{
@@ -5780,7 +5781,7 @@ ada_add_block_symbols (std::vector<struct block_symbol> &result,
       ALL_BLOCK_SYMBOLS (block, iter, sym)
       {
 	if (symbol_matches_domain (sym->language (),
-				   SYMBOL_DOMAIN (sym), domain))
+				   sym->domain (), domain))
 	  {
 	    int cmp;
 
@@ -5796,9 +5797,9 @@ ada_add_block_symbols (std::vector<struct block_symbol> &result,
 	    if (cmp == 0
 		&& is_name_suffix (sym->linkage_name () + name_len + 5))
 	      {
-		if (SYMBOL_CLASS (sym) != LOC_UNRESOLVED)
+		if (sym->aclass () != LOC_UNRESOLVED)
 		  {
-		    if (SYMBOL_IS_ARGUMENT (sym))
+		    if (sym->is_argument ())
 		      arg_sym = sym;
 		    else
 		      {
@@ -7214,7 +7215,7 @@ ada_find_any_type_symbol (const char *name)
   struct symbol *sym;
 
   sym = standard_lookup (name, get_selected_block (NULL), VAR_DOMAIN);
-  if (sym != NULL && SYMBOL_CLASS (sym) == LOC_TYPEDEF)
+  if (sym != NULL && sym->aclass () == LOC_TYPEDEF)
     return sym;
 
   sym = standard_lookup (name, NULL, STRUCT_DOMAIN);
@@ -7231,7 +7232,7 @@ ada_find_any_type (const char *name)
   struct symbol *sym = ada_find_any_type_symbol (name);
 
   if (sym != NULL)
-    return SYMBOL_TYPE (sym);
+    return sym->type ();
 
   return NULL;
 }
@@ -8788,7 +8789,13 @@ ada_enum_name (const char *name)
 
       if (name[1] == 'U' || name[1] == 'W')
 	{
-	  if (sscanf (name + 2, "%x", &v) != 1)
+	  int offset = 2;
+	  if (name[1] == 'W' && name[2] == 'W')
+	    {
+	      /* Also handle the QWW case.  */
+	      ++offset;
+	    }
+	  if (sscanf (name + offset, "%x", &v) != 1)
 	    return name;
 	}
       else if (((name[1] >= '0' && name[1] <= '9')
@@ -8804,9 +8811,11 @@ ada_enum_name (const char *name)
       if (isascii (v) && isprint (v))
 	storage = string_printf ("'%c'", v);
       else if (name[1] == 'U')
-	storage = string_printf ("[\"%02x\"]", v);
+	storage = string_printf ("'[\"%02x\"]'", v);
+      else if (name[2] != 'W')
+	storage = string_printf ("'[\"%04x\"]'", v);
       else
-	storage = string_printf ("[\"%04x\"]", v);
+	storage = string_printf ("'[\"%06x\"]'", v);
 
       return storage.c_str ();
     }
@@ -10181,7 +10190,7 @@ ada_resolvable::replace (operation_up &&owner,
   return std::move (owner);
 }
 
-/* Convert the character literal whose ASCII value would be VAL to the
+/* Convert the character literal whose value would be VAL to the
    appropriate value of type TYPE, if there is a translation.
    Otherwise return VAL.  Hence, in an enumeration type ('A', 'B'),
    the literal 'A' (VAL == 65), returns 0.  */
@@ -10189,7 +10198,7 @@ ada_resolvable::replace (operation_up &&owner,
 static LONGEST
 convert_char_literal (struct type *type, LONGEST val)
 {
-  char name[7];
+  char name[12];
   int f;
 
   if (type == NULL)
@@ -10200,8 +10209,12 @@ convert_char_literal (struct type *type, LONGEST val)
 
   if ((val >= 'a' && val <= 'z') || (val >= '0' && val <= '9'))
     xsnprintf (name, sizeof (name), "Q%c", (int) val);
+  else if (val >= 0 && val < 256)
+    xsnprintf (name, sizeof (name), "QU%02x", (unsigned) val);
+  else if (val >= 0 && val < 0x10000)
+    xsnprintf (name, sizeof (name), "QW%04x", (unsigned) val);
   else
-    xsnprintf (name, sizeof (name), "QU%02x", (int) val);
+    xsnprintf (name, sizeof (name), "QWW%08lx", (unsigned long) val);
   size_t len = strlen (name);
   for (f = 0; f < type->num_fields (); f += 1)
     {
@@ -10411,7 +10424,7 @@ ada_var_value_operation::evaluate (struct type *expect_type,
 {
   symbol *sym = std::get<0> (m_storage).symbol;
 
-  if (SYMBOL_DOMAIN (sym) == UNDEF_DOMAIN)
+  if (sym->domain () == UNDEF_DOMAIN)
     /* Only encountered when an unresolved symbol occurs in a
        context other than a function call, in which case, it is
        invalid.  */
@@ -10420,7 +10433,7 @@ ada_var_value_operation::evaluate (struct type *expect_type,
 
   if (noside == EVAL_AVOID_SIDE_EFFECTS)
     {
-      struct type *type = static_unwrap_type (SYMBOL_TYPE (sym));
+      struct type *type = static_unwrap_type (sym->type ());
       /* Check to see if this is a tagged type.  We also need to handle
 	 the case where the type is a reference to a tagged type, but
 	 we have to be careful to exclude pointers to tagged types.
@@ -10501,7 +10514,7 @@ ada_var_value_operation::resolve (struct expression *exp,
 				  struct type *context_type)
 {
   symbol *sym = std::get<0> (m_storage).symbol;
-  if (SYMBOL_DOMAIN (sym) == UNDEF_DOMAIN)
+  if (sym->domain () == UNDEF_DOMAIN)
     {
       block_symbol resolved
 	= ada_resolve_variable (sym, std::get<0> (m_storage).block,
@@ -10511,7 +10524,7 @@ ada_var_value_operation::resolve (struct expression *exp,
     }
 
   if (deprocedure_p
-      && (SYMBOL_TYPE (std::get<0> (m_storage).symbol)->code ()
+      && (std::get<0> (m_storage).symbol->type ()->code ()
 	  == TYPE_CODE_FUNC))
     return true;
 
@@ -10666,7 +10679,7 @@ ada_funcall_operation::evaluate (struct type *expect_type,
   ada_var_value_operation *avv
     = dynamic_cast<ada_var_value_operation *> (callee_op.get ());
   if (avv != nullptr
-      && SYMBOL_DOMAIN (avv->get_symbol ()) == UNDEF_DOMAIN)
+      && avv->get_symbol ()->domain () == UNDEF_DOMAIN)
     error (_("Unexpected unresolved symbol, %s, during evaluation"),
 	   avv->get_symbol ()->print_name ());
 
@@ -10810,7 +10823,7 @@ ada_funcall_operation::resolve (struct expression *exp,
     return false;
 
   symbol *sym = avv->get_symbol ();
-  if (SYMBOL_DOMAIN (sym) != UNDEF_DOMAIN)
+  if (sym->domain () != UNDEF_DOMAIN)
     return false;
 
   const std::vector<operation_up> &args_up = std::get<1> (m_storage);
@@ -11253,10 +11266,10 @@ ada_has_this_exception_support (const struct exception_support_info *einfo)
 
   /* Make sure that the symbol we found corresponds to a function.  */
 
-  if (SYMBOL_CLASS (sym) != LOC_BLOCK)
+  if (sym->aclass () != LOC_BLOCK)
     {
       error (_("Symbol \"%s\" is not a function (class = %d)"),
-	     sym->linkage_name (), SYMBOL_CLASS (sym));
+	     sym->linkage_name (), sym->aclass ());
       return 0;
     }
 
@@ -11276,10 +11289,10 @@ ada_has_this_exception_support (const struct exception_support_info *einfo)
 
   /* Make sure that the symbol we found corresponds to a function.  */
 
-  if (SYMBOL_CLASS (sym) != LOC_BLOCK)
+  if (sym->aclass () != LOC_BLOCK)
     {
       error (_("Symbol \"%s\" is not a function (class = %d)"),
-	     sym->linkage_name (), SYMBOL_CLASS (sym));
+	     sym->linkage_name (), sym->aclass ());
       return 0;
     }
 
@@ -11388,8 +11401,8 @@ is_known_support_routine (struct frame_info *frame)
       re_comp (known_runtime_file_name_patterns[i]);
       if (re_exec (lbasename (sal.symtab->filename)))
 	return 1;
-      if (SYMTAB_OBJFILE (sal.symtab) != NULL
-	  && re_exec (objfile_name (SYMTAB_OBJFILE (sal.symtab))))
+      if (sal.symtab->compunit ()->objfile () != NULL
+	  && re_exec (objfile_name (sal.symtab->compunit ()->objfile ())))
 	return 1;
     }
 
@@ -12246,7 +12259,7 @@ ada_exception_sal (enum ada_exception_catchpoint_kind ex,
   if (sym == NULL)
     error (_("Catchpoint symbol not found: %s"), sym_name);
 
-  if (SYMBOL_CLASS (sym) != LOC_BLOCK)
+  if (sym->aclass () != LOC_BLOCK)
     error (_("Unable to insert catchpoint. %s is not a function."), sym_name);
 
   /* Set ADDR_STRING.  */
@@ -12418,12 +12431,12 @@ catch_assert_command (const char *arg_entry, int from_tty,
 static int
 ada_is_exception_sym (struct symbol *sym)
 {
-  const char *type_name = SYMBOL_TYPE (sym)->name ();
+  const char *type_name = sym->type ()->name ();
 
-  return (SYMBOL_CLASS (sym) != LOC_TYPEDEF
-	  && SYMBOL_CLASS (sym) != LOC_BLOCK
-	  && SYMBOL_CLASS (sym) != LOC_CONST
-	  && SYMBOL_CLASS (sym) != LOC_UNRESOLVED
+  return (sym->aclass () != LOC_TYPEDEF
+	  && sym->aclass () != LOC_BLOCK
+	  && sym->aclass () != LOC_CONST
+	  && sym->aclass () != LOC_UNRESOLVED
 	  && type_name != NULL && strcmp (type_name, "exception") == 0);
 }
 
@@ -12545,7 +12558,7 @@ ada_add_exceptions_from_frame (compiled_regex *preg,
 
       ALL_BLOCK_SYMBOLS (block, iter, sym)
 	{
-	  switch (SYMBOL_CLASS (sym))
+	  switch (sym->aclass ())
 	    {
 	    case LOC_TYPEDEF:
 	    case LOC_BLOCK:
@@ -12617,7 +12630,7 @@ ada_add_global_exceptions (compiled_regex *preg,
     {
       for (compunit_symtab *s : objfile->compunits ())
 	{
-	  const struct blockvector *bv = COMPUNIT_BLOCKVECTOR (s);
+	  const struct blockvector *bv = s->blockvector ();
 	  int i;
 
 	  for (i = GLOBAL_BLOCK; i <= STATIC_BLOCK; i++)
@@ -12975,9 +12988,9 @@ public:
   }
 
   /* See language.h.  */
-  virtual bool symbol_printing_suppressed (struct symbol *symbol) const override
+  bool symbol_printing_suppressed (struct symbol *symbol) const override
   {
-    return symbol->artificial;
+    return symbol->is_artificial ();
   }
 
   /* See language.h.  */
@@ -12999,9 +13012,11 @@ public:
     add (arch_integer_type (gdbarch, gdbarch_short_bit (gdbarch),
 			    0, "short_integer"));
     struct type *char_type = arch_character_type (gdbarch, TARGET_CHAR_BIT,
-						  0, "character");
+						  1, "character");
     lai->set_string_char_type (char_type);
     add (char_type);
+    add (arch_character_type (gdbarch, 16, 1, "wide_character"));
+    add (arch_character_type (gdbarch, 32, 1, "wide_wide_character"));
     add (arch_float_type (gdbarch, gdbarch_float_bit (gdbarch),
 			  "float", gdbarch_float_format (gdbarch)));
     add (arch_float_type (gdbarch, gdbarch_double_bit (gdbarch),
@@ -13204,7 +13219,7 @@ public:
 	for (compunit_symtab *s : objfile->compunits ())
 	  {
 	    QUIT;
-	    b = BLOCKVECTOR_BLOCK (COMPUNIT_BLOCKVECTOR (s), GLOBAL_BLOCK);
+	    b = BLOCKVECTOR_BLOCK (s->blockvector (), GLOBAL_BLOCK);
 	    ALL_BLOCK_SYMBOLS (b, iter, sym)
 	      {
 		if (completion_skip_symbol (mode, sym))
@@ -13223,7 +13238,7 @@ public:
 	for (compunit_symtab *s : objfile->compunits ())
 	  {
 	    QUIT;
-	    b = BLOCKVECTOR_BLOCK (COMPUNIT_BLOCKVECTOR (s), STATIC_BLOCK);
+	    b = BLOCKVECTOR_BLOCK (s->blockvector (), STATIC_BLOCK);
 	    /* Don't do this block twice.  */
 	    if (b == surrounding_static_block)
 	      continue;

@@ -1549,6 +1549,9 @@ reloc_overflow (struct bfd_link_info *info,
       return;
     }
 
+  const char *msg = "For detailed descriptions and workarounds," \
+		    " please see \"Troubleshooting\" in the Appendix" \
+		    " of Andes Programming Guide for ISA V5.";
   if (entry)
     {
       while (entry->type == bfd_link_hash_indirect
@@ -1559,17 +1562,18 @@ reloc_overflow (struct bfd_link_info *info,
 	case bfd_link_hash_undefined:
 	case bfd_link_hash_undefweak:
 	  einfo (_(" relocation truncated to fit: "
-		   "%s against undefined symbol `%pT'"),
-		 reloc_name, entry->root.string);
+		   "%s against undefined symbol `%pT'. %s"),
+		 reloc_name, entry->root.string, msg);
 	  break;
 	case bfd_link_hash_defined:
 	case bfd_link_hash_defweak:
 	  einfo (_(" relocation truncated to fit: "
-		   "%s against symbol `%pT' defined in %pA section in %pB"),
+		   "%s against symbol `%pT' defined in %pA section in %pB. %s"),
 		 reloc_name, entry->root.string,
 		 entry->u.def.section,
 		 entry->u.def.section == bfd_abs_section_ptr
-		 ? info->output_bfd : entry->u.def.section->owner);
+		 ? info->output_bfd : entry->u.def.section->owner,
+		 msg);
 	  break;
 	default:
 	  abort ();
@@ -1577,8 +1581,8 @@ reloc_overflow (struct bfd_link_info *info,
 	}
     }
   else
-    einfo (_(" relocation truncated to fit: %s against `%pT'"),
-	   reloc_name, name);
+    einfo (_(" relocation truncated to fit: %s against `%pT'. %s"),
+	   reloc_name, name, msg);
   if (addend != 0)
     einfo ("+%v", addend);
   einfo ("\n");

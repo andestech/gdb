@@ -125,6 +125,7 @@ static int error_index;
 %token END
 %left <token> '('
 %token <token> ALIGN_K BLOCK BIND QUAD SQUAD LONG SHORT BYTE
+%token ICT_ENTRY
 %token SECTIONS PHDRS INSERT_K AFTER BEFORE
 %token DATA_SEGMENT_ALIGN DATA_SEGMENT_RELRO_END DATA_SEGMENT_END
 %token SORT_BY_NAME SORT_BY_ALIGNMENT SORT_NONE
@@ -648,6 +649,11 @@ input_section_spec:
 statement:
 	';'
 	| assignment separator
+	| ICT_ENTRY '(' INT ',' NAME ',' exp ')'
+		{
+		  lang_add_assignment (exp_provide ($5, $7, false));
+		  lang_add_ict_entry ($3.integer, $5, $7);
+		}
 	| CREATE_OBJECT_SYMBOLS
 		{
 		  lang_add_attribute (lang_object_symbols_statement_enum);

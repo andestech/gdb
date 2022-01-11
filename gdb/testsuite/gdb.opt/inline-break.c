@@ -217,7 +217,7 @@ main (int argc, char *argv[])
      If GCC is allowed to combine calls then some of them end up with
      no instructions at all, so there is no specific address for GDB
      to set a breakpoint at.  */
-  volatile int x = argc;
+  volatile int x = 1;
 
   x = func1 (x);
 

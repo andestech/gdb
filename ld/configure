@@ -16852,7 +16852,7 @@ tdir_$i=$result"
 	  if test "$elf_list_options" = "true"; then
 	    source_sh()
 	    {
-	      . $1
+	      . $1 $2
 	    }
 	    source_sh ${srcdir}/emulparams/${i}.sh
 	    if test x${GENERATE_SHLIB_SCRIPT} = xyes; then

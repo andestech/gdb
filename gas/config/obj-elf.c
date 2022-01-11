@@ -73,7 +73,6 @@ static void obj_elf_local (int);
 static void obj_elf_visibility (int);
 static void obj_elf_symver (int);
 static void obj_elf_subsection (int);
-static void obj_elf_popsection (int);
 static void obj_elf_gnu_attribute (int);
 static void obj_elf_tls_common (int);
 static void obj_elf_lcomm (int);
@@ -421,6 +420,25 @@ get_sym_from_input_line_and_check (void)
   return sym;
 }
 
+static symbolS *
+get_sym_from_input_line_and_check_lto (void)
+{
+  char *name;
+  char c;
+  symbolS *sym = NULL;
+
+  c = get_symbol_name (& name);
+  if (! is_lto_discarded (name))
+    sym = symbol_find_or_make (name);
+  *input_line_pointer = c;
+  SKIP_WHITESPACE_AFTER_NAME ();
+
+  /* There is no symbol name if input_line_pointer has not moved.  */
+  if (name == input_line_pointer)
+    as_bad (_("Missing symbol name in directive"));
+  return sym;
+}
+
 static void
 obj_elf_local (int ignore ATTRIBUTE_UNUSED)
 {
@@ -429,10 +447,13 @@ obj_elf_local (int ignore ATTRIBUTE_UNUSED)
 
   do
     {
-      symbolP = get_sym_from_input_line_and_check ();
+      symbolP = get_sym_from_input_line_and_check_lto ();
       c = *input_line_pointer;
-      S_CLEAR_EXTERNAL (symbolP);
-      symbol_get_obj (symbolP)->local = 1;
+      if (symbolP)
+	{
+	  S_CLEAR_EXTERNAL (symbolP);
+	  symbol_get_obj (symbolP)->local = 1;
+	}
       if (c == ',')
 	{
 	  input_line_pointer++;
@@ -453,9 +474,10 @@ obj_elf_weak (int ignore ATTRIBUTE_UNUSED)
 
   do
     {
-      symbolP = get_sym_from_input_line_and_check ();
+      symbolP = get_sym_from_input_line_and_check_lto ();
       c = *input_line_pointer;
-      S_SET_WEAK (symbolP);
+      if (symbolP)
+	S_SET_WEAK (symbolP);
       if (c == ',')
 	{
 	  input_line_pointer++;
@@ -478,15 +500,18 @@ obj_elf_visibility (int visibility)
 
   do
     {
-      symbolP = get_sym_from_input_line_and_check ();
+      symbolP = get_sym_from_input_line_and_check_lto ();
 
-      bfdsym = symbol_get_bfdsym (symbolP);
-      elfsym = elf_symbol_from (bfdsym);
+      if (symbolP)
+	{
+	  bfdsym = symbol_get_bfdsym (symbolP);
+	  elfsym = elf_symbol_from (bfdsym);
 
-      gas_assert (elfsym);
+	  gas_assert (elfsym);
 
-      elfsym->internal_elf_sym.st_other &= ~3;
-      elfsym->internal_elf_sym.st_other |= visibility;
+	  elfsym->internal_elf_sym.st_other &= ~3;
+	  elfsym->internal_elf_sym.st_other |= visibility;
+	}
 
       c = *input_line_pointer;
       if (c == ',')
@@ -1614,7 +1639,7 @@ obj_elf_previous (int ignore ATTRIBUTE_UNUSED)
 #endif
 }
 
-static void
+void
 obj_elf_popsection (int xxx ATTRIBUTE_UNUSED)
 {
   struct section_stack *top = section_stack;
@@ -1730,7 +1755,9 @@ obj_elf_symver (int ignore ATTRIBUTE_UNUSED)
   struct elf_obj_sy *sy_obj;
   char *p;
 
-  sym = get_sym_from_input_line_and_check ();
+  sym = get_sym_from_input_line_and_check_lto ();
+  if (sym == NULL)
+    goto lto_out;
 
   if (*input_line_pointer != ',')
     {
@@ -1803,6 +1830,10 @@ obj_elf_symver (int ignore ATTRIBUTE_UNUSED)
     }
 
   demand_empty_rest_of_line ();
+  return;
+
+lto_out:
+  ignore_rest_of_line ();
 }
 
 /* This handles the .vtable_inherit pseudo-op, which is used to indicate
@@ -1896,7 +1927,13 @@ obj_elf_get_vtable_entry (void)
   if (*input_line_pointer == '#')
     ++input_line_pointer;
 
-  sym = get_sym_from_input_line_and_check ();
+  sym = get_sym_from_input_line_and_check_lto ();
+  if (sym == NULL)
+    {
+      ignore_rest_of_line ();
+      return NULL;
+    }
+
   if (*input_line_pointer != ',')
     {
       as_bad (_("expected comma after name in .vtable_entry"));
@@ -2332,7 +2369,12 @@ obj_elf_type (int ignore ATTRIBUTE_UNUSED)
   symbolS *sym;
   elf_symbol_type *elfsym;
 
-  sym = get_sym_from_input_line_and_check ();
+  sym = get_sym_from_input_line_and_check_lto ();
+  if (sym == NULL)
+    {
+	ignore_rest_of_line ();
+	return;
+    }
   c = *input_line_pointer;
   elfsym = (elf_symbol_type *) symbol_get_bfdsym (sym);
 

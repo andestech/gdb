@@ -976,7 +976,7 @@ prepare_one_step (thread_info *tp, struct step_command_fsm *sm)
 	  if (inline_skipped_frames (tp) > 0)
 	    {
 	      symbol *sym = inline_skipped_symbol (tp);
-	      if (SYMBOL_CLASS (sym) == LOC_BLOCK)
+	      if (sym->aclass () == LOC_BLOCK)
 		{
 		  const block *block = SYMBOL_BLOCK_VALUE (sym);
 		  if (BLOCK_END (block) < tp->control.step_range_end)
@@ -1103,7 +1103,7 @@ jump_command (const char *arg, int from_tty)
   if (from_tty)
     {
       printf_filtered (_("Continuing at "));
-      fputs_filtered (paddress (gdbarch, addr), gdb_stdout);
+      puts_filtered (paddress (gdbarch, addr));
       printf_filtered (".\n");
     }
 
@@ -1567,7 +1567,7 @@ finish_command_fsm::should_stop (struct thread_info *tp)
       /* We're done.  */
       set_finished ();
 
-      rv->type = TYPE_TARGET_TYPE (SYMBOL_TYPE (function));
+      rv->type = TYPE_TARGET_TYPE (function->type ());
       if (rv->type == NULL)
 	internal_error (__FILE__, __LINE__,
 			_("finish_command: function has no target type"));
@@ -1803,7 +1803,7 @@ finish_command (const char *arg, int from_tty)
 	printf_filtered (_("Run back to call of "));
       else
 	{
-	  if (sm->function != NULL && TYPE_NO_RETURN (sm->function->type)
+	  if (sm->function != NULL && TYPE_NO_RETURN (sm->function->type ())
 	      && !query (_("warning: Function %s does not return normally.\n"
 			   "Try to finish anyway? "),
 			 sm->function->print_name ()))

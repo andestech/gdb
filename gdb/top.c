@@ -873,7 +873,7 @@ gdb_readline_no_editing (const char *prompt)
       /* Don't use a _filtered function here.  It causes the assumed
 	 character position to be off, since the newline we read from
 	 the user is not accounted for.  */
-      fputs_unfiltered (prompt, gdb_stdout);
+      puts_unfiltered (prompt);
       gdb_flush (gdb_stdout);
     }
 
@@ -1364,7 +1364,6 @@ command_line_input (const char *prompt_arg, const char *annotation_suffix)
       /* Make sure that all output has been output.  Some machines may
 	 let you get away with leaving out some of the gdb_flush, but
 	 not all.  */
-      wrap_here ("");
       gdb_flush (gdb_stdout);
       gdb_flush (gdb_stderr);
 

@@ -1,5 +1,5 @@
 #as: -march=rv32i_zihintpause
-#objdump: -dr
+#objdump: -d
 
 .*:[ 	]+file format .*
 

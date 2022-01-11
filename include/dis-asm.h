@@ -396,6 +396,8 @@ extern bool generic_symbol_is_valid
 extern void init_disassemble_info (struct disassemble_info *dinfo, void *stream,
 				   fprintf_ftype fprintf_func);
 
+extern char *andes_ace_load_hooks (const char *arg);
+
 /* For compatibility with existing code.  */
 #define INIT_DISASSEMBLE_INFO(INFO, STREAM, FPRINTF_FUNC) \
   init_disassemble_info (&(INFO), (STREAM), (fprintf_ftype) (FPRINTF_FUNC))

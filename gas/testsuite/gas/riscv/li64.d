@@ -1,12 +1,12 @@
 #as: -march=rv64ic -mabi=lp64
-#objdump: -dr
+#objdump: -d -M_no-prefer
 
 .*:     file format elf64-(little|big)riscv
 
 
 Disassembly of section .text:
 
-0000000000000000 <target>:
+0+ <target>:
 [^:]+:[ 	]+6521[ 	]+lui[ 	]+a0,0x8
 [^:]+:[ 	]+2505[ 	]+addiw[ 	]+a0,a0,1 # .*
 [^:]+:[ 	]+6509[ 	]+lui[ 	]+a0,0x2

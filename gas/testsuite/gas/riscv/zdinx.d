@@ -1,6 +1,6 @@
 #as: -march=rv64ima_zdinx
 #source: zdinx.s
-#objdump: -dr
+#objdump: -d
 
 .*:[ 	]+file format .*
 

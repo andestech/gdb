@@ -317,7 +317,7 @@ print_formatted (struct value *val, int size,
 
 	case 'i':
 	  /* We often wrap here if there are long symbolic names.  */
-	  wrap_here ("    ");
+	  stream->wrap_here (4);
 	  next_address = (value_address (val)
 			  + gdb_print_insn (type->arch (),
 					    value_address (val), stream,
@@ -442,7 +442,6 @@ print_scalar_formatted (const gdb_byte *valaddr, struct type *type,
        && (options->format == 'o'
 	   || options->format == 'x'
 	   || options->format == 't'
-	   || options->format == 'z'
 	   || options->format == 'd'
 	   || options->format == 'u'))
       || (type->code () == TYPE_CODE_RANGE && type->bounds ()->bias != 0)
@@ -826,7 +825,7 @@ find_instruction_backward (struct gdbarch *gdbarch, CORE_ADDR addr,
 	     is calculated after the loop.  */
 	  printf_filtered (_("No line number information available "
 			     "for address "));
-	  wrap_here ("  ");
+	  gdb_stdout->wrap_here (2);
 	  print_address (gdbarch, loop_start - 1, gdb_stdout);
 	  printf_filtered ("\n");
 	  break;
@@ -1155,7 +1154,7 @@ do_examine (struct format_data fmt, struct gdbarch *gdbarch, CORE_ADDR addr)
 	}
 
       if (format == 'i')
-	fputs_filtered (pc_prefix (next_address), gdb_stdout);
+	puts_filtered (pc_prefix (next_address));
       print_address (next_gdbarch, next_address, gdb_stdout);
       printf_filtered (":");
       for (i = maxelts;
@@ -1498,7 +1497,6 @@ output_command (const char *exp, int from_tty)
 
   annotate_value_end ();
 
-  wrap_here ("");
   gdb_flush (gdb_stdout);
 }
 
@@ -1683,10 +1681,10 @@ info_address_command (const char *exp, int from_tty)
     }
 
   printf_filtered ("Symbol \"");
-  fputs_filtered (sym->print_name (), gdb_stdout);
+  puts_filtered (sym->print_name ());
   printf_filtered ("\" is ");
   val = SYMBOL_VALUE (sym);
-  if (SYMBOL_OBJFILE_OWNED (sym))
+  if (sym->is_objfile_owned ())
     section = sym->obj_section (symbol_objfile (sym));
   else
     section = NULL;
@@ -1700,7 +1698,7 @@ info_address_command (const char *exp, int from_tty)
       return;
     }
 
-  switch (SYMBOL_CLASS (sym))
+  switch (sym->aclass ())
     {
     case LOC_CONST:
     case LOC_CONST_BYTES:
@@ -1735,7 +1733,7 @@ info_address_command (const char *exp, int from_tty)
 	 in that objfile.  */
       regno = SYMBOL_REGISTER_OPS (sym)->register_number (sym, gdbarch);
 
-      if (SYMBOL_IS_ARGUMENT (sym))
+      if (sym->is_argument ())
 	printf_filtered (_("an argument in register %s"),
 			 gdbarch_register_name (gdbarch, regno));
       else
@@ -2184,9 +2182,9 @@ do_one_display (struct display *d)
 	}
       catch (const gdb_exception_error &ex)
 	{
-	  fprintf_filtered (gdb_stdout, _("%p[<error: %s>%p]\n"),
-			    metadata_style.style ().ptr (), ex.what (),
-			    nullptr);
+	  printf_filtered (_("%p[<error: %s>%p]\n"),
+			   metadata_style.style ().ptr (), ex.what (),
+			   nullptr);
 	}
     }
   else
@@ -2895,7 +2893,7 @@ printf_command (const char *arg, int from_tty)
 {
   ui_printf (arg, gdb_stdout);
   reset_terminal_style (gdb_stdout);
-  wrap_here ("");
+  gdb_stdout->wrap_here (0);
   gdb_stdout->flush ();
 }
 

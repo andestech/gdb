@@ -142,14 +142,14 @@ proc up_set { t l r new } {
     }
 }
 
-up_set "charest" "-1 .*" "-2 .*" "4 ..004."
-up_set "short" "-1" "-2" "4"
-up_set "int" "-1" "-2" "4"
-up_set "long" "-1" "-2" "4"
-up_set "longest" "-1" "-2" "4"
-up_set "float" "-1" "-2" "4"
-up_set "double" "-1" "-2" "4"
-up_set "doublest" "-1" "-2" "4"
+#up_set "charest" "-1 .*" "-2 .*" "4 ..004."
+#up_set "short" "-1" "-2" "4"
+#up_set "int" "-1" "-2" "4"
+#up_set "long" "-1" "-2" "4"
+#up_set "longest" "-1" "-2" "4"
+#up_set "float" "-1" "-2" "4"
+#up_set "double" "-1" "-2" "4"
+#up_set "doublest" "-1" "-2" "4"
 
 #
 

@@ -1,5 +1,5 @@
 #as: -march=rv64i -mabi=lp64
-#objdump: -dr
+#objdump: -d
 
 .*:     file format elf64-(little|big)riscv
 
