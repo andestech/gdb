@@ -134,6 +134,13 @@ static enum float_abi float_abi = FLOAT_ABI_DEFAULT;
 
 static unsigned elf_flags = 0;
 
+/* { Andes  */
+/* Save option -O1 for perfomance.  */
+static int optimize = 0;
+/* Save option -Os for code size.  */
+static int optimize_for_space = 0;
+/* } Andes  */
+
 /* Set the default_isa_spec.  Return 0 if the spec isn't supported.
    Otherwise, return 1.  */
 
@@ -3294,6 +3301,10 @@ enum options
   OPTION_MPRIV_SPEC,
   OPTION_BIG_ENDIAN,
   OPTION_LITTLE_ENDIAN,
+  /* { Andes  */
+  OPTION_OPTIMIZE,
+  OPTION_OPTIMIZE_SPACE,
+  /* } Andes  */
   OPTION_END_OF_ENUM
 };
 
@@ -3314,6 +3325,11 @@ struct option md_longopts[] =
   {"mpriv-spec", required_argument, NULL, OPTION_MPRIV_SPEC},
   {"mbig-endian", no_argument, NULL, OPTION_BIG_ENDIAN},
   {"mlittle-endian", no_argument, NULL, OPTION_LITTLE_ENDIAN},
+
+  /* { Andes  */
+  {"O1", no_argument, NULL, OPTION_OPTIMIZE},
+  {"Os", no_argument, NULL, OPTION_OPTIMIZE_SPACE},
+  /* } Andes  */
 
   {NULL, no_argument, NULL, 0}
 };
@@ -3397,6 +3413,18 @@ md_parse_option (int c, const char *arg)
     case OPTION_LITTLE_ENDIAN:
       target_big_endian = 0;
       break;
+
+    /* { Andes  */
+    case OPTION_OPTIMIZE:
+      optimize = 1;
+      optimize_for_space = 0;
+      break;
+
+    case OPTION_OPTIMIZE_SPACE:
+      optimize = 0;
+      optimize_for_space = 1;
+      break;
+    /* } Andes  */
 
     default:
       return 0;
