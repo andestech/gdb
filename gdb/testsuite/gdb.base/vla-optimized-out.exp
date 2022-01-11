@@ -32,9 +32,9 @@ proc vla_optimized_out {exe_suffix options} {
 	return -1
     }
 
-    if ![runto f1] {
-	return
-    }
+    runto_main
+    gdb_breakpoint [gdb_get_line_number "set breakpoint here"]
+    gdb_continue_to_breakpoint "continue to breakpoint in f1"
 
     gdb_test "p a" \
 	" = <optimized out>" \

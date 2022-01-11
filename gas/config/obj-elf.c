@@ -73,7 +73,6 @@ static void obj_elf_local (int);
 static void obj_elf_visibility (int);
 static void obj_elf_symver (int);
 static void obj_elf_subsection (int);
-static void obj_elf_popsection (int);
 static void obj_elf_gnu_attribute (int);
 static void obj_elf_tls_common (int);
 static void obj_elf_lcomm (int);
@@ -1614,7 +1613,7 @@ obj_elf_previous (int ignore ATTRIBUTE_UNUSED)
 #endif
 }
 
-static void
+void
 obj_elf_popsection (int xxx ATTRIBUTE_UNUSED)
 {
   struct section_stack *top = section_stack;

@@ -34,6 +34,7 @@
 #include "opcode/riscv.h"
 
 #include <stdint.h>
+#include <stdlib.h>
 
 /* Information about an instruction, including its format, operands
    and fixups.  */
@@ -53,6 +54,19 @@ struct riscv_cl_insn
 
   /* The relocs associated with the instruction, if any.  */
   fixS *fixp;
+
+  /* { Andes */
+  /* The cmodel parameters.  */
+  struct
+    {
+      int method;
+      int state;
+      int type;
+      int relax;
+      int index;
+      int offset;
+    } cmodel;
+  /* } Andes */
 };
 
 /* All RISC-V CSR belong to one of these classes.  */
@@ -65,6 +79,12 @@ enum riscv_csr_class
   CSR_CLASS_F,		/* f-ext only */
   CSR_CLASS_ZKR,	/* zkr only */
   CSR_CLASS_V,		/* rvv only */
+  CSR_CLASS_SSCOFPMF,	/* sscofpmf only */
+  /* { Andes  */
+  CSR_CLASS_P,
+  CSR_CLASS_XANDES,
+  /* } Andes  */
+  CSR_CLASS_ZCMT,	/* zcmt only */
   CSR_CLASS_DEBUG	/* debug CSR */
 };
 
@@ -104,12 +124,52 @@ struct riscv_csr_extra
 
 /* Need to sync the version with RISC-V compiler.  */
 #ifndef DEFAULT_RISCV_ISA_SPEC
-#define DEFAULT_RISCV_ISA_SPEC "20191213"
+/* #define DEFAULT_RISCV_ISA_SPEC "20191213" */
+#define DEFAULT_RISCV_ISA_SPEC "2.2"
 #endif
 
 #ifndef DEFAULT_RISCV_PRIV_SPEC
 #define DEFAULT_RISCV_PRIV_SPEC "1.11"
 #endif
+
+/* Instruction pair combiner check function. */
+typedef bfd_boolean (*riscv_combine_check) (const struct riscv_cl_insn*,
+    const expressionS*, const bfd_reloc_code_real_type);
+
+typedef bfd_boolean (*riscv_combine_avail) (void);
+
+/* A matcher defines a rule to combine an instruction pair. */
+struct riscv_combiner_matcher
+{
+  /* Func to check the first/second insn in insn pair. */
+  riscv_combine_check check_1;
+  riscv_combine_check check_2;
+
+  /* Func to write the combined insn after check_2 passes.
+    The combined insn is written to the cached field in
+    riscv_combiner.  */
+  riscv_combine_check update;
+
+  /* Rturn TRUE if this matcher is available. */
+  riscv_combine_avail avail;
+};
+
+struct riscv_combiner
+{
+  /* Matcher list */
+  struct riscv_combiner_matcher *matcher;
+
+  /* idx is 0 if no insn is cached. If idx is not 0,
+    then an insn is cached through the matcher(check_1)
+    at the index idx-1 in matcher list. */
+  int idx;
+
+  /* Holding a cached insn information,
+     insn symbol, info and reloc type */
+  expressionS imm_expr;
+  struct riscv_cl_insn insn;
+  bfd_reloc_code_real_type imm_reloc;
+};
 
 static const char default_arch[] = DEFAULT_ARCH;
 static const char *default_arch_with_ext = DEFAULT_RISCV_ARCH_WITH_EXT;
@@ -133,6 +193,98 @@ static enum float_abi float_abi = FLOAT_ABI_DEFAULT;
 #define ADD32_INSN (xlen == 64 ? "addiw" : "addi")
 
 static unsigned elf_flags = 0;
+
+/* { Andes  */
+enum riscv_cl_insn_method
+{
+  METHOD_DEFAULT,
+  METHOD_VARIABLE,
+};
+
+enum cmodel_types {
+  CMODEL_DEFAULT,
+  CMODEL_LARGE,
+};
+
+enum cmodel_subtype_index
+{
+  CSI_INDIRECT_SYMBOL = 0,
+  CSI_REFERENCE_SYMBOL = 1,
+  CSI_LARGE_CODE = 2,
+  CSI_DEFAULT_CODE = 3,
+  /* workaround borrow variable frag used by cmodel.  */
+  CSI_B22827,
+  CSI_B22827_1,
+};
+/* } Andes  */
+
+/* { Andes  */
+/* Save option -O1 for perfomance.  */
+static int optimize = 0;
+/* Save option -Os for code size.  */
+static int optimize_for_space = 0;
+/* Save option -mict-model for ICT model setting.  */
+static const char *m_ict_model = NULL;
+static bool pre_insn_is_a_cond_br = false;
+static struct andes_as_states
+{
+  /* CONS (RISCV_DATA) */
+  int cons_count;
+  /* ICT */
+  expressionS *ict_exp;
+  /* b22827 */
+  struct riscv_cl_insn prev_insn;
+  fragS *frag_b22827;
+} nsta;
+/* } Andes  */
+
+/* { Andes ACE */
+extern char *andes_ace_load_hooks (const char *arg);
+/* Hash table for storing symbols from shared library */
+static htab_t ace_keyword_hash = NULL;
+static htab_t ace_op_hash = NULL;
+/* Pointers for storing symbols from ACE shared library */
+extern struct riscv_opcode *ace_opcs;
+extern ace_keyword_t *ace_keys;
+extern ace_op_t *ace_ops;
+/* Represent whether ACE shared library is loaded successfully */
+extern bool ace_lib_load_success;
+
+static void
+ace_ip (char **args, char **str, struct riscv_cl_insn *ip);
+/* } Andes ACE */
+
+/* { Andes */
+static void
+riscv_rvc_reloc_setting (int mode);
+static bool
+is_b19758_associated_insn (struct riscv_opcode *insn);
+static bool
+is_indirect_jump (struct riscv_opcode *insn);
+static bool
+is_conditional_branch (struct riscv_opcode *insn);
+static bool
+is_insn_fdiv_or_fsqrt (const struct riscv_opcode *insn);
+static bool
+is_insn_in_b22827_list (const struct riscv_opcode *insn,
+			insn_t prev, insn_t curr);
+static inline int insn_fp_rd (insn_t insn);
+static inline bool is_insn_fmt_s (insn_t insn);
+static inline bool is_insn_fshw (const struct riscv_opcode *insn);
+static bool
+is_insn_of_std_type (const struct riscv_opcode *insn, const char *type);
+static bool
+is_insn_of_fp_types (const struct riscv_opcode *insn);
+static void
+andes_insert_btb_reloc (struct riscv_cl_insn *ip);
+
+static void
+riscv_aligned_cons (int idx);
+static void
+macro_build (expressionS *ep, const char *name, const char *fmt, ...);
+static void
+riscv_make_nops (char *buf, bfd_vma bytes);
+/* } Andes */
 
 /* Set the default_isa_spec.  Return 0 if the spec isn't supported.
    Otherwise, return 1.  */
@@ -208,6 +360,30 @@ struct riscv_set_options
   int relax; /* Emit relocs the linker is allowed to relax.  */
   int arch_attr; /* Emit architecture and privileged elf attributes.  */
   int csr_check; /* Enable the CSR checking.  */
+  /* { Andes  */
+  int no_16_bit; /* Do not emit any 16 bit instructions.  */
+  int execit; /* Enable EXECIT relaxation.  */
+  int verbatim; /* Code is generated by compiler.  */
+  int cmodel; /* cmodel type.  */
+  int atomic; /* RVA */
+  int dsp; /* RVP */
+  int nexecit_op; /* Enable nexec.it opcode. */
+  int vector; /* RVV */
+  int efhw; /* RVXefhw (flhw/fshw) */
+  int workaround; /* Enable Andes workarounds.  */
+  /* { workaround */
+  int b19758_effect;
+  int b19758;
+  int b25057; /* alias of b19758 */
+  int b20282;
+  int b22827;
+  int b22827_1;
+  /* } workaround */
+  int full_arch;
+  int no_branch_relax;
+  int no_rvc_convert;
+  int is_linux;
+  /* } Andes  */
 };
 
 static struct riscv_set_options riscv_opts =
@@ -217,6 +393,28 @@ static struct riscv_set_options riscv_opts =
   1, /* relax */
   DEFAULT_RISCV_ATTR, /* arch_attr */
   0, /* csr_check */
+  /* { Andes  */
+  0, /* no_16_bit */
+  0, /* execit */
+  0, /* verbatim */
+  CMODEL_DEFAULT, /* cmodel */
+  0, /* atomic */
+  0, /* dsp */
+  0, /* nexec.it opcode */
+  0, /* vector */
+  0, /* efhw */
+  1, /* workaround */
+  1, /* b19758_effect */
+  1, /* b19758 */
+  1, /* b25057 */
+  0, /* b20282 */
+  0, /* b22827 */
+  0, /* b22827_1 */
+  0, /* full arch */
+  0, /* no_branch_relax */
+  0, /* no_rvc_convert */
+  0, /* is_linux */
+  /* } Andes  */
 };
 
 /* Enable or disable the rvc flags for riscv_opts.  Turn on the rvc flag
@@ -225,6 +423,10 @@ static struct riscv_set_options riscv_opts =
 static void
 riscv_set_rvc (bool rvc_value)
 {
+  /* Always close the rvc when -mno-16-bit option is set.  */
+  if (riscv_opts.no_16_bit)
+    return;
+
   if (rvc_value)
     elf_flags |= EF_RISCV_RVC;
 
@@ -241,9 +443,12 @@ static riscv_parse_subset_t riscv_rps_as =
   NULL,			/* subset_list, we will set it later once
 			   riscv_opts_stack is created or updated.  */
   as_bad,		/* error_handler.  */
+  as_warn,		/* warning_handler.  */
   &xlen,		/* xlen.  */
   &default_isa_spec,	/* isa_spec.  */
   true,			/* check_unknown_prefixed_ext.  */
+  STATE_ASSEMBLE,	/* state.  */
+  false,		/* exec.it enabled? */
 };
 
 /* This structure is used to hold a stack of .option values.  */
@@ -273,13 +478,15 @@ riscv_set_arch (const char *s)
       riscv_subsets = XNEW (riscv_subset_list_t);
       riscv_subsets->head = NULL;
       riscv_subsets->tail = NULL;
+      riscv_subsets->last = NULL;
       riscv_rps_as.subset_list = riscv_subsets;
     }
   riscv_release_subset_list (riscv_subsets);
   riscv_parse_subset (&riscv_rps_as, s);
 
   riscv_set_rvc (false);
-  if (riscv_subset_supports (&riscv_rps_as, "c"))
+  if (riscv_subset_supports (&riscv_rps_as, "c")
+      || riscv_subset_supports (&riscv_rps_as, "zca"))
     riscv_set_rvc (true);
 }
 
@@ -375,7 +582,7 @@ const char EXP_CHARS[] = "eE";
 
 /* Chars that mean this number is a floating point constant.
    As in 0f12.456 or 0d1.2345e12.  */
-const char FLT_CHARS[] = "rRsSfFdDxXpP";
+const char FLT_CHARS[] = "rRsSfFdDxXpPhH";
 
 /* Indicate we are already assemble any instructions or not.  */
 static bool start_assemble = false;
@@ -388,6 +595,9 @@ static bool explicit_priv_attr = false;
 
 static char *expr_end;
 
+/* Instruction pair combiner */
+static struct riscv_combiner *insn_combiner;
+
 /* Macros for encoding relaxation state for RVC branches and far jumps.  */
 #define RELAX_BRANCH_ENCODE(uncond, rvc, length)	\
   ((relax_substateT) 					\
@@ -399,6 +609,52 @@ static char *expr_end;
 #define RELAX_BRANCH_LENGTH(i) (((i) >> 2) & 0xF)
 #define RELAX_BRANCH_RVC(i) (((i) & 2) != 0)
 #define RELAX_BRANCH_UNCOND(i) (((i) & 1) != 0)
+/* { Andes */
+#define RELAX_BRANCH_ENCODE_EX(uncond, rvc, length, range) \
+  (RELAX_BRANCH_ENCODE(uncond, rvc, length) \
+  | ((range) << 6))
+#define RELAX_BRANCH_RANGE(i) (((i) >> 6) & 0xF)
+
+#define RELAX_CMODEL_ENCODE(type, relax, length, index)	\
+  ((relax_substateT) 					\
+   (0xd0000000						\
+    | ((type) << 0)					\
+    | ((relax) << 7)					\
+    | ((length) << 8)					\
+    | ((index) << 16)))
+#define RELAX_CMODEL_P(i) (((i) & 0xf0000000) == 0xd0000000)
+#define RELAX_CMODEL_TYPE(i) ((i) & 0x7f)
+#define RELAX_CMODEL_RELAX(i) (((i) >> 7) & 0x01)
+#define RELAX_CMODEL_LENGTH(i) (((i) >> 8) & 0xff)
+#define RELAX_CMODEL_INDEX(i) (((i) >> 16) & 0xff)
+
+enum cmodel_type
+{
+  TYPE_JX = 0,
+  TYPE_LA,
+  TYPE_LD,
+  TYPE_ST,
+  TYPE_ALIGN,
+  TYPE_IS, /* indirect symbol  */
+  /* workaround borrow variable frag used by cmodel.  */
+  TYPE_B22827,
+  TYPE_B22827_1,
+};
+
+enum branch_range
+{
+  RANGE_JMP = 1,
+  RANGE_BRANCH = 2,
+  RANGE_10_PCREL = 3
+};
+
+#define ENUM_BRANCH_RANGE(reloc)					\
+  ((reloc == BFD_RELOC_RISCV_JMP) ? RANGE_JMP				\
+    : ((reloc == BFD_RELOC_12_PCREL) ? RANGE_BRANCH			\
+      : (reloc == BFD_RELOC_RISCV_10_PCREL) ? RANGE_10_PCREL : 0))
+
+/* } Andes */
+
 
 /* Is the given value a sign-extended 32-bit value?  */
 #define IS_SEXT_32BIT_NUM(x)						\
@@ -645,6 +901,46 @@ add_relaxed_insn (struct riscv_cl_insn *insn, int max_chars, int var,
 	    subtype, symbol, offset, NULL);
 }
 
+/* { Andes */
+static void
+add_insn_grow (struct riscv_cl_insn *insn)
+{
+  frag_grow (insn_length (insn));
+  move_insn (insn, frag_now, frag_more (0) - frag_now->fr_literal + insn->cmodel.offset);
+}
+
+static inline void
+add_insn_grow_done (struct riscv_cl_insn *insn ATTRIBUTE_UNUSED, int max_chars, int var,
+      relax_substateT subtype, symbolS *symbol, offsetT offset)
+{
+  frag_var (rs_machine_dependent, max_chars, var,
+	    subtype, symbol, offset, NULL);
+}
+
+static inline bool
+is_cmodel_large (void)
+{
+  return riscv_opts.cmodel == CMODEL_LARGE;
+}
+
+static inline bool
+is_same_section_symbol (symbolS *sym, asection *sec)
+{
+  return (sym != NULL
+	  && S_IS_DEFINED (sym)
+	  && !S_IS_WEAK (sym)
+	  && sec == S_GET_SEGMENT (sym));
+}
+
+static inline
+bfd_boolean is_cmodel_relaxable (symbolS *sym, asection *sec)
+{
+  return (abi_xlen >= 64
+	  && is_cmodel_large ()
+	  && !is_same_section_symbol (sym, sec));
+}
+/* } Andes */
+
 /* Compute the length of a branch sequence, and adjust the stored length
    accordingly.  If FRAGP is NULL, the worst-case length is returned.  */
 
@@ -652,6 +948,7 @@ static unsigned
 relaxed_branch_length (fragS *fragp, asection *sec, int update)
 {
   int jump, rvc, length = 8;
+  enum branch_range range;
 
   if (!fragp)
     return length;
@@ -659,11 +956,14 @@ relaxed_branch_length (fragS *fragp, asection *sec, int update)
   jump = RELAX_BRANCH_UNCOND (fragp->fr_subtype);
   rvc = RELAX_BRANCH_RVC (fragp->fr_subtype);
   length = RELAX_BRANCH_LENGTH (fragp->fr_subtype);
+  range = RELAX_BRANCH_RANGE (fragp->fr_subtype);
 
   /* Assume jumps are in range; the linker will catch any that aren't.  */
-  length = jump ? 4 : 8;
+  if (!riscv_opts.no_branch_relax)
+    length = jump ? 4 : 8;
 
-  if (fragp->fr_symbol != NULL
+  if (!riscv_opts.no_branch_relax
+      && fragp->fr_symbol != NULL
       && S_IS_DEFINED (fragp->fr_symbol)
       && !S_IS_WEAK (fragp->fr_symbol)
       && sec == S_GET_SEGMENT (fragp->fr_symbol))
@@ -674,17 +974,111 @@ relaxed_branch_length (fragS *fragp, asection *sec, int update)
 
       if (rvc && (bfd_vma)(val + rvc_range/2) < rvc_range)
 	length = 2;
-      else if ((bfd_vma)(val + RISCV_BRANCH_REACH/2) < RISCV_BRANCH_REACH)
+      else if (range == RANGE_BRANCH
+	       && (bfd_vma)(val + RISCV_BRANCH_REACH/2) < RISCV_BRANCH_REACH)
+	length = 4;
+      else if  ((bfd_vma)(val + RISCV_10_PCREL_REACH/2) < RISCV_10_PCREL_REACH)
 	length = 4;
       else if (!jump && rvc)
 	length = 6;
     }
 
   if (update)
-    fragp->fr_subtype = RELAX_BRANCH_ENCODE (jump, rvc, length);
+    fragp->fr_subtype = RELAX_BRANCH_ENCODE_EX (jump, rvc, length, range);
 
   return length;
 }
+
+/* { Andes */
+/* Compute the length of a CModel sequence, and adjust the stored length
+   accordingly.  */
+static unsigned
+relaxed_cmodel_length (fragS *fragp, asection *sec)
+{
+  int type = RELAX_CMODEL_TYPE (fragp->fr_subtype);
+  int relax = RELAX_CMODEL_RELAX (fragp->fr_subtype);
+  int length = RELAX_CMODEL_LENGTH (fragp->fr_subtype);
+  int index = RELAX_CMODEL_INDEX (fragp->fr_subtype);
+  int is_same_sec = is_same_section_symbol (fragp->fr_symbol, sec);
+
+  gas_assert (fragp);
+
+  switch (index)
+    {
+    case CSI_INDIRECT_SYMBOL:
+      switch (type)
+	{
+	case TYPE_JX ... TYPE_ST:
+	  length = 0;
+	  break;
+	case TYPE_ALIGN:
+	  if (is_same_sec)
+	    length = 0;
+	  else
+	    gas_assert (length == 6);
+	  break;
+	case TYPE_IS:
+	  if (is_same_sec)
+	    length = 0;
+	  else
+	    gas_assert (length == 8);
+	  break;
+	default:
+	  as_fatal (_("internal error: invalid CModel type!"));
+	}
+      break;
+    case CSI_REFERENCE_SYMBOL:
+      switch (type)
+	{
+	case TYPE_JX ... TYPE_ST:
+	  length = 0;
+	  break;
+	default:
+	  as_fatal (_("internal error: invalid CModel type!"));
+	}
+      break;
+    case CSI_LARGE_CODE:
+      switch (type)
+	{
+	case TYPE_JX:
+	  if (is_same_sec)
+	    length = 0;
+	  break;
+	case TYPE_LA:
+	    length = 8;
+	    break;
+	case TYPE_LD... TYPE_ST:
+	  if (is_same_sec)
+	    length = 8; /* -= 4 is NG, might do more than time.  */
+	  break;
+	default:
+	  as_fatal (_("internal error: invalid CModel type!"));
+	}
+      break;
+    case CSI_DEFAULT_CODE:
+      switch (type)
+	{
+	case TYPE_JX:
+	  if (!is_same_sec)
+	    length = 0;
+	  break;
+	default:
+	  as_fatal (_("internal error: invalid CModel type!"));
+	}
+      break;
+    case CSI_B22827:
+    case CSI_B22827_1:
+      if (fragp->fr_var == 0) length = 0;
+      else if (fragp->fr_var == 1) length = 4;
+      break;
+    default:
+      as_fatal (_("internal error: invalid CModel index!"));
+    }
+
+  fragp->fr_subtype = RELAX_CMODEL_ENCODE (type, relax, length, index);
+  return length;
+}
+/* } Andes */
 
 /* Information about an opcode name, mnemonics and its value.  */
 struct opcode_name_t
@@ -908,6 +1302,21 @@ riscv_csr_address (const char *csr_name,
     case CSR_CLASS_DEBUG:
       need_check_version = false;
       break;
+    case CSR_CLASS_SSCOFPMF:
+      need_check_version = false;
+      break;
+    /* { Andes  */
+    case CSR_CLASS_P:
+      result = riscv_subset_supports (&riscv_rps_as, "p");
+      break;
+    case CSR_CLASS_XANDES:
+      result = riscv_subset_supports (&riscv_rps_as, "xandes");
+      break;
+    /* } Andes  */
+    case CSR_CLASS_ZCMT:
+      result = riscv_subset_supports (&riscv_rps_as, "zcmt");
+      need_check_version = false;
+      break;
     default:
       as_bad (_("internal: bad RISC-V CSR class (0x%x)"), csr_class);
     }
@@ -1024,6 +1433,154 @@ arg_lookup (char **s, const char *const *array, size_t size, unsigned *regnop)
   return false;
 }
 
+/* Map ra and s-register to [4,15], so that we can check if the
+    reg2 in register list reg1-reg2 or single reg2 is valid or not,
+    and obtain the corresponding rlist value.
+
+   ra - 4
+   s0 - 5
+   s1 - 6
+    ....
+  s10 - 0 (invalid)
+  s11 - 15
+*/
+
+static int
+regno_to_rlist (unsigned regno)
+{
+  if (regno == X_RA)
+    return 4;
+  else if (regno == X_S0 || regno == X_S1)
+    return 5 + regno - X_S0;
+  else if (regno >= X_S2 && regno < X_S10)
+    return 7 + regno - X_S2;
+  else if (regno == X_S11)
+    return 15;
+
+  return 0; /* invalid symbol */
+}
+
+/* Parse register list, and the parsed rlist value is stored in rlist
+  argument.
+
+  If ABI register names are used (e.g. ra and s0), the register
+  list could be "{ra}", "{ra, s0}", "{ra, s0-sN}", where 0 < N < 10 or
+  N == 11.
+
+  If numeric register names are used (e.g. x1 and x8), the register list
+  could be "{x1}", "{x1,x8}", "{x1,x8-x9}", "{x1,x8-x9, x18}" and
+  "{x1,x8-x9,x18-xN}", where 19 < N < 25 or N == 27.
+
+  It will fail if numeric register names and ABI register names are used
+  at the same time.
+  */
+
+static bool
+reglist_lookup (char **s, unsigned *rlist)
+{
+  unsigned regno;
+  bool is_zcmpe = riscv_subset_supports (&riscv_rps_as, "zcmpe");
+  /* Use to check if the register format is xreg.  */
+  bool use_xreg = **s == 'x';
+
+  /* The first register in register list should be ra.  */
+  if (!reg_lookup (s, RCLASS_GPR, &regno)
+      || !(*rlist = regno_to_rlist (regno)) /* update rlist */
+      || regno != X_RA)
+    return FALSE;
+
+  /* Skip "whitespace, whitespace" pattern.  */
+  while (ISSPACE (**s))
+    ++ *s;
+  if (**s == '}')
+    return TRUE;
+  else if (**s != ',')
+    return FALSE;
+  while (ISSPACE (*++*s))
+    ++ *s;
+
+  /* Do not use numeric and abi names at the same time.  */
+  if (use_xreg && **s != 'x')
+    return FALSE;
+
+  /* Reg1 should be s0 or its numeric names x8. */
+  if (!reg_lookup (s, RCLASS_GPR, &regno)
+      || !(*rlist = regno_to_rlist (regno))
+      || regno != X_S0)
+    return FALSE;
+
+  /* Skip "whitespace - whitespace" pattern.  */
+  while (ISSPACE (**s))
+    ++ *s;
+  if (**s == '}')
+    return TRUE;
+  else if (**s != '-')
+    return FALSE;
+  while (ISSPACE (*++*s))
+    ++ *s;
+
+  if (use_xreg && **s != 'x')
+    return FALSE;
+
+  /* Reg2 is x9 if the numeric name is used or arch is zcmpe,
+    otherwise, it could be any other sN register, where N > 0. */
+  if (!reg_lookup (s, RCLASS_GPR, &regno)
+      || !(*rlist = regno_to_rlist (regno))
+      || regno <= X_S0
+      || (use_xreg && regno != X_S1)
+	  || (is_zcmpe && regno != X_S1))
+    return FALSE;
+
+   /* Skip whitespace */
+  while (ISSPACE (**s))
+    ++ *s;
+
+  /* Check if it is the end of register list. */
+  if (**s == '}')
+    return TRUE;
+  else if (!(use_xreg || is_zcmpe))
+    return FALSE;
+
+  /* Here is not reachable if the abi name is used. */
+  gas_assert (use_xreg);
+
+  /* If the numeric name is used, we need to parse extra
+    register list, reg3 or reg3-reg4. */
+
+  /* Skip ", white space" pattern.  */
+  if (**s != ',')
+    return FALSE;
+  while (ISSPACE (*++*s))
+    ++ *s;
+
+  if (use_xreg && **s != 'x')
+    return FALSE;
+
+  /* Reg3 should be s2. */
+    if (!reg_lookup (s, RCLASS_GPR, &regno)
+	|| !(*rlist = regno_to_rlist (regno))
+	|| regno != X_S2)
+      return FALSE;
+
+  /* skip "whitespace - whitespace" pattern.  */
+  while (ISSPACE (**s))
+    ++ *s;
+  if (**s == '}')
+    return TRUE;
+  else if (**s != '-')
+    return FALSE;
+  while (ISSPACE (*++*s))
+    ++ *s;
+
+  /* Reg4 could be any other sN register, where N > 1. */
+  if (!reg_lookup (s, RCLASS_GPR, &regno)
+      || !(*rlist = regno_to_rlist (regno))
+      || regno <= X_S2)
+    return FALSE;
+
+  return TRUE;
+}
+
 #define USE_BITS(mask,shift) (used_bits |= ((insn_t)(mask) << (shift)))
 
 /* For consistency checking, verify that all bits are specified either
@@ -1101,10 +1658,104 @@ validate_riscv_insn (const struct riscv_opcode *opc, int length)
 		  goto unknown_validate_operand;
 		}
 	      break;
+	    /* { Andes  */
+	    case 'e':
+	      switch (*++oparg)
+		{
+		case 'i':
+		  used_bits |= ENCODE_RVC_EX9IT_IMM (-1U); break;
+		case 't':
+		  used_bits |= ENCODE_RVC_EXECIT_IMM (-1U); break;
+		case 'T':
+		  used_bits |= ENCODE_RVC_NEXECIT_IMM (-1U); break;
+		default:
+		  goto unknown_validate_operand;
+		}
+	      break;
+	    /* } Andes  */
+	    case 'Z': /* ZC specific operators.  */
+	      switch (*++oparg)
+		{
+		/* sreg operators in cm.mvsa01 and cm.mva01s. */
+		case '1': USE_BITS (OP_MASK_SREG1, OP_SH_SREG1); break;
+		case '2': USE_BITS (OP_MASK_SREG2, OP_SH_SREG2); break;
+		/* byte immediate operators, load/store byte insns.  */
+		case 'h': used_bits |= ENCODE_ZCB_HALFWORD_UIMM (-1U); break;
+		/* halfword immediate operators, load/store halfword insns.  */
+		case 'b': used_bits |= ENCODE_ZCB_BYTE_UIMM (-1U); break;
+		/* byte immediate operators, load/store byte insns.  */
+		case 'H': used_bits |= ENCODE_ZCMB_HALFWORD_UIMM (-1U); break;
+		/* halfword immediate operators, load/store halfword insns.  */
+		case 'B': used_bits |= ENCODE_ZCMB_BYTE_UIMM (-1U); break;
+		/* immediate offset operand for cm.push and cm.pop.  */
+		case 'p': used_bits |= ENCODE_ZCMP_SPIMM (-1U); break;
+		/* register list operand for cm.push and cm.pop. */
+		case 'r': USE_BITS (OP_MASK_RLIST, OP_SH_RLIST); break;
+		/* table jump index operand.  */
+		case 'i':
+		case 'I': used_bits |= ENCODE_ZCMP_TABLE_JUMP_INDEX (-1U); break;
+		default:
+		  goto unknown_validate_operand;
+		}
+	      break;
 	    default:
 	      goto unknown_validate_operand;
 	    }
 	  break;  /* end RVC */
+	/* { Andes  */
+	case 'g': used_bits |= ENCODE_STYPE_IMM10 (-1U); break;
+	case 'h': used_bits |= ENCODE_ITYPE_IMM (-1U); break;
+	case 'i': used_bits |= ENCODE_STYPE_IMM7 (-1U); break;
+	case 'k': used_bits |= ENCODE_TYPE_CIMM6 (-1U); break;
+	case 'l': used_bits |= ENCODE_ITYPE_IMM (-1U); break;
+	case 'H':
+	  switch (*++oparg)
+	    {
+	    case 'b': used_bits |= ENCODE_GPTYPE_SB_IMM (-1U); break;
+	    case 'h': used_bits |= ENCODE_GPTYPE_SH_IMM (-1U); break;
+	    case 'w': used_bits |= ENCODE_GPTYPE_SW_IMM (-1U); break;
+	    case 'd': used_bits |= ENCODE_GPTYPE_SD_IMM (-1U); break;
+	    default:
+	      goto unknown_validate_operand;
+	    }
+	  break;
+	case 'G':
+	  switch (*++oparg)
+	    {
+	    case 'b': used_bits |= ENCODE_GPTYPE_LB_IMM (-1U); break;
+	    case 'h': used_bits |= ENCODE_GPTYPE_LH_IMM (-1U); break;
+	    case 'w': used_bits |= ENCODE_GPTYPE_LW_IMM (-1U); break;
+	    case 'd': used_bits |= ENCODE_GPTYPE_LD_IMM (-1U); break;
+	    default:
+	      goto unknown_validate_operand;
+	    }
+	  break;
+	case 'N': /* Andes extensions: RVP  */
+	  switch (*++oparg)
+	    {
+	      case 'c': /* rc */
+		USE_BITS (OP_MASK_RC, OP_SH_RC); break;
+	      case 'd': /* rdp */
+		USE_BITS (OP_MASK_RD, OP_SH_RD); break;
+	      case 's': /* rsp */
+		USE_BITS (OP_MASK_RD, OP_SH_RS1); break;
+	      case 't': /* rtp */
+		USE_BITS (OP_MASK_RD, OP_SH_RS2); break;
+	      case '3': /* i3u */
+		used_bits |= ENCODE_PTYPE_IMM3U (-1U); break;
+	      case '4': /* i4u */
+		used_bits |= ENCODE_PTYPE_IMM4U (-1U); break;
+	      case '5': /* i5u */
+		used_bits |= ENCODE_PTYPE_IMM5U (-1U); break;
+	      case '6': /* i6u */
+		used_bits |= ENCODE_PTYPE_IMM6U (-1U); break;
+	      case 'f': /* i15s */
+		used_bits |= ENCODE_PTYPE_IMM15S (-1U); break;
+	      default:
+		goto unknown_validate_operand;
+	    }
+	  break;
+	/* } Andes  */
 	case 'V': /* RVV */
 	  switch (*++oparg)
 	    {
@@ -1132,6 +1783,9 @@ validate_riscv_insn (const struct riscv_opcode *opc, int length)
 	case ',': break;
 	case '(': break;
 	case ')': break;
+	case '{': break;
+	case '}': break;
+	case '!': break;
 	case '<': USE_BITS (OP_MASK_SHAMTW, OP_SH_SHAMTW); break;
 	case '>': USE_BITS (OP_MASK_SHAMT, OP_SH_SHAMT); break;
 	case 'A': break; /* Macro operand, must be symbol.  */
@@ -1160,6 +1814,7 @@ validate_riscv_insn (const struct riscv_opcode *opc, int length)
 	case 'a': used_bits |= ENCODE_JTYPE_IMM (-1U); break;
 	case 'p': used_bits |= ENCODE_BTYPE_IMM (-1U); break;
 	case 'q': used_bits |= ENCODE_STYPE_IMM (-1U); break;
+	case 'f': used_bits |= ENCODE_STYPE_IMM (-1U); break;
 	case 'u': used_bits |= ENCODE_UTYPE_IMM (-1U); break;
 	case 'z': break; /* Zero immediate.  */
 	case '[': break; /* Unused operand.  */
@@ -1181,6 +1836,14 @@ validate_riscv_insn (const struct riscv_opcode *opc, int length)
 	    {
 	      case '4': USE_BITS (OP_MASK_OP, OP_SH_OP); break;
 	      case '2': USE_BITS (OP_MASK_OP2, OP_SH_OP2); break;
+	      default:
+		goto unknown_validate_operand;
+	    }
+	  break;
+	case 'n': /* ZC */
+	  switch (*++oparg)
+	    {
+	      case 'f': break;
 	      default:
 		goto unknown_validate_operand;
 	    }
@@ -1289,6 +1952,64 @@ md_begin (void)
 
   /* Set the default alignment for the text section.  */
   record_alignment (text_section, riscv_opts.rvc ? 1 : 2);
+
+  /* { Andes ACE */
+  /* Load symbols from ACE shared library if exists */
+  if (ace_lib_load_success)
+    {
+      int i;
+
+      /* Insert instruction information in a hash table */
+      i = 0;
+      while (ace_opcs[i].name)
+	{
+	  const char *name = ace_opcs[i].name;
+	  struct riscv_opcode **hash_error = (struct riscv_opcode **)
+	    str_hash_insert (op_hash, name, (void *) &ace_opcs[i], 0);
+	  if (hash_error)
+	    {
+	      fprintf (stderr, _("internal error: can't hash `%s': %s\n"),
+		       name, (*hash_error)->name);
+	      as_fatal (_("Broken assembler.  No assembly attempted."));
+	    }
+	  i++;
+	}
+
+      /* Insert ACR index name in a hash table */
+      ace_keyword_hash = str_htab_create ();
+      i = 0;
+      while (ace_keys[i].name)
+	{
+	  const char *name = ace_keys[i].name;
+	  struct riscv_opcode **hash_error = (struct riscv_opcode **)
+	    str_hash_insert (ace_keyword_hash, name, (void *) &ace_keys[i], 0);
+	  if (hash_error)
+	    {
+	      fprintf (stderr, _("internal error: can't hash `%s': %s\n"),
+		       name, (*hash_error)->name);
+	      as_fatal (_("Broken assembler.  No assembly attempted."));
+	    }
+	  i++;
+	}
+
+      /* Insert operand field information in a hash table */
+      ace_op_hash = str_htab_create ();
+      i = 0;
+      while (ace_ops[i].name)
+	{
+	  const char *name = ace_ops[i].name;
+	  struct riscv_opcode **hash_error = (struct riscv_opcode **)
+	    str_hash_insert (ace_op_hash, name, (void *) &ace_ops[i], 0);
+	  if (hash_error)
+	    {
+	      fprintf (stderr, _("internal error: can't hash `%s': %s\n"),
+		       name, (*hash_error)->name);
+	      as_fatal (_("Broken assembler.  No assembly attempted."));
+	    }
+	  i++;
+	}
+    }
+  /* } Andes ACE */
 }
 
 static insn_t
@@ -1300,12 +2021,14 @@ riscv_apply_const_reloc (bfd_reloc_code_real_type reloc_type, bfd_vma value)
       return value;
 
     case BFD_RELOC_RISCV_HI20:
+    case BFD_RELOC_RISCV_ICT_HI20:
       return ENCODE_UTYPE_IMM (RISCV_CONST_HIGH_PART (value));
 
     case BFD_RELOC_RISCV_LO12_S:
       return ENCODE_STYPE_IMM (value);
 
     case BFD_RELOC_RISCV_LO12_I:
+    case BFD_RELOC_RISCV_ICT_LO12_I:
       return ENCODE_ITYPE_IMM (value);
 
     default:
@@ -1329,11 +2052,18 @@ append_insn (struct riscv_cl_insn *ip, expressionS *address_expr,
 
       gas_assert (address_expr);
       if (reloc_type == BFD_RELOC_12_PCREL
+          /* { Andes  */
+	  || reloc_type == BFD_RELOC_RISCV_10_PCREL
+	  /* } Andes  */
 	  || reloc_type == BFD_RELOC_RISCV_JMP)
 	{
 	  int j = reloc_type == BFD_RELOC_RISCV_JMP;
 	  int best_case = riscv_insn_length (ip->insn_opcode);
 	  unsigned worst_case = relaxed_branch_length (NULL, NULL, 0);
+	  int range = ENUM_BRANCH_RANGE (reloc_type);
+
+	  if (riscv_opts.no_branch_relax)
+	    worst_case = best_case;
 
 	  if (now_seg == absolute_section)
 	    {
@@ -1342,12 +2072,15 @@ append_insn (struct riscv_cl_insn *ip, expressionS *address_expr,
 	    }
 
 	  add_relaxed_insn (ip, worst_case, best_case,
-			    RELAX_BRANCH_ENCODE (j, best_case == 2, worst_case),
+			    RELAX_BRANCH_ENCODE_EX (j, best_case == 2,
+						    worst_case, range),
 			    address_expr->X_add_symbol,
 			    address_expr->X_add_number);
+	  if (reloc_type == BFD_RELOC_RISCV_JMP)
+	    andes_insert_btb_reloc (ip);
 	  return;
 	}
-      else
+      else if (ip->cmodel.method == METHOD_DEFAULT)
 	{
 	  howto = bfd_reloc_type_lookup (stdoutput, reloc_type);
 	  if (howto == NULL)
@@ -1359,11 +2092,76 @@ append_insn (struct riscv_cl_insn *ip, expressionS *address_expr,
 				  address_expr, false, reloc_type);
 
 	  ip->fixp->fx_tcbit = riscv_opts.relax;
+	  /* { Andes */
+	  if (address_expr == nsta.ict_exp)
+	    {
+	      nsta.ict_exp = NULL;
+	      ip->fixp->tc_fix_data.ict = address_expr->X_md;
+	    }
+	  /* } Andes */
 	}
     }
 
-  add_fixed_insn (ip);
-  install_insn (ip);
+  if (ip->cmodel.method == METHOD_DEFAULT)
+    {
+      add_fixed_insn (ip);
+      if (riscv_opts.workaround)
+	{
+	  if ((riscv_opts.b22827 || riscv_opts.b22827_1)
+	      && !riscv_subset_supports (&riscv_rps_as, "v"))
+	    {
+	      const struct riscv_opcode *insn = ip->insn_mo;
+
+	      /* insert “fclass.x x0, RD(FDIV/FSQRT)” after FDIV/FSQRT unless
+	       * the next immediate instruction is
+	       * “fsub/fadd/fmul/fmadd/fsqrt/fdiv/jal/ret and their 16bit variants”
+	       * NOTE: by jal I mean jal and jral. Ret includes jr.
+	       * If you can accept more complex conditions, RD(FDIV/FSQRT) has to be
+	       * in fa0-7 to exclude jal/ret.
+	       */
+	      if (riscv_opts.b22827 && is_insn_fdiv_or_fsqrt (insn))
+		{
+		  const char *mne = "fclass.d";
+		  if (is_insn_fmt_s (ip->insn_opcode))
+		    mne = "fclass.s";
+		  nsta.frag_b22827 = frag_now;
+		  macro_build (NULL, mne, "d,s,C", 0, insn_fp_rd(ip->insn_opcode),
+			       0, TYPE_B22827, 0, CSI_B22827, 0);
+		}
+
+	      /* to provide a separate flag to turn it off, with the following rule:
+	       * If FSHW is followed by any floating-point instructions (including
+	       * FSHW and FLHW), insert a NOP after it.
+	       */
+	      else if (riscv_opts.b22827_1 && is_insn_fshw (insn))
+		{
+		  nsta.frag_b22827 = frag_now;
+		  macro_build (NULL, "nop", "C",
+			       0, TYPE_B22827_1, 0, CSI_B22827_1, 0);
+		}
+	    }
+	}
+    }
+  else if (ip->cmodel.method == METHOD_VARIABLE)
+    {
+      add_insn_grow (ip);
+      if (ip->cmodel.state == 0)
+	{
+	  int length = ip->cmodel.offset + 4;
+	  symbolS *symbol = address_expr ? address_expr->X_add_symbol : NULL;
+	  offsetT offset = address_expr ? address_expr->X_add_number : 0;
+	  add_insn_grow_done (ip, length, 0,
+			      RELAX_CMODEL_ENCODE (ip->cmodel.type, ip->cmodel.relax,
+						   length, ip->cmodel.index),
+			      symbol, offset);
+	  andes_insert_btb_reloc (ip);
+	}
+      return;
+    }
+  else
+    as_fatal (_("internal error: invalid append_insn method!"));
+
+  andes_insert_btb_reloc (ip);
 
   /* We need to start a new frag after any instruction that can be
      optimized away or compressed by the linker during relaxation, to prevent
@@ -1377,6 +2175,205 @@ append_insn (struct riscv_cl_insn *ip, expressionS *address_expr,
       frag_wane (frag_now);
       frag_new (0);
     }
+}
+
+/* Return TRUE if instruction combiner is available.  */
+
+static bfd_boolean
+use_insn_combiner (void)
+{
+  return riscv_subset_supports (&riscv_rps_as, "zcmp");
+}
+
+/* Return TRUE if the insn is valid for the first insn in
+  instruction pair. */
+
+static bfd_boolean
+zcmp_mva01s_1 (const struct riscv_cl_insn *insn,
+	const expressionS *imm_expr ATTRIBUTE_UNUSED,
+	const bfd_reloc_code_real_type reloc_type ATTRIBUTE_UNUSED)
+{
+  int rd, rs2;
+
+  /* mv is replaced by c.mv in C ext  */
+  if (insn->insn_mo->match != MATCH_C_MV)
+    return FALSE;
+
+  rd = EXTRACT_OPERAND (RD, insn->insn_opcode);
+  rs2 = EXTRACT_OPERAND (CRS2, insn->insn_opcode);
+
+  return (rd == X_A0 || rd == X_A1)
+      && RISCV_SREG_0_7 (rs2);
+}
+
+static bfd_boolean
+zcmp_mvsa01_1 (const struct riscv_cl_insn *insn,
+	const expressionS *imm_expr ATTRIBUTE_UNUSED,
+	const bfd_reloc_code_real_type reloc_type ATTRIBUTE_UNUSED)
+{
+  int rd, rs2;
+
+  /* mv is replaced by c.mv in C ext  */
+  if (insn->insn_mo->match != MATCH_C_MV)
+    return FALSE;
+
+  rd = EXTRACT_OPERAND (RD, insn->insn_opcode);
+  rs2 = EXTRACT_OPERAND (CRS2, insn->insn_opcode);
+
+  return (rs2 == X_A0 || rs2 == X_A1)
+      && RISCV_SREG_0_7 (rd);
+}
+
+/* Return TRUE if the insn is valid for the second insn in
+  instruction pair. */
+
+static bfd_boolean
+zcmp_mva01s_2 (const struct riscv_cl_insn *insn,
+	const expressionS *imm_expr ATTRIBUTE_UNUSED,
+	const bfd_reloc_code_real_type reloc_type ATTRIBUTE_UNUSED)
+{
+  if (insn->insn_mo->match != MATCH_C_MV)
+    return FALSE;
+
+  int rd = EXTRACT_OPERAND (RD, insn->insn_opcode);
+  int rs2 = EXTRACT_OPERAND (CRS2, insn->insn_opcode);
+  int rd_cache = EXTRACT_OPERAND (RD, insn_combiner->insn.insn_opcode);
+
+  /* First check if rd does not equal the rd of cached c.mv insn,
+    and if rd is a0 or a1. */
+  if ((rd == rd_cache)
+      || (rd != X_A0 && rd != X_A1))
+    return FALSE;
+
+  /* Then we check if rs is s0-s7. */
+  return RISCV_SREG_0_7 (rs2);
+}
+
+static bfd_boolean
+zcmp_mvsa01_2 (const struct riscv_cl_insn *insn,
+	const expressionS *imm_expr ATTRIBUTE_UNUSED,
+	const bfd_reloc_code_real_type reloc_type ATTRIBUTE_UNUSED)
+{
+  if (insn->insn_mo->match != MATCH_C_MV)
+    return FALSE;
+
+  int rd = EXTRACT_OPERAND (RD, insn->insn_opcode);
+  int rs2 = EXTRACT_OPERAND (CRS2, insn->insn_opcode);
+  int rd_cache = EXTRACT_OPERAND (RD, insn_combiner->insn.insn_opcode);
+  int rs2_cache = EXTRACT_OPERAND (CRS2, insn_combiner->insn.insn_opcode);
+
+  /* First check if rs does not equal the rd of cached c.mv insn,
+    and if rs is a0 or a1. */
+  if ((rs2 == rs2_cache)
+      || (rs2 != X_A0 && rs2 != X_A1))
+    return FALSE;
+
+  /* Then we check if rd is s0-s7 and does not equal the
+    rd of cached c.mv insn.  */
+  return (rd != rd_cache)
+      && RISCV_SREG_0_7 (rd);
+}
+
+/* Write combined insn to the cached field in insn_combiner to append
+  later. */
+
+static bfd_boolean
+zcmp_mva01s_update (const struct riscv_cl_insn *insn,
+	const expressionS *imm_expr ATTRIBUTE_UNUSED,
+	const bfd_reloc_code_real_type reloc_type ATTRIBUTE_UNUSED)
+{
+  unsigned sreg1, sreg2;
+  struct riscv_cl_insn *cached_insn = &insn_combiner->insn;
+
+  unsigned rd = EXTRACT_OPERAND (RD, insn->insn_opcode);
+  unsigned rs2 = EXTRACT_OPERAND (CRS2, insn->insn_opcode);
+  unsigned rs2_cache = EXTRACT_OPERAND (CRS2, cached_insn->insn_opcode);
+
+  cached_insn->insn_opcode = MATCH_CM_MVA01S;
+
+  sreg1 = (rd == X_A0 ? rs2 : rs2_cache) % 8;
+  sreg2 = (rd == X_A0 ? rs2_cache : rs2) % 8;
+
+  INSERT_OPERAND (SREG1, *cached_insn, sreg1);
+  INSERT_OPERAND (SREG2, *cached_insn, sreg2);
+
+  return TRUE;
+}
+
+static bfd_boolean
+zcmp_mvsa01_update (const struct riscv_cl_insn *insn,
+	const expressionS *imm_expr ATTRIBUTE_UNUSED,
+	const bfd_reloc_code_real_type reloc_type ATTRIBUTE_UNUSED)
+{
+  unsigned sreg1, sreg2;
+  struct riscv_cl_insn *cached_insn = &insn_combiner->insn;
+
+  unsigned rd = EXTRACT_OPERAND (RD, insn->insn_opcode);
+  unsigned rd_cache = EXTRACT_OPERAND (RD, cached_insn->insn_opcode);
+  unsigned rs2 = EXTRACT_OPERAND (CRS2, insn->insn_opcode);
+
+  cached_insn->insn_opcode = MATCH_CM_MVSA01;
+
+  sreg1 = (rs2 == X_A0 ? rd : rd_cache) % 8;
+  sreg2 = (rs2 == X_A0 ? rd_cache : rd) % 8;
+
+  INSERT_OPERAND (SREG1, *cached_insn, sreg1);
+  INSERT_OPERAND (SREG2, *cached_insn, sreg2);
+  return TRUE;
+}
+
+/* Instruction pair matching table.  */
+
+static struct riscv_combiner_matcher riscv_comb_matchers [] = {
+  { zcmp_mva01s_1, zcmp_mva01s_2, zcmp_mva01s_update, use_insn_combiner },
+  { zcmp_mvsa01_1, zcmp_mvsa01_2, zcmp_mvsa01_update, use_insn_combiner },
+  { NULL, NULL, NULL, NULL },
+};
+
+/* Cache an instruction when it passes check function */
+
+static void
+cache_an_insn (struct riscv_cl_insn *insn,
+		    expressionS *imm_expr,
+		    bfd_reloc_code_real_type reloc_type)
+{
+  memcpy((void*)&(insn_combiner->imm_expr),
+      (void*)imm_expr, sizeof(expressionS));
+  memcpy((void*)&(insn_combiner->insn), (void*)insn,
+      sizeof(struct riscv_cl_insn));
+  insn_combiner->imm_reloc = reloc_type;
+}
+
+/* Initialize instruction pair combiner */
+
+static void
+init_insn_combiner (void)
+{
+  insn_combiner = (struct riscv_combiner *)
+	xmalloc (sizeof (struct riscv_combiner));
+  insn_combiner->idx = 0;
+  insn_combiner->matcher = riscv_comb_matchers;
+}
+
+/* Return TRUE if combiner has cached one instruction.  */
+
+static bfd_boolean
+has_cached_insn (void)
+{
+  return use_insn_combiner ()
+      && insn_combiner
+      && insn_combiner->idx > 0;
+}
+
+/* Append a cached instruction.  */
+
+static void
+release_cached_insn (void)
+{
+  append_insn (&insn_combiner->insn,
+		&insn_combiner->imm_expr,
+		insn_combiner->imm_reloc);
+  insn_combiner->idx = 0;
 }
 
 /* Build an instruction created by a macro expansion.  This is passed
@@ -1393,6 +2390,7 @@ macro_build (expressionS *ep, const char *name, const char *fmt, ...)
   va_list args;
   const char *fmtStart;
 
+  insn.cmodel.method = METHOD_DEFAULT;
   va_start (args, fmt);
 
   r = BFD_RELOC_UNUSED;
@@ -1465,6 +2463,25 @@ macro_build (expressionS *ep, const char *name, const char *fmt, ...)
 	  break;
 	case ',':
 	  continue;
+
+	/* { Andes */
+	case 'C':
+	  insn.cmodel.method = METHOD_VARIABLE;
+	  insn.cmodel.state = va_arg (args, int);
+	  insn.cmodel.type = va_arg (args, int);
+	  insn.cmodel.relax = va_arg (args, int);
+	  insn.cmodel.index = va_arg (args, int);
+	  insn.cmodel.offset = va_arg (args, int);
+	  continue;
+	/* } Andes */
+
+	case 'P':
+	  INSERT_OPERAND (PRED, insn, va_arg (args, int));
+	  continue;
+	case 'Q':
+	  INSERT_OPERAND (SUCC, insn, va_arg (args, int));
+	  continue;
+
 	default:
 	unknown_macro_argument:
 	  as_fatal (_("internal: invalid macro argument `%s'"), fmtStart);
@@ -1539,6 +2556,71 @@ make_internal_label (void)
 					frag_now_fix ());
 }
 
+/* { Andes */
+#define CMODEL_SUBSECTION 8100
+#define CMODEL_SYMBOL_PREFIX ".Laddr"
+#define CMODEL_SECTION_ALIGN 3
+#define CMODEL_SECTION_ENTRY_SIZE (1u << CMODEL_SECTION_ALIGN)
+
+static
+void make_indirect_symbol (expressionS *ep, expressionS *ep_ind)
+{
+  char buf[0x100];
+  char isym_name[0x100];
+  symbolS *isym;
+  const char *seg_name = segment_name (now_seg);
+  const char *sym_name = S_GET_NAME (ep->X_add_symbol);
+  valueT sym_addend = ep->X_add_number;
+
+  /* make indirect symbol once  */
+  sprintf (isym_name, "%s_%s_%s_%lx", CMODEL_SYMBOL_PREFIX, seg_name,
+	   sym_name, (unsigned long)sym_addend);
+  isym = symbol_find (isym_name);
+  if (isym == NULL)
+    {
+      /* create indirect symbol:
+       *   # NOTE! these data might eventually drop, don't put fix here!!
+       *   # .pushsection subsection
+       *   # make nops for align
+       *   # make indirect symbol
+       *   # new variable fragment (grow frag, pend reloc till md_convert)
+       *   # .popsection
+       */
+      const char *sec_name = segment_name (now_seg);
+      char *save_in;
+      /* #  */
+      sprintf (buf, "%s, %d", sec_name, CMODEL_SUBSECTION);
+      save_in = input_line_pointer;
+      input_line_pointer = buf;
+      obj_elf_section (1); /* .pushsection  */
+      input_line_pointer = save_in;
+      /* #  */
+      #define ALIGN_LEN (6)
+      /* ALIGN */
+      frag_grow (ALIGN_LEN);
+      char *nops = frag_more (0);
+      riscv_make_nops (nops, ALIGN_LEN);
+      frag_var (rs_machine_dependent, ALIGN_LEN, 0,
+		RELAX_CMODEL_ENCODE (TYPE_ALIGN, riscv_opts.relax, ALIGN_LEN, 0),
+		ep->X_add_symbol, ep->X_add_number, NULL);
+      /* SYMBOL */
+      isym = colon (isym_name);
+      #define DATA_LEN (8)
+      frag_grow (DATA_LEN);
+      frag_var (rs_machine_dependent, DATA_LEN, 0,
+		RELAX_CMODEL_ENCODE (TYPE_IS, riscv_opts.relax, DATA_LEN, 0),
+		ep->X_add_symbol, ep->X_add_number, NULL);
+      /* #  */
+      obj_elf_popsection (0); /* .popsection  */
+    }
+
+  ep_ind->X_op = O_symbol;
+  ep_ind->X_add_symbol = isym;
+  ep_ind->X_add_number = 0;
+  ep_ind->X_md = 0; /* for ICT logic within fix_new_exp */
+}
+/* } Andes */
+
 /* Load an entry from the GOT.  */
 
 static void
@@ -1547,13 +2629,53 @@ pcrel_access (int destreg, int tempreg, expressionS *ep,
 	      bfd_reloc_code_real_type hi_reloc,
 	      bfd_reloc_code_real_type lo_reloc)
 {
-  expressionS ep2;
-  ep2.X_op = O_symbol;
-  ep2.X_add_symbol = make_internal_label ();
-  ep2.X_add_number = 0;
+  /* only L[BHWD]/S[BHWD support cmodel large  */
+  if (hi_reloc == BFD_RELOC_RISCV_PCREL_HI20
+      && is_cmodel_relaxable (ep->X_add_symbol, now_seg))
+    {
+      gas_assert (ep->X_op == O_symbol);
+      char lo_pattern_ex[0x100];
+      int index, type, relax = riscv_opts.relax;
+      expressionS ep_ind, ep_ref;
+      bfd_boolean is_la = strcmp (lo_insn, "addi") == 0;
+      bfd_boolean is_st = lo_reloc == BFD_RELOC_RISCV_PCREL_LO12_S;
+      make_indirect_symbol (ep, &ep_ind);
+      ep_ref.X_op = O_symbol;
+      ep_ref.X_add_symbol = make_internal_label ();
+      ep_ref.X_add_number = 0;
+      ep_ref.X_md = 0; /* for ICT logic within fix_new_exp */
+      type = is_st ? TYPE_ST : is_la ? TYPE_LA : TYPE_LD;
 
-  macro_build (ep, "auipc", "d,u", tempreg, hi_reloc);
-  macro_build (&ep2, lo_insn, lo_pattern, destreg, tempreg, lo_reloc);
+      strcpy (lo_pattern_ex, lo_pattern);
+      strcat (lo_pattern_ex, ",C");
+
+      /* index 0: argument, C: state, type, index, offset.  */
+      index = CSI_INDIRECT_SYMBOL;
+      macro_build (&ep_ind, "nop", "j,C", hi_reloc, 0, type, relax, index, 0);
+
+      /* index 1: argument, C: state, type, index, offset.  */
+      index++; /* CSI_REFERENCE_SYMBOL  */
+      macro_build (&ep_ref, "nop", "j,C", hi_reloc, 0, type, relax, index, 0);
+
+      /* index 2: generic form, C: state, type, index, offset.  */
+      index++; /* CSI_LARGE_CODE  */
+      frag_grow(4 * 3); /* ensure folloiwng instructions without frag bump.  */
+      macro_build (&ep_ind, "auipc", "d,u,C", tempreg, hi_reloc, 1, type, relax, index, 0);
+      macro_build (&ep_ref, "ld", "d,s,j,C", tempreg, tempreg, hi_reloc, 1, type, relax, index, 4);
+      macro_build (ep, lo_insn, lo_pattern_ex, destreg, tempreg, lo_reloc, 0, type, relax, index, 8);
+
+      /* CSI_DEFAULT_CODE can be extracted from CSI_LARGE_CODE  */
+    }
+  else
+    {
+      expressionS ep2;
+      ep2.X_op = O_symbol;
+      ep2.X_add_symbol = make_internal_label ();
+      ep2.X_add_number = 0;
+
+      macro_build (ep, "auipc", "d,u", tempreg, hi_reloc);
+      macro_build (&ep2, lo_insn, lo_pattern, destreg, tempreg, lo_reloc);
+    }
 }
 
 static void
@@ -1561,6 +2683,7 @@ pcrel_load (int destreg, int tempreg, expressionS *ep, const char *lo_insn,
 	    bfd_reloc_code_real_type hi_reloc,
 	    bfd_reloc_code_real_type lo_reloc)
 {
+  gas_assert (lo_reloc == BFD_RELOC_RISCV_PCREL_LO12_I);
   pcrel_access (destreg, tempreg, ep, lo_insn, "d,s,j", hi_reloc, lo_reloc);
 }
 
@@ -1569,19 +2692,59 @@ pcrel_store (int srcreg, int tempreg, expressionS *ep, const char *lo_insn,
 	     bfd_reloc_code_real_type hi_reloc,
 	     bfd_reloc_code_real_type lo_reloc)
 {
+  gas_assert (lo_reloc == BFD_RELOC_RISCV_PCREL_LO12_S);
   pcrel_access (srcreg, tempreg, ep, lo_insn, "t,s,q", hi_reloc, lo_reloc);
 }
 
 /* PC-relative function call using AUIPC/JALR, relaxed to JAL.  */
 
 static void
-riscv_call (int destreg, int tempreg, expressionS *ep,
+ riscv_call (int destreg, int tempreg, expressionS *ep,
 	    bfd_reloc_code_real_type reloc)
 {
-  /* Ensure the jalr is emitted to the same frag as the auipc.  */
-  frag_grow (8);
-  macro_build (ep, "auipc", "d,u", tempreg, reloc);
-  macro_build (NULL, "jalr", "d,s", destreg, tempreg);
+  /* { Andes */
+  if (reloc == BFD_RELOC_RISCV_CALL
+      && is_cmodel_relaxable (ep->X_add_symbol, now_seg))
+    {
+      gas_assert (ep->X_op == O_symbol);
+      int index, relax = riscv_opts.relax;
+      expressionS ep_ind, ep_ref;
+      make_indirect_symbol (ep, &ep_ind);
+      ep_ref.X_op = O_symbol;
+      ep_ref.X_add_symbol = make_internal_label ();
+      ep_ref.X_add_number = 0;
+      ep_ref.X_md = 0; /* for ICT logic within fix_new_exp */
+
+      /* index 0: argument, C: state, type, index, offset.  */
+      index = CSI_INDIRECT_SYMBOL;
+      macro_build (&ep_ind, "nop", "j,C", reloc, 0, TYPE_JX, relax, index, 0);
+
+      /* index 1: argument, C: state, type, index, offset.  */
+      index++; /* CSI_REFERENCE_SYMBOL  */
+      macro_build (&ep_ref, "nop", "j,C", reloc, 0, TYPE_JX, relax, index, 0);
+
+      /* index 2: generic form, C: state, type, index, offset.  */
+      index++; /* CSI_LARGE_CODE  */
+      frag_grow(4 * 3); /* ensure folloiwng instructions without frag bump.  */
+      macro_build (&ep_ind, "auipc", "d,u,C", tempreg, reloc, 1, TYPE_JX, relax, index, 0);
+      macro_build (&ep_ref, "ld", "d,s,j,C", tempreg, tempreg, reloc, 1, TYPE_JX, relax, index, 4);
+      macro_build (ep, "jalr", "d,s,j,C", destreg, tempreg, reloc, 0, TYPE_JX, relax, index, 8);
+
+      /* index 3: relaxed form  */
+      index++; /* CSI_DEFAULT_CODE  */
+      frag_grow(4 * 2); /* ensure folloiwng instructions without frag bump.  */
+      macro_build (ep, "auipc", "d,u,C", tempreg, reloc, 1, TYPE_JX, relax, index, 0);
+      macro_build (ep, "jalr", "d,s,j,C", destreg, tempreg, reloc, 0, TYPE_JX, relax, index, 4);
+    }
+  /* } Andes */
+  else
+    {
+      /* Ensure the jalr is emitted to the same frag as the auipc.  */
+      frag_grow (8);
+      macro_build (ep, "auipc", "d,u", tempreg, reloc);
+      macro_build (NULL, "jalr", "d,s", destreg, tempreg);
+    }
+
   /* See comment at end of append_insn.  */
   frag_wane (frag_now);
   frag_new (0);
@@ -1822,6 +2985,11 @@ macro (struct riscv_cl_insn *ip, expressionS *imm_expr,
 		  BFD_RELOC_RISCV_PCREL_HI20, BFD_RELOC_RISCV_PCREL_LO12_I);
       break;
 
+    case M_FLH:
+      pcrel_load (rd, rs1, imm_expr, "flh",
+                 BFD_RELOC_RISCV_PCREL_HI20, BFD_RELOC_RISCV_PCREL_LO12_I);
+      break;
+
     case M_FLW:
       pcrel_load (rd, rs1, imm_expr, "flw",
 		  BFD_RELOC_RISCV_PCREL_HI20, BFD_RELOC_RISCV_PCREL_LO12_I);
@@ -1850,6 +3018,11 @@ macro (struct riscv_cl_insn *ip, expressionS *imm_expr,
     case M_SD:
       pcrel_store (rs2, rs1, imm_expr, "sd",
 		   BFD_RELOC_RISCV_PCREL_HI20, BFD_RELOC_RISCV_PCREL_LO12_S);
+      break;
+
+    case M_FSH:
+      pcrel_store (rs2, rs1, imm_expr, "fsh",
+                  BFD_RELOC_RISCV_PCREL_HI20, BFD_RELOC_RISCV_PCREL_LO12_S);
       break;
 
     case M_FSW:
@@ -2253,6 +3426,16 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
       if (!riscv_multi_subset_supports (&riscv_rps_as, insn->insn_class))
 	continue;
 
+      /* VLSI mode desires AS IT conversion.  */
+      if (riscv_opts.no_rvc_convert
+	  && (insn->insn_class == INSN_CLASS_C
+	      || insn->insn_class == INSN_CLASS_F_AND_C
+	      || insn->insn_class == INSN_CLASS_D_AND_C)
+	  && 0 != strncmp (insn->name, "c.", 2))
+	continue;
+
+      nsta.ict_exp = NULL;
+
       /* Reset error message of the previous round.  */
       error = _("illegal operands");
       create_insn (ip, insn);
@@ -2310,6 +3493,21 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 		}
 	      if (*asarg != '\0')
 		break;
+
+	      /* Convert "add rd, rs, zero" and "add rd, zero, rs"
+		 to "mv rd, rs".  */
+	      if (strcmp (insn->name, "add") == 0 && !riscv_opts.rvc)
+		{
+		  if (EXTRACT_OPERAND (RS2, ip->insn_opcode) == 0)
+		    ip->insn_opcode &= ~(1 << 5);
+		  else if (EXTRACT_OPERAND (RS1, ip->insn_opcode) == 0)
+		    {
+		      ip->insn_opcode &= ~(1 << 5);
+		      INSERT_OPERAND (RS1, *ip, EXTRACT_OPERAND (RS2, ip->insn_opcode));
+		      INSERT_OPERAND (RS2, *ip, 0);
+		    }
+		}
+
 	      /* Successful assembly.  */
 	      error = NULL;
 	      insn_with_csr = false;
@@ -2601,6 +3799,149 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 			goto unknown_riscv_ip_operand;
 		    }
 		  break;
+		/* { Andes  */
+		case 'e': /* exec.it imm  */
+		  switch (*++oparg)
+		    {
+		    case 'i':
+		      if (my_getSmallExpression (imm_expr, imm_reloc, asarg, p)
+			  || imm_expr->X_op != O_constant
+			  || !VALID_RVC_EX9IT_IMM (imm_expr->X_add_number << 2))
+			break;
+		      ip->insn_opcode |= ENCODE_RVC_EX9IT_IMM (imm_expr->X_add_number << 2);
+		      goto rvc_imm_done;
+		    case 't':
+		      if (my_getSmallExpression (imm_expr, imm_reloc, asarg, p)
+			  || imm_expr->X_op != O_constant
+			  || !VALID_RVC_EXECIT_IMM (imm_expr->X_add_number << 2))
+			break;
+		      ip->insn_opcode |= ENCODE_RVC_EXECIT_IMM (imm_expr->X_add_number << 2);
+		      goto rvc_imm_done;
+		    case 'T':
+		      if (my_getSmallExpression (imm_expr, imm_reloc, asarg, p)
+			  || imm_expr->X_op != O_constant
+			  || !VALID_RVC_NEXECIT_IMM (imm_expr->X_add_number << 2))
+			break;
+		      ip->insn_opcode |= ENCODE_RVC_NEXECIT_IMM (imm_expr->X_add_number << 2);
+		      goto rvc_imm_done;
+		    default:
+		      goto unknown_riscv_ip_operand;
+		    }
+		  break;
+		/* } Andes  */
+
+		case 'Z': /* ZC extension.  */
+		  switch (*++oparg)
+		    {
+		    case 'h': /* immediate field for c.lh/c.lhu/c.sh.  */
+		      /* handle cases, such as c.sh rs2', (rs1') */
+		      if (riscv_handle_implicit_zero_offset (imm_expr, asarg))
+			continue;
+		      if (my_getSmallExpression (imm_expr, imm_reloc, asarg, p)
+			|| imm_expr->X_op != O_constant
+			|| !VALID_ZCB_HALFWORD_UIMM ((valueT) imm_expr->X_add_number))
+			  break;
+		      ip->insn_opcode |= ENCODE_ZCB_HALFWORD_UIMM (imm_expr->X_add_number);
+		      goto rvc_imm_done;
+
+		    case 'b': /* immediate field for c.lbu/c.sb.  */
+		      /* handle cases, such as c.lbu rd', (rs1') */
+		      if (riscv_handle_implicit_zero_offset (imm_expr, asarg))
+			continue;
+		      if (my_getSmallExpression (imm_expr, imm_reloc, asarg, p)
+			|| imm_expr->X_op != O_constant
+			|| !VALID_ZCB_BYTE_UIMM ((valueT) imm_expr->X_add_number))
+			break;
+		      ip->insn_opcode |= ENCODE_ZCB_BYTE_UIMM (imm_expr->X_add_number);
+		      goto rvc_imm_done;
+
+		    case 'H': /* immediate field for cm.lh/cm.lhu/cm.sh.  */
+		      /* handle cases, such as cm.sh rs2', (rs1') */
+		      if (riscv_handle_implicit_zero_offset (imm_expr, asarg))
+			continue;
+		      if (my_getSmallExpression (imm_expr, imm_reloc, asarg, p)
+			|| imm_expr->X_op != O_constant
+			|| !VALID_ZCMB_HALFWORD_UIMM ((valueT) imm_expr->X_add_number))
+			  break;
+		      ip->insn_opcode |= ENCODE_ZCMB_HALFWORD_UIMM (imm_expr->X_add_number);
+		      goto rvc_imm_done;
+
+		    case 'B': /* immediate field for cm.lbu/cm.sb.  */
+		      /* handle cases, such as cm.lbu rd', (rs1') */
+		      if (riscv_handle_implicit_zero_offset (imm_expr, asarg))
+			continue;
+		      if (my_getSmallExpression (imm_expr, imm_reloc, asarg, p)
+			|| imm_expr->X_op != O_constant
+			|| !VALID_ZCMB_BYTE_UIMM ((valueT) imm_expr->X_add_number))
+			break;
+		      ip->insn_opcode |= ENCODE_ZCMB_BYTE_UIMM (imm_expr->X_add_number);
+		      goto rvc_imm_done;
+
+		    case 'r':
+		      /* we use regno to store reglist value here.  */
+		      if (!reglist_lookup (&asarg, &regno))
+			break;
+		      INSERT_OPERAND (RLIST, *ip, regno);
+		      continue;
+
+		    case 'p':
+		      if (my_getSmallExpression (imm_expr, imm_reloc, asarg, p)
+			  || imm_expr->X_op != O_constant)
+			break;
+		      /* convert stack adjust of cm.push to a positive offset. */
+		      if (ip->insn_mo->match == MATCH_CM_PUSH)
+			imm_expr->X_add_number *= -1;
+		      /* subtract base stack adjust. */
+		      imm_expr->X_add_number -=
+			  riscv_get_base_spimm (ip->insn_opcode, &riscv_rps_as);
+		      if (!VALID_ZCMP_SPIMM (imm_expr->X_add_number))
+			break;
+		      ip->insn_opcode |=
+			  ENCODE_ZCMP_SPIMM (imm_expr->X_add_number);
+		      goto rvc_imm_done;
+
+		    case '1':
+		      if (!reg_lookup (&asarg, RCLASS_GPR, &regno)
+			  || !RISCV_SREG_0_7 (regno))
+			break;
+		      INSERT_OPERAND (SREG1, *ip, regno % 8);
+		      continue;
+
+		    case '2':
+		      if (!reg_lookup (&asarg, RCLASS_GPR, &regno)
+			  || !RISCV_SREG_0_7 (regno))
+			break;
+		      INSERT_OPERAND (SREG2, *ip, regno % 8);
+		      continue;
+
+		    case 'I': /* index operand of cm.jt. The range is from 0 to 32. */
+		      my_getExpression (imm_expr, asarg);
+		      if (imm_expr->X_op != O_constant
+			  || imm_expr->X_add_number < 0
+			  || imm_expr->X_add_number > 31)
+			{
+			  as_bad ("bad index value for cm.jt, range: [0, 31]");
+			  break;
+			}
+		      ip->insn_opcode |= ENCODE_ZCMP_TABLE_JUMP_INDEX (imm_expr->X_add_number);
+		      goto rvc_imm_done;
+
+		    case 'i': /* index operand of cm.jalt. The range is from 64 to 255. */
+		      my_getExpression (imm_expr, asarg);
+		      if (imm_expr->X_op != O_constant
+			  || imm_expr->X_add_number < 32
+			  || imm_expr->X_add_number > 255)
+			{
+			  as_bad ("bad index value for cm.jalt, range: [32, 255]");
+			  break;
+			}
+		      ip->insn_opcode |= ENCODE_ZCMP_TABLE_JUMP_INDEX (imm_expr->X_add_number);
+		      goto rvc_imm_done;
+
+		    default:
+		      goto unknown_riscv_ip_operand;
+		    }
+		  break;
 
 		default:
 		  goto unknown_riscv_ip_operand;
@@ -2782,6 +4123,8 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 
 	    case '(':
 	    case ')':
+	    case '{':
+	    case '}':
 	    case '[':
 	    case ']':
 	      if (*asarg++ == *oparg)
@@ -3163,6 +4506,284 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 	      imm_expr->X_op = O_absent;
 	      continue;
 
+	    /* { zicbo */
+	    case 'f': /* Prefetch offset, pseudo S-type but lower 5-bits zero.  */
+	      if (riscv_handle_implicit_zero_offset (imm_expr, asarg))
+		continue;
+	      my_getExpression (imm_expr, asarg);
+	      check_absolute_expr (ip, imm_expr, FALSE);
+	      if (((unsigned) (imm_expr->X_add_number) & 0x1f)
+		  || imm_expr->X_add_number >= (signed)RISCV_IMM_REACH/2
+		  || imm_expr->X_add_number < -(signed)RISCV_IMM_REACH/2)
+		as_bad (_("improper prefetch offset (%ld)"),
+		        (long) imm_expr->X_add_number);
+	      ip->insn_opcode |= ENCODE_STYPE_IMM (imm_expr->X_add_number);
+	      ip->insn_opcode &= ~ ENCODE_STYPE_IMM (0x1fU);
+	      imm_expr->X_op = O_absent;
+	      asarg = expr_end;
+	      continue;
+	    /* } zicbo */
+
+	    /* { Andes  */
+	    case 'g': /* 10bits PC-relative offset.  */
+	      *imm_reloc = BFD_RELOC_RISCV_10_PCREL;
+	      my_getExpression (imm_expr, asarg);
+	      asarg = expr_end;
+	      continue;
+	    case 'h': /* Upper unsigned 6-bit immediate.  */
+	      my_getExpression (imm_expr, asarg);
+	      if (imm_expr->X_op != O_constant
+		  || imm_expr->X_add_number >= xlen
+		  || imm_expr->X_add_number < 0)
+		break;
+	      asarg = expr_end;
+	      ip->insn_opcode |= ENCODE_SBTYPE_IMM6H (imm_expr->X_add_number);
+	      imm_expr->X_op = O_absent;
+	      continue;
+	    case 'i': /* Signed 7-bit immediate in [31:25].  */
+	      my_getExpression (imm_expr, asarg);
+	      if (imm_expr->X_op != O_constant
+		  || imm_expr->X_add_number >= (signed) RISCV_IMM7_REACH
+		  || imm_expr->X_add_number < 0)
+		break;
+	      ip->insn_opcode |= ENCODE_STYPE_IMM7 (imm_expr->X_add_number);
+	      asarg = expr_end;
+	      imm_expr->X_op = O_absent;
+	      continue;
+	    case 'k': /* Cimm unsigned 6-bit immediate.  */
+	      my_getExpression (imm_expr, asarg);
+	      if (imm_expr->X_op != O_constant
+		  || imm_expr->X_add_number >= xlen
+		  || imm_expr->X_add_number < 0)
+		break;
+	      asarg = expr_end;
+	      ip->insn_opcode |= ENCODE_TYPE_CIMM6 (imm_expr->X_add_number);
+	      imm_expr->X_op = O_absent;
+	      continue;
+	    case 'l': /* Lower unsigned 6-bit immediate.  */
+	      my_getExpression (imm_expr, asarg);
+	      if (imm_expr->X_op != O_constant
+		  || imm_expr->X_add_number >= xlen
+		  || imm_expr->X_add_number < 0)
+		break;
+	      ip->insn_opcode |= ENCODE_SBTYPE_IMM6L (imm_expr->X_add_number);
+	      asarg = expr_end;
+	      imm_expr->X_op = O_absent;
+	      continue;
+	    case 'H':
+	    case 'G':
+	      {
+		bfd_boolean store = FALSE;
+		if (*oparg == 'H')
+		  store = TRUE;
+
+		my_getExpression (imm_expr, asarg);
+		switch (*++oparg)
+		  {
+		  case 'b':
+		    if (imm_expr->X_op == O_constant
+			&& imm_expr->X_add_number < (signed) RISCV_IMM18_REACH/2
+			&& imm_expr->X_add_number >= -(signed) RISCV_IMM18_REACH/2)
+		      {
+			if (store)
+			  ip->insn_opcode |= ENCODE_GPTYPE_SB_IMM (imm_expr->X_add_number);
+			else
+			  ip->insn_opcode |= ENCODE_GPTYPE_LB_IMM (imm_expr->X_add_number);
+			asarg = expr_end;
+			continue;
+		      }
+		    else if (imm_expr->X_op == O_symbol)
+		      {
+			if (store)
+			  *imm_reloc = BFD_RELOC_RISCV_SGP18S0;
+			else
+			  *imm_reloc = BFD_RELOC_RISCV_LGP18S0;
+			asarg = expr_end;
+			continue;
+		      }
+		    break;
+
+		  case 'h':
+		    if (imm_expr->X_op == O_constant
+			&& imm_expr->X_add_number < (signed) RISCV_IMM18_REACH/2
+			&& imm_expr->X_add_number >= -(signed) RISCV_IMM18_REACH/2
+			&& (imm_expr->X_add_number & 0x1) == 0)
+		      {
+			if (store)
+			  ip->insn_opcode |= ENCODE_GPTYPE_SH_IMM (imm_expr->X_add_number);
+			else
+			  ip->insn_opcode |= ENCODE_GPTYPE_LH_IMM (imm_expr->X_add_number);
+			asarg = expr_end;
+			continue;
+		      }
+		    else if (imm_expr->X_op == O_symbol)
+		      {
+			if (store)
+			  *imm_reloc = BFD_RELOC_RISCV_SGP17S1;
+			else
+			  *imm_reloc = BFD_RELOC_RISCV_LGP17S1;
+			asarg = expr_end;
+			continue;
+		      }
+		    break;
+
+		  case 'w':
+		    if (imm_expr->X_op == O_constant
+			&& imm_expr->X_add_number < (signed) RISCV_IMM19_REACH/2
+			&& imm_expr->X_add_number >= -(signed) RISCV_IMM19_REACH/2
+			&& (imm_expr->X_add_number & 0x3) == 0)
+		      {
+			if (store)
+			  ip->insn_opcode |= ENCODE_GPTYPE_SW_IMM (imm_expr->X_add_number);
+			else
+			  ip->insn_opcode |= ENCODE_GPTYPE_LW_IMM (imm_expr->X_add_number);
+			asarg = expr_end;
+			continue;
+		      }
+		    else if (imm_expr->X_op == O_symbol)
+		      {
+			if (store)
+			  *imm_reloc = BFD_RELOC_RISCV_SGP17S2;
+			else
+			  *imm_reloc = BFD_RELOC_RISCV_LGP17S2;
+			asarg = expr_end;
+			continue;
+		      }
+		    break;
+
+		  case 'd':
+		    if (imm_expr->X_op == O_constant
+			&& imm_expr->X_add_number < (signed) RISCV_IMM20_REACH/2
+			&& imm_expr->X_add_number >= -(signed) RISCV_IMM20_REACH/2
+			&& (imm_expr->X_add_number & 0x7) == 0)
+		      {
+			if (store)
+			  ip->insn_opcode |= ENCODE_GPTYPE_SD_IMM (imm_expr->X_add_number);
+			else
+			  ip->insn_opcode |= ENCODE_GPTYPE_LD_IMM (imm_expr->X_add_number);
+			asarg = expr_end;
+			continue;
+		      }
+		    else if (imm_expr->X_op == O_symbol)
+		      {
+			if (store)
+			  *imm_reloc = BFD_RELOC_RISCV_SGP17S3;
+			else
+			  *imm_reloc = BFD_RELOC_RISCV_LGP17S3;
+			asarg = expr_end;
+			continue;
+		      }
+		    break;
+
+		  default:
+		    goto unknown_riscv_ip_operand;
+		  }
+		break;
+	      }
+	    case 'N': /* Andes extensions: RVP  */
+	      ++oparg;
+	      if ((*oparg == 'c') /* rc */
+		  && reg_lookup (&asarg, RCLASS_GPR, &regno))
+		{
+		  INSERT_OPERAND (RC, *ip, regno);
+		  continue;
+		}
+	      else if ((*oparg == 'd') /* rdp */
+		       && reg_lookup (&asarg, RCLASS_GPR, &regno))
+		{
+		  if (xlen == 32 && (regno % 2) != 0)
+		    {
+		      as_bad (_("The number of Rd must be even "
+				"(limitation of register pair)."));
+		      break;
+		    }
+		  INSERT_OPERAND (RD, *ip, regno);
+		  continue;
+		}
+	      else if ((*oparg == 's') /* rsp */
+		       && reg_lookup (&asarg, RCLASS_GPR, &regno))
+		{
+		  if (xlen == 32 && (regno % 2) != 0)
+		    {
+		      as_bad (_("The number of Rs1 must be even "
+				"(limitation of register pair)."));
+		      break;
+		    }
+		  INSERT_OPERAND (RS1, *ip, regno);
+		  continue;
+		}
+	      else if ((*oparg == 't') /* rtp */
+		       && reg_lookup (&asarg, RCLASS_GPR, &regno))
+		{
+		  if (xlen == 32 && (regno % 2) != 0)
+		    {
+		      as_bad (_("The number of Rs2 must be even "
+				"(limitation of register pair)."));
+		      break;
+		    }
+		  INSERT_OPERAND (RS2, *ip, regno);
+		  continue;
+		}
+
+	      my_getExpression (imm_expr, asarg);
+	      if (imm_expr->X_op != O_constant
+		  || imm_expr->X_add_number >= xlen
+		  || imm_expr->X_add_number < 0)
+		break;
+
+	      if ((*oparg == '3') /* i3u */
+		  && VALID_PTYPE_IMM3U (imm_expr->X_add_number))
+		ip->insn_opcode |= ENCODE_PTYPE_IMM3U (imm_expr->X_add_number);
+	      else if ((*oparg == '4') /* i4u */
+		       && VALID_PTYPE_IMM4U (imm_expr->X_add_number))
+		ip->insn_opcode |= ENCODE_PTYPE_IMM4U (imm_expr->X_add_number);
+	      else if ((*oparg == '5') /* i5u */
+		       && VALID_PTYPE_IMM5U (imm_expr->X_add_number))
+		ip->insn_opcode |= ENCODE_PTYPE_IMM5U (imm_expr->X_add_number);
+	      else if ((*oparg == '6') /* i6u */
+		       && VALID_PTYPE_IMM6U (imm_expr->X_add_number))
+		ip->insn_opcode |= ENCODE_PTYPE_IMM6U (imm_expr->X_add_number);
+	      else if ((*oparg == 'f') /* i15 */
+		       && VALID_PTYPE_IMM15S (imm_expr->X_add_number))
+		ip->insn_opcode |= ENCODE_PTYPE_IMM15S (imm_expr->X_add_number);
+	      else
+		goto unknown_riscv_ip_operand;
+
+	      asarg = expr_end;
+	      imm_expr->X_op = O_absent;
+	      continue;
+	    /* } Andes  */
+
+	    /* { Andes ACE */
+	    /* Handle operand fields of ACE.  */
+	    case 'X':
+	      if (ace_lib_load_success)
+		{
+		  ace_ip ((char **) &oparg, &asarg, ip);
+		  continue;
+		}
+	      else
+		break;
+	    /* } Andes ACE */
+
+	    case 'n':
+	      switch (*++oparg)
+	        {
+		case 'f': /* operand for matching immediate 255.  */
+		  if (my_getSmallExpression (imm_expr, imm_reloc, asarg, p)
+		      || imm_expr->X_op != O_constant
+		      || imm_expr->X_add_number != 255)
+		    break;
+		  /* this operand is used for matching immediate 255, and
+		  we do not write anything to encoding by this operand. */
+		  asarg = expr_end;
+		  imm_expr->X_op = O_absent;
+		  continue;
+		default:
+		  goto unknown_riscv_ip_operand;
+		}
+	      break;
+
 	    default:
 	    unknown_riscv_ip_operand:
 	      as_fatal (_("internal: unknown argument type `%s'"),
@@ -3178,6 +4799,66 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
   /* Restore the character we might have clobbered above.  */
   if (save_c)
     *(asargStart  - 1) = save_c;
+
+  if (error == NULL && riscv_opts.workaround)
+    {
+      if (riscv_opts.b19758_effect)
+	{
+	  if (is_b19758_associated_insn (insn))
+	    {
+	      char *s = (char*) "iorw";
+	      arg_lookup (&s, riscv_pred_succ, ARRAY_SIZE (riscv_pred_succ), &regno);
+              macro_build (NULL, "fence", "P,Q", regno, regno);
+	    }
+	}
+
+      if (riscv_opts.b20282)
+	{
+	  if (pre_insn_is_a_cond_br && is_indirect_jump (insn))
+	    {
+	      macro_build (NULL, "nop", "");
+	      pre_insn_is_a_cond_br = false;
+	    }
+	  else
+	    pre_insn_is_a_cond_br = is_conditional_branch (insn);
+	}
+
+      if ((riscv_opts.b22827 || riscv_opts.b22827_1)
+	  && !riscv_subset_supports (&riscv_rps_as, "v"))
+	{
+	  const struct riscv_opcode *prev_insn = nsta.prev_insn.insn_mo;
+	  insn_t prev_insn_co = nsta.prev_insn.insn_opcode;
+	  insn_t curr_insn_co = ip->insn_opcode;
+
+	  /* insert “fclass.x x0, RD(FDIV/FSQRT)” after FDIV/FSQRT unless 
+	   * the next immediate instruction is 
+	   * “fsub/fadd/fmul/fmadd/fsqrt/fdiv/jal/ret and their 16bit variants”
+	   * NOTE: by jal I mean jal and jral. Ret includes jr. 
+	   * If you can accept more complex conditions, RD(FDIV/FSQRT) has to be
+	   * in fa0-7 to exclude jal/ret.
+	   */
+	  if (riscv_opts.b22827
+	      && is_insn_fdiv_or_fsqrt (prev_insn)
+	      && is_insn_in_b22827_list (insn, prev_insn_co, curr_insn_co))
+	    {
+	      nsta.frag_b22827->fr_var = 1;
+	    }
+
+	  /* to provide a separate flag to turn it off, with the following rule:
+	   * If FSHW is followed by any floating-point instructions (including 
+	   * FSHW and FLHW), insert a NOP after it.
+	   */
+	  else if (riscv_opts.b22827_1
+	      && is_insn_fshw (prev_insn)
+	      && is_insn_of_fp_types (insn))
+	    {
+	      nsta.frag_b22827->fr_var = 1;
+	    }
+
+	  /* update previous insns  */
+	  nsta.prev_insn = *ip;
+	}
+    }
 
   return error;
 }
@@ -3227,22 +4908,96 @@ riscv_ip_hardcode (char *str,
   return NULL;
 }
 
+static
+void riscv_append_insn (struct riscv_cl_insn *insn, expressionS *imm_expr,
+  bfd_reloc_code_real_type imm_reloc)
+{
+  if (insn->insn_mo->pinfo == INSN_MACRO)
+    {
+      if (has_cached_insn ())
+        release_cached_insn ();
+      macro (insn, imm_expr, &imm_reloc);
+      return;
+    }
+
+  if (use_insn_combiner ())
+    {
+      struct riscv_combiner_matcher *matchers = insn_combiner->matcher;
+      unsigned idx;
+
+      /* if one insn is cached, we now check the second insn */
+      if (insn_combiner->idx)
+	{
+	  idx = insn_combiner->idx - 1;
+
+	  /* if successfully match a insn pair, we output the merged result */
+	  if (matchers[idx].check_2 (insn, imm_expr, imm_reloc))
+	    {
+	      matchers[idx].update (insn, imm_expr, imm_reloc);
+	      release_cached_insn ();
+	      return;
+	    }
+
+	  release_cached_insn ();
+	}
+
+      gas_assert (insn_combiner->idx == 0);
+
+      for (idx = 0; matchers[idx].check_1 != NULL; idx++)
+	{
+	  if (!matchers[idx].avail())
+	    continue;
+	  if (matchers[idx].check_1 (insn, imm_expr, imm_reloc))
+	    {
+	      cache_an_insn (insn, imm_expr, imm_reloc);
+	      insn_combiner->idx = idx + 1;
+	      return;
+	    }
+	}
+    }
+
+  append_insn (insn, imm_expr, imm_reloc);
+}
+
 void
 md_assemble (char *str)
 {
   struct riscv_cl_insn insn;
   expressionS imm_expr;
   bfd_reloc_code_real_type imm_reloc = BFD_RELOC_UNUSED;
+  insn.cmodel.method = METHOD_DEFAULT;
+
+  /* { Andes */
+  /* Set the first rvc info for the the current fragmant.  */
+  if (!frag_now->tc_frag_data.rvc)
+    frag_now->tc_frag_data.rvc = riscv_opts.rvc ? 1 : -1;
+  /* } Andes */
 
   /* The architecture and privileged elf attributes should be set
      before assembling.  */
   if (!start_assemble)
     {
       start_assemble = true;
+      /* Initialize instruction pair combiner for cm.mva01s
+	and cm.mvsa01*/
+      if (use_insn_combiner ())
+	init_insn_combiner ();
 
       riscv_set_abi_by_arch ();
       if (!riscv_set_default_priv_spec (NULL))
        return;
+
+      /* { Andes */
+      /* sync arch from source file; update riscv_opts.  */
+      if (riscv_opts.efhw == 0)
+	riscv_opts.efhw = riscv_subset_supports (&riscv_rps_as, "xefhw");
+      /* determine exec.it opcode.  */
+      if (riscv_subset_supports (&riscv_rps_as, "xnexecit"))
+	riscv_opts.nexecit_op = 1;
+      else if (riscv_opts.nexecit_op != 0)
+	riscv_parse_add_subset (&riscv_rps_as, "xnexecit", RISCV_UNKNOWN_VERSION,
+				RISCV_UNKNOWN_VERSION, false);
+      /* } Andes */
     }
 
   riscv_mapping_state (MAP_INSN, 0);
@@ -3255,10 +5010,7 @@ md_assemble (char *str)
       return;
     }
 
-  if (insn.insn_mo->pinfo == INSN_MACRO)
-    macro (&insn, &imm_expr, &imm_reloc);
-  else
-    append_insn (&insn, &imm_expr, imm_reloc);
+  riscv_append_insn (&insn, &imm_expr, imm_reloc);
 }
 
 const char *
@@ -3294,6 +5046,30 @@ enum options
   OPTION_MPRIV_SPEC,
   OPTION_BIG_ENDIAN,
   OPTION_LITTLE_ENDIAN,
+  /* { Andes  */
+  OPTION_NO_16_BIT,
+  OPTION_OPTIMIZE,
+  OPTION_OPTIMIZE_SPACE,
+  OPTION_MCMODEL,
+  OPTION_MICT_MODEL,
+  OPTION_ACE,
+  OPTION_MATOMIC,
+  OPTION_MEXT_DSP,
+  OPTION_MEXT_VECTOR,
+  OPTION_MEXT_EFHW,
+  OPTION_MNO_WORKAROUND,
+  OPTION_MB19758,
+  OPTION_MNO_B19758,
+  OPTION_MB25057,
+  OPTION_MNO_B25057,
+  OPTION_MB20282,
+  OPTION_MB22827,
+  OPTION_MB22827_1,
+  OPTION_FULL_ARCH,
+  OPTION_MNEXECIT_OP,
+  OPTION_MNO_BRANCH_RELAX,
+  OPTION_MNO_RVC_CONVERT,
+  /* } Andes  */
   OPTION_END_OF_ENUM
 };
 
@@ -3314,6 +5090,32 @@ struct option md_longopts[] =
   {"mpriv-spec", required_argument, NULL, OPTION_MPRIV_SPEC},
   {"mbig-endian", no_argument, NULL, OPTION_BIG_ENDIAN},
   {"mlittle-endian", no_argument, NULL, OPTION_LITTLE_ENDIAN},
+
+  /* { Andes  */
+  {"mno-16-bit", no_argument, NULL, OPTION_NO_16_BIT},
+  {"matomic", no_argument, NULL, OPTION_MATOMIC},
+  {"mace", required_argument, NULL, OPTION_ACE},
+  {"O1", no_argument, NULL, OPTION_OPTIMIZE},
+  {"Os", no_argument, NULL, OPTION_OPTIMIZE_SPACE},
+  {"mext-dsp", no_argument, NULL, OPTION_MEXT_DSP},
+  {"mnexecitop", no_argument, NULL, OPTION_MNEXECIT_OP},
+  /* hidden options */
+  {"mext-efhw", no_argument, NULL, OPTION_MEXT_EFHW},
+  {"mext-vector", no_argument, NULL, OPTION_MEXT_VECTOR},
+  {"mcmodel", required_argument, NULL, OPTION_MCMODEL},
+  {"mict-model", required_argument, NULL, OPTION_MICT_MODEL},
+  {"mno-workaround", no_argument, NULL, OPTION_MNO_WORKAROUND},
+  {"mb19758", no_argument, NULL, OPTION_MB19758},
+  {"mno-b19758", no_argument, NULL, OPTION_MNO_B19758},
+  {"mb25057", no_argument, NULL, OPTION_MB25057},
+  {"mno-b25057", no_argument, NULL, OPTION_MNO_B25057},
+  {"mb20282", no_argument, NULL, OPTION_MB20282},
+  {"mb22827", no_argument, NULL, OPTION_MB22827},
+  {"mb22827.1", no_argument, NULL, OPTION_MB22827_1},
+  {"mfull-arch", no_argument, NULL, OPTION_FULL_ARCH},
+  {"mno-branch-relax", no_argument, NULL, OPTION_MNO_BRANCH_RELAX},
+  {"mno-rvc-convert", no_argument, NULL, OPTION_MNO_RVC_CONVERT},
+  /* } Andes  */
 
   {NULL, no_argument, NULL, 0}
 };
@@ -3398,6 +5200,119 @@ md_parse_option (int c, const char *arg)
       target_big_endian = 0;
       break;
 
+    /* { Andes  */
+    case OPTION_NO_16_BIT:
+      riscv_opts.no_16_bit = true;
+      break;
+
+    case OPTION_OPTIMIZE:
+      optimize = 1;
+      optimize_for_space = 0;
+      break;
+
+    case OPTION_OPTIMIZE_SPACE:
+      optimize = 0;
+      optimize_for_space = 1;
+      break;
+
+    case OPTION_MCMODEL:
+      if (strcmp (arg, "large") == 0)
+	riscv_opts.cmodel = CMODEL_LARGE;
+      else if (strcmp (arg, "medany") == 0)
+	riscv_opts.cmodel = CMODEL_DEFAULT;
+      else if (strcmp (arg, "medlow") == 0)
+	riscv_opts.cmodel = CMODEL_DEFAULT;
+      else
+	return 0;
+      break;
+
+    case OPTION_MICT_MODEL:
+      if (strcmp ("tiny", arg) == 0
+	  || strcmp ("small", arg) == 0
+	  || strcmp ("large", arg) == 0)
+	m_ict_model = arg;
+      else
+	as_bad (_("invalid ICT model setting -mict-model=%s"), arg);
+      break;
+
+    case OPTION_MATOMIC:
+      riscv_opts.atomic = true;
+      break;
+
+    case OPTION_MEXT_DSP:
+      riscv_opts.dsp = true;
+      break;
+
+    case OPTION_MNEXECIT_OP:
+      riscv_opts.nexecit_op = true;
+      break;
+
+    case OPTION_MEXT_VECTOR:
+      riscv_opts.vector = true;
+      break;
+
+    case OPTION_MEXT_EFHW:
+      riscv_opts.efhw = true;
+      break;
+
+    case OPTION_MNO_BRANCH_RELAX:
+      riscv_opts.no_branch_relax = true;
+      break;
+
+    case OPTION_MNO_RVC_CONVERT:
+      riscv_opts.no_rvc_convert = true;
+      break;
+    /* } Andes  */
+
+    /* { Andes ACE */
+    /* Load ACE shared library if ACE option is enable */
+    case OPTION_ACE:
+      {
+#ifndef __MINGW32__
+	char *err = andes_ace_load_hooks (arg);
+	if (err)
+	  as_bad ("Fault to load ACE shared library: %s\n", err);
+#endif
+      }
+      break;
+    /* } Andes ACE */
+
+    case OPTION_MNO_WORKAROUND:
+	riscv_opts.workaround = 0;
+      break;
+
+    case OPTION_MB19758:
+	riscv_opts.b19758 = 1;
+	riscv_opts.b19758_effect = 1;
+      break;
+    case OPTION_MNO_B19758:
+	riscv_opts.b19758 = 0;
+	riscv_opts.b19758_effect = riscv_opts.b25057;
+      break;
+    case OPTION_MB25057:
+	riscv_opts.b25057 = 1;
+	riscv_opts.b19758_effect = 1;
+      break;
+    case OPTION_MNO_B25057:
+	riscv_opts.b25057 = 0;
+	riscv_opts.b19758_effect = riscv_opts.b19758;
+      break;
+
+    case OPTION_MB20282:
+	riscv_opts.b20282 = 1;
+      break;
+
+    case OPTION_MB22827:
+	riscv_opts.b22827 = 1;
+      break;
+    case OPTION_MB22827_1:
+	riscv_opts.b22827_1 = 1;
+      break;
+
+    case OPTION_FULL_ARCH:
+	riscv_opts.full_arch = 1;
+      break;
+
     default:
       return 0;
     }
@@ -3408,6 +5323,12 @@ md_parse_option (int c, const char *arg)
 void
 riscv_after_parse_args (void)
 {
+#ifdef TARGET_OS
+  riscv_opts.is_linux = (0 == strcmp (TARGET_OS, "elf")) ? 0 : 1;
+#else
+  #error "TARGET_OS not defined!"
+#endif
+
   /* The --with-arch is optional for now, so we still need to set the xlen
      according to the default_arch, which is set by the --target.  */
   if (xlen == 0)
@@ -3433,12 +5354,80 @@ riscv_after_parse_args (void)
      range of registers in a .cfi_return_column directive.  */
   if (flag_dwarf_cie_version == -1)
     flag_dwarf_cie_version = 3;
+
+  /* { Andes */
+  memset (&nsta, 0, sizeof (nsta)); /* init once.  */
+
+  /* disable --cmodel=large if RV32  */
+  if (riscv_opts.cmodel == CMODEL_LARGE && xlen <= 32)
+	riscv_opts.cmodel = CMODEL_DEFAULT;
+
+  if (riscv_opts.atomic)
+    riscv_parse_add_subset (&riscv_rps_as, "a", RISCV_UNKNOWN_VERSION,
+			    RISCV_UNKNOWN_VERSION, false);
+
+  if (riscv_opts.dsp)
+    riscv_parse_add_subset (&riscv_rps_as, "p", RISCV_UNKNOWN_VERSION,
+			    RISCV_UNKNOWN_VERSION, false);
+
+#if 0 /* defer to md_assemble. */
+  if (riscv_opts.nexecit_op)
+    riscv_parse_add_subset (&riscv_rps_as, "xnexecit", RISCV_UNKNOWN_VERSION,
+			    RISCV_UNKNOWN_VERSION, false);
+#endif
+
+  if (riscv_opts.vector)
+    riscv_parse_add_subset (&riscv_rps_as, "v", RISCV_UNKNOWN_VERSION,
+			    RISCV_UNKNOWN_VERSION, false);
+
+  if (riscv_opts.efhw)
+    riscv_parse_add_subset (&riscv_rps_as, "xefhw", RISCV_UNKNOWN_VERSION,
+			    RISCV_UNKNOWN_VERSION, false);
+
+
+
+  if (riscv_opts.atomic || riscv_opts.dsp || riscv_opts.vector
+      || riscv_opts.efhw)
+    {
+      riscv_parse_add_implicit_subsets (&riscv_rps_as);
+      riscv_parse_check_conflicts (&riscv_rps_as);
+    }
+  /* } Andes */
 }
 
 long
 md_pcrel_from (fixS *fixP)
 {
   return fixP->fx_where + fixP->fx_frag->fr_address;
+}
+
+static void
+riscv_convert_ict_relocs (fixS ** fix)
+{
+  if ((*fix)->tc_fix_data.ict == BFD_RELOC_RISCV_ICT_HI20)
+    switch ((*fix)->fx_r_type)
+      {
+      case BFD_RELOC_RISCV_HI20:
+	(*fix)->fx_r_type = BFD_RELOC_RISCV_ICT_HI20;
+	break;
+      case BFD_RELOC_RISCV_LO12_I:
+	(*fix)->fx_r_type = BFD_RELOC_RISCV_ICT_LO12_I;
+	break;
+      case BFD_RELOC_RISCV_PCREL_HI20:
+	(*fix)->fx_r_type = BFD_RELOC_RISCV_PCREL_ICT_HI20;
+	break;
+      case BFD_RELOC_RISCV_CALL:
+	(*fix)->fx_r_type = BFD_RELOC_RISCV_CALL_ICT;
+	break;
+      case BFD_RELOC_64:
+	(*fix)->fx_r_type = BFD_RELOC_RISCV_ICT_64;
+	break;
+      default:
+	as_fatal (_("internal error: ICT suffix for #%d "
+		    "is not supported"),
+		  (*fix)->fx_r_type);
+	break;
+      }
 }
 
 /* Apply a fixup to the object file.  */
@@ -3455,11 +5444,17 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
   /* Remember value for tc_gen_reloc.  */
   fixP->fx_addnumber = *valP;
 
+  /* Convert the correct ICT relocs according to the ict
+     flag in the fixup.  */
+  riscv_convert_ict_relocs (&fixP);
+
   switch (fixP->fx_r_type)
     {
     case BFD_RELOC_RISCV_HI20:
     case BFD_RELOC_RISCV_LO12_I:
     case BFD_RELOC_RISCV_LO12_S:
+    case BFD_RELOC_RISCV_ICT_HI20:
+    case BFD_RELOC_RISCV_ICT_LO12_I:
       bfd_putl32 (riscv_apply_const_reloc (fixP->fx_r_type, *valP)
 		  | bfd_getl32 (buf), buf);
       if (fixP->fx_addsy == NULL)
@@ -3657,17 +5652,49 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 
     case BFD_RELOC_RISCV_CALL:
     case BFD_RELOC_RISCV_CALL_PLT:
+    case BFD_RELOC_RISCV_CALL_ICT:
       relaxable = true;
       break;
 
     case BFD_RELOC_RISCV_PCREL_HI20:
     case BFD_RELOC_RISCV_PCREL_LO12_S:
     case BFD_RELOC_RISCV_PCREL_LO12_I:
+    case BFD_RELOC_RISCV_PCREL_ICT_HI20:
       relaxable = riscv_opts.relax;
       break;
 
     case BFD_RELOC_RISCV_ALIGN:
       break;
+
+    /* { Andes */
+    case BFD_RELOC_RISCV_10_PCREL:
+      if (fixP->fx_addsy)
+	{
+	  /* Fill in a tentative value to improve objdump readability.  */
+	  bfd_vma target = S_GET_VALUE (fixP->fx_addsy) + *valP;
+	  bfd_vma delta = target - md_pcrel_from (fixP);
+	  bfd_putl32 (bfd_getl32 (buf) | ENCODE_STYPE_IMM10 (delta), buf);
+	}
+      break;
+
+    case BFD_RELOC_RISCV_ALIGN_BTB:
+    case BFD_RELOC_RISCV_DATA:
+    case BFD_RELOC_RISCV_ICT_64:
+    case BFD_RELOC_RISCV_LGP18S0:
+    case BFD_RELOC_RISCV_LGP17S1:
+    case BFD_RELOC_RISCV_LGP17S2:
+    case BFD_RELOC_RISCV_LGP17S3:
+    case BFD_RELOC_RISCV_SGP18S0:
+    case BFD_RELOC_RISCV_SGP17S1:
+    case BFD_RELOC_RISCV_SGP17S2:
+    case BFD_RELOC_RISCV_SGP17S3:
+    case BFD_RELOC_RISCV_RELAX_REGION_BEGIN:
+    case BFD_RELOC_RISCV_RELAX_REGION_END:
+    case BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN:
+    case BFD_RELOC_RISCV_NO_RVC_REGION_END:
+    case BFD_RELOC_RISCV_RELAX_ENTRY:
+      break;
+    /* } Andes */
 
     default:
       /* We ignore generic BFD relocations we don't know about.  */
@@ -3685,6 +5712,8 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
       fixP->fx_next->fx_addsy = fixP->fx_next->fx_subsy = NULL;
       fixP->fx_next->fx_r_type = BFD_RELOC_RISCV_RELAX;
       fixP->fx_next->fx_size = 0;
+      /* Clean up the ict flag for R_RISCV_RELAX.  */
+      fixP->fx_next->tc_fix_data.ict = 0;
     }
 }
 
@@ -3749,11 +5778,19 @@ s_riscv_option (int x ATTRIBUTE_UNUSED)
     {
       riscv_update_subset (&riscv_rps_as, "+c");
       riscv_set_rvc (true);
+      riscv_rvc_reloc_setting (1);
     }
   else if (strcmp (name, "norvc") == 0)
     {
+      /* Force to set the 4-byte aligned when converting
+	 rvc to norvc.  The repeated alignment setting is
+	 fine since linker will remove the redundant nops.  */
+      if (riscv_opts.rvc && !riscv_opts.no_16_bit && start_assemble
+	  && !riscv_opts.is_linux)
+	riscv_frag_align_code (2);
       riscv_update_subset (&riscv_rps_as, "-c");
       riscv_set_rvc (false);
+      riscv_rvc_reloc_setting (0);
     }
   else if (strcmp (name, "pic") == 0)
     riscv_opts.pic = true;
@@ -3775,7 +5812,8 @@ s_riscv_option (int x ATTRIBUTE_UNUSED)
       riscv_update_subset (&riscv_rps_as, name);
 
       riscv_set_rvc (false);
-      if (riscv_subset_supports (&riscv_rps_as, "c"))
+      if (riscv_subset_supports (&riscv_rps_as, "c")
+	  || riscv_subset_supports (&riscv_rps_as, "zca"))
 	riscv_set_rvc (true);
     }
   else if (strcmp (name, "push") == 0)
@@ -3793,8 +5831,10 @@ s_riscv_option (int x ATTRIBUTE_UNUSED)
   else if (strcmp (name, "pop") == 0)
     {
       struct riscv_option_stack *s;
+      int pre_rvc;
 
       s = riscv_opts_stack;
+      pre_rvc = riscv_opts.rvc;
       if (s == NULL)
 	as_bad (_(".option pop with no .option push"));
       else
@@ -3807,7 +5847,44 @@ s_riscv_option (int x ATTRIBUTE_UNUSED)
 	  riscv_release_subset_list (release_subsets);
 	  free (s);
 	}
+
+      /* Deal with the rvc setting.  */
+      if (riscv_opts.rvc && !pre_rvc)
+	/* norvc to rvc.  */
+	riscv_rvc_reloc_setting (1);
+      else if (!riscv_opts.rvc && pre_rvc)
+	{
+	  /* rvc to norvc.  */
+	  if (!riscv_opts.no_16_bit)
+	    {
+	      riscv_opts.rvc = 1;
+	      if (!riscv_opts.is_linux)
+		riscv_frag_align_code (2);
+	    }
+	  riscv_opts.rvc = 0;
+	  riscv_rvc_reloc_setting (0);
+	}
     }
+  /* { Andes  */
+  else if (strcmp (name, "execit") == 0
+	   || strcmp (name, "ex9") == 0)
+    riscv_opts.execit = TRUE;
+  else if (strcmp (name, "verbatim") == 0)
+    riscv_opts.verbatim = TRUE;
+  else if (strcmp (name, "no_branch_relax") == 0)
+    riscv_opts.no_branch_relax = true;
+  else if (strcmp (name, "no_rvc_convert") == 0)
+    riscv_opts.no_rvc_convert = true;
+  else if (strncmp (name, "cmodel_", 7) == 0)
+    {
+      if (strcmp (name+7, "large") == 0 && xlen > 32)
+	riscv_opts.cmodel = CMODEL_LARGE;
+      else if (strcmp (name+7, "medany") == 0)
+	riscv_opts.cmodel = CMODEL_DEFAULT;
+      else if (strcmp (name+7, "medlow") == 0)
+	riscv_opts.cmodel = CMODEL_DEFAULT;
+    }
+  /* } Andes  */
   else
     {
       as_warn (_("unrecognized .option directive: %s\n"), name);
@@ -3990,6 +6067,15 @@ riscv_init_frag (fragS * fragP, int max_chars)
     case rs_align_code:
       riscv_mapping_state (MAP_INSN, max_chars);
       break;
+    case rs_machine_dependent:
+      {
+	int type = RELAX_CMODEL_TYPE (fragP->fr_subtype);
+	int length = RELAX_CMODEL_LENGTH (fragP->fr_subtype);
+	if (type == TYPE_IS)
+	  riscv_mapping_state (MAP_DATA, length);
+	else if (type == TYPE_ALIGN)
+	  riscv_mapping_state (MAP_INSN, length);
+      }
     default:
       break;
     }
@@ -3998,7 +6084,14 @@ riscv_init_frag (fragS * fragP, int max_chars)
 int
 md_estimate_size_before_relax (fragS *fragp, asection *segtype)
 {
-  return (fragp->fr_var = relaxed_branch_length (fragp, segtype, false));
+  if (RELAX_BRANCH_P (fragp->fr_subtype))
+    fragp->fr_var = relaxed_branch_length (fragp, segtype, false);
+  else if (RELAX_CMODEL_P (fragp->fr_subtype))
+    fragp->fr_var = relaxed_cmodel_length (fragp, segtype);
+  else
+    gas_assert (0);
+
+  return fragp->fr_var;
 }
 
 /* Translate internal representation of relocation info to BFD target
@@ -4031,6 +6124,20 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
       return NULL;
     }
 
+  switch (fixp->fx_r_type)
+    {
+    case BFD_RELOC_RISCV_DATA:
+      /* Prevent linker from optimizing data in text sections.
+	 For example, jump table.  */
+      reloc->addend = fixp->fx_size;
+      break;
+
+    default:
+      /* In general, addend of a relocation is the offset to the
+	 associated symbol.  */
+      break;
+    }
+
   return reloc;
 }
 
@@ -4050,7 +6157,7 @@ riscv_relax_frag (asection *sec, fragS *fragp, long stretch ATTRIBUTE_UNUSED)
 /* Expand far branches to multi-instruction sequences.  */
 
 static void
-md_convert_frag_branch (fragS *fragp)
+md_convert_frag_branch (fragS *fragp, segT sec)
 {
   bfd_byte *buf;
   expressionS exp;
@@ -4065,6 +6172,10 @@ md_convert_frag_branch (fragS *fragp)
   exp.X_add_number = fragp->fr_offset;
 
   gas_assert (fragp->fr_var == RELAX_BRANCH_LENGTH (fragp->fr_subtype));
+
+  /* Andes: the relocation for the branch over jump has to be kept.
+     since the linker optimizations, inlcuding target aligned and EXECIT,
+     may change the immediate field of the branch.  */
 
   if (RELAX_BRANCH_RVC (fragp->fr_subtype))
     {
@@ -4094,6 +6205,12 @@ md_convert_frag_branch (fragS *fragp)
 	    insn ^= MATCH_C_BEQZ ^ MATCH_C_BNEZ;
 	    insn |= ENCODE_CBTYPE_IMM (6);
 	    bfd_putl16 (insn, buf);
+	    /* Keep the relocation for the RVC branch.  */
+	    exp.X_add_symbol = symbol_temp_new (sec, fragp->fr_next, 0);
+	    exp.X_add_number = 0;
+	    reloc = BFD_RELOC_RISCV_RVC_BRANCH;
+	    fixp = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+				2, &exp, FALSE, reloc);
 	    buf += 2;
 	    goto jump;
 
@@ -4118,13 +6235,38 @@ md_convert_frag_branch (fragS *fragp)
 
       /* Invert the branch condition.  Branch over the jump.  */
       insn = bfd_getl32 (buf);
-      insn ^= MATCH_BEQ ^ MATCH_BNE;
-      insn |= ENCODE_BTYPE_IMM (8);
+      if (((insn & MASK_BEQC) == MATCH_BEQC)
+	  || ((insn & MASK_BNEC) == MATCH_BNEC))
+	{
+	  insn ^= MATCH_BEQC ^ MATCH_BNEC;
+	  insn |= ENCODE_STYPE_IMM10 (8);
+	  reloc = BFD_RELOC_RISCV_10_PCREL;
+	}
+      else if (((insn & MASK_BBC) == MATCH_BBC)
+	       || ((insn & MASK_BBS) == MATCH_BBS))
+	{
+	  insn ^= MATCH_BBC ^ MATCH_BBS;
+	  insn |= ENCODE_STYPE_IMM10 (8);
+	  reloc = BFD_RELOC_RISCV_10_PCREL;
+	}
+      else
+	{
+	  insn ^= MATCH_BEQ ^ MATCH_BNE;
+	  insn |= ENCODE_BTYPE_IMM (8);
+	  reloc = BFD_RELOC_12_PCREL;
+	}
       bfd_putl32 (insn, buf);
+      /* Keep the relocation for the branch.  */
+      exp.X_add_symbol = symbol_temp_new (sec, fragp->fr_next, 0);
+      exp.X_add_number = 0;
+      fixp = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+			  4, &exp, FALSE, reloc);
       buf += 4;
 
     jump:
       /* Jump to the target.  */
+      exp.X_add_symbol = fragp->fr_symbol;
+      exp.X_add_number = fragp->fr_offset;
       fixp = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
 			  4, &exp, false, BFD_RELOC_RISCV_JMP);
       bfd_putl32 (MATCH_JAL, buf);
@@ -4132,8 +6274,22 @@ md_convert_frag_branch (fragS *fragp)
       break;
 
     case 4:
-      reloc = RELAX_BRANCH_UNCOND (fragp->fr_subtype)
+      switch (RELAX_BRANCH_RANGE (fragp->fr_subtype))
+	{
+	case RANGE_JMP:
+	  reloc = BFD_RELOC_RISCV_JMP;
+	  break;
+	case RANGE_BRANCH:
+	    reloc = BFD_RELOC_12_PCREL;
+	    break;
+	case RANGE_10_PCREL:
+	    reloc = BFD_RELOC_RISCV_10_PCREL;
+	    break;
+	default:
+	    reloc = RELAX_BRANCH_UNCOND (fragp->fr_subtype)
 	      ? BFD_RELOC_RISCV_JMP : BFD_RELOC_12_PCREL;
+	    break;
+	}
       fixp = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
 			  4, &exp, false, reloc);
       buf += 4;
@@ -4153,15 +6309,254 @@ md_convert_frag_branch (fragS *fragp)
   fragp->fr_fix += fragp->fr_var;
 }
 
+static void
+md_convert_frag_cmodel (fragS *fragp, segT sec)
+{
+  static expressionS exp_ind, exp_ref;
+  bfd_byte *buf;
+  expressionS exp;
+  fixS *fixp = NULL;
+  int reloc;
+  int type = RELAX_CMODEL_TYPE (fragp->fr_subtype);
+  int relax = RELAX_CMODEL_RELAX (fragp->fr_subtype);
+  int length = RELAX_CMODEL_LENGTH (fragp->fr_subtype);
+  int index = RELAX_CMODEL_INDEX (fragp->fr_subtype);
+  int is_same_sec = is_same_section_symbol (fragp->fr_symbol, sec);
+
+  gas_assert (fragp->fr_var == RELAX_CMODEL_LENGTH (fragp->fr_subtype));
+
+  buf = (bfd_byte *)fragp->fr_literal + fragp->fr_fix;
+
+  exp.X_op = O_symbol;
+  exp.X_add_symbol = fragp->fr_symbol;
+  exp.X_add_number = fragp->fr_offset;
+
+  switch (index)
+  {
+  case CSI_INDIRECT_SYMBOL:
+    exp_ind = exp;
+    switch (type)
+    {
+    case TYPE_JX ... TYPE_ST:
+      break;
+    case TYPE_ALIGN:
+      if (is_same_sec)
+	gas_assert (length == 0);
+      else
+	{ /* add relocation here now!  */
+	  gas_assert (length == 6);
+	  expressionS ex;
+	  ex.X_op = O_constant;
+	  ex.X_add_number = ALIGN_LEN;
+	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+		       0, &ex, FALSE, BFD_RELOC_RISCV_ALIGN);
+	}
+      break;
+    case TYPE_IS:
+      if (is_same_sec)
+	gas_assert (length == 0);
+      else
+	{  /* add relocation here now!  */
+	  gas_assert (length == CMODEL_SECTION_ENTRY_SIZE);
+	  /* SYM rela */
+	  reloc = BFD_RELOC_64;
+	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+		       CMODEL_SECTION_ENTRY_SIZE, &exp, FALSE, reloc);
+	  /* _DATA */
+	  expressionS ex;
+	  ex.X_op = O_constant;
+	  ex.X_add_number = 0;
+	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal, 8,
+		       &ex, 0, BFD_RELOC_RISCV_DATA);
+	}
+      break;
+    default:
+      as_fatal (_("internal error: invalid CModel type!"));
+    }
+    break;
+  case CSI_REFERENCE_SYMBOL:
+    exp_ref = exp;
+    break;
+  case CSI_LARGE_CODE:
+    reloc = 0;
+    switch (type)
+    {
+    case TYPE_JX:
+      if (is_same_sec)
+        gas_assert (length == 0);
+      else
+	{
+	  fixS *fix;
+	  reloc = BFD_RELOC_RISCV_PCREL_HI20;
+	  fix = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+			     4, &exp_ind, FALSE, reloc);
+	  fix->fx_tcbit = relax;
+
+	  reloc = BFD_RELOC_RISCV_PCREL_LO12_I;
+	  fix = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal + 4,
+			     4, &exp_ref, FALSE, reloc);
+	  fix->fx_tcbit = relax;
+
+	  /* TODO: relax jalr to c.jalr  */
+	}
+      break;
+    case TYPE_LA:
+      gas_assert (length == 8);
+      if (is_same_sec)
+	{
+	  fixS *fix;
+	  int32_t *bin = (int32_t *) buf;
+	  bin[1] = bin[2];
+
+	  reloc = BFD_RELOC_RISCV_PCREL_HI20;
+	  fix = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+			     4, &exp, FALSE, reloc);
+	  fix->fx_tcbit = relax;
+
+	  reloc = BFD_RELOC_RISCV_PCREL_LO12_I;
+	  fix = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal + 4,
+			     4, &exp_ref, FALSE, reloc);
+	  fix->fx_tcbit = relax;
+	}
+      else
+	{
+	  fixS *fix;
+	  reloc = BFD_RELOC_RISCV_PCREL_HI20;
+	  fix = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+			     4, &exp_ind, FALSE, reloc);
+	  fix->fx_tcbit = relax;
+
+	  reloc = BFD_RELOC_RISCV_PCREL_LO12_I;
+	  fix = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal + 4,
+			     4, &exp_ref, FALSE, reloc);
+	  fix->fx_tcbit = relax;
+	}
+      break;
+    case TYPE_LD:
+      if (is_same_sec)
+	{
+	  fixS *fix;
+	  gas_assert (length == 8);
+	  int32_t *bin = (int32_t *) buf;
+	  bin[1] = bin[2];
+
+	  reloc = BFD_RELOC_RISCV_PCREL_HI20;
+	  fix = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+			     4, &exp, FALSE, reloc);
+	  fix->fx_tcbit = relax;
+
+	  reloc = BFD_RELOC_RISCV_PCREL_LO12_I;
+	  fix = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal + 4,
+			     4, &exp_ref, FALSE, reloc);
+	  fix->fx_tcbit = relax;
+	}
+      else
+	{
+	  fixS *fix;
+	  gas_assert (length == 12);
+	  reloc = BFD_RELOC_RISCV_PCREL_HI20;
+	  fix = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+			     4, &exp_ind, FALSE, reloc);
+	  fix->fx_tcbit = relax;
+
+	  reloc = BFD_RELOC_RISCV_PCREL_LO12_I;
+	  fix = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal + 4,
+			     4, &exp_ref, FALSE, reloc);
+	  fix->fx_tcbit = relax;
+	}
+      break;
+    case TYPE_ST:
+      if (is_same_sec)
+	{
+	  fixS *fix;
+	  gas_assert (length == 8);
+	  int32_t *bin = (int32_t *) buf;
+	  bin[1] = bin[2];
+
+	  reloc = BFD_RELOC_RISCV_PCREL_HI20;
+	  fix = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+			     4, &exp, FALSE, reloc);
+	  fix->fx_tcbit = relax;
+
+	  reloc = BFD_RELOC_RISCV_PCREL_LO12_S;
+	  fix = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal + 4,
+			     4, &exp_ref, FALSE, reloc);
+	  fix->fx_tcbit = relax;
+	}
+      else
+	{
+	  fixS *fix;
+	  gas_assert (length == 12);
+	  reloc = BFD_RELOC_RISCV_PCREL_HI20;
+	  fix = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+			     4, &exp_ind, FALSE, reloc);
+	  fix->fx_tcbit = relax;
+
+	  reloc = BFD_RELOC_RISCV_PCREL_LO12_I;
+	  fix = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal + 4,
+			     4, &exp_ref, FALSE, reloc);
+	  fix->fx_tcbit = relax;
+	}
+      break;
+    default:
+      as_fatal (_("internal error: invalid CModel type!"));
+    }
+    break;
+  case CSI_DEFAULT_CODE:
+    reloc = 0;
+    switch (type)
+    {
+    case TYPE_JX:
+      if (!is_same_sec)
+        gas_assert (length == 0);
+      else
+	{
+	  fixS *fix;
+	  reloc = BFD_RELOC_RISCV_CALL;
+	  fix = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+			     4, &exp, FALSE, reloc);
+	  fix->fx_tcbit = relax;
+	}
+      break;
+    default:
+      as_fatal (_("internal error: invalid CModel type!"));
+    }
+    break;
+  case CSI_B22827:
+  case CSI_B22827_1: /* TODO: relax nop to c.nop if has RVC  */
+    /* blank  */
+    break;
+  default:
+    as_fatal (_("internal error: invalid CModel index!"));
+  }
+
+  buf += length;
+
+  if (fixp)
+    {
+      fixp->fx_file = fragp->fr_file;
+      fixp->fx_line = fragp->fr_line;
+    }
+
+  gas_assert (buf == (bfd_byte *)fragp->fr_literal
+	      + fragp->fr_fix + fragp->fr_var);
+
+  fragp->fr_fix += fragp->fr_var;
+}
+
 /* Relax a machine dependent frag.  This returns the amount by which
    the current size of the frag should change.  */
 
 void
-md_convert_frag (bfd *abfd ATTRIBUTE_UNUSED, segT asec ATTRIBUTE_UNUSED,
+md_convert_frag (bfd *abfd ATTRIBUTE_UNUSED, segT asec,
 		 fragS *fragp)
 {
-  gas_assert (RELAX_BRANCH_P (fragp->fr_subtype));
-  md_convert_frag_branch (fragp);
+  gas_assert (RELAX_BRANCH_P (fragp->fr_subtype)
+	      || RELAX_CMODEL_P (fragp->fr_subtype));
+  if (RELAX_BRANCH_P (fragp->fr_subtype))
+    md_convert_frag_branch (fragp, asec);
+  else if (RELAX_CMODEL_P (fragp->fr_subtype))
+    md_convert_frag_cmodel (fragp, asec);
 }
 
 void
@@ -4184,6 +6579,36 @@ RISC-V options:\n\
   -mbig-endian                assemble for big-endian\n\
   -mlittle-endian             assemble for little-endian\n\
 "));
+
+  /* Andes explicit options */
+  fprintf (stream, _("\n\
+NDS specific command line options:\n\
+  -mno-16-bit                 don't generate rvc instructions\n\
+  -matomic                    enable atomic extension\n\
+  -mace                       support user defined instruction extension\n\
+  -O1                         optimize for performance\n\
+  -Os                         optimize for space\n\
+  -mext-dsp                   enable dsp extension\n\
+"));
+
+  /* Andes hidden options */
+  char *var = getenv("ANDES_HELP");
+  if (var)
+    {
+      fprintf (stream, _("\
+  -mext-efhw                  enable efhw extension\n\
+  -mext-vector                enable vector extension\n\
+  -mcmodel=TYPE               set cmodel type\n\
+  -mict-model=TYPE            set ICT model type\n\
+  -mno-workaround             disable all workarounds\n\
+  -mb19758                    enable workaround b19758\n\
+  -mb25057                    enable workaround b25057\n\
+  -mb20282                    enable workaround b20282\n\
+  -mb22827                    enable workaround b22827\n\
+  -mb22827.1                  enable workaround b22827.1\n\
+  -mfull-arch                 disable arch attribute suppression\n\
+"));
+    }
 }
 
 /* Standard calling conventions leave the CFA at SP on entry.  */
@@ -4251,6 +6676,7 @@ s_riscv_insn (int x ATTRIBUTE_UNUSED)
   expressionS imm_expr;
   bfd_reloc_code_real_type imm_reloc = BFD_RELOC_UNUSED;
   char save_c;
+  insn.cmodel.method = METHOD_DEFAULT;
 
   while (!is_end_of_line[(unsigned char) *input_line_pointer])
     ++input_line_pointer;
@@ -4295,7 +6721,8 @@ riscv_write_out_attrs (void)
   unsigned int i;
 
   /* Re-write architecture elf attribute.  */
-  arch_str = riscv_arch_str (xlen, riscv_subsets);
+  arch_str = riscv_arch_str_ext (xlen, riscv_subsets,
+				 riscv_opts.full_arch, default_isa_spec);
   bfd_elf_add_proc_attr_string (stdoutput, Tag_RISCV_arch, arch_str);
   xfree ((void *) arch_str);
 
@@ -4335,6 +6762,16 @@ riscv_write_out_attrs (void)
   bfd_elf_add_proc_attr_int (stdoutput, Tag_RISCV_priv_spec, versions[0]);
   bfd_elf_add_proc_attr_int (stdoutput, Tag_RISCV_priv_spec_minor, versions[1]);
   bfd_elf_add_proc_attr_int (stdoutput, Tag_RISCV_priv_spec_revision, versions[2]);
+
+  /* { Andes */
+  if (m_ict_model)
+    {
+      bfd_elf_add_proc_attr_int (stdoutput, Tag_RISCV_ict_version,
+				 DEFAULT_ICT_VERSION);
+      bfd_elf_add_proc_attr_string (stdoutput, Tag_RISCV_ict_model,
+				    m_ict_model);
+    }
+  /* } Andes */
 }
 
 /* Add the default contents for the .riscv.attributes section.  */
@@ -4346,13 +6783,366 @@ riscv_set_public_attributes (void)
     riscv_write_out_attrs ();
 }
 
+/* Implement TC_START_LABEL and md_cleanup. Release cache instruction
+   when assemble finished parsing input file or defining a label  */
+
+bfd_boolean
+riscv_md_cleanup (void)
+{
+  if (has_cached_insn ())
+    release_cached_insn ();
+
+  return TRUE;
+}
+
 /* Called after all assembly has been done.  */
 
 void
 riscv_md_end (void)
 {
+  if (use_insn_combiner ()
+	&& insn_combiner)
+    {
+      free (insn_combiner);
+    }
   riscv_set_public_attributes ();
 }
+
+/* { Andes */
+/* We don't allow the overlapped NO_RVC_REGION_BEGIN and NO_RVC_REGION_END.
+   Therefore, we choose the last NO_RVC_REGION as the effective setting
+   at the same address.  */
+
+static void
+riscv_find_next_effective_rvc_region (fixS **fixp)
+{
+  fixS *effective_fixp = NULL;
+
+  while (*fixp && (*fixp)->fx_r_type != BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN)
+    *fixp = (*fixp)->fx_next;
+  effective_fixp = *fixp;
+  if (!effective_fixp)
+    return;
+
+  *fixp = (*fixp)->fx_next;
+  while (*fixp
+	 && (*fixp)->fx_frag == effective_fixp->fx_frag
+	 && (*fixp)->fx_where == effective_fixp->fx_where)
+    {
+      if ((*fixp)->fx_r_type == BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN)
+	{
+	  effective_fixp->fx_offset = 2;
+	  effective_fixp->fx_done = 1;
+	  effective_fixp = *fixp;
+	}
+      *fixp = (*fixp)->fx_next;
+    }
+  *fixp = effective_fixp;
+}
+
+/* The Addend of BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN means,
+   0: norvc, unchecked
+   1: rvc, unchecked
+   2: Already checked.  */
+
+static void
+riscv_final_no_rvc_region (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
+			   void *xxx ATTRIBUTE_UNUSED)
+{
+  segment_info_type *seginfo;
+  frchainS *frch;
+  fixS *fixp, *pre_fixp_begin;
+  int current_rvc = 0;
+
+  seginfo = seg_info (sec);
+  if (!seginfo || !symbol_rootP || !subseg_text_p (sec) || sec->size == 0)
+    return;
+
+  subseg_change (sec, 0);
+
+  frch = seginfo->frchainP;
+  pre_fixp_begin = NULL;
+  current_rvc = frch->frch_root->tc_frag_data.rvc;
+  if (current_rvc == -1)
+    {
+      fixp = fix_at_start (frch->frch_root, 0, abs_section_sym, 0x2,
+			   0, BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN);
+      pre_fixp_begin = fixp;
+      fixp = seginfo->fix_root->fx_next;
+    }
+  else
+    fixp = seginfo->fix_root;
+
+  /* Assume the offset of the NO_RVC_REGION are in order.  */
+  for (; fixp; fixp = fixp->fx_next)
+    {
+      /* Find the next effective NO_RVC_REGION relocations.  */
+      riscv_find_next_effective_rvc_region (&fixp);
+      if (!fixp)
+	break;
+
+      /* Remove the redundant NO_RVC_REGION relocations.  */
+      if (fixp->fx_offset == 0)
+	{
+	  /* norvc to norvc.  */
+	  if (current_rvc == -1)
+	    fixp->fx_done = 1;
+	  else
+	    {
+	      /* rvc to norvc.  */
+	      current_rvc = -1;
+	      pre_fixp_begin = fixp;
+	    }
+	}
+      else if (fixp->fx_offset == 1)
+	{
+	  /* Cannot find the corresponding NO_RVC_REGION_BEGIN
+	     or rvc to rvc.  */
+	  if (!pre_fixp_begin
+	      || current_rvc == 1)
+	    fixp->fx_done = 1;
+	  else
+	    {
+	      /* norvc to rvc.  */
+	      current_rvc = 1;
+	      pre_fixp_begin = NULL;
+	      fixp->fx_r_type = BFD_RELOC_RISCV_NO_RVC_REGION_END;
+	    }
+	}
+      fixp->fx_offset = 2;
+    }
+}
+
+/* final both .no_execit_[begin|end]
+ *        and .innermost_loop_[begin|end]
+ */
+static void
+riscv_final_no_execit_region (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
+			      void *xxx ATTRIBUTE_UNUSED)
+{
+  segment_info_type *seginfo;
+  fixS *fixp;
+  int no_execit_count;
+  int innermost_loop_count;
+
+  seginfo = seg_info (sec);
+  if (!seginfo || !symbol_rootP || !subseg_text_p (sec) || sec->size == 0)
+    return;
+
+  subseg_change (sec, 0);
+
+  /* First, we also need to insert noexecit directives according to
+     the NO_RVC_REGION directives set at riscv_final_no_rvc_region.  */
+  fixp = seginfo->fix_root;
+  for (; fixp; fixp = fixp->fx_next)
+    {
+      /* skip redundant fixes  */
+      if (fixp->fx_done)
+	continue;
+
+      if (fixp->fx_r_type == BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN)
+	fix_new (fixp->fx_frag, fixp->fx_where, 0, abs_section_sym,
+		 R_RISCV_RELAX_REGION_NO_EXECIT_FLAG, 0,
+		 BFD_RELOC_RISCV_RELAX_REGION_BEGIN);
+      else if (fixp->fx_r_type == BFD_RELOC_RISCV_NO_RVC_REGION_END)
+	fix_new (fixp->fx_frag, fixp->fx_where, 0, abs_section_sym,
+		 R_RISCV_RELAX_REGION_NO_EXECIT_FLAG, 0,
+		 BFD_RELOC_RISCV_RELAX_REGION_END);
+    }
+
+  /* Assume the offset of the BFD_RELOC_RISCV_RELAX_REGION_BEGIN/END
+     are in order.  */
+  no_execit_count = 0;
+  innermost_loop_count = 0;
+  fixp = seginfo->fix_root;
+  for (; fixp; fixp = fixp->fx_next)
+    {
+      if (fixp->fx_r_type == BFD_RELOC_RISCV_RELAX_REGION_BEGIN)
+	{
+	  if (fixp->fx_offset == R_RISCV_RELAX_REGION_NO_EXECIT_FLAG)
+	    {
+	      /* We must find the corresponding REGION_END later.  */
+	      if (no_execit_count > 0)
+		fixp->fx_done = 1;
+	      no_execit_count++;
+	    }
+	  else if (fixp->fx_offset == R_RISCV_RELAX_REGION_IMLOOP_FLAG)
+	    {
+	      /* eliminate nested ".innermost_loop_begin".  */
+	      if (innermost_loop_count > 0)
+		fixp->fx_done = 1;
+	      innermost_loop_count++;
+	    }
+	}
+      else if (fixp->fx_r_type == BFD_RELOC_RISCV_RELAX_REGION_END)
+        {
+	  if (fixp->fx_offset == R_RISCV_RELAX_REGION_NO_EXECIT_FLAG)
+	    {
+	      no_execit_count--;
+	      if (no_execit_count > 0)
+		fixp->fx_done = 1;
+	      else if (no_execit_count < 0)
+		{
+		  /* Find the unmatched REGION_END, ignore it.  */
+		  no_execit_count++;
+		  fixp->fx_done = 1;
+		}
+	    }
+	  else if (fixp->fx_offset == R_RISCV_RELAX_REGION_IMLOOP_FLAG)
+	    {
+	      innermost_loop_count--;
+	      /* eliminate nested ".innermost_loop_end".  */
+	      if (innermost_loop_count > 0)
+		fixp->fx_done = 1;
+	      else if (innermost_loop_count < 0)
+		{
+		  /* unmatched ".innermost_loop_end", ignore it.  */
+		  innermost_loop_count++;
+		  fixp->fx_done = 1;
+		}
+	    }
+	}
+    }
+
+  /* We have handle the negative no_execit_count cases above.  */
+  if (no_execit_count > 0)
+    {
+      /* Find the unmatched REGION_BEGIN, we should print
+	 warning/error msg here.  */
+    }
+}
+
+static void
+riscv_insert_relax_entry (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
+			  void *xxx ATTRIBUTE_UNUSED)
+{
+  segment_info_type *seginfo;
+  frchainS *frch;
+  fixS *fixp;
+  offsetT X_add_number;
+
+  seginfo = seg_info (sec);
+  if (!seginfo || !symbol_rootP || !subseg_text_p (sec) || sec->size == 0)
+    return;
+
+  subseg_change (sec, 0);
+
+  /* The original code says that it is not necessary to insert the
+     R_RISCV_RELAX_ENTRY when there is no relocation and the execit
+     is disabled. It is weird for me now, I think always insert the
+     R_RISCV_RELAX_ENTRY is fine and do no harm.  */
+
+  /* Set RELAX_ENTRY flags for linker.  */
+  frch = seginfo->frchainP;
+  X_add_number = 0;
+
+  if (!riscv_opts.relax)
+    X_add_number |= R_RISCV_RELAX_ENTRY_DISABLE_RELAX_FLAG;
+  if (riscv_opts.execit)
+    X_add_number |= R_RISCV_RELAX_ENTRY_EXECIT_FLAG;
+
+  fixp = fix_at_start (frch->frch_root, 0, abs_section_sym, X_add_number,
+		       0, BFD_RELOC_RISCV_RELAX_ENTRY);
+  fixp->fx_no_overflow = 1;
+}
+
+static void
+andes_trim_seg_end_padding (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
+			    void *xxx ATTRIBUTE_UNUSED)
+{
+  segment_info_type *seginfo;
+  frchainS *frch;
+  struct frag *fragP;
+  bfd_signed_vma size;
+
+  seginfo = seg_info (sec);
+  if (!seginfo || !symbol_rootP || !subseg_text_p (sec) || sec->size == 0)
+    return;
+
+  subseg_change (sec, 0);
+
+  /* tag segment pading zeros.  */
+  frch = seginfo->frchainP;
+  for (fragP = frch->frch_root; fragP; fragP = fragP->fr_next)
+    {
+      struct frag *next = fragP->fr_next;
+      if (!next || next->fr_next)
+	continue;
+
+      gas_assert (fragP->fr_type == rs_fill
+		  && next->fr_type == rs_fill && next->fr_fix == 0);
+
+      size = fragP->fr_var * fragP->fr_offset;
+      sec->size -= size;
+      fragP->fr_offset = 0;
+      /* mapping symbol check needs next frag there.  */
+      fragP->fr_next->fr_address -= size;
+      fragP->fr_next->last_fr_address -= size;
+      break;
+    }
+}
+
+void
+riscv_post_relax_hook (void)
+{
+  /* TODO: Maybe we can sort the relocations here to reduce the burden
+     of linker.  */
+  bfd_map_over_sections (stdoutput, riscv_final_no_rvc_region, NULL);
+  bfd_map_over_sections (stdoutput, riscv_final_no_execit_region, NULL);
+  bfd_map_over_sections (stdoutput, riscv_insert_relax_entry, NULL);
+  bfd_map_over_sections (stdoutput, andes_trim_seg_end_padding, NULL);
+}
+
+/* Insert relocations to mark the region that can not do EXECIT relaxation.  */
+
+static void
+riscv_no_execit (int mode)
+{
+  expressionS exp;
+
+  exp.X_op = O_symbol;
+  exp.X_add_symbol = abs_section_sym;
+  if (mode == 1)
+    {
+      /* The begin of the region without EXECIT.  */
+      exp.X_add_number = R_RISCV_RELAX_REGION_NO_EXECIT_FLAG;
+      fix_new_exp (frag_now, frag_now_fix (), 0, &exp, 0,
+		   BFD_RELOC_RISCV_RELAX_REGION_BEGIN);
+    }
+  else
+    {
+      /* The end of the region without EXECIT.  */
+      exp.X_add_number = R_RISCV_RELAX_REGION_NO_EXECIT_FLAG;
+      fix_new_exp (frag_now, frag_now_fix (), 0, &exp, 0,
+		   BFD_RELOC_RISCV_RELAX_REGION_END);
+    }
+}
+
+/* Insert relocations to mark the innermost loop region.  */
+
+static void
+riscv_innermost_loop (int mode)
+{
+  /* Insert loop region relocation here.  */
+  expressionS exp;
+
+  exp.X_op = O_symbol;
+  exp.X_add_symbol = abs_section_sym;
+  if (mode == 1)
+    {
+      exp.X_add_number = R_RISCV_RELAX_REGION_IMLOOP_FLAG;
+      fix_new_exp (frag_now, frag_now_fix (), 0, &exp, 0,
+		   BFD_RELOC_RISCV_RELAX_REGION_BEGIN);
+    }
+  else
+    {
+      exp.X_add_number = R_RISCV_RELAX_REGION_IMLOOP_FLAG;
+      fix_new_exp (frag_now, frag_now_fix (), 0, &exp, 0,
+		   BFD_RELOC_RISCV_RELAX_REGION_END);
+    }
+}
+
+/* } Andes */
 
 /* Adjust the symbol table.  */
 
@@ -4385,6 +7175,8 @@ riscv_convert_symbolic_attribute (const char *name)
     T(priv_spec_revision),
     T(unaligned_access),
     T(stack_align),
+    T(ict_version),
+    T(ict_model),
 #undef T
   };
 
@@ -4502,17 +7294,38 @@ riscv_elf_copy_symbol_attributes (symbolS *dest, symbolS *src)
 static const pseudo_typeS riscv_pseudo_table[] =
 {
   {"option", s_riscv_option, 0},
+#if 0
   {"half", cons, 2},
   {"word", cons, 4},
   {"dword", cons, 8},
+#endif
   {"dtprelword", s_dtprel, 4},
   {"dtpreldword", s_dtprel, 8},
   {"bss", s_bss, 0},
-  {"uleb128", s_riscv_leb128, 0},
   {"sleb128", s_riscv_leb128, 1},
   {"insn", s_riscv_insn, 0},
   {"attribute", s_riscv_attribute, 0},
   {"variant_cc", s_variant_cc, 0},
+  {"float16", float_cons, 'h'},
+
+  /* { Andes */
+  {"byte", riscv_aligned_cons, 0},
+  {"2byte", riscv_aligned_cons, 1},
+  {"half", riscv_aligned_cons, 1},
+  {"short", riscv_aligned_cons, 1},
+  {"4byte", riscv_aligned_cons, 2},
+  {"word", riscv_aligned_cons, 2},
+  {"long", riscv_aligned_cons, 2},
+  {"8byte", riscv_aligned_cons, 3},
+  {"dword", riscv_aligned_cons, 3},
+  {"quad", riscv_aligned_cons, 3},
+  {"no_ex9_begin", riscv_no_execit, 1},
+  {"no_ex9_end", riscv_no_execit, 0},
+  {"no_execit_begin", riscv_no_execit, 1},
+  {"no_execit_end", riscv_no_execit, 0},
+  {"innermost_loop_begin", riscv_innermost_loop, 1},
+  {"innermost_loop_end", riscv_innermost_loop, 0},
+  /* } Andes */
 
   { NULL, NULL, 0 },
 };
@@ -4524,3 +7337,620 @@ riscv_pop_insert (void)
 
   pop_insert (riscv_pseudo_table);
 }
+
+/* Implement md_parse_name for parsing SYNBOL@ICT.  */
+
+int
+riscv_parse_name (char const *name, expressionS *exprP,
+                  enum expr_mode mode ATTRIBUTE_UNUSED,
+                  char *nextcharP)
+{
+  segT segment;
+  char *next;
+
+  /* We only deal with the case that includes `@ICT'.  */
+  if (*nextcharP != '@'
+      || (strncasecmp (input_line_pointer + 1, "ICT", 3) != 0
+	  && strncasecmp (input_line_pointer + 1, "ict", 3) != 0))
+    return 0;
+
+  gas_assert (nsta.ict_exp == NULL);
+  exprP->X_op_symbol = NULL;
+  exprP->X_md = BFD_RELOC_UNUSED;
+  exprP->X_add_symbol = symbol_find_or_make (name);
+  exprP->X_op = O_symbol;
+  exprP->X_add_number = 0;
+
+  /* Check the specail name if a symbol.  */
+  segment = S_GET_SEGMENT (exprP->X_add_symbol);
+  if ((segment != undefined_section) && (*nextcharP != '@'))
+    return 0;
+
+  next = input_line_pointer + 1 + 3;	/* strlen (ict/ICT) is 3.  */
+
+  if (!is_part_of_name (*next))
+    {
+      exprP->X_md = BFD_RELOC_RISCV_ICT_HI20;
+      nsta.ict_exp = exprP;
+      *input_line_pointer = *nextcharP;
+      input_line_pointer = next;
+      *nextcharP = *input_line_pointer;
+      *input_line_pointer = '\0';
+    }
+
+  return 1;
+}
+
+/* { Andes */
+
+/* This fix_new is called by cons via TC_CONS_FIX_NEW_POST.  */
+
+void
+tc_cons_fix_new_post_riscv (void *ptr, expressionS *exp)
+{
+  fixS *fix = ptr;
+  if (exp == nsta.ict_exp)
+    {
+      nsta.ict_exp = NULL;
+      fix->tc_fix_data.ict = exp->X_md;
+    }
+}
+
+void
+tc_cons_count_check (int count)
+{ /* how many items of the current pseudo instruction.  */
+  nsta.cons_count = count;
+}
+
+static void
+riscv_rvc_reloc_setting (int mode)
+{
+  /* We skip the rvc/norvc options which are set before the first
+     instruction.  It is no necessary to insert the NO_RVC_REGION relocs
+     according to these options since the first rvc information is
+     stored in the fragment's tc_frag_data.rvc.  */
+  /* RVC is disable entirely when -mno-16-bit is enabled  */
+  if (!start_assemble  || riscv_opts.no_16_bit)
+    return;
+
+  if (mode)
+    /* RVC.  */
+    fix_new (frag_now, frag_now_fix (), 0, abs_section_sym,
+	     0x1, 0, BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN);
+  else
+    /* No RVC.  */
+    fix_new (frag_now, frag_now_fix (), 0, abs_section_sym,
+	     0x0, 0, BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN);
+}
+
+
+#ifndef MASK_AQRL
+  #define MASK_AQRL (0x3u << 25)
+#endif
+
+static bool
+is_b19758_associated_insn (struct riscv_opcode *insn)
+{
+  static insn_t lr_insns[] =
+    {
+      MATCH_LR_W,
+      #if 0
+      MATCH_LR_D,
+      #endif
+      0
+    };
+  static insn_t amo_insns[] =
+    {
+      MATCH_AMOSWAP_W,
+      MATCH_AMOADD_W,
+      MATCH_AMOAND_W,
+      MATCH_AMOOR_W,
+      MATCH_AMOXOR_W,
+      MATCH_AMOMAX_W,
+      MATCH_AMOMAXU_W,
+      MATCH_AMOMIN_W,
+      MATCH_AMOMINU_W,
+      #if 0
+      MATCH_AMOSWAP_D,
+      MATCH_AMOADD_D,
+      MATCH_AMOAND_D,
+      MATCH_AMOOR_D,
+      MATCH_AMOXOR_D,
+      MATCH_AMOMAX_D,
+      MATCH_AMOMAXU_D,
+      MATCH_AMOMIN_D,
+      MATCH_AMOMINU_D,
+      #endif
+      0
+    };
+  const insn_t lr_mask = MASK_LR_W | MASK_AQRL;
+  const insn_t amo_mask = MASK_AMOSWAP_W | MASK_AQRL;
+  bool rz = false;
+  int i = 0;
+
+  if (insn->mask == lr_mask)
+    {
+      insn_t match = insn->match & ~(MASK_AQRL|0x1000);
+      while (lr_insns[i])
+	{
+	  if (match == lr_insns[i++])
+	    {
+	      rz = true;
+	      break;
+	    }
+	}
+    }
+  else if (insn->mask == amo_mask)
+    {
+      insn_t match = insn->match & ~(MASK_AQRL|0x1000);
+      while (amo_insns[i])
+	{
+	  if (match == amo_insns[i++])
+	    {
+	      rz = true;
+	      break;
+	    }
+	}
+    }
+  return rz;
+}
+
+static bool
+is_indirect_jump (struct riscv_opcode *insn)
+{
+  static insn_t insns[] =
+    {
+      MATCH_JALR, MATCH_C_JALR, MATCH_C_JR,
+      0
+    };
+  bool rz = false;
+  int i = 0;
+  insn_t x;
+  while ((x = insns[i++]))
+    {
+      if (x == insn->match)
+	{
+	  rz = true;
+	  break;
+	}
+    }
+  return rz;
+}
+
+static bool
+is_conditional_branch (struct riscv_opcode *insn)
+{
+  static insn_t insns[] =
+    {
+      MATCH_BEQ, MATCH_BEQC, MATCH_C_BEQZ,
+      MATCH_BNE, MATCH_BNEC, MATCH_C_BNEZ,
+      MATCH_BLT, MATCH_BLTU,
+      MATCH_BGE, MATCH_BGEU,
+      MATCH_BBC, MATCH_BBS,
+      0
+    };
+  bool rz = false;
+  int i = 0;
+  insn_t x;
+  while ((x = insns[i++]))
+    {
+      if (x == insn->match)
+	{
+	  rz = true;
+	  break;
+	}
+    }
+  return rz;
+}
+
+#define MASK_RM (0x7u << 12)
+
+static bool
+is_insn_fdiv_or_fsqrt (const struct riscv_opcode *insn)
+{
+  static insn_t insns[] =
+    {
+      MATCH_FDIV_D, MATCH_FSQRT_D,
+      MATCH_FDIV_S, MATCH_FSQRT_S,
+      0
+    };
+  bool rz = false;
+  if (insn)
+    {
+      insn_t x;
+      insn_t match = insn->match & ~MASK_RM; /* all rounding mode  */
+      int i = 0;
+      while ((x = insns[i++]))
+	{
+	  if (x == match)
+	    {
+	      rz = true;
+	      break;
+	    }
+	}
+    }
+  return rz;
+}
+
+static inline int
+insn_fp_rd (insn_t insn)
+{
+  int rd = 0x1fu & (insn >> 7);
+  return rd;
+}
+
+static bool
+is_insn_in_b22827_list (const struct riscv_opcode *insn,
+			insn_t prev, insn_t curr)
+{
+  static insn_t insns[] =
+    {
+      /* unconditional  */
+      MATCH_FSUB_S, MATCH_FADD_S, MATCH_FMUL_S, MATCH_FMADD_S,
+      MATCH_FSQRT_S, MATCH_FDIV_S,
+      MATCH_FSUB_D, MATCH_FADD_D, MATCH_FMUL_D, MATCH_FMADD_D,
+      MATCH_FSQRT_D, MATCH_FDIV_D,
+      MATCH_FSUB_Q, MATCH_FADD_Q, MATCH_FMUL_Q, MATCH_FMADD_Q,
+      MATCH_FSQRT_Q, MATCH_FDIV_Q,
+      0
+    };
+
+  bool rz = false;
+  insn_t x;
+  insn_t match = insn->match & ~MASK_RM; /* all rounding mode  */
+  int i = 0;
+  while ((x = insns[i++]))
+    {
+      if (x == match)
+	{
+	  rz = true;
+	  return !rz;
+	}
+    }
+
+  /* RD(FDIV/FSQRT) has to be in fa0-7 to exclude jal/ret  */
+  if ((((insn->match & MASK_JAL) == MATCH_JAL)
+       && (curr & (0x1fu << 7))) // JAL RD != 0 (not J)
+      || (insn->match == (MATCH_JAL|(0x1u << 7)))   // JAL RA
+      || ((insn->match & MASK_JALR) == MATCH_JALR)  // JALR|JR
+      || (insn->match == MATCH_C_JAL)               // C.JAL
+      || ((insn->match & MASK_C_JR) == MATCH_C_JR)  // C.JR
+      || (insn->match == MATCH_C_JALR))             // C.JALR
+    {
+      int rd = insn_fp_rd (prev);
+      rz = (10 <= rd) && (rd <= 17); /* rd in fa0 .. fa7  */
+    }
+
+  return !rz;
+}
+
+static inline bool
+is_insn_fmt_s (insn_t insn)
+{
+  int fmt = 0x3u & (insn >> 25);
+  return fmt == 0; /* 0:s, 1:d, 2:h, 3:q  */
+}
+
+static inline bool
+is_insn_fshw (const struct riscv_opcode *insn)
+{
+  return insn && (insn->match == MATCH_FSHW);
+}
+
+static bool
+is_insn_of_std_type (const struct riscv_opcode *insn, const char *type)
+{
+  bool rz = false;
+  const char *p = type;
+  enum riscv_insn_class klass = insn->insn_class;
+  while (p && !rz)
+    {
+      switch (*p)
+	{
+	case 'D':
+	  if (klass == INSN_CLASS_D
+	      || klass == INSN_CLASS_D_AND_C
+	      || klass == INSN_CLASS_D_OR_ZDINX
+	      || klass == INSN_CLASS_D_AND_ZFH)
+	    rz = true;
+	  break;
+	case 'F':
+	  if (klass == INSN_CLASS_F
+	      || klass == INSN_CLASS_F_AND_C
+	      || klass == INSN_CLASS_F_OR_ZFINX
+	      || klass == INSN_CLASS_F_AND_ZFH)
+	    rz = true;
+	  break;
+	case 'Q':
+	  if (klass == INSN_CLASS_Q
+	      || klass == INSN_CLASS_Q_OR_ZQINX
+	      || klass == INSN_CLASS_Q_AND_ZFH)
+	    rz = true;
+	  break;
+	default:
+	  gas_assert (0);
+	}
+    }
+  return rz;
+}
+
+static bool
+is_insn_of_fp_types (const struct riscv_opcode *insn)
+{
+  bool rz = false;
+  if (insn)
+    {
+      if (insn->match == MATCH_FSHW
+	  || insn->match == MATCH_FLHW)
+	rz = true;
+      else
+	rz = is_insn_of_std_type (insn, "FDQ");
+    }
+  return rz;
+}
+
+static void
+riscv_aligned_cons (int idx)
+{
+  unsigned long size = 1 << idx;
+  /* Call default handler.  */
+  cons (size);
+  if (now_seg->flags & SEC_CODE
+      && now_seg->flags & SEC_ALLOC && now_seg->flags & SEC_RELOC)
+    {
+      /* Use BFD_RELOC_RISCV_DATA to avoid EXECIT optimization replacing data.  */
+      expressionS exp;
+
+      exp.X_add_number = 0;
+      exp.X_op = O_constant;
+      size *= nsta.cons_count;
+      fix_new_exp (frag_now, frag_now_fix () - size, size,
+		   &exp, 0, BFD_RELOC_RISCV_DATA);
+    }
+}
+
+/* Andes BTB alignmemt implementation:
+* insert a 4-byte NOP tagged with ALIGN_BTB for liner relaxation.
+* Do this only when RVC is enabled and NOT (Os and .option norelax.)
+* sample:
+*   call test / jr a0
+*   => jalr  ra / jalr a0
+*   << nop @ R_RISCV_ALIGN_BTB >> insertion
+*/
+
+static void
+andes_insert_btb_reloc (struct riscv_cl_insn *ip)
+{
+  insn_t opc = ip->insn_opcode;
+  if (optimize && riscv_opts.verbatim
+      && (((opc & MASK_JALR) == MATCH_JALR && RV_X (opc, 7, 5))
+          || ((opc & MASK_JAL) == MATCH_JAL && RV_X (opc, 7, 5)))
+      && riscv_opts.relax && riscv_opts.rvc)
+    { /* append NOP @ ALIGN_BTB  */
+      char *nops = frag_more (4);
+      expressionS ex;
+      ex.X_op = O_constant;
+      ex.X_add_number = 4;
+      riscv_make_nops (nops, 4);
+      fix_new_exp (frag_now, nops - frag_now->fr_literal, 4,
+		   &ex, false, BFD_RELOC_RISCV_ALIGN_BTB);
+    }
+}
+/* } Andes */
+
+/* { Andes ACE */
+static void
+ace_encode_insn (unsigned int v, ace_op_t * ace_op, struct riscv_cl_insn *ip)
+{
+  unsigned int bit_value = v;
+
+  /* Perform mask to truncate oversize value */
+  bit_value <<= 32 - ace_op->bitsize;
+  bit_value >>= 32 - ace_op->bitsize;
+
+  /* Shift value to specified position */
+  bit_value <<= ace_op->bitpos - ace_op->bitsize + 1;
+
+  ip->insn_opcode = (unsigned int) ip->insn_opcode | bit_value;
+}
+
+static void
+ace_encode_insn_discrete (unsigned int v, char *op_name_discrete, const char *op, struct riscv_cl_insn *ip)
+{
+  bfd_boolean found_or_token = TRUE;
+  unsigned bit_value = 0;
+  char *psep, *pval = op_name_discrete + strlen(op);
+  unsigned msb = 0, width = 0, width_acc = 0;
+
+  while (found_or_token) {
+	/* Extract msb from string */
+	psep = strchr (pval, '_');
+	*psep = '\0';
+	msb = strtoul (pval, (char **) NULL, 10);
+	/* Extract width from string */
+	pval = psep + 1;
+	psep = strchr (pval, '|');
+	if (psep)
+	  *psep = '\0';
+	else
+	  found_or_token = FALSE;
+	width = strtoul (pval, (char **) NULL, 10);
+
+	/* Perform mask to truncate oversize value */
+	bit_value = v >> width_acc;
+	bit_value <<= 32 - width;
+	bit_value >>= 32 - width;
+
+	/* Shift value to specified position */
+	bit_value <<= msb - width + 1;
+
+	ip->insn_opcode = (unsigned int) ip->insn_opcode | bit_value;
+	width_acc += width;
+
+	/* Prepare condition for next iteration */
+	pval = psep + 1;
+  }
+
+}
+
+/* Assemble ACE instruction string to binary */
+
+static void
+ace_ip (char **args, char **str, struct riscv_cl_insn *ip)
+{
+  /* Extract field attribute name from opcode description (ace_ops) and
+     store the extracted result to var of op_name for finding the
+     field attribute information from ace_op_hash */
+  bfd_boolean found_op_str_end = FALSE;
+  char *pch = strchr (*args, ',');
+  if (pch == NULL)
+    {
+      pch = strchr (*args, '\0');
+      found_op_str_end = TRUE;
+    }
+  if (pch == NULL)
+    as_fatal (_("Broken assembler.  No assembly attempted."));
+
+  unsigned int op_name_size = pch - (*args + 1);
+  char *op_name = malloc (op_name_size + 1);
+  memcpy (op_name, *args + 1, op_name_size);
+  /* Cat null character to the end of op_name to avoid gash */
+  memcpy (op_name + op_name_size, "\0", 1);
+
+  /* Check whether encounter the end of line in assembly code */
+  bfd_boolean found_asm_end = FALSE;
+  if (strchr (*str, ',') == NULL && strchr (*str, '\0') != NULL)
+    found_asm_end = TRUE;
+
+  /* With rGPR encoding format, operand bit-field may be discrete.
+     There is an "|" token in discrete format */
+  bfd_boolean is_discrete = FALSE;
+  char *por = strchr (op_name, '|');
+  char *op_name_discrete = NULL;
+  if (por != NULL)
+    {
+      is_discrete = TRUE;
+      op_name_discrete = malloc (op_name_size + 1);
+      strcpy (op_name_discrete, op_name);
+      *por = '\0';
+    }
+
+  /*  Find the field attribute from ace_op_hash and encode instruction */
+  ace_op_t *ace_op = (ace_op_t *) str_hash_find (ace_op_hash, op_name);
+  switch (ace_op->hw_res)
+    {
+    case HW_GPR:
+	{
+	  unsigned int regno;
+	  /* Extract the GPR index string from assembly code (*str) */
+	  if (reg_lookup (str, RCLASS_GPR, &regno))
+	    /* Encode instruction */
+	    ace_encode_insn (regno, ace_op, ip);
+
+	  /* Update the address of pointer of assembly code (*str) */
+	  if (!found_asm_end)
+	    *str += 1;
+	}
+      break;
+
+    case HW_FPR:
+	{
+	  unsigned int regno;
+	  /* Extract the FPR index string from assembly code (*str) */
+	  if (reg_lookup (str, RCLASS_FPR, &regno))
+	    /* Encode instruction */
+	    ace_encode_insn (regno, ace_op, ip);
+
+	  /* Update the address of pointer of assembly code (*str) */
+	  if (!found_asm_end)
+	    *str += 1;
+	}
+      break;
+
+    case HW_VR:
+	{
+	  unsigned int regno;
+	  /* Extract the VR index string from assembly code (*str) */
+	  if (reg_lookup (str, RCLASS_VECR, &regno))
+	    /* Encode instruction */
+	    ace_encode_insn (regno, ace_op, ip);
+
+	  /* Update the address of pointer of assembly code (*str) */
+	  if (!found_asm_end)
+	    *str += 1;
+	}
+      break;
+
+    case HW_UINT:
+	{
+	  /* Extract the IMM value string from assembly code (*str) */
+	  char *p = strchr (*str, ',');
+	  if (p == NULL)
+	    p = strchr (*str, '\0');
+	  if (p == NULL)
+	    as_fatal (_("Broken assembler.  No IMM value is given."));
+	  unsigned int imm_size = p - *str;
+	  char *imm = malloc (imm_size + 1);
+	  memcpy (imm, *str, imm_size);
+	  memcpy (imm + imm_size, "\0", 1);
+	  unsigned int imm_value = strtoul (imm, (char **) NULL, 0);
+
+	  /* Encode instruction */
+	  if (is_discrete)
+	    ace_encode_insn_discrete (imm_value, op_name_discrete, "imm",  ip);
+	  else
+	    ace_encode_insn (imm_value, ace_op, ip);
+
+	  /* Update the address of pointer of assembly code (*str) */
+	  if (found_asm_end)
+	    *str += imm_size;
+	  else
+	    *str += imm_size + 1;
+	}
+      break;
+
+    case HW_ACR:
+	{
+	  /* Extract the ACR register index string from assembly code (*str) */
+	  char *p = strchr (*str, ',');
+	  if (p == NULL)
+	    p = strchr (*str, '\0');
+	  if (p == NULL)
+	    as_fatal (_("No ACR register index is given."));
+	  unsigned int reg_idx_size = p - *str;
+	  char *reg_idx = malloc (reg_idx_size + 1);
+	  memcpy (reg_idx, *str, reg_idx_size);
+	  // always append EOL at ACR index string
+	  memcpy (reg_idx + reg_idx_size, "\0", 1);
+
+	  /* Find the digit number of ACR register index string */
+	  ace_keyword_t *ace_reg =
+	    (ace_keyword_t *) str_hash_find (ace_keyword_hash, reg_idx);
+	  if (ace_reg != NULL)
+	    /* Encode instruction */
+	    if (is_discrete)
+	      ace_encode_insn_discrete (ace_reg->value, op_name_discrete, ace_op->hw_name,  ip);
+	    else
+	      ace_encode_insn (ace_reg->value, ace_op, ip);
+	  else
+	    as_fatal (_("Wrong ACR register index (%s)) is given."), reg_idx);
+
+	  /* Update the address of pointer of assembly code (*str) */
+	  if (found_asm_end)
+	    *str += reg_idx_size;
+	  else
+	    *str += reg_idx_size + 1;
+	}
+      break;
+
+    default:
+      as_fatal (_("Broken assembler.  Cannot find field attribute."));
+    }
+
+  /* Update the address of pointer of the field attribute (*args) */
+  if (found_op_str_end == TRUE)
+    *args = pch - 1;
+  else
+    *args = pch;
+}
+/* } Andes ACE */

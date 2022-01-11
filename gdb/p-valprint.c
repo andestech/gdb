@@ -255,7 +255,7 @@ pascal_language::value_print_inner (struct value *val,
 
 	      if (wsym)
 		{
-		  wtype = SYMBOL_TYPE (wsym);
+		  wtype = wsym->type ();
 		}
 	      else
 		{
@@ -313,7 +313,7 @@ pascal_language::value_print_inner (struct value *val,
 	}
       else
 	{
-          if (pascal_is_string_type (type, &length_pos, &length_size,
+	  if (pascal_is_string_type (type, &length_pos, &length_size,
 				     &string_pos, &char_type, NULL) > 0)
 	    {
 	      len = extract_unsigned_integer (valaddr + length_pos,
@@ -574,7 +574,7 @@ pascal_object_print_value_fields (struct value *val, struct ui_file *stream,
 	    }
 	  else
 	    {
-	      wrap_here (n_spaces (2 + 2 * recurse));
+	      stream->wrap_here (2 + 2 * recurse);
 	    }
 
 	  annotate_field_begin (type->field (i).type ());

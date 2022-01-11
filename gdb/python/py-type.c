@@ -997,9 +997,9 @@ typy_template_argument (PyObject *self, PyObject *args)
     }
 
   sym = TYPE_TEMPLATE_ARGUMENT (type, argno);
-  if (SYMBOL_CLASS (sym) == LOC_TYPEDEF)
-    return type_to_type_object (SYMBOL_TYPE (sym));
-  else if (SYMBOL_CLASS (sym) == LOC_OPTIMIZED_OUT)
+  if (sym->aclass () == LOC_TYPEDEF)
+    return type_to_type_object (sym->type ());
+  else if (sym->aclass () == LOC_OPTIMIZED_OUT)
     {
       PyErr_Format (PyExc_RuntimeError,
 		    _("Template argument is optimized out"));
@@ -1025,8 +1025,9 @@ typy_str (PyObject *self)
 
   try
     {
-      LA_PRINT_TYPE (type_object_to_type (self), "", &thetype, -1, 0,
-		     &type_print_raw_options);
+      current_language->print_type (type_object_to_type (self), "",
+				    &thetype, -1, 0,
+				    &type_print_raw_options);
     }
   catch (const gdb_exception &except)
     {

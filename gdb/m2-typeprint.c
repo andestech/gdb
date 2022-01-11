@@ -79,7 +79,7 @@ m2_print_type (struct type *type, const char *varstring,
 
   QUIT;
 
-  wrap_here ("    ");
+  stream->wrap_here (4);
   if (type == NULL)
     {
       fputs_styled (_("<type unknown>"), metadata_style.style (), stream);
@@ -163,8 +163,8 @@ m2_language::print_typedef (struct type *type, struct symbol *new_symbol,
 {
   type = check_typedef (type);
   fprintf_filtered (stream, "TYPE ");
-  if (!SYMBOL_TYPE (new_symbol)->name ()
-      || strcmp ((SYMBOL_TYPE (new_symbol))->name (),
+  if (!new_symbol->type ()->name ()
+      || strcmp ((new_symbol->type ())->name (),
 		 new_symbol->linkage_name ()) != 0)
     fprintf_filtered (stream, "%s = ", new_symbol->print_name ());
   else
@@ -292,7 +292,7 @@ m2_procedure (struct type *type, struct ui_file *stream,
 	  if (i > 0)
 	    {
 	      fputs_filtered (", ", stream);
-	      wrap_here ("    ");
+	      stream->wrap_here (4);
 	    }
 	  m2_print_type (type->field (i).type (), "", stream, -1, 0, flags);
 	}
@@ -539,7 +539,7 @@ m2_record_fields (struct type *type, struct ui_file *stream, int show,
 	    fprintf_filtered (stream, " = ");
 	}
     }
-  wrap_here ("    ");
+  stream->wrap_here (4);
   if (show < 0)
     {
       if (type->code () == TYPE_CODE_STRUCT)
@@ -608,7 +608,7 @@ m2_enum (struct type *type, struct ui_file *stream, int show, int level)
 	  QUIT;
 	  if (i > 0)
 	    fprintf_filtered (stream, ", ");
-	  wrap_here ("    ");
+	  stream->wrap_here (4);
 	  fputs_styled (type->field (i).name (),
 			variable_name_style.style (), stream);
 	  if (lastval != type->field (i).loc_enumval ())

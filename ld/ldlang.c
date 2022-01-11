@@ -8434,6 +8434,18 @@ lang_add_data (int type, union etree_union *exp)
   new_stmt->type = type;
 }
 
+/* { Andes */
+#define ICT_FLG_LD   2
+void *
+andes_ict_list_create (int index, const char *name, bfd_vma vma, unsigned flags);
+void
+lang_add_ict_entry (bfd_vma index, const char *name, union etree_union *exp)
+{
+  ASSERT (exp->type.node_class == etree_value);
+  andes_ict_list_create (index, name, exp->value.value, ICT_FLG_LD);
+}
+/* } Andes */
+
 /* Create a new reloc statement.  RELOC is the BFD relocation type to
    generate.  HOWTO is the corresponding howto structure (we could
    look this up, but the caller has already done so).  SECTION is the

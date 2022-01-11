@@ -72,6 +72,7 @@ static int vers_node_nesting = 0;
 
 static int yy_input (char *, int);
 static void comment (void);
+static int try_split_comma (void);
 static void lex_warn_invalid (char *where, char *what);
 
 /* STATES
@@ -163,7 +164,7 @@ V_IDENTIFIER [*?.$_a-zA-Z\[\]\-\!\^\\]([*?.$_a-zA-Z0-9\[\]\-\!\^\\]|::)*
 				   yylval.bigint.str = NULL;
 				   return INT;
 				 }
-<SCRIPT,MRI,EXPRESSION>((("$"|0[xX])([0-9A-Fa-f])+)|(([0-9])+))(M|K|m|k)? {
+<SCRIPT,MRI,EXPRESSION,WILD>((("$"|0[xX])([0-9A-Fa-f])+)|(([0-9])+))(M|K|m|k)? {
 				  char *s = yytext;
 				  int ibase = 0;
 
@@ -342,6 +343,7 @@ V_IDENTIFIER [*?.$_a-zA-Z\[\]\-\!\^\\]([*?.$_a-zA-Z0-9\[\]\-\!\^\\]|::)*
 <WILD>"KEEP"				{ RTOKEN(KEEP); }
 <WILD>"EXCLUDE_FILE"			{ RTOKEN(EXCLUDE_FILE); }
 <SCRIPT,EXPRESSION>"CONSTANT"		{ RTOKEN(CONSTANT);}
+<WILD>"ICT_ENTRY"			{ RTOKEN(ICT_ENTRY);}
 
 <MRI>"#".*\n?			{ ++ lineno; }
 <MRI>"\n"			{ ++ lineno;  RTOKEN(NEWLINE); }
@@ -425,8 +427,7 @@ V_IDENTIFIER [*?.$_a-zA-Z\[\]\-\!\^\\]([*?.$_a-zA-Z0-9\[\]\-\!\^\\]|::)*
 		  }
 		else
 		  {
-		    yylval.name = xstrdup (yytext);
-		    return NAME;
+		    return try_split_comma ();
 		  }
 	}
 
@@ -710,6 +711,44 @@ comment (void)
 	  break;
 	}
     }
+}
+
+static int
+try_split_comma (void)
+{
+  int len, i;
+  len = strlen (yytext);
+
+  if ((len == 1) && yytext[0] == ',')
+    RTOKEN(',');
+
+  while (1)
+    {
+      if ((len == 0) || !ISDIGIT (yytext[0]))
+	break;
+      for (i=1; i<len-1; ++i)
+	if (!ISDIGIT (yytext[i])) break;
+      if (yytext[i] != ',')
+	break;
+      yylval.integer = bfd_scan_vma (yytext, 0, 10);
+      yylval.bigint.str = NULL;
+      yyless (i);
+      return INT;
+    }
+
+  char *p = strchr (yytext, ',');
+  if (p)
+    {
+      i = (int) (p - yytext);
+      yytext[i] = 0;
+      yylval.name = xstrdup (yytext);
+      yytext[i] = ',';
+      yyless (i);
+    }
+  else
+    yylval.name = xstrdup (yytext);
+
+  return NAME;
 }
 
 /* Warn the user about a garbage character WHAT in the input

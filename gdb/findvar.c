@@ -358,7 +358,7 @@ symbol_read_needs (struct symbol *sym)
   if (SYMBOL_COMPUTED_OPS (sym) != NULL)
     return SYMBOL_COMPUTED_OPS (sym)->get_symbol_read_needs (sym);
 
-  switch (SYMBOL_CLASS (sym))
+  switch (sym->aclass ())
     {
       /* All cases listed explicitly so that gcc -Wall will detect it if
 	 we failed to consider one.  */
@@ -404,7 +404,7 @@ symbol_read_needs_frame (struct symbol *sym)
 struct minsym_lookup_data
 {
   /* The name of the minimal symbol we are searching for.  */
-  const char *name;
+  const char *name = nullptr;
 
   /* The field where the callback should store the minimal symbol
      if found.  It should be initialized to NULL before the search
@@ -593,7 +593,7 @@ language_defn::read_var_value (struct symbol *var,
 			       struct frame_info *frame) const
 {
   struct value *v;
-  struct type *type = SYMBOL_TYPE (var);
+  struct type *type = var->type ();
   CORE_ADDR addr;
   enum symbol_needs_kind sym_need;
 
@@ -616,7 +616,7 @@ language_defn::read_var_value (struct symbol *var,
   if (SYMBOL_COMPUTED_OPS (var) != NULL)
     return SYMBOL_COMPUTED_OPS (var)->read_variable (var, frame);
 
-  switch (SYMBOL_CLASS (var))
+  switch (var->aclass ())
     {
     case LOC_CONST:
       if (is_dynamic_type (type))
@@ -718,7 +718,7 @@ language_defn::read_var_value (struct symbol *var,
 		      ->register_number (var, get_frame_arch (frame));
 	struct value *regval;
 
-	if (SYMBOL_CLASS (var) == LOC_REGPARM_ADDR)
+	if (var->aclass () == LOC_REGPARM_ADDR)
 	  {
 	    regval = value_from_register (lookup_pointer_type (type),
 					  regno,
@@ -751,7 +751,6 @@ language_defn::read_var_value (struct symbol *var,
 	struct minimal_symbol *msym;
 	struct obj_section *obj_section;
 
-	memset (&lookup_data, 0, sizeof (lookup_data));
 	lookup_data.name = var->linkage_name ();
 
 	gdbarch_iterate_over_objfiles_in_search_order

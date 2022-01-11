@@ -427,7 +427,7 @@ display_gdb_prompt (const char *new_prompt)
       /* Don't use a _filtered function here.  It causes the assumed
 	 character position to be off, since the newline we read from
 	 the user is not accounted for.  */
-      fprintf_unfiltered (gdb_stdout, "%s", actual_gdb_prompt.c_str ());
+      printf_unfiltered ("%s", actual_gdb_prompt.c_str ());
       gdb_flush (gdb_stdout);
     }
 }
@@ -890,7 +890,9 @@ handle_fatal_signal (int sig)
     {
       sig_write ("\n\n");
       sig_write (_("Fatal signal: "));
+#if (!defined (__CYGWIN__))
       sig_write (strsignal (sig));
+#endif
       sig_write ("\n");
 
       gdb_internal_backtrace ();

@@ -63,4 +63,4 @@ gdb_test "info shared"
 
 # If the skip_prologue analysis of _exit is too eager, we may not hit the
 # breakpoint.
-gdb_continue_to_breakpoint "_exit" "_exit \\(\\) .*"
+gdb_continue_to_breakpoint "_exit" "_exit \\(\\).*"

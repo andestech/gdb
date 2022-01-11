@@ -147,7 +147,7 @@ static int watchpoint_locations_match (struct bp_location *loc1,
 
 static int breakpoint_locations_match (struct bp_location *loc1,
 				       struct bp_location *loc2,
-				       bool sw_hw_bps_match = false);
+				       bool sw_hw_bps_match = true);
 
 static int breakpoint_location_address_match (struct bp_location *bl,
 					      const struct address_space *aspace,
@@ -3171,10 +3171,10 @@ static const char *const longjmp_names[] =
 struct breakpoint_objfile_data
 {
   /* Minimal symbol for "_ovly_debug_event" (if any).  */
-  struct bound_minimal_symbol overlay_msym {};
+  struct bound_minimal_symbol overlay_msym;
 
   /* Minimal symbol(s) for "longjmp", "siglongjmp", etc. (if any).  */
-  struct bound_minimal_symbol longjmp_msym[NUM_LONGJMP_NAMES] {};
+  struct bound_minimal_symbol longjmp_msym[NUM_LONGJMP_NAMES];
 
   /* True if we have looked for longjmp probes.  */
   int longjmp_searched = 0;
@@ -3184,10 +3184,10 @@ struct breakpoint_objfile_data
   std::vector<probe *> longjmp_probes;
 
   /* Minimal symbol for "std::terminate()" (if any).  */
-  struct bound_minimal_symbol terminate_msym {};
+  struct bound_minimal_symbol terminate_msym;
 
   /* Minimal symbol for "_Unwind_DebugHook" (if any).  */
-  struct bound_minimal_symbol exception_msym {};
+  struct bound_minimal_symbol exception_msym;
 
   /* True if we have looked for exception probes.  */
   int exception_searched = 0;
@@ -5788,14 +5788,13 @@ bpstat_causes_stop (bpstat *bs)
 
 
 
-/* Compute a string of spaces suitable to indent the next line
+/* Compute a number of spaces suitable to indent the next line
    so it starts at the position corresponding to the table column
    named COL_NAME in the currently active table of UIOUT.  */
 
-static char *
+static int
 wrap_indent_at_field (struct ui_out *uiout, const char *col_name)
 {
-  static char wrap_indent[80];
   int i, total_width, width, align;
   const char *text;
 
@@ -5803,18 +5802,12 @@ wrap_indent_at_field (struct ui_out *uiout, const char *col_name)
   for (i = 1; uiout->query_table_field (i, &width, &align, &text); i++)
     {
       if (strcmp (text, col_name) == 0)
-	{
-	  gdb_assert (total_width < sizeof wrap_indent);
-	  memset (wrap_indent, ' ', total_width);
-	  wrap_indent[total_width] = 0;
-
-	  return wrap_indent;
-	}
+	return total_width;
 
       total_width += width + 1;
     }
 
-  return NULL;
+  return 0;
 }
 
 /* Determine if the locations of this breakpoint will have their conditions
@@ -7201,7 +7194,7 @@ get_sal_arch (struct symtab_and_line sal)
   if (sal.section)
     return sal.section->objfile->arch ();
   if (sal.symtab)
-    return SYMTAB_OBJFILE (sal.symtab)->arch ();
+    return sal.symtab->compunit ()->objfile ()->arch ();
 
   return NULL;
 }
@@ -8255,10 +8248,9 @@ handle_automatic_hardware_breakpoints (bp_location *bl)
 	      bl->loc_type = new_type;
 	      if (!said)
 		{
-		  fprintf_filtered (gdb_stdout,
-				    _("Note: automatically using "
-				      "hardware breakpoints for "
-				      "read-only addresses.\n"));
+		  printf_filtered (_("Note: automatically using "
+				     "hardware breakpoints for "
+				     "read-only addresses.\n"));
 		  said = true;
 		}
 	    }
@@ -8465,8 +8457,14 @@ init_breakpoint_sal (struct breakpoint *b, struct gdbarch *gdbarch,
   for (const auto &sal : sals)
     {
       struct bp_location *loc;
+			if (thread != -1) {
+				struct inferior *inf = find_inferior_id (thread);
+				/* printf_unfiltered ("inf->pspace: 0x%x, sal.pspace: 0x%x\n", inf->pspace, sal.pspace); */
+				if (sal.pspace != inf->pspace)
+					continue;
+			}
 
-      if (from_tty)
+			if (from_tty)
 	{
 	  struct gdbarch *loc_gdbarch = get_sal_arch (sal);
 	  if (!loc_gdbarch)
@@ -8476,7 +8474,7 @@ init_breakpoint_sal (struct breakpoint *b, struct gdbarch *gdbarch,
 				      sal.pspace, sal.pc, sal.section, thread);
 	}
 
-      if (&sal == &sals[0])
+      if ((&sal == &sals[0]) || (thread != -1))
 	{
 	  init_raw_breakpoint (b, gdbarch, sal, type, ops);
 	  b->thread = thread;
@@ -9238,14 +9236,15 @@ resolve_sal_pc (struct symtab_and_line *sal)
       struct symbol *sym;
 
       bv = blockvector_for_pc_sect (sal->pc, 0, &b,
-				    SYMTAB_COMPUNIT (sal->symtab));
+				    sal->symtab->compunit ());
       if (bv != NULL)
 	{
 	  sym = block_linkage_function (b);
 	  if (sym != NULL)
 	    {
-	      fixup_symbol_section (sym, SYMTAB_OBJFILE (sal->symtab));
-	      sal->section = sym->obj_section (SYMTAB_OBJFILE (sal->symtab));
+	      fixup_symbol_section (sym, sal->symtab->compunit ()->objfile ());
+	      sal->section
+		= sym->obj_section (sal->symtab->compunit ()->objfile ());
 	    }
 	  else
 	    {
@@ -14743,7 +14742,7 @@ void
 breakpoint_free_objfile (struct objfile *objfile)
 {
   for (bp_location *loc : all_bp_locations ())
-    if (loc->symtab != NULL && SYMTAB_OBJFILE (loc->symtab) == objfile)
+    if (loc->symtab != NULL && loc->symtab->compunit ()->objfile () == objfile)
       loc->symtab = NULL;
 }
 

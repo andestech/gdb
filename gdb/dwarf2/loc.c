@@ -585,7 +585,7 @@ const struct symbol_block_ops dwarf2_block_frame_base_loclist_funcs =
   loclist_get_frame_base
 };
 
-/* See dwarf2loc.h.  */
+/* See dwarf2/loc.h.  */
 
 void
 func_get_frame_base_dwarf_block (struct symbol *framefunc, CORE_ADDR pc,
@@ -617,7 +617,7 @@ compute_var_value (const char *name)
   return nullptr;
 }
 
-/* See dwarf2loc.h.  */
+/* See dwarf2/loc.h.  */
 
 unsigned int entry_values_debug = 0;
 
@@ -632,25 +632,25 @@ show_entry_values_debug (struct ui_file *file, int from_tty,
 		    value);
 }
 
-/* Find DW_TAG_call_site's DW_AT_call_target address.
-   CALLER_FRAME (for registers) can be NULL if it is not known.  This function
-   always returns valid address or it throws NO_ENTRY_VALUE_ERROR.  */
+/* See gdbtypes.h.  */
 
-static CORE_ADDR
-call_site_to_target_addr (struct gdbarch *call_site_gdbarch,
-			  struct call_site *call_site,
-			  struct frame_info *caller_frame)
+void
+call_site_target::iterate_over_addresses
+     (struct gdbarch *call_site_gdbarch,
+      const struct call_site *call_site,
+      struct frame_info *caller_frame,
+      iterate_ftype callback) const
 {
-  switch (call_site->target.loc_kind ())
+  switch (m_loc_kind)
     {
-    case FIELD_LOC_KIND_DWARF_BLOCK:
+    case call_site_target::DWARF_BLOCK:
       {
 	struct dwarf2_locexpr_baton *dwarf_block;
 	struct value *val;
 	struct type *caller_core_addr_type;
 	struct gdbarch *caller_arch;
 
-	dwarf_block = call_site->target.loc_dwarf_block ();
+	dwarf_block = m_loc.dwarf_block;
 	if (dwarf_block == NULL)
 	  {
 	    struct bound_minimal_symbol msym;
@@ -685,17 +685,18 @@ call_site_to_target_addr (struct gdbarch *call_site_gdbarch,
 					dwarf_block->per_objfile);
 	/* DW_AT_call_target is a DWARF expression, not a DWARF location.  */
 	if (VALUE_LVAL (val) == lval_memory)
-	  return value_address (val);
+	  callback (value_address (val));
 	else
-	  return value_as_address (val);
+	  callback (value_as_address (val));
       }
+      break;
 
-    case FIELD_LOC_KIND_PHYSNAME:
+    case call_site_target::PHYSNAME:
       {
 	const char *physname;
 	struct bound_minimal_symbol msym;
 
-	physname = call_site->target.loc_physname ();
+	physname = m_loc.physname;
 
 	/* Handle both the mangled and demangled PHYSNAME.  */
 	msym = lookup_minimal_symbol (physname, NULL, NULL);
@@ -710,18 +711,32 @@ call_site_to_target_addr (struct gdbarch *call_site_gdbarch,
 			  : msym.minsym->print_name ()));
 			
 	  }
-	return BMSYMBOL_VALUE_ADDRESS (msym);
+	callback (BMSYMBOL_VALUE_ADDRESS (msym));
       }
+      break;
 
-    case FIELD_LOC_KIND_PHYSADDR:
+    case call_site_target::PHYSADDR:
       {
 	dwarf2_per_objfile *per_objfile = call_site->per_objfile;
 	compunit_symtab *cust = per_objfile->get_symtab (call_site->per_cu);
-	int sect_idx = COMPUNIT_BLOCK_LINE_SECTION (cust);
+	int sect_idx = cust->block_line_section ();
 	CORE_ADDR delta = per_objfile->objfile->section_offsets[sect_idx];
 
-	return call_site->target.loc_physaddr () + delta;
+	callback (m_loc.physaddr + delta);
       }
+      break;
+
+    case call_site_target::ADDRESSES:
+      {
+	dwarf2_per_objfile *per_objfile = call_site->per_objfile;
+	compunit_symtab *cust = per_objfile->get_symtab (call_site->per_cu);
+	int sect_idx = cust->block_line_section ();
+	CORE_ADDR delta = per_objfile->objfile->section_offsets[sect_idx];
+
+	for (unsigned i = 0; i < m_loc.addresses.length; ++i)
+	  callback (m_loc.addresses.values[i] + delta);
+      }
+      break;
 
     default:
       internal_error (__FILE__, __LINE__, _("invalid call site target kind"));
@@ -744,7 +759,7 @@ func_addr_to_tail_call_list (struct gdbarch *gdbarch, CORE_ADDR addr)
 		   "name for address %s"),
 		 paddress (gdbarch, addr));
 
-  type = SYMBOL_TYPE (sym);
+  type = sym->type ();
   gdb_assert (type->code () == TYPE_CODE_FUNC);
   gdb_assert (TYPE_SPECIFIC_FIELD (type) == TYPE_SPECIFIC_FUNC);
 
@@ -783,31 +798,31 @@ func_verify_no_selftailcall (struct gdbarch *gdbarch, CORE_ADDR verify_addr)
 
       func_sym = func_addr_to_tail_call_list (gdbarch, addr);
 
-      for (call_site = TYPE_TAIL_CALL_LIST (SYMBOL_TYPE (func_sym));
+      for (call_site = TYPE_TAIL_CALL_LIST (func_sym->type ());
 	   call_site; call_site = call_site->tail_call_next)
 	{
-	  CORE_ADDR target_addr;
-
 	  /* CALLER_FRAME with registers is not available for tail-call jumped
 	     frames.  */
-	  target_addr = call_site_to_target_addr (gdbarch, call_site, NULL);
-
-	  if (target_addr == verify_addr)
+	  call_site->iterate_over_addresses (gdbarch, nullptr,
+					     [&] (CORE_ADDR target_addr)
 	    {
-	      struct bound_minimal_symbol msym;
-	      
-	      msym = lookup_minimal_symbol_by_pc (verify_addr);
-	      throw_error (NO_ENTRY_VALUE_ERROR,
-			   _("DW_OP_entry_value resolving has found "
-			     "function \"%s\" at %s can call itself via tail "
-			     "calls"),
-			   (msym.minsym == NULL ? "???"
-			    : msym.minsym->print_name ()),
-			   paddress (gdbarch, verify_addr));
-	    }
+	      if (target_addr == verify_addr)
+		{
+		  struct bound_minimal_symbol msym;
 
-	  if (addr_hash.insert (target_addr).second)
-	    todo.push_back (target_addr);
+		  msym = lookup_minimal_symbol_by_pc (verify_addr);
+		  throw_error (NO_ENTRY_VALUE_ERROR,
+			       _("DW_OP_entry_value resolving has found "
+				 "function \"%s\" at %s can call itself via tail "
+				 "calls"),
+			       (msym.minsym == NULL ? "???"
+				: msym.minsym->print_name ()),
+			       paddress (gdbarch, verify_addr));
+		}
+
+	      if (addr_hash.insert (target_addr).second)
+		todo.push_back (target_addr);
+	    });
 	}
     }
 }
@@ -837,9 +852,9 @@ tailcall_dump (struct gdbarch *gdbarch, const struct call_site *call_site)
 static void
 chain_candidate (struct gdbarch *gdbarch,
 		 gdb::unique_xmalloc_ptr<struct call_site_chain> *resultp,
-		 std::vector<struct call_site *> *chain)
+		 const std::vector<struct call_site *> &chain)
 {
-  long length = chain->size ();
+  long length = chain.size ();
   int callers, callees, idx;
 
   if (*resultp == NULL)
@@ -852,8 +867,8 @@ chain_candidate (struct gdbarch *gdbarch,
 		    + sizeof (*result->call_site) * (length - 1)));
       result->length = length;
       result->callers = result->callees = length;
-      if (!chain->empty ())
-	memcpy (result->call_site, chain->data (),
+      if (!chain.empty ())
+	memcpy (result->call_site, chain.data (),
 		sizeof (*result->call_site) * length);
       resultp->reset (result);
 
@@ -872,7 +887,7 @@ chain_candidate (struct gdbarch *gdbarch,
     {
       fprintf_unfiltered (gdb_stdlog, "tailcall: compare:");
       for (idx = 0; idx < length; idx++)
-	tailcall_dump (gdbarch, chain->at (idx));
+	tailcall_dump (gdbarch, chain[idx]);
       fputc_unfiltered ('\n', gdb_stdlog);
     }
 
@@ -880,7 +895,7 @@ chain_candidate (struct gdbarch *gdbarch,
 
   callers = std::min ((long) (*resultp)->callers, length);
   for (idx = 0; idx < callers; idx++)
-    if ((*resultp)->call_site[idx] != chain->at (idx))
+    if ((*resultp)->call_site[idx] != chain[idx])
       {
 	(*resultp)->callers = idx;
 	break;
@@ -891,7 +906,7 @@ chain_candidate (struct gdbarch *gdbarch,
   callees = std::min ((long) (*resultp)->callees, length);
   for (idx = 0; idx < callees; idx++)
     if ((*resultp)->call_site[(*resultp)->length - 1 - idx]
-	!= chain->at (length - 1 - idx))
+	!= chain[length - 1 - idx])
       {
 	(*resultp)->callees = idx;
 	break;
@@ -926,11 +941,75 @@ chain_candidate (struct gdbarch *gdbarch,
   gdb_assert ((*resultp)->callers + (*resultp)->callees <= (*resultp)->length);
 }
 
-/* Create and return call_site_chain for CALLER_PC and CALLEE_PC.  All the
-   assumed frames between them use GDBARCH.  Use depth first search so we can
-   keep single CHAIN of call_site's back to CALLER_PC.  Function recursion
-   would have needless GDB stack overhead.  Any unreliability results
-   in thrown NO_ENTRY_VALUE_ERROR.  */
+/* Recursively try to construct the call chain.  GDBARCH, RESULTP, and
+   CHAIN are passed to chain_candidate.  ADDR_HASH tracks which
+   addresses have already been seen along the current chain.
+   CALL_SITE is the call site to visit, and CALLEE_PC is the PC we're
+   trying to "reach".  Returns false if an error has already been
+   detected and so an early return can be done.  If it makes sense to
+   keep trying (even if no answer has yet been found), returns
+   true.  */
+
+static bool
+call_site_find_chain_2
+     (struct gdbarch *gdbarch,
+      gdb::unique_xmalloc_ptr<struct call_site_chain> *resultp,
+      std::vector<struct call_site *> &chain,
+      std::unordered_set<CORE_ADDR> &addr_hash,
+      struct call_site *call_site,
+      CORE_ADDR callee_pc)
+{
+  std::vector<CORE_ADDR> addresses;
+  bool found_exact = false;
+  call_site->iterate_over_addresses (gdbarch, nullptr,
+				     [&] (CORE_ADDR addr)
+    {
+      if (addr == callee_pc)
+	found_exact = true;
+      else
+	addresses.push_back (addr);
+    });
+
+  if (found_exact)
+    {
+      chain_candidate (gdbarch, resultp, chain);
+      /* If RESULTP was reset, then chain_candidate failed, and so we
+	 can tell our callers to early-return.  */
+      return *resultp != nullptr;
+    }
+
+  for (CORE_ADDR target_func_addr : addresses)
+    {
+      struct symbol *target_func
+	= func_addr_to_tail_call_list (gdbarch, target_func_addr);
+      for (struct call_site *target_call_site
+	     = TYPE_TAIL_CALL_LIST (target_func->type ());
+	   target_call_site != nullptr;
+	   target_call_site = target_call_site->tail_call_next)
+	{
+	  if (addr_hash.insert (target_call_site->pc ()).second)
+	    {
+	      /* Successfully entered TARGET_CALL_SITE.  */
+	      chain.push_back (target_call_site);
+
+	      if (!call_site_find_chain_2 (gdbarch, resultp, chain,
+					   addr_hash, target_call_site,
+					   callee_pc))
+		return false;
+
+	      size_t removed = addr_hash.erase (target_call_site->pc ());
+	      gdb_assert (removed == 1);
+	      chain.pop_back ();
+	    }
+	}
+    }
+
+  return true;
+}
+
+/* Create and return call_site_chain for CALLER_PC and CALLEE_PC.  All
+   the assumed frames between them use GDBARCH.  Any unreliability
+   results in thrown NO_ENTRY_VALUE_ERROR.  */
 
 static gdb::unique_xmalloc_ptr<call_site_chain>
 call_site_find_chain_1 (struct gdbarch *gdbarch, CORE_ADDR caller_pc,
@@ -946,6 +1025,12 @@ call_site_find_chain_1 (struct gdbarch *gdbarch, CORE_ADDR caller_pc,
      TAIL_CALL_NEXT.  This is inappropriate for CALLER_PC's call_site.  */
   std::vector<struct call_site *> chain;
 
+  /* A given call site may have multiple associated addresses.  This
+     can happen if, e.g., the caller is split by hot/cold
+     partitioning.  This vector tracks the ones we haven't visited
+     yet.  */
+  std::vector<std::vector<CORE_ADDR>> unvisited_addresses;
+
   /* We are not interested in the specific PC inside the callee function.  */
   callee_pc = get_pc_function_start (callee_pc);
   if (callee_pc == 0)
@@ -960,74 +1045,10 @@ call_site_find_chain_1 (struct gdbarch *gdbarch, CORE_ADDR caller_pc,
      target's function will get iterated as already pushed into CHAIN via their
      TAIL_CALL_NEXT.  */
   call_site = call_site_for_pc (gdbarch, caller_pc);
-
-  while (call_site)
-    {
-      CORE_ADDR target_func_addr;
-      struct call_site *target_call_site;
-
-      /* CALLER_FRAME with registers is not available for tail-call jumped
-	 frames.  */
-      target_func_addr = call_site_to_target_addr (gdbarch, call_site, NULL);
-
-      if (target_func_addr == callee_pc)
-	{
-	  chain_candidate (gdbarch, &retval, &chain);
-	  if (retval == NULL)
-	    break;
-
-	  /* There is no way to reach CALLEE_PC again as we would prevent
-	     entering it twice as being already marked in ADDR_HASH.  */
-	  target_call_site = NULL;
-	}
-      else
-	{
-	  struct symbol *target_func;
-
-	  target_func = func_addr_to_tail_call_list (gdbarch, target_func_addr);
-	  target_call_site = TYPE_TAIL_CALL_LIST (SYMBOL_TYPE (target_func));
-	}
-
-      do
-	{
-	  /* Attempt to visit TARGET_CALL_SITE.  */
-
-	  if (target_call_site)
-	    {
-	      if (addr_hash.insert (target_call_site->pc ()).second)
-		{
-		  /* Successfully entered TARGET_CALL_SITE.  */
-
-		  chain.push_back (target_call_site);
-		  break;
-		}
-	    }
-
-	  /* Backtrack (without revisiting the originating call_site).  Try the
-	     callers's sibling; if there isn't any try the callers's callers's
-	     sibling etc.  */
-
-	  target_call_site = NULL;
-	  while (!chain.empty ())
-	    {
-	      call_site = chain.back ();
-	      chain.pop_back ();
-
-	      size_t removed = addr_hash.erase (call_site->pc ());
-	      gdb_assert (removed == 1);
-
-	      target_call_site = call_site->tail_call_next;
-	      if (target_call_site)
-		break;
-	    }
-	}
-      while (target_call_site);
-
-      if (chain.empty ())
-	call_site = NULL;
-      else
-	call_site = chain.back ();
-    }
+  /* No need to check the return value here, because we no longer care
+     about possible early returns.  */
+  call_site_find_chain_2 (gdbarch, &retval, chain, addr_hash, call_site,
+			  callee_pc);
 
   if (retval == NULL)
     {
@@ -1159,19 +1180,32 @@ dwarf_expr_reg_to_entry_parameter (struct frame_info *frame,
   caller_pc = get_frame_pc (caller_frame);
   call_site = call_site_for_pc (gdbarch, caller_pc);
 
-  target_addr = call_site_to_target_addr (gdbarch, call_site, caller_frame);
-  if (target_addr != func_addr)
+  bool found = false;
+  unsigned count = 0;
+  call_site->iterate_over_addresses (gdbarch, caller_frame,
+				     [&] (CORE_ADDR addr)
+    {
+      /* Preserve any address.  */
+      target_addr = addr;
+      ++count;
+      if (addr == func_addr)
+	found = true;
+    });
+  if (!found)
     {
       struct minimal_symbol *target_msym, *func_msym;
 
       target_msym = lookup_minimal_symbol_by_pc (target_addr).minsym;
       func_msym = lookup_minimal_symbol_by_pc (func_addr).minsym;
       throw_error (NO_ENTRY_VALUE_ERROR,
-		   _("DW_OP_entry_value resolving expects callee %s at %s "
+		   _("DW_OP_entry_value resolving expects callee %s at %s %s"
 		     "but the called frame is for %s at %s"),
 		   (target_msym == NULL ? "???"
 					: target_msym->print_name ()),
 		   paddress (gdbarch, target_addr),
+		   (count > 0
+		    ? _("(but note there are multiple addresses not listed)")
+		    : ""),
 		   func_msym == NULL ? "???" : func_msym->print_name (),
 		   paddress (gdbarch, func_addr));
     }
@@ -1604,7 +1638,7 @@ dwarf2_locexpr_baton_eval (const struct dwarf2_locexpr_baton *dlbaton,
   return 1;
 }
 
-/* See dwarf2loc.h.  */
+/* See dwarf2/loc.h.  */
 
 bool
 dwarf2_evaluate_property (const struct dynamic_prop *prop,
@@ -1738,7 +1772,7 @@ dwarf2_evaluate_property (const struct dynamic_prop *prop,
   return false;
 }
 
-/* See dwarf2loc.h.  */
+/* See dwarf2/loc.h.  */
 
 void
 dwarf2_compile_property_to_c (string_file *stream,
@@ -2227,7 +2261,7 @@ unimplemented (unsigned int op)
 	   op);
 }
 
-/* See dwarf2loc.h.
+/* See dwarf2/loc.h.
 
    This is basically a wrapper on gdbarch_dwarf2_reg_to_regnum so that we
    can issue a complaint, which is better than having every target's
@@ -2260,7 +2294,7 @@ throw_bad_regnum_error (ULONGEST dwarf_reg)
 	 pulongest (dwarf_reg));
 }
 
-/* See dwarf2loc.h.  */
+/* See dwarf2/loc.h.  */
 
 int
 dwarf_reg_to_regnum_or_error (struct gdbarch *arch, ULONGEST dwarf_reg)
@@ -3019,7 +3053,7 @@ locexpr_read_variable (struct symbol *symbol, struct frame_info *frame)
     = (struct dwarf2_locexpr_baton *) SYMBOL_LOCATION_BATON (symbol);
   struct value *val;
 
-  val = dwarf2_evaluate_loc_desc (SYMBOL_TYPE (symbol), frame, dlbaton->data,
+  val = dwarf2_evaluate_loc_desc (symbol->type (), frame, dlbaton->data,
 				  dlbaton->size, dlbaton->per_cu,
 				  dlbaton->per_objfile);
 
@@ -3036,7 +3070,7 @@ locexpr_read_variable_at_entry (struct symbol *symbol, struct frame_info *frame)
   struct dwarf2_locexpr_baton *dlbaton
     = (struct dwarf2_locexpr_baton *) SYMBOL_LOCATION_BATON (symbol);
 
-  return value_of_dwarf_block_entry (SYMBOL_TYPE (symbol), frame, dlbaton->data,
+  return value_of_dwarf_block_entry (symbol->type (), frame, dlbaton->data,
 				     dlbaton->size);
 }
 
@@ -3856,7 +3890,7 @@ loclist_read_variable (struct symbol *symbol, struct frame_info *frame)
   CORE_ADDR pc = frame ? get_frame_address_in_block (frame) : 0;
 
   data = dwarf2_find_location_expression (dlbaton, &size, pc);
-  val = dwarf2_evaluate_loc_desc (SYMBOL_TYPE (symbol), frame, data, size,
+  val = dwarf2_evaluate_loc_desc (symbol->type (), frame, data, size,
 				  dlbaton->per_cu, dlbaton->per_objfile);
 
   return val;
@@ -3880,13 +3914,13 @@ loclist_read_variable_at_entry (struct symbol *symbol, struct frame_info *frame)
   CORE_ADDR pc;
 
   if (frame == NULL || !get_frame_func_if_available (frame, &pc))
-    return allocate_optimized_out_value (SYMBOL_TYPE (symbol));
+    return allocate_optimized_out_value (symbol->type ());
 
   data = dwarf2_find_location_expression (dlbaton, &size, pc);
   if (data == NULL)
-    return allocate_optimized_out_value (SYMBOL_TYPE (symbol));
+    return allocate_optimized_out_value (symbol->type ());
 
-  return value_of_dwarf_block_entry (SYMBOL_TYPE (symbol), frame, data, size);
+  return value_of_dwarf_block_entry (symbol->type (), frame, data, size);
 }
 
 /* Implementation of get_symbol_read_needs from

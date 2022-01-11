@@ -57,6 +57,9 @@
 #include "prologue-value.h"
 #include "arch/riscv.h"
 #include "riscv-ravenscar-thread.h"
+#include "stack.h"
+#include "common-utils.h"
+#include "vec.h"
 
 /* The stack must be 16-byte aligned.  */
 #define SP_ALIGNMENT 16
@@ -706,6 +709,18 @@ show_use_compressed_breakpoints (struct ui_file *file, int from_tty,
 		      "to %s.\n"), value);
 }
 
+extern void nds_init_remote_cmds (void);
+
+/* Callback for "nds" command.  */
+
+static void
+nds_command (const char *arg, int from_tty)
+{
+  printf_unfiltered (_("\"nds\" must be followed by arguments\n"));
+}
+
+struct cmd_list_element *nds_cmdlist;
+
 /* The set and show lists for 'set riscv' and 'show riscv' prefixes.  */
 
 static struct cmd_list_element *setriscvcmdlist = NULL;
@@ -883,7 +898,7 @@ riscv_register_name (struct gdbarch *gdbarch, int regnum)
      look up the registers preferred name below.  */
   const char *name = tdesc_register_name (gdbarch, regnum);
   if (name == NULL || name[0] == '\0')
-    return NULL;
+    return "";
 
   /* We want GDB to use the ABI names for registers even if the target
      gives us a target description with the architectural name.  For
@@ -899,7 +914,7 @@ riscv_register_name (struct gdbarch *gdbarch, int regnum)
       if (riscv_has_fp_regs (gdbarch))
 	return riscv_freg_feature.register_name (regnum);
       else
-	return NULL;
+	return "";
     }
 
   /* Some targets (QEMU) are reporting these three registers twice, once
@@ -912,11 +927,11 @@ riscv_register_name (struct gdbarch *gdbarch, int regnum)
      then hide the registers here by giving them no name.  */
   riscv_gdbarch_tdep *tdep = (riscv_gdbarch_tdep *) gdbarch_tdep (gdbarch);
   if (tdep->duplicate_fflags_regnum == regnum)
-    return NULL;
+    return "";
   if (tdep->duplicate_frm_regnum == regnum)
-    return NULL;
+    return "";
   if (tdep->duplicate_fcsr_regnum == regnum)
-    return NULL;
+    return "";
 
   /* The remaining registers are different.  For all other registers on the
      machine we prefer to see the names that the target description
@@ -967,6 +982,58 @@ riscv_fpreg_d_type (struct gdbarch *gdbarch)
   return tdep->riscv_fpreg_d_type;
 }
 
+typedef struct acr_type
+{
+  int adj_bitsize;
+  struct type *type;
+} acr_type;
+DEF_VEC_O(acr_type);
+
+/* This vector is shared between different gdbarch, and it is used to contain
+   information about dynamically created acr type.  */
+static VEC (acr_type) *acr_type_vec;
+
+/* Find the dynamically created acr_type for given @BITSIZE in the vector
+   acr_type_vec, if the acr_type is not found, create it and insert it into
+   vector acr_type_vec.  */
+
+static struct type *
+nds_acr_type (struct gdbarch *gdbarch, int bitsize)
+{
+  char buf[20];
+  struct type *bit_int_type;
+  acr_type new_acr_type;
+  acr_type *p_acr_type = NULL;
+  int adj_bitsize = align_up (bitsize, 8);
+  unsigned len;
+  int ix;
+
+  len = VEC_length (acr_type, acr_type_vec);
+  for (ix = 0; ix < len; ix++)
+    {
+      p_acr_type = VEC_index (acr_type, acr_type_vec, ix);
+      if (p_acr_type->adj_bitsize == adj_bitsize)
+	break;
+    }
+
+  if (ix == len)
+    {
+      /* Not found, so create it.  */
+      sprintf (buf, "acr_%d_t", adj_bitsize);
+      bit_int_type = arch_integer_type(gdbarch, adj_bitsize, 1, buf);
+
+      new_acr_type.adj_bitsize = adj_bitsize;
+      new_acr_type.type = bit_int_type;
+      VEC_safe_push (acr_type, acr_type_vec, &new_acr_type);
+      return bit_int_type;
+    }
+  else
+    {
+      /* Found, so use it.  */
+      return p_acr_type->type;
+    }
+}
+
 /* Implement the register_type gdbarch method.  This is installed as an
    for the override setup by TDESC_USE_REGISTERS, for most registers we
    delegate the type choice to the target description, but for a few
@@ -976,8 +1043,11 @@ riscv_fpreg_d_type (struct gdbarch *gdbarch)
 static struct type *
 riscv_register_type (struct gdbarch *gdbarch, int regnum)
 {
+  /* type temporarily used to identify acr register.  */
+  struct type *acr_temp_type = builtin_type (gdbarch)->builtin_uint8;
   struct type *type = tdesc_register_type (gdbarch, regnum);
   int xlen = riscv_isa_xlen (gdbarch);
+  const struct tdesc_feature *feature = NULL;
 
   /* We want to perform some specific type "fixes" in cases where we feel
      that we really can do better than the target description.  For all
@@ -1019,7 +1089,68 @@ riscv_register_type (struct gdbarch *gdbarch, int regnum)
 	type = builtin_type (gdbarch)->builtin_data_ptr;
     }
 
+  if (regnum > RISCV_LAST_REGNUM && type == acr_temp_type)
+    {
+      feature = tdesc_find_feature (target_current_description (),
+				    "org.gnu.gdb.riscv.ace");
+      if (feature != NULL)
+	{
+	  /* This may be ace register.  */
+	  const char *regname = gdbarch_register_name (gdbarch, regnum);
+	  type = nds_acr_type (gdbarch,
+			       tdesc_register_bitsize (feature, regname));
+	}
+    }
+
   return type;
+}
+
+/* This is a helper function to print register which is of type struct.
+   Currently, register is of type struct only when the passed target
+   description has bitfield description.
+
+   This function is implemented based on generic function
+   default_print_registers_info() and
+   default_print_one_register_info().
+
+   default_print_registers_info() cannot be used, because it does not display
+   alias name.
+   default_print_one_register_info() cannot be used, becuase it is static.  */
+
+static void
+riscv_print_register_struct (struct ui_file *file, struct frame_info *frame,
+			     int regnum)
+{
+  struct gdbarch *gdbarch = get_frame_arch (frame);
+  struct value_print_options opts;
+  const char *regname;
+  struct value *val = NULL;
+  struct type *regtype = NULL;
+
+  /* Use alias (symbolic) name.  */
+  regname = riscv_register_name (gdbarch, regnum);
+  if (regname == NULL || *regname == '\0')
+    return;
+
+  val = value_of_register (regnum, frame);
+  regtype = value_type (val);
+
+  if (regtype->code () != TYPE_CODE_STRUCT)
+    return;
+
+  fputs_filtered (regname, file);
+  print_spaces_filtered (15 - strlen (regname), file);
+
+  /* Print the register in hex.  */
+  get_formatted_print_options (&opts, 'x');
+  opts.deref_ref = 1;
+  common_val_print (val, file, 0, &opts, current_language);
+
+  /* Always print raw format.  */
+  get_user_print_options (&opts);
+  opts.deref_ref = 1;
+  fprintf_filtered (file, "\t");
+  common_val_print (val, file, 0, &opts, current_language);
 }
 
 /* Helper for riscv_print_registers_info, prints info for a single register
@@ -1084,6 +1215,8 @@ riscv_print_one_register_info (struct gdbarch *gdbarch,
 	  fprintf_filtered (file, ")");
 	}
     }
+  else if (regtype->code () == TYPE_CODE_STRUCT)
+    riscv_print_register_struct (file, frame, regnum);
   else
     {
       struct value_print_options opts;
@@ -1775,7 +1908,7 @@ riscv_insn::decode (struct gdbarch *gdbarch, CORE_ADDR pc)
 	  m_rd = m_rs1 = decode_register_index (ival, OP_SH_RD);
 	  m_imm.s = EXTRACT_CITYPE_ADDI16SP_IMM (ival);
 	}
-      else if (is_c_addi4spn_insn (ival))
+      else if ((is_c_addi4spn_insn (ival)) && (ival != 0x0))
 	{
 	  m_opcode = ADDI;
 	  m_rd = decode_register_index_short (ival, OP_SH_CRS2S);
@@ -2068,56 +2201,7 @@ riscv_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
      scanner can scan as far as it needs to find the end of the prologue.  */
   return riscv_scan_prologue (gdbarch, pc, ((CORE_ADDR) -1), NULL);
 }
-
-/* Implement the gdbarch push dummy code callback.  */
-
-static CORE_ADDR
-riscv_push_dummy_code (struct gdbarch *gdbarch, CORE_ADDR sp,
-		       CORE_ADDR funaddr, struct value **args, int nargs,
-		       struct type *value_type, CORE_ADDR *real_pc,
-		       CORE_ADDR *bp_addr, struct regcache *regcache)
-{
-  /* A nop instruction is 'add x0, x0, 0'.  */
-  static const gdb_byte nop_insn[] = { 0x13, 0x00, 0x00, 0x00 };
-
-  /* Allocate space for a breakpoint, and keep the stack correctly
-     aligned.  The space allocated here must be at least big enough to
-     accommodate the NOP_INSN defined above.  */
-  sp -= 16;
-  *bp_addr = sp;
-  *real_pc = funaddr;
-
-  /* When we insert a breakpoint we select whether to use a compressed
-     breakpoint or not based on the existing contents of the memory.
-
-     If the breakpoint is being placed onto the stack as part of setting up
-     for an inferior call from GDB, then the existing stack contents may
-     randomly appear to be a compressed instruction, causing GDB to insert
-     a compressed breakpoint.  If this happens on a target that does not
-     support compressed instructions then this could cause problems.
-
-     To prevent this issue we write an uncompressed nop onto the stack at
-     the location where the breakpoint will be inserted.  In this way we
-     ensure that we always use an uncompressed breakpoint, which should
-     work on all targets.
-
-     We call TARGET_WRITE_MEMORY here so that if the write fails we don't
-     throw an exception.  Instead we ignore the error and move on.  The
-     assumption is that either GDB will error later when actually trying to
-     insert a software breakpoint, or GDB will use hardware breakpoints and
-     there will be no need to write to memory later.  */
-  int status = target_write_memory (*bp_addr, nop_insn, sizeof (nop_insn));
-
-  if (riscv_debug_breakpoints || riscv_debug_infcall)
-    fprintf_unfiltered (gdb_stdlog,
-			"Writing %s-byte nop instruction to %s: %s\n",
-			plongest (sizeof (nop_insn)),
-			paddress (gdbarch, *bp_addr),
-			(status == 0 ? "success" : "failed"));
-
-  return sp;
-}
-
+   
 /* Implement the gdbarch type alignment method, overrides the generic
    alignment algorithm for anything that is RISC-V specific.  */
 
@@ -2897,7 +2981,7 @@ riscv_regcache_cooked_write (int regnum, const gdb_byte *data, int len,
   gdb_byte tmp [sizeof (ULONGEST)];
 
   /* FP values in FP registers must be NaN-boxed.  */
-  if (riscv_is_fp_regno_p (regnum) && len < flen)
+  if (riscv_is_fp_regno_p (regnum) && len == 4)
     memset (tmp, -1, sizeof (tmp));
   else
     memset (tmp, 0, sizeof (tmp));
@@ -3301,7 +3385,7 @@ riscv_return_value (struct gdbarch  *gdbarch,
     case riscv_arg_info::location::in_reg:
       return RETURN_VALUE_REGISTER_CONVENTION;
     case riscv_arg_info::location::by_ref:
-      return RETURN_VALUE_ABI_PRESERVES_ADDRESS;
+      return RETURN_VALUE_STRUCT_CONVENTION;
     case riscv_arg_info::location::on_stack:
     default:
       error (_("invalid argument location"));
@@ -3337,6 +3421,15 @@ riscv_frame_cache (struct frame_info *this_frame, void **this_cache)
   /* Scan the prologue, filling in the cache.  */
   start_addr = get_frame_func (this_frame);
   pc = get_frame_pc (this_frame);
+
+  /* When pc does not fall in a valid function, not to scan prologue
+     to avoid extra useless memory access.  */
+  if (find_pc_partial_function (pc, NULL, &start_addr, NULL) == 0)
+    {
+      cache->this_id = outer_frame_id;
+      return cache;
+    }
+
   riscv_scan_prologue (gdbarch, start_addr, pc, cache);
 
   /* We can now calculate the frame base address.  */
@@ -3429,6 +3522,135 @@ static const struct frame_unwind riscv_frame_unwind =
   /*.prev_arch     =*/ NULL,
 };
 
+/* Return non-zero if function NAME should be handled specially during
+   stepping over.
+
+   Functions "__riscv_save_[0-12]" and "__riscv_restore_[0-12]" are
+   used as trampoline to push/pop registers and to adjust stack pointer.  The
+   normal mechanism for step over doesn't work for this.  */
+
+static int
+riscv_in_solib_return_trampoline (struct gdbarch *gdbarch,
+				  CORE_ADDR pc, const char *name)
+{
+  return name && startswith (name, "__riscv_")
+	 && (startswith (name, "__riscv_save_")
+	     || startswith (name, "__riscv_restore_"));
+}
+
+/* Skip code that cannot be handled correctly when stepping over.
+
+   Result is desired PC to step until, or NULL if we are not in
+   code that should be skipped.  */
+
+#define RISCV_T0_REGNUM 5
+static CORE_ADDR
+riscv_skip_trampoline_code (struct frame_info *frame, CORE_ADDR pc)
+{
+  struct gdbarch *gdbarch = get_frame_arch (frame);
+  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+  struct bound_minimal_symbol msymbol;
+  const char *func_name = NULL;
+  int restore_arg = 0;
+  CORE_ADDR sp = 0;
+  uint32_t sp_offset = 0;
+
+  msymbol = lookup_minimal_symbol_by_pc (pc);
+  if (msymbol.minsym)
+    {
+      func_name = msymbol.minsym->linkage_name ();
+      if (startswith (func_name, "__riscv_save_"))
+	return get_frame_register_unsigned (frame, RISCV_T0_REGNUM);
+      if (startswith (func_name, "__riscv_restore_"))
+	{
+	  sp  = get_frame_register_unsigned (frame, RISCV_SP_REGNUM);
+
+	  sscanf (&func_name[16], "%d", &restore_arg);
+	  switch (restore_arg)
+	    {
+	    case 12:
+	      sp_offset += 16;
+	      /* FALLTHROUGH */
+	    case 8 ... 11:
+	      sp_offset += 16;
+	      /* FALLTHROUGH */
+	    case 4 ... 7:
+	      sp_offset += 16;
+	      /* FALLTHROUGH */
+	    case 0 ... 3:
+	      sp_offset += 12;
+	      break;
+	    default:
+	      return 0;
+	    }
+	  return read_memory_unsigned_integer (sp + sp_offset, 4, byte_order);
+	}
+    }
+  return 0;
+}
+
+/* Implement the gdbarch_overlay_update method.  */
+
+static void
+riscv_simple_overlay_update (struct obj_section *osect)
+{
+  if (osect != NULL) {
+    /* bfd *obfd = osect->objfile->obfd; */
+    asection *bsect = osect->the_bfd_section;
+    const char *name = bfd_section_name (bsect);
+    /* fprintf_unfiltered (gdb_stdlog, "riscv_simple_overlay_update: name: %s\n", name); */
+    if (strstr (name, "ovly.tbl") != 0) {
+      /* fprintf_unfiltered (gdb_stdlog, "skip doing simple_overlay_update()...\n"); */
+      return;
+    }
+  }
+
+  simple_overlay_update (osect);
+}
+
+/* Implement the "get_longjmp_target" gdbarch method.  */
+
+static int
+riscv_get_longjmp_target (struct frame_info *frame, CORE_ADDR *pc)
+{
+  gdb_byte buf[8];
+  CORE_ADDR jb_addr;
+  struct gdbarch *gdbarch = get_frame_arch (frame);
+  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+  int regsize = riscv_isa_xlen (gdbarch);
+
+  jb_addr = get_frame_register_unsigned (frame, RISCV_A0_REGNUM);
+
+  if (target_read_memory (jb_addr, buf, regsize))
+    return 0;
+
+  *pc = extract_unsigned_integer (buf, regsize, byte_order);
+  return 1;
+}
+
+/* Implement the "print_insn" gdbarch method.  */
+
+static int
+gdb_print_insn_riscv (bfd_vma memaddr, disassemble_info *info)
+{
+  struct obj_section *s = find_pc_section (memaddr);
+
+  /* When disassembling exec.it instructions, annotating them with
+     the original instructions at the end of line.  For example,
+
+	0x00500122 <+82>:    exec.it #4		!neg    a0,a0
+
+     Disassembler uses .exec.itable section info to locate _ITB_BASE_ table
+     and extract the original instruction from it.  If the object file is
+     changed, reload symbol table.  */
+
+  if (s != NULL)
+    info->section = s->the_bfd_section;
+
+done:
+  return default_print_insn (memaddr, info);
+}
+
 /* Extract a set of required target features out of ABFD.  If ABFD is
    nullptr then a RISCV_GDBARCH_FEATURES is returned in its default state.  */
 
@@ -3520,10 +3742,10 @@ riscv_add_reggroups (struct gdbarch *gdbarch)
 static int
 riscv_dwarf_reg_to_regnum (struct gdbarch *gdbarch, int reg)
 {
-  if (reg < RISCV_DWARF_REGNUM_X31)
+  if (reg <= RISCV_DWARF_REGNUM_X31)
     return RISCV_ZERO_REGNUM + (reg - RISCV_DWARF_REGNUM_X0);
 
-  else if (reg < RISCV_DWARF_REGNUM_F31)
+  else if (reg <= RISCV_DWARF_REGNUM_F31)
     return RISCV_FIRST_FP_REGNUM + (reg - RISCV_DWARF_REGNUM_F0);
 
   else if (reg >= RISCV_DWARF_FIRST_CSR && reg <= RISCV_DWARF_LAST_CSR)
@@ -3779,6 +4001,7 @@ riscv_gdbarch_init (struct gdbarch_info info,
   set_gdbarch_breakpoint_kind_from_pc (gdbarch, riscv_breakpoint_kind_from_pc);
   set_gdbarch_sw_breakpoint_from_kind (gdbarch, riscv_sw_breakpoint_from_kind);
   set_gdbarch_have_nonsteppable_watchpoint (gdbarch, 1);
+  set_gdbarch_print_insn (gdbarch, gdb_print_insn_riscv);
 
   /* Functions to analyze frames.  */
   set_gdbarch_skip_prologue (gdbarch, riscv_skip_prologue);
@@ -3786,9 +4009,18 @@ riscv_gdbarch_init (struct gdbarch_info info,
   set_gdbarch_frame_align (gdbarch, riscv_frame_align);
 
   /* Functions handling dummy frames.  */
-  set_gdbarch_call_dummy_location (gdbarch, ON_STACK);
-  set_gdbarch_push_dummy_code (gdbarch, riscv_push_dummy_code);
   set_gdbarch_push_dummy_call (gdbarch, riscv_push_dummy_call);
+
+  /* Trampoline.  */
+  set_gdbarch_in_solib_return_trampoline
+    (gdbarch, riscv_in_solib_return_trampoline);
+  set_gdbarch_skip_trampoline_code (gdbarch, riscv_skip_trampoline_code);
+
+  /* Support simple overlay manager.  */
+  set_gdbarch_overlay_update (gdbarch, riscv_simple_overlay_update);
+
+  /* Handle longjmp.  */
+  set_gdbarch_get_longjmp_target (gdbarch, riscv_get_longjmp_target);
 
   /* Frame unwinders.  Use DWARF debug info if available, otherwise use our own
      unwinder.  */
@@ -4142,4 +4374,10 @@ this option can be used."),
 				show_use_compressed_breakpoints,
 				&setriscvcmdlist,
 				&showriscvcmdlist);
+
+  add_prefix_cmd ("nds", no_class, nds_command,
+		  _("ANDES specific commands."), &nds_cmdlist,
+		  0, &cmdlist);
+
+  nds_init_remote_cmds ();
 }

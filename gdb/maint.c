@@ -41,15 +41,12 @@
 #include "maint.h"
 #include "gdbsupport/selftest.h"
 #include "inferior.h"
+#include "gdbsupport/thread-pool.h"
 
 #include "cli/cli-decode.h"
 #include "cli/cli-utils.h"
 #include "cli/cli-setshow.h"
 #include "cli/cli-cmds.h"
-
-#if CXX_STD_THREAD
-#include "gdbsupport/thread-pool.h"
-#endif
 
 static void maintenance_do_deprecate (const char *, int);
 
@@ -364,9 +361,9 @@ maint_print_all_sections (const char *header, bfd *abfd, objfile *objfile,
 			  const char *arg)
 {
   puts_filtered (header);
-  wrap_here ("        ");
+  gdb_stdout->wrap_here (8);
   printf_filtered ("`%s', ", bfd_get_filename (abfd));
-  wrap_here ("        ");
+  gdb_stdout->wrap_here (8);
   printf_filtered (_("file type %s.\n"), bfd_get_target (abfd));
 
   int section_count = gdb_bfd_count_sections (abfd);
@@ -946,9 +943,9 @@ count_symtabs_and_blocks (int *nr_symtabs_ptr, int *nr_compunit_symtabs_ptr,
 	  for (compunit_symtab *cu : o->compunits ())
 	    {
 	      ++nr_compunit_symtabs;
-	      nr_blocks += BLOCKVECTOR_NBLOCKS (COMPUNIT_BLOCKVECTOR (cu));
-	      nr_symtabs += std::distance (compunit_filetabs (cu).begin (),
-					   compunit_filetabs (cu).end ());
+	      nr_blocks += BLOCKVECTOR_NBLOCKS (cu->blockvector ());
+	      nr_symtabs += std::distance (cu->filetabs ().begin (),
+					   cu->filetabs ().end ());
 	    }
 	}
     }

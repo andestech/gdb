@@ -204,7 +204,7 @@ collect_info::add_symbol (block_symbol *bsym)
 {
   /* In list mode, add all matching symbols, regardless of class.
      This allows the user to type "list a_global_variable".  */
-  if (SYMBOL_CLASS (bsym->symbol) == LOC_BLOCK || this->state->list_mode)
+  if (bsym->symbol->aclass () == LOC_BLOCK || this->state->list_mode)
     this->result.symbols->push_back (*bsym);
 
   /* Continue iterating.  */
@@ -1179,7 +1179,7 @@ iterate_over_all_matching_symtabs
 
 	  for (compunit_symtab *cu : objfile->compunits ())
 	    {
-	      struct symtab *symtab = COMPUNIT_FILETABS (cu);
+	      struct symtab *symtab = cu->primary_filetab ();
 
 	      iterate_over_file_blocks (symtab, lookup_name, name_domain,
 					callback);
@@ -1188,19 +1188,18 @@ iterate_over_all_matching_symtabs
 		{
 		  const struct block *block;
 		  int i;
+		  const blockvector *bv = symtab->compunit ()->blockvector ();
 
-		  for (i = FIRST_LOCAL_BLOCK;
-		       i < BLOCKVECTOR_NBLOCKS (SYMTAB_BLOCKVECTOR (symtab));
-		       i++)
+		  for (i = FIRST_LOCAL_BLOCK; i < BLOCKVECTOR_NBLOCKS (bv); i++)
 		    {
-		      block = BLOCKVECTOR_BLOCK (SYMTAB_BLOCKVECTOR (symtab), i);
+		      block = BLOCKVECTOR_BLOCK (bv, i);
 		      state->language->iterate_over_symbols
 			(block, lookup_name, name_domain,
 			 [&] (block_symbol *bsym)
 			 {
 			   /* Restrict calls to CALLBACK to symbols
 			      representing inline symbols only.  */
-			   if (SYMBOL_INLINED (bsym->symbol))
+			   if (bsym->symbol->is_inlined ())
 			     return callback (bsym);
 			   return true;
 			 });
@@ -1232,7 +1231,8 @@ iterate_over_file_blocks
 {
   const struct block *block;
 
-  for (block = BLOCKVECTOR_BLOCK (SYMTAB_BLOCKVECTOR (symtab), STATIC_BLOCK);
+  for (block = BLOCKVECTOR_BLOCK (symtab->compunit ()->blockvector (),
+				  STATIC_BLOCK);
        block != NULL;
        block = BLOCK_SUPERBLOCK (block))
     current_language->iterate_over_symbols (block, name, domain, callback);
@@ -2265,7 +2265,7 @@ convert_linespec_to_sals (struct linespec_state *state, linespec *ls)
       for (const auto &sym : ls->labels.label_symbols)
 	{
 	  struct program_space *pspace
-	    = SYMTAB_PSPACE (symbol_symtab (sym.symbol));
+	    = symbol_symtab (sym.symbol)->compunit ()->objfile ()->pspace;
 
 	  if (symbol_to_sal (&sal, state->funfirstline, sym.symbol)
 	      && maybe_add_address (state->addr_set, pspace, sal.pc))
@@ -2287,7 +2287,7 @@ convert_linespec_to_sals (struct linespec_state *state, linespec *ls)
 	  for (const auto &sym : ls->function_symbols)
 	    {
 	      program_space *pspace
-		= SYMTAB_PSPACE (symbol_symtab (sym.symbol));
+		= symbol_symtab (sym.symbol)->compunit ()->objfile ()->pspace;
 	      set_current_program_space (pspace);
 
 	      /* Don't skip to the first line of the function if we
@@ -2298,7 +2298,7 @@ convert_linespec_to_sals (struct linespec_state *state, linespec *ls)
 
 	      if (state->funfirstline
 		   && !ls->minimal_symbols.empty ()
-		   && SYMBOL_CLASS (sym.symbol) == LOC_BLOCK)
+		   && sym.symbol->aclass () == LOC_BLOCK)
 		{
 		  const CORE_ADDR addr
 		    = BLOCK_ENTRY_PC (SYMBOL_BLOCK_VALUE (sym.symbol));
@@ -2522,14 +2522,15 @@ convert_explicit_location_to_sals (struct linespec_state *self,
    if no file is validly specified.  Callers must check that.
    Also, the line number returned may be invalid.  */
 
-/* Parse the linespec in ARG.  MATCH_TYPE indicates how function names
-   should be matched.  */
+/* Parse the linespec in ARG, which must not be nullptr.  MATCH_TYPE
+   indicates how function names should be matched.  */
 
 static std::vector<symtab_and_line>
 parse_linespec (linespec_parser *parser, const char *arg,
 		symbol_name_match_type match_type)
 {
-  linespec_token token;
+  gdb_assert (arg != nullptr);
+
   struct gdb_exception file_exception;
 
   /* A special case to start.  It has become quite popular for
@@ -2538,11 +2539,10 @@ parse_linespec (linespec_parser *parser, const char *arg,
   parser->is_quote_enclosed = 0;
   if (parser->completion_tracker == NULL
       && !is_ada_operator (arg)
+      && *arg != '\0'
       && strchr (linespec_quote_characters, *arg) != NULL)
     {
-      const char *end;
-
-      end = skip_quote_char (arg + 1, *arg);
+      const char *end = skip_quote_char (arg + 1, *arg);
       if (end != NULL && is_closing_quote_enclosed (end))
 	{
 	  /* Here's the special case.  Skip ARG past the initial
@@ -2583,7 +2583,7 @@ parse_linespec (linespec_parser *parser, const char *arg,
   /* Start parsing.  */
 
   /* Get the first token.  */
-  token = linespec_lexer_consume_token (parser);
+  linespec_token token = linespec_lexer_consume_token (parser);
 
   /* It must be either LSTOKEN_STRING or LSTOKEN_NUMBER.  */
   if (token.type == LSTOKEN_STRING && *LS_TOKEN_STOKEN (token).ptr == '$')
@@ -3491,10 +3491,10 @@ decode_compound_collector::operator () (block_symbol *bsym)
   struct type *t;
   struct symbol *sym = bsym->symbol;
 
-  if (SYMBOL_CLASS (sym) != LOC_TYPEDEF)
+  if (sym->aclass () != LOC_TYPEDEF)
     return true; /* Continue iterating.  */
 
-  t = SYMBOL_TYPE (sym);
+  t = sym->type ();
   t = check_typedef (t);
   if (t->code () != TYPE_CODE_STRUCT
       && t->code () != TYPE_CODE_UNION
@@ -3539,8 +3539,10 @@ lookup_prefix_sym (struct linespec_state *state,
 	{
 	  /* Program spaces that are executing startup should have
 	     been filtered out earlier.  */
-	  gdb_assert (!SYMTAB_PSPACE (elt)->executing_startup);
-	  set_current_program_space (SYMTAB_PSPACE (elt));
+	  program_space *pspace = elt->compunit ()->objfile ()->pspace;
+
+	  gdb_assert (!pspace->executing_startup);
+	  set_current_program_space (pspace);
 	  iterate_over_file_blocks (elt, lookup_name, STRUCT_DOMAIN, collector);
 	  iterate_over_file_blocks (elt, lookup_name, VAR_DOMAIN, collector);
 	}
@@ -3558,8 +3560,8 @@ compare_symbols (const block_symbol &a, const block_symbol &b)
 {
   uintptr_t uia, uib;
 
-  uia = (uintptr_t) SYMTAB_PSPACE (symbol_symtab (a.symbol));
-  uib = (uintptr_t) SYMTAB_PSPACE (symbol_symtab (b.symbol));
+  uia = (uintptr_t) symbol_symtab (a.symbol)->compunit ()->objfile ()->pspace;
+  uib = (uintptr_t) symbol_symtab (b.symbol)->compunit ()->objfile ()->pspace;
 
   if (uia < uib)
     return true;
@@ -3683,10 +3685,10 @@ find_method (struct linespec_state *self,
 
       /* Program spaces that are executing startup should have
 	 been filtered out earlier.  */
-      pspace = SYMTAB_PSPACE (symbol_symtab (sym));
+      pspace = symbol_symtab (sym)->compunit ()->objfile ()->pspace;
       gdb_assert (!pspace->executing_startup);
       set_current_program_space (pspace);
-      t = check_typedef (SYMBOL_TYPE (sym));
+      t = check_typedef (sym->type ());
       find_methods (t, sym->language (),
 		    method_name, &result_names, &superclass_vec);
 
@@ -3694,7 +3696,8 @@ find_method (struct linespec_state *self,
 	 sure not to miss the last batch.  */
       if (ix == sym_classes->size () - 1
 	  || (pspace
-	      != SYMTAB_PSPACE (symbol_symtab (sym_classes->at (ix + 1).symbol))))
+	      != (symbol_symtab (sym_classes->at (ix + 1).symbol)
+		  ->compunit ()->objfile ()->pspace)))
 	{
 	  /* If we did not find a direct implementation anywhere in
 	     this program space, consider superclasses.  */
@@ -3995,7 +3998,7 @@ find_label_symbols_in_block (const struct block *block,
       ALL_BLOCK_SYMBOLS (block, iter, sym)
 	{
 	  if (symbol_matches_domain (sym->language (),
-				     SYMBOL_DOMAIN (sym), LABEL_DOMAIN)
+				     sym->domain (), LABEL_DOMAIN)
 	      && cmp (sym->search_name (), name, name_len) == 0)
 	    {
 	      result->push_back ({sym, block});
@@ -4058,7 +4061,8 @@ find_label_symbols (struct linespec_state *self,
       for (const auto &elt : function_symbols)
 	{
 	  fn_sym = elt.symbol;
-	  set_current_program_space (SYMTAB_PSPACE (symbol_symtab (fn_sym)));
+	  set_current_program_space
+	    (symbol_symtab (fn_sym)->compunit ()->objfile ()->pspace);
 	  block = SYMBOL_BLOCK_VALUE (fn_sym);
 
 	  find_label_symbols_in_block (block, name, fn_sym, completion_mode,
@@ -4087,13 +4091,14 @@ decode_digits_list_mode (struct linespec_state *self,
       /* The logic above should ensure this.  */
       gdb_assert (elt != NULL);
 
-      set_current_program_space (SYMTAB_PSPACE (elt));
+      program_space *pspace = elt->compunit ()->objfile ()->pspace;
+      set_current_program_space (pspace);
 
       /* Simplistic search just for the list command.  */
       val.symtab = find_line_symtab (elt, val.line, NULL, NULL);
       if (val.symtab == NULL)
 	val.symtab = elt;
-      val.pspace = SYMTAB_PSPACE (elt);
+      val.pspace = pspace;
       val.pc = 0;
       val.explicit_line = true;
 
@@ -4121,13 +4126,14 @@ decode_digits_ordinary (struct linespec_state *self,
       /* The logic above should ensure this.  */
       gdb_assert (elt != NULL);
 
-      set_current_program_space (SYMTAB_PSPACE (elt));
+      program_space *pspace = elt->compunit ()->objfile ()->pspace;
+      set_current_program_space (pspace);
 
       pcs = find_pcs_for_symtab_line (elt, line, best_entry);
       for (CORE_ADDR pc : pcs)
 	{
 	  symtab_and_line sal;
-	  sal.pspace = SYMTAB_PSPACE (elt);
+	  sal.pspace = pspace;
 	  sal.symtab = elt;
 	  sal.line = line;
 	  sal.explicit_line = true;
@@ -4273,8 +4279,7 @@ add_minsym (struct minimal_symbol *minsym, struct objfile *objfile,
   if (!list_mode && !msymbol_is_function (objfile, minsym))
     return;
 
-  struct bound_minimal_symbol mo = {minsym, objfile};
-  msyms->push_back (mo);
+  msyms->emplace_back (minsym, objfile);
   return;
 }
 
@@ -4319,14 +4324,16 @@ search_minsyms_for_name (struct collect_info *info,
     }
   else
     {
-      if (search_pspace == NULL || SYMTAB_PSPACE (symtab) == search_pspace)
+      program_space *pspace = symtab->compunit ()->objfile ()->pspace;
+
+      if (search_pspace == NULL || pspace == search_pspace)
 	{
-	  set_current_program_space (SYMTAB_PSPACE (symtab));
+	  set_current_program_space (pspace);
 	  iterate_over_minimal_symbols
-	    (SYMTAB_OBJFILE (symtab), name,
+	    (symtab->compunit ()->objfile (), name,
 	     [&] (struct minimal_symbol *msym)
 	       {
-		 add_minsym (msym, SYMTAB_OBJFILE (symtab), symtab,
+		 add_minsym (msym, symtab->compunit ()->objfile (), symtab,
 			     info->state->list_mode, &minsyms);
 		 return false;
 	       });
@@ -4407,14 +4414,15 @@ add_matching_symbols_to_info (const char *name,
 	    { return info->add_symbol (bsym); });
 	  search_minsyms_for_name (info, lookup_name, pspace, NULL);
 	}
-      else if (pspace == NULL || pspace == SYMTAB_PSPACE (elt))
+      else if (pspace == NULL || pspace == elt->compunit ()->objfile ()->pspace)
 	{
 	  int prev_len = info->result.symbols->size ();
 
 	  /* Program spaces that are executing startup should have
 	     been filtered out earlier.  */
-	  gdb_assert (!SYMTAB_PSPACE (elt)->executing_startup);
-	  set_current_program_space (SYMTAB_PSPACE (elt));
+	  program_space *elt_pspace = elt->compunit ()->objfile ()->pspace;
+	  gdb_assert (!elt_pspace->executing_startup);
+	  set_current_program_space (elt_pspace);
 	  iterate_over_file_blocks (elt, lookup_name, VAR_DOMAIN,
 				    [&] (block_symbol *bsym)
 	    { return info->add_symbol (bsym); });
@@ -4424,7 +4432,7 @@ add_matching_symbols_to_info (const char *name,
 	     which we don't have debug info.  Check for a minimal symbol in
 	     this case.  */
 	  if (prev_len == info->result.symbols->size ()
-	      && elt->language == language_asm)
+	      && elt->language () == language_asm)
 	    search_minsyms_for_name (info, lookup_name, pspace, elt);
 	}
     }
@@ -4439,21 +4447,21 @@ static int
 symbol_to_sal (struct symtab_and_line *result,
 	       int funfirstline, struct symbol *sym)
 {
-  if (SYMBOL_CLASS (sym) == LOC_BLOCK)
+  if (sym->aclass () == LOC_BLOCK)
     {
       *result = find_function_start_sal (sym, funfirstline);
       return 1;
     }
   else
     {
-      if (SYMBOL_CLASS (sym) == LOC_LABEL && SYMBOL_VALUE_ADDRESS (sym) != 0)
+      if (sym->aclass () == LOC_LABEL && SYMBOL_VALUE_ADDRESS (sym) != 0)
 	{
 	  *result = {};
 	  result->symtab = symbol_symtab (sym);
 	  result->symbol = sym;
-	  result->line = SYMBOL_LINE (sym);
+	  result->line = sym->line ();
 	  result->pc = SYMBOL_VALUE_ADDRESS (sym);
-	  result->pspace = SYMTAB_PSPACE (result->symtab);
+	  result->pspace = result->symtab->compunit ()->objfile ()->pspace;
 	  result->explicit_pc = 1;
 	  return 1;
 	}
@@ -4461,15 +4469,15 @@ symbol_to_sal (struct symtab_and_line *result,
 	{
 	  /* Nothing.  */
 	}
-      else if (SYMBOL_LINE (sym) != 0)
+      else if (sym->line () != 0)
 	{
 	  /* We know its line number.  */
 	  *result = {};
 	  result->symtab = symbol_symtab (sym);
 	  result->symbol = sym;
-	  result->line = SYMBOL_LINE (sym);
+	  result->line = sym->line ();
 	  result->pc = SYMBOL_VALUE_ADDRESS (sym);
-	  result->pspace = SYMTAB_PSPACE (result->symtab);
+	  result->pspace = result->symtab->compunit ()->objfile ()->pspace;
 	  return 1;
 	}
     }

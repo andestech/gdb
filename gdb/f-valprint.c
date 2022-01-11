@@ -512,24 +512,38 @@ f_language::value_print_inner (struct value *val, struct ui_file *stream,
 
     case TYPE_CODE_STRUCT:
     case TYPE_CODE_UNION:
+    case TYPE_CODE_NAMELIST:
       /* Starting from the Fortran 90 standard, Fortran supports derived
 	 types.  */
       fprintf_filtered (stream, "( ");
       for (index = 0; index < type->num_fields (); index++)
 	{
-	  struct value *field = value_field (val, index);
-
-	  struct type *field_type = check_typedef (type->field (index).type ());
-
+	  struct type *field_type
+	    = check_typedef (type->field (index).type ());
 
 	  if (field_type->code () != TYPE_CODE_FUNC)
 	    {
-	      const char *field_name;
+	      const char *field_name = type->field (index).name ();
+	      struct value *field;
+
+	      if (type->code () == TYPE_CODE_NAMELIST)
+		{
+		  /* While printing namelist items, fetch the appropriate
+		     value field before printing its value.  */
+		  struct block_symbol sym
+		    = lookup_symbol (field_name, get_selected_block (nullptr),
+				     VAR_DOMAIN, nullptr);
+		  if (sym.symbol == nullptr)
+		    error (_("failed to find symbol for name list component %s"),
+			   field_name);
+		  field = value_of_variable (sym.symbol, sym.block);
+		}
+	      else
+		field = value_field (val, index);
 
 	      if (printed_field > 0)
 		fputs_filtered (", ", stream);
 
-	      field_name = type->field (index).name ();
 	      if (field_name != NULL)
 		{
 		  fputs_styled (field_name, variable_name_style.style (),
@@ -595,12 +609,12 @@ info_common_command_for_block (const struct block *block, const char *comname,
   get_user_print_options (&opts);
 
   ALL_BLOCK_SYMBOLS (block, iter, sym)
-    if (SYMBOL_DOMAIN (sym) == COMMON_BLOCK_DOMAIN)
+    if (sym->domain () == COMMON_BLOCK_DOMAIN)
       {
 	const struct common_block *common = SYMBOL_VALUE_COMMON_BLOCK (sym);
 	size_t index;
 
-	gdb_assert (SYMBOL_CLASS (sym) == LOC_COMMON_BLOCK);
+	gdb_assert (sym->aclass () == LOC_COMMON_BLOCK);
 
 	if (comname && (!sym->linkage_name ()
 			|| strcmp (comname, sym->linkage_name ()) != 0))

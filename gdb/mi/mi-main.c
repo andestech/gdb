@@ -848,7 +848,10 @@ mi_cmd_list_thread_groups (const char *command, char **argv, int argc)
       if (!inf)
 	error (_("Non-existent thread group id '%d'"), id);
 
-      print_thread_info (uiout, NULL, inf->pid);
+      if (inf->fake_pid_p == true)
+        print_thread_info (uiout, NULL, inf->num);
+      else
+        print_thread_info (uiout, NULL, inf->pid);
     }
   else
     {

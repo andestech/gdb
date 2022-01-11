@@ -317,7 +317,7 @@ print_enum_type (struct type *type, struct ui_file *stream)
   LONGEST lastval;
 
   fprintf_filtered (stream, "(");
-  wrap_here (" ");
+  stream->wrap_here (1);
 
   lastval = 0;
   for (i = 0; i < len; i++)
@@ -325,7 +325,7 @@ print_enum_type (struct type *type, struct ui_file *stream)
       QUIT;
       if (i)
 	fprintf_filtered (stream, ", ");
-      wrap_here ("    ");
+      stream->wrap_here (4);
       fputs_styled (ada_enum_name (type->field (i).name ()),
 		    variable_name_style.style (), stream);
       if (lastval != type->field (i).loc_enumval ())
@@ -416,7 +416,7 @@ print_array_type (struct type *type, struct ui_file *stream, int show,
 
   elt_type = ada_array_element_type (type, n_indices);
   fprintf_filtered (stream, ") of ");
-  wrap_here ("");
+  stream->wrap_here (0);
   ada_print_type (elt_type, "", stream, show == 0 ? 0 : show - 1, level + 1,
 		  flags);
   /* Arrays with variable-length elements are never bit-packed in practice but
@@ -506,6 +506,35 @@ Huh:
   return 0;
 }
 
+/* A helper for print_variant_clauses that prints the members of
+   VAR_TYPE.  DISCR_TYPE is the type of the discriminant (or nullptr
+   if not available).  The discriminant is contained in OUTER_TYPE.
+   STREAM, LEVEL, SHOW, and FLAGS are the same as for
+   ada_print_type.  */
+
+static void
+print_variant_clauses (struct type *var_type, struct type *discr_type,
+		       struct type *outer_type, struct ui_file *stream,
+		       int show, int level,
+		       const struct type_print_options *flags)
+{
+  for (int i = 0; i < var_type->num_fields (); i += 1)
+    {
+      fprintf_filtered (stream, "\n%*swhen ", level, "");
+      if (print_choices (var_type, i, stream, discr_type))
+	{
+	  if (print_record_field_types (var_type->field (i).type (),
+					outer_type, stream, show, level,
+					flags)
+	      <= 0)
+	    fprintf_filtered (stream, " null;");
+	}
+      else
+	print_selected_record_field_types (var_type, outer_type, i, i,
+					   stream, show, level, flags);
+    }
+}
+
 /* Assuming that field FIELD_NUM of TYPE represents variants whose
    discriminant is contained in OUTER_TYPE, print its components on STREAM.
    LEVEL is the recursion (indentation) level, in case any of the fields
@@ -520,7 +549,6 @@ print_variant_clauses (struct type *type, int field_num,
 		       int show, int level,
 		       const struct type_print_options *flags)
 {
-  int i;
   struct type *var_type, *par_type;
   struct type *discr_type;
 
@@ -538,21 +566,8 @@ print_variant_clauses (struct type *type, int field_num,
   if (par_type != NULL)
     var_type = par_type;
 
-  for (i = 0; i < var_type->num_fields (); i += 1)
-    {
-      fprintf_filtered (stream, "\n%*swhen ", level + 4, "");
-      if (print_choices (var_type, i, stream, discr_type))
-	{
-	  if (print_record_field_types (var_type->field (i).type (),
-					outer_type, stream, show, level + 4,
-					flags)
-	      <= 0)
-	    fprintf_filtered (stream, " null;");
-	}
-      else
-	print_selected_record_field_types (var_type, outer_type, i, i,
-					   stream, show, level + 4, flags);
-    }
+  print_variant_clauses (var_type, discr_type, outer_type, stream, show,
+			 level + 4, flags);
 }
 
 /* Assuming that field FIELD_NUM of TYPE is a variant part whose
@@ -842,19 +857,9 @@ print_unchecked_union_type (struct type *type, struct ui_file *stream,
     fprintf_filtered (stream, "record (?) is null; end record");
   else
     {
-      int i;
-
       fprintf_filtered (stream, "record (?) is\n%*scase ? is", level + 4, "");
 
-      for (i = 0; i < type->num_fields (); i += 1)
-	{
-	  fprintf_filtered (stream, "\n%*swhen ? =>\n%*s", level + 8, "",
-			    level + 12, "");
-	  ada_print_type (type->field (i).type (),
-			  type->field (i).name (),
-			  stream, show - 1, level + 12, flags);
-	  fprintf_filtered (stream, ";");
-	}
+      print_variant_clauses (type, nullptr, type, stream, show, level + 8, flags);
 
       fprintf_filtered (stream, "\n%*send case;\n%*send record",
 			level + 4, "", level, "");
@@ -892,7 +897,7 @@ print_func_type (struct type *type, struct ui_file *stream, const char *name,
 	  if (i > 0)
 	    {
 	      fputs_filtered ("; ", stream);
-	      wrap_here ("    ");
+	      stream->wrap_here (4);
 	    }
 	  fprintf_filtered (stream, "a%d: ", i + 1);
 	  ada_print_type (type->field (i).type (), "", stream, -1, 0,

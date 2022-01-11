@@ -110,6 +110,20 @@ struct context_stack
 
   };
 
+/* Flags associated with a linetable entry.  */
+
+enum linetable_entry_flag : unsigned
+{
+  /* Indicates this PC is a good location to place a breakpoint at LINE.  */
+  LEF_IS_STMT = 1 << 1,
+
+  /* Indicates this PC is a good location to place a breakpoint at the first
+     instruction past a function prologue.  */
+  LEF_PROLOGUE_END = 1 << 2,
+};
+DEF_ENUM_FLAGS_TYPE (enum linetable_entry_flag, linetable_entry_flags);
+
+
 /* Buildsym's counterpart to struct compunit_symtab.  */
 
 struct buildsym_compunit
@@ -188,7 +202,7 @@ struct buildsym_compunit
   const char *pop_subfile ();
 
   void record_line (struct subfile *subfile, int line, CORE_ADDR pc,
-		    bool is_stmt);
+		    linetable_entry_flags flags);
 
   struct compunit_symtab *get_compunit_symtab ()
   {
@@ -271,13 +285,13 @@ struct buildsym_compunit
 
   struct context_stack pop_context ();
 
-  struct block *end_symtab_get_static_block (CORE_ADDR end_addr,
-					     int expandable, int required);
+  struct block *end_compunit_symtab_get_static_block
+    (CORE_ADDR end_addr, int expandable, int required);
 
-  struct compunit_symtab *end_symtab_from_static_block
-      (struct block *static_block, int section, int expandable);
+  struct compunit_symtab *end_compunit_symtab_from_static_block
+    (struct block *static_block, int section, int expandable);
 
-  struct compunit_symtab *end_symtab (CORE_ADDR end_addr, int section);
+  struct compunit_symtab *end_compunit_symtab (CORE_ADDR end_addr, int section);
 
   struct compunit_symtab *end_expandable_symtab (CORE_ADDR end_addr,
 						 int section);
@@ -299,8 +313,8 @@ private:
 
   void watch_main_source_file_lossage ();
 
-  struct compunit_symtab *end_symtab_with_blockvector
-      (struct block *static_block, int section, int expandable);
+  struct compunit_symtab *end_compunit_symtab_with_blockvector
+    (struct block *static_block, int section, int expandable);
 
   /* The objfile we're reading debug info from.  */
   struct objfile *m_objfile;

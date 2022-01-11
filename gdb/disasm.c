@@ -189,7 +189,7 @@ line_is_less_than (const deprecated_dis_line_entry &mle1,
     {
       if (mle1.start_pc != mle2.start_pc)
 	val = mle1.start_pc < mle2.start_pc;
-    else
+      else
 	val = mle1.line < mle2.line;
     }
   else
@@ -393,10 +393,10 @@ do_mixed_source_and_assembly_deprecated
   int num_displayed = 0;
   print_source_lines_flags psl_flags = 0;
 
-  gdb_assert (symtab != NULL && SYMTAB_LINETABLE (symtab) != NULL);
+  gdb_assert (symtab != nullptr && symtab->linetable () != nullptr);
 
-  nlines = SYMTAB_LINETABLE (symtab)->nitems;
-  le = SYMTAB_LINETABLE (symtab)->item;
+  nlines = symtab->linetable ()->nitems;
+  le = symtab->linetable ()->item;
 
   if (flags & DISASSEMBLY_FILENAME)
     psl_flags |= PRINT_SOURCE_LINES_FILENAME;
@@ -535,7 +535,7 @@ do_mixed_source_and_assembly (struct gdbarch *gdbarch,
   struct symtab *last_symtab;
   int last_line;
 
-  gdb_assert (main_symtab != NULL && SYMTAB_LINETABLE (main_symtab) != NULL);
+  gdb_assert (main_symtab != NULL && main_symtab->linetable () != NULL);
 
   /* First pass: collect the list of all source files and lines.
      We do this so that we can only print lines containing code once.
@@ -553,8 +553,8 @@ do_mixed_source_and_assembly (struct gdbarch *gdbarch,
      line after the opening brace.  We still want to print this opening brace.
      first_le is used to implement this.  */
 
-  nlines = SYMTAB_LINETABLE (main_symtab)->nitems;
-  le = SYMTAB_LINETABLE (main_symtab)->item;
+  nlines = main_symtab->linetable ()->nitems;
+  le = main_symtab->linetable ()->item;
   first_le = NULL;
 
   /* Skip all the preceding functions.  */
@@ -845,19 +845,36 @@ gdb_disassembly (struct gdbarch *gdbarch, struct ui_out *uiout,
 		 CORE_ADDR low, CORE_ADDR high)
 {
   struct symtab *symtab;
-  int nlines = -1;
+  CORE_ADDR pc;
 
-  /* Assume symtab is valid for whole PC range.  */
-  symtab = find_pc_line_symtab (low);
+  if (!(flags & (DISASSEMBLY_SOURCE_DEPRECATED | DISASSEMBLY_SOURCE)))
+    {
+      do_assembly_only (gdbarch, uiout, low, high, how_many, flags);
+      goto disassembly_done;
+    }
 
-  if (symtab != NULL && SYMTAB_LINETABLE (symtab) != NULL)
-    nlines = SYMTAB_LINETABLE (symtab)->nitems;
+  /* Between the given range, find the first address with valid line info.  */
+  pc = low;
+  while (pc < high)
+    {
+      symtab = find_pc_line_symtab (pc);
+      if (symtab != NULL
+	  && symtab->linetable () != NULL
+	  && symtab->linetable ()->nitems > 0)
+	break;
+      else
+	pc += gdb_insn_length (gdbarch, pc);
+    }
 
-  if (!(flags & (DISASSEMBLY_SOURCE_DEPRECATED | DISASSEMBLY_SOURCE))
-      || nlines <= 0)
-    do_assembly_only (gdbarch, uiout, low, high, how_many, flags);
+  if (pc > low)
+    do_assembly_only (gdbarch, uiout, low, pc, how_many, flags);
 
-  else if (flags & DISASSEMBLY_SOURCE)
+  if (pc >= high)
+    goto disassembly_done;
+
+  low = pc;
+
+  if (flags & DISASSEMBLY_SOURCE)
     do_mixed_source_and_assembly (gdbarch, uiout, symtab, low, high,
 				  how_many, flags);
 
@@ -865,6 +882,7 @@ gdb_disassembly (struct gdbarch *gdbarch, struct ui_out *uiout,
     do_mixed_source_and_assembly_deprecated (gdbarch, uiout, symtab,
 					     low, high, how_many, flags);
 
+disassembly_done:
   gdb_flush (gdb_stdout);
 }
 
@@ -1118,7 +1136,7 @@ The following disassembler options are supported for use with the\n\
 	    fprintf_filtered (file, "%s", valid_options->arg[i]->name);
 	  if (valid_options->name[i + 1] != NULL)
 	    fprintf_filtered (file, ", ");
-	  wrap_here ("  ");
+	  file->wrap_here (2);
 	}
       fprintf_filtered (file, "\n");
     }
@@ -1136,7 +1154,7 @@ The following disassembler options are supported for use with the\n\
 	  for (j = 0; valid_args[i].values[j] != NULL; j++)
 	    {
 	      fprintf_filtered (file, " %s", valid_args[i].values[j]);
-	      wrap_here ("   ");
+	      file->wrap_here (3);
 	    }
 	  fprintf_filtered (file, "\n");
 	}

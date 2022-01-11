@@ -1,7 +1,7 @@
 #as: -march=rv64i_zicsr -mcsr-check -mpriv-spec=1.10
 #source: csr.s
 #warning_output: csr-version-1p10.l
-#objdump: -dr -Mpriv-spec=1.10
+#objdump: -d -Mpriv-spec=1.10
 
 .*:[ 	]+file format .*
 

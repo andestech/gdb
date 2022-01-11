@@ -178,7 +178,7 @@ val_print_packed_array_elements (struct type *type, const gdb_byte *valaddr,
 	  fprintf_filtered (stream, "\n");
 	  print_spaces_filtered (2 + 2 * recurse, stream);
 	}
-      wrap_here (n_spaces (2 + 2 * recurse));
+      stream->wrap_here (2 + 2 * recurse);
       maybe_print_array_index (index_type, i + low, stream, options);
 
       i0 = i;
@@ -235,7 +235,7 @@ val_print_packed_array_elements (struct type *type, const gdb_byte *valaddr,
 		    {
 		      fprintf_filtered (stream, ", ");
 		    }
-		  wrap_here (n_spaces (2 + 2 * recurse));
+		  stream->wrap_here (2 + 2 * recurse);
 		  maybe_print_array_index (index_type, j + low,
 					   stream, options);
 		}
@@ -277,7 +277,11 @@ ada_emit_char (int c, struct type *type, struct ui_file *stream,
 	fprintf_filtered (stream, "%c", c);
     }
   else
-    fprintf_filtered (stream, "[\"%0*x\"]", type_len * 2, c);
+    {
+      /* Follow GNAT's lead here and only use 6 digits for
+	 wide_wide_character.  */
+      fprintf_filtered (stream, "[\"%0*x\"]", std::min (6, type_len * 2), c);
+    }
 }
 
 /* Character #I of STRING, given that TYPE_LEN is the size in bytes
@@ -402,7 +406,7 @@ ada_print_scalar (struct type *type, LONGEST val, struct ui_file *stream)
       break;
 
     case TYPE_CODE_CHAR:
-      LA_PRINT_CHAR (val, type, stream);
+      current_language->printchar (val, type, stream);
       break;
 
     case TYPE_CODE_BOOL:
@@ -614,7 +618,7 @@ print_field_values (struct value *value, struct value *outer_value,
 	}
       else
 	{
-	  wrap_here (n_spaces (2 + 2 * recurse));
+	  stream->wrap_here (2 + 2 * recurse);
 	}
 
       annotate_field_begin (type->field (i).type ());

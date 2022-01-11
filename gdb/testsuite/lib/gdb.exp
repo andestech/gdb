@@ -2143,6 +2143,9 @@ proc default_gdb_start { } {
 	-re "\[\r\n\]$gdb_prompt $" {
 	    verbose "GDB initialized."
 	}
+	-re "\[\r\n\].*m$gdb_prompt $" {
+	    verbose "GDB initialized."
+	}
 	-re "$gdb_prompt $"	{
 	    perror "GDB never initialized."
 	    unset gdb_spawn_id
@@ -3851,7 +3854,7 @@ proc skip_compile_feature_tests {} {
 
     set result 0
     gdb_test_multiple "compile code -- ;" "check for working compile command" {
-	"Could not load libcc1.*\r\n$gdb_prompt $" {
+	-re "Could not load libcc1.*\r\n$gdb_prompt $" {
 	    set result 1
 	}
 	-re "Command not supported on this host\\..*\r\n$gdb_prompt $" {
@@ -7990,7 +7993,7 @@ proc ensure_gdb_index { binfile {style ""} } {
 	    set has_index 1
 	    gdb_test_lines "" $gdb_test_name ".*"
 	}
-	-re "\r\nPsymtabs:(?=\r\n)" {
+	-re "\r\n(Cooked index in use|Psymtabs)(?=\r\n)" {
 	    gdb_test_lines "" $gdb_test_name ".*"
 	}
 	-re ".gdb_index: faked for \"readnow\"" {

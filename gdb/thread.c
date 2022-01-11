@@ -998,14 +998,20 @@ should_print_thread (const char *requested_threads, int default_inf_num,
       if (!in_list)
 	return 0;
     }
-
+  if (thr->inf->fake_pid_p == true) {
+    if (pid != -1 && thr->inf->num != pid) {
+      if (requested_threads != NULL && *requested_threads != '\0')
+        error (_("Requested thread not found in requested process"));
+      return 0;
+    }
+  } else {
   if (pid != -1 && thr->ptid.pid () != pid)
     {
       if (requested_threads != NULL && *requested_threads != '\0')
 	error (_("Requested thread not found in requested process"));
       return 0;
     }
-
+  }
   if (thr->state == THREAD_EXITED)
     return 0;
 
@@ -1487,6 +1493,7 @@ thread_try_catch_cmd (thread_info *thr, gdb::optional<int> ada_task,
 	  if (!flags.quiet)
 	    printf_filtered ("%s", thr_header.c_str ());
 	  printf_filtered ("%s", cmd_result.c_str ());
+		gdb_flush (gdb_stdout);
 	}
     }
   catch (const gdb_exception_error &ex)
