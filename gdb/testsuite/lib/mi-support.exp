@@ -61,6 +61,16 @@ proc mi_uncatched_gdb_exit {} {
     global mi_gdb_prompt
     global MIFLAGS
 
+    # Switch back to the main spawn id, so that remote_close below
+    # closes it, and not a secondary channel.  Closing a secondary
+    # channel does not make GDB exit.
+
+    # do it switch_gdb_spawn_id() before sid_exit()
+    # because remote_close host in sid_exit()
+    if {$gdb_spawn_id != $gdb_main_spawn_id} {
+        switch_gdb_spawn_id $gdb_main_spawn_id
+    }
+
     if { [info procs sid_exit] != "" } {
 	sid_exit
     }
@@ -85,13 +95,6 @@ proc mi_uncatched_gdb_exit {} {
 	    -re "DOSEXIT code" { }
 	    default { }
 	}
-    }
-
-    # Switch back to the main spawn id, so that remote_close below
-    # closes it, and not a secondary channel.  Closing a secondary
-    # channel does not make GDB exit.
-    if {$gdb_spawn_id != $gdb_main_spawn_id} {
-	switch_gdb_spawn_id $gdb_main_spawn_id
     }
 
     # Close secondary MI channel, if there's one.
@@ -1309,6 +1312,14 @@ proc mi_expect_stop { reason func args file line extra test } {
     verbose -log "mi_expect_stop: expecting: \\*stopped,${ebn}${r}${a}${bn}frame=\{addr=\"$hex\",func=\"$func\",args=$args,(?:file=\"$any$file\",fullname=\"${fullname_syntax}$file\",line=\"$line\",arch=\"$any\"|from=\"$file\")\}$after_stopped,thread-id=\"$decimal\",stopped-threads=$any\r\n($thread_selected_re|$breakpoint_re)*$prompt_re"
     gdb_expect {
 	-re "\\*stopped,${ebn}${r}${a}${bn}frame=\{addr=\"$hex\",func=\"$func\",args=$args,(?:file=\"$any$file\",fullname=\"${fullname_syntax}$file\",line=\"($line)\",arch=\"$any\"|from=\"$file\")\}$after_stopped,thread-id=\"$decimal\",stopped-threads=$any\r\n($thread_selected_re|$breakpoint_re)*$prompt_re" {
+	    pass "$test"
+	    if {[array names expect_out "2,string"] != ""} {
+		return $expect_out(2,string)
+	    }
+	    # No debug info available but $file does match.
+	    return 0
+	}
+	-re "\\*stopped,${ebn}${r}${a}${bn}frame=\{addr=\"$hex\",func=\"$func\",args=$args,arch=\"$any\"\}$after_stopped,thread-id=\"$decimal\",stopped-threads=$any\r\n($thread_selected_re|$breakpoint_re)*$prompt_re" {
 	    pass "$test"
 	    if {[array names expect_out "2,string"] != ""} {
 		return $expect_out(2,string)

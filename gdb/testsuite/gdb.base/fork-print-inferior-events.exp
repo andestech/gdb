@@ -32,6 +32,10 @@ if [gdb_debug_enabled] {
     return 0
 }
 
+if { ![istarget "*-*-linux*"] } then {
+    continue
+}
+
 standard_testfile
 
 if { [build_executable "failed to prepare" $testfile $srcfile debug] } {

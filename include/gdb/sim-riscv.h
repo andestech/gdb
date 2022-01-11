@@ -90,7 +90,7 @@ enum sim_riscv_regnum {
 #define SIM_RISCV_LAST_FP_REGNUM SIM_RISCV_FT11_REGNUM
 
 #define SIM_RISCV_FIRST_CSR_REGNUM SIM_RISCV_LAST_FP_REGNUM + 1
-#define DECLARE_CSR(name, num, ...) SIM_RISCV_ ## num ## _REGNUM,
+#define DECLARE_CSR(name, num, ...) SIM_RISCV_ ## num ## _REGNUM = SIM_RISCV_LAST_FP_REGNUM + 1 + num,
 #include "opcode/riscv-opc.h"
 #undef DECLARE_CSR
 #define SIM_RISCV_LAST_CSR_REGNUM SIM_RISCV_LAST_REGNUM - 1
