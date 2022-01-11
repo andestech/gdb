@@ -156,6 +156,9 @@ typedef struct elf_internal_rela {
   bfd_vma	r_offset;	/* Location at which to apply the action */
   bfd_vma	r_info;		/* Index and Type of relocation */
   bfd_vma	r_addend;	/* Constant addend used to compute value */
+  /* { Andes */
+  bfd_vma	r_user;		/* User data for extensions */
+  /* } Andes */
 } Elf_Internal_Rela;
 
 /* dynamic section structure */

@@ -46,6 +46,7 @@ proc restart_for_test {} {
     global srcdir subdir binfile srcfile
     global main_lineno
 
+    gdb_exit
     if {[mi_gdb_start]} {
 	continue
     }

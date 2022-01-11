@@ -52,8 +52,13 @@ scan_expression (const char **cmd, const char *def)
 }
 
 
+/* Helper function to return the filename within *CMD buffer, and to put
+ * remaining arguments into allocated REST buffer which is pointed to
+ * by updated *CMD if the original *CMD is valid.  */
+
 static gdb::unique_xmalloc_ptr<char>
-scan_filename (const char **cmd, const char *defname)
+scan_filename (const char **cmd, const char *defname,
+	       gdb::unique_xmalloc_ptr<char> &rest)
 {
   gdb::unique_xmalloc_ptr<char> filename;
 
@@ -68,13 +73,23 @@ scan_filename (const char **cmd, const char *defname)
     }
   else
     {
-      /* FIXME: should parse a possibly quoted string.  */
-      const char *end;
+      gdb_argv argv (*cmd);
 
-      (*cmd) = skip_spaces (*cmd);
-      end = *cmd + strcspn (*cmd, " \t");
-      filename.reset (savestring ((*cmd), end - (*cmd)));
-      (*cmd) = skip_spaces (end);
+      filename.reset (xstrdup (argv[0]));
+
+      /* The size of REST buffer is bounded by the original CMD.  */
+      rest.reset ((char *) xmalloc (strlen (*cmd) + 1));
+      char *r = rest.get ();
+      r[0] = '\0';
+      *cmd = r;
+
+      if (argv[1] != NULL)
+	{
+	  r += sprintf (r, "%s", argv[1]);
+	  /* The remaining args will be delimited using space.  */
+	  for (int i = 2; argv[i] != NULL; i++)
+	    r += sprintf (r, " %s", argv[i]);
+	}
     }
   gdb_assert (filename != NULL);
 
@@ -169,9 +184,10 @@ dump_memory_to_file (const char *cmd, const char *mode, const char *file_format)
   CORE_ADDR hi;
   ULONGEST count;
   const char *hi_exp;
+  gdb::unique_xmalloc_ptr<char> rest;
 
   /* Open the file.  */
-  gdb::unique_xmalloc_ptr<char> filename = scan_filename (&cmd, NULL);
+  gdb::unique_xmalloc_ptr<char> filename = scan_filename (&cmd, NULL, rest);
 
   /* Find the low address.  */
   if (cmd == NULL || *cmd == '\0')
@@ -211,9 +227,10 @@ static void
 dump_value_to_file (const char *cmd, const char *mode, const char *file_format)
 {
   struct value *val;
+  gdb::unique_xmalloc_ptr<char> rest;
 
   /* Open the file.  */
-  gdb::unique_xmalloc_ptr<char> filename = scan_filename (&cmd, NULL);
+  gdb::unique_xmalloc_ptr<char> filename = scan_filename (&cmd, NULL, rest);
 
   /* Find the value.  */
   if (cmd == NULL || *cmd == '\0')
@@ -499,6 +516,7 @@ static void
 restore_command (const char *args, int from_tty)
 {
   int binary_flag = 0;
+  gdb::unique_xmalloc_ptr<char> rest;
 
   if (!target_has_execution ())
     noprocess ();
@@ -508,7 +526,8 @@ restore_command (const char *args, int from_tty)
   CORE_ADDR load_end    = 0;
 
   /* Parse the input arguments.  First is filename (required).  */
-  gdb::unique_xmalloc_ptr<char> filename = scan_filename (&args, NULL);
+  gdb::unique_xmalloc_ptr<char> filename = scan_filename (&args, NULL, rest);
+
   if (args != NULL && *args != '\0')
     {
       static const char binary_string[] = "binary";

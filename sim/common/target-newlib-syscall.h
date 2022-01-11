@@ -142,6 +142,7 @@ extern CB_TARGET_DEFS_MAP cb_riscv_syscall_map[];
 #define TARGET_NEWLIB_RISCV_SYS_unlink 1026
 #define TARGET_NEWLIB_RISCV_SYS_write 64
 #define TARGET_NEWLIB_RISCV_SYS_writev 66
+#define TARGET_NEWLIB_RISCV_SYS_rename 1034
 
 extern CB_TARGET_DEFS_MAP cb_sh_syscall_map[];
 #define TARGET_NEWLIB_SH_SYS_ARG 24

@@ -16,10 +16,10 @@
 # Test GDB for RISC-V always uses an uncompressed breakpoint when
 # setting up for an inferior call.
 
-if {![istarget "riscv*-*-*"]} {
+# if {![istarget "riscv*-*-*"]} {
     verbose "Skipping ${gdb_test_file_name}."
     return
-}
+# }
 
 standard_testfile
 

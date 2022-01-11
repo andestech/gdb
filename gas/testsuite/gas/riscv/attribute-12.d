@@ -1,4 +1,4 @@
-#as: -march-attr -mpriv-spec=1.9.1
+#as: -march-attr -mpriv-spec=1.9.1 -misa-spec=2.2
 #readelf: -A
 #source: attribute-11.s
 Attribute Section: riscv

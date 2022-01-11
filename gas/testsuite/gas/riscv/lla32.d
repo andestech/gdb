@@ -1,5 +1,5 @@
 #as: -march=rv32i -mabi=ilp32
-#objdump: -dr
+#objdump: -d
 
 .*:     file format elf32-(little|big)riscv
 
