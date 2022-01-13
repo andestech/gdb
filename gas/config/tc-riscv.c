@@ -65,6 +65,9 @@ enum riscv_csr_class
   CSR_CLASS_F,		/* f-ext only */
   CSR_CLASS_ZKR,	/* zkr only */
   CSR_CLASS_V,		/* rvv only */
+  /* { Andes  */
+  CSR_CLASS_P,
+  /* } Andes  */
   CSR_CLASS_DEBUG	/* debug CSR */
 };
 
@@ -939,6 +942,11 @@ riscv_csr_address (const char *csr_name,
     case CSR_CLASS_DEBUG:
       need_check_version = false;
       break;
+    /* { Andes  */
+    case CSR_CLASS_P:
+      result = riscv_subset_supports (&riscv_rps_as, "p");
+      break;
+    /* } Andes  */
     default:
       as_bad (_("internal: bad RISC-V CSR class (0x%x)"), csr_class);
     }
@@ -1136,6 +1144,34 @@ validate_riscv_insn (const struct riscv_opcode *opc, int length)
 	      goto unknown_validate_operand;
 	    }
 	  break;  /* end RVC */
+	/* { Andes  */
+	case 'l': used_bits |= ENCODE_ITYPE_IMM (-1U); break;
+	case 'N': /* Andes extensions: RVP  */
+	  switch (*++oparg)
+	    {
+	      case 'c': /* rc */
+		USE_BITS (OP_MASK_RC, OP_SH_RC); break;
+	      case 'd': /* rdp */
+		USE_BITS (OP_MASK_RD, OP_SH_RD); break;
+	      case 's': /* rsp */
+		USE_BITS (OP_MASK_RD, OP_SH_RS1); break;
+	      case 't': /* rtp */
+		USE_BITS (OP_MASK_RD, OP_SH_RS2); break;
+	      case '3': /* i3u */
+		used_bits |= ENCODE_PTYPE_IMM3U (-1U); break;
+	      case '4': /* i4u */
+		used_bits |= ENCODE_PTYPE_IMM4U (-1U); break;
+	      case '5': /* i5u */
+		used_bits |= ENCODE_PTYPE_IMM5U (-1U); break;
+	      case '6': /* i6u */
+		used_bits |= ENCODE_PTYPE_IMM6U (-1U); break;
+	      case 'f': /* i15s */
+		used_bits |= ENCODE_PTYPE_IMM15S (-1U); break;
+	      default:
+		goto unknown_validate_operand;
+	    }
+	  break;
+	/* } Andes  */
 	case 'V': /* RVV */
 	  switch (*++oparg)
 	    {
@@ -3193,6 +3229,91 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 	      asarg = expr_end;
 	      imm_expr->X_op = O_absent;
 	      continue;
+
+	    /* { Andes  */
+	    case 'l': /* Lower unsigned 6-bit immediate.  */
+	      my_getExpression (imm_expr, asarg);
+	      if (imm_expr->X_op != O_constant
+		  || imm_expr->X_add_number >= xlen
+		  || imm_expr->X_add_number < 0)
+		break;
+	      ip->insn_opcode |= ENCODE_SBTYPE_IMM6L (imm_expr->X_add_number);
+	      asarg = expr_end;
+	      imm_expr->X_op = O_absent;
+	      continue;
+	    case 'N': /* Andes extensions: RVP  */
+	      ++oparg;
+	      if ((*oparg == 'c') /* rc */
+		  && reg_lookup (&asarg, RCLASS_GPR, &regno))
+		{
+		  INSERT_OPERAND (RC, *ip, regno);
+		  continue;
+		}
+	      else if ((*oparg == 'd') /* rdp */
+		       && reg_lookup (&asarg, RCLASS_GPR, &regno))
+		{
+		  if (xlen == 32 && (regno % 2) != 0)
+		    {
+		      as_bad (_("The number of Rd must be even "
+				"(limitation of register pair)."));
+		      break;
+		    }
+		  INSERT_OPERAND (RD, *ip, regno);
+		  continue;
+		}
+	      else if ((*oparg == 's') /* rsp */
+		       && reg_lookup (&asarg, RCLASS_GPR, &regno))
+		{
+		  if (xlen == 32 && (regno % 2) != 0)
+		    {
+		      as_bad (_("The number of Rs1 must be even "
+				"(limitation of register pair)."));
+		      break;
+		    }
+		  INSERT_OPERAND (RS1, *ip, regno);
+		  continue;
+		}
+	      else if ((*oparg == 't') /* rtp */
+		       && reg_lookup (&asarg, RCLASS_GPR, &regno))
+		{
+		  if (xlen == 32 && (regno % 2) != 0)
+		    {
+		      as_bad (_("The number of Rs2 must be even "
+				"(limitation of register pair)."));
+		      break;
+		    }
+		  INSERT_OPERAND (RS2, *ip, regno);
+		  continue;
+		}
+
+	      my_getExpression (imm_expr, asarg);
+	      if (imm_expr->X_op != O_constant
+		  || imm_expr->X_add_number >= xlen
+		  || imm_expr->X_add_number < 0)
+		break;
+
+	      if ((*oparg == '3') /* i3u */
+		  && VALID_PTYPE_IMM3U (imm_expr->X_add_number))
+		ip->insn_opcode |= ENCODE_PTYPE_IMM3U (imm_expr->X_add_number);
+	      else if ((*oparg == '4') /* i4u */
+		       && VALID_PTYPE_IMM4U (imm_expr->X_add_number))
+		ip->insn_opcode |= ENCODE_PTYPE_IMM4U (imm_expr->X_add_number);
+	      else if ((*oparg == '5') /* i5u */
+		       && VALID_PTYPE_IMM5U (imm_expr->X_add_number))
+		ip->insn_opcode |= ENCODE_PTYPE_IMM5U (imm_expr->X_add_number);
+	      else if ((*oparg == '6') /* i6u */
+		       && VALID_PTYPE_IMM6U (imm_expr->X_add_number))
+		ip->insn_opcode |= ENCODE_PTYPE_IMM6U (imm_expr->X_add_number);
+	      else if ((*oparg == 'f') /* i15 */
+		       && VALID_PTYPE_IMM15S (imm_expr->X_add_number))
+		ip->insn_opcode |= ENCODE_PTYPE_IMM15S (imm_expr->X_add_number);
+	      else
+		goto unknown_riscv_ip_operand;
+
+	      asarg = expr_end;
+	      imm_expr->X_op = O_absent;
+	      continue;
+	    /* } Andes  */
 
 	    default:
 	    unknown_riscv_ip_operand:

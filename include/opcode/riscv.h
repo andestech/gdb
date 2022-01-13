@@ -37,6 +37,10 @@ static inline unsigned int riscv_insn_length (insn_t insn)
     return 6;
   if ((insn & 0x7f) == 0x3f) /* 64-bit instructions.  */
     return 8;
+  /* { Andes  */
+    if ((insn & 0x7f) == 0x7f) /* 32-bit RVP v0.5.  */
+    return 4;
+  /* } Andes  */
   /* Longer instructions not supported at the moment.  */
   return 2;
 }
@@ -182,6 +186,39 @@ static const char * const riscv_pred_succ[16] =
 #define VALID_RVV_VB_IMM(x) (EXTRACT_RVV_VB_IMM(ENCODE_RVV_VB_IMM(x)) == (x))
 #define VALID_RVV_VC_IMM(x) (EXTRACT_RVV_VC_IMM(ENCODE_RVV_VC_IMM(x)) == (x))
 
+/* { Andes  */
+/* RVP */
+#define EXTRACT_PTYPE_IMM3U(x) \
+  (RV_X(x, 20, 3))
+#define EXTRACT_PTYPE_IMM4U(x) \
+  (RV_X(x, 20, 4))
+#define EXTRACT_PTYPE_IMM5U(x) \
+  (RV_X(x, 20, 5))
+#define EXTRACT_PTYPE_IMM6U(x) \
+  (RV_X(x, 20, 6))
+#define EXTRACT_PTYPE_IMM15S(x) \
+  ((-RV_X(x, 24, 1) << 15) | (RV_X(x, 7, 5) << 0) | RV_X(x, 15, 9) << 5)
+
+#define ENCODE_PTYPE_IMM3U(x) \
+  (RV_X(x, 0, 3) << 20)
+#define ENCODE_PTYPE_IMM4U(x) \
+  (RV_X(x, 0, 4) << 20)
+#define ENCODE_PTYPE_IMM5U(x) \
+  (RV_X(x, 0, 5) << 20)
+#define ENCODE_PTYPE_IMM6U(x) \
+  (RV_X(x, 0, 6) << 20)
+#define ENCODE_PTYPE_IMM15S(x) \
+  ((RV_X(x, 0, 5) << 7) | RV_X(x, 5, 10) << 15)
+#define ENCODE_SBTYPE_IMM6L(x) \
+  (RV_X(x, 0, 6) << 20)
+
+#define VALID_PTYPE_IMM3U(x) (EXTRACT_PTYPE_IMM3U(ENCODE_PTYPE_IMM3U(x)) == (x))
+#define VALID_PTYPE_IMM4U(x) (EXTRACT_PTYPE_IMM4U(ENCODE_PTYPE_IMM4U(x)) == (x))
+#define VALID_PTYPE_IMM5U(x) (EXTRACT_PTYPE_IMM5U(ENCODE_PTYPE_IMM5U(x)) == (x))
+#define VALID_PTYPE_IMM6U(x) (EXTRACT_PTYPE_IMM6U(ENCODE_PTYPE_IMM6U(x)) == (x))
+#define VALID_PTYPE_IMM15S(x) (EXTRACT_PTYPE_IMM15S(ENCODE_PTYPE_IMM15S(x)) == (x))
+/* } Andes  */
+
 #define RISCV_RTYPE(insn, rd, rs1, rs2) \
   ((MATCH_ ## insn) | ((rd) << OP_SH_RD) | ((rs1) << OP_SH_RS1) | ((rs2) << OP_SH_RS2))
 #define RISCV_ITYPE(insn, rd, rs1, imm) \
@@ -283,6 +320,14 @@ static const char * const riscv_pred_succ[16] =
 #define OP_MASK_BS      3
 #define OP_SH_RNUM      20
 #define OP_MASK_RNUM    0xf
+
+/* { Andes  */
+/* RVP fields.  */
+#define OP_MASK_SV		0x3
+#define OP_SH_SV		25
+#define OP_MASK_RC		0x1f
+#define OP_SH_RC		25
+/* } Andes  */
 
 /* RVV fields.  */
 
@@ -388,6 +433,9 @@ enum riscv_insn_class
   INSN_CLASS_V,
   INSN_CLASS_ZVEF,
   INSN_CLASS_SVINVAL,
+  /* { Andes  */
+  INSN_CLASS_P,
+  /* } Andes  */
 };
 
 /* This structure holds information for a particular instruction.  */

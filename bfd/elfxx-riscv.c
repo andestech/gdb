@@ -1171,6 +1171,7 @@ static struct riscv_supported_ext riscv_supported_std_ext[] =
   {"k",		ISA_SPEC_CLASS_NONE, RISCV_UNKNOWN_VERSION, RISCV_UNKNOWN_VERSION, 0 },
   {"j",		ISA_SPEC_CLASS_NONE, RISCV_UNKNOWN_VERSION, RISCV_UNKNOWN_VERSION, 0 },
   {"t",		ISA_SPEC_CLASS_NONE, RISCV_UNKNOWN_VERSION, RISCV_UNKNOWN_VERSION, 0 },
+  {"p",		ISA_SPEC_CLASS_DRAFT, 0, 5, 0 }, /* Andes  */
   {"p",		ISA_SPEC_CLASS_NONE, RISCV_UNKNOWN_VERSION, RISCV_UNKNOWN_VERSION, 0 },
   {"v",		ISA_SPEC_CLASS_DRAFT,		1, 0, 0 },
   {"n",		ISA_SPEC_CLASS_NONE, RISCV_UNKNOWN_VERSION, RISCV_UNKNOWN_VERSION, 0 },
@@ -2364,6 +2365,10 @@ riscv_multi_subset_supports (riscv_parse_subset_t *rps,
     case INSN_CLASS_Q_OR_ZQINX:
       return (riscv_subset_supports (rps, "q")
 	      || riscv_subset_supports (rps, "zqinx"));
+    /* { Andes  */
+    case INSN_CLASS_P:
+      return riscv_subset_supports (rps, "p");
+    /* } Andes  */
     case INSN_CLASS_ZBA:
       return riscv_subset_supports (rps, "zba");
     case INSN_CLASS_ZBB:

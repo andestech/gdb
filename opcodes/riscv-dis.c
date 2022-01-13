@@ -360,6 +360,43 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 	    }
 	  break;
 
+	/* { Andes  */
+	case 'N':
+	  switch (*++oparg)
+	    {
+	    case 'c': /* rc */
+	      print (info->stream, "%s",
+		     riscv_gpr_names[EXTRACT_OPERAND (RC, l)]);
+	      break;
+	    case 'd': /* rdp */
+	      print (info->stream, "%s", riscv_gpr_names[rd]);
+	      break;
+	    case 's': /* rsp */
+	      print (info->stream, "%s", riscv_gpr_names[rs1]);
+	      break;
+	    case 't': /* rtp */
+	      print (info->stream, "%s",
+		     riscv_gpr_names[EXTRACT_OPERAND (RS2, l)]);
+	      break;
+	    case '3': /* i3u */
+	      print (info->stream, "%d", (int)EXTRACT_PTYPE_IMM3U (l));
+	      break;
+	    case '4': /* i4u */
+	      print (info->stream, "%d", (int)EXTRACT_PTYPE_IMM4U (l));
+	      break;
+	    case '5': /* i5u */
+	      print (info->stream, "%d", (int)EXTRACT_PTYPE_IMM5U (l));
+	      break;
+	    case '6': /* i6u */
+	      print (info->stream, "%d", (int)EXTRACT_PTYPE_IMM6U (l));
+	      break;
+	    case 'f': /* i15s */
+	      print (info->stream, "%d", (int)EXTRACT_PTYPE_IMM15S (l));
+	      break;
+	    }
+	  break;
+	/* } Andes  */
+
 	case ',':
 	case '(':
 	case ')':
