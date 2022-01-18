@@ -8775,7 +8775,7 @@ execute_b (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op,
       TRACE_INSN (cpu, "roriw %s, %s, %" PRIiTW, rd_name, rs1_name, shamt_imm);
       rs1u = (uint32_t) cpu->regs[rs1].u;
       shamt = shamt_imm & 31;
-      result = (rs1u >> shamt) | (rs1u << (32 - shamt));
+      result = (int32_t) (rs1u >> shamt) | (rs1u << (32 - shamt));
       store_rd (cpu, rd, result);
       break;
     case MATCH_RORW:
@@ -8783,7 +8783,7 @@ execute_b (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op,
       TRACE_INSN (cpu, "rorw %s, %s, %s", rd_name, rs1_name, rs2_name);
       rs1u = (uint32_t) cpu->regs[rs1].u;
       shamt = cpu->regs[rs2].u & 31;
-      result = (rs1u >> shamt) | (rs1u << (32 - shamt));
+      result = (int32_t) (rs1u >> shamt) | (rs1u << (32 - shamt));
       store_rd (cpu, rd, result);
       break;
     case MATCH_ROL:
@@ -8797,7 +8797,7 @@ execute_b (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op,
       TRACE_INSN (cpu, "rolw %s, %s, %s", rd_name, rs1_name, rs2_name);
       rs1u = (uint32_t) cpu->regs[rs1].u;
       shamt = cpu->regs[rs2].u & 31;
-      result = (rs1u << shamt) | (rs1u >> (32 - shamt));
+      result = (int32_t) ((rs1u << shamt) | (rs1u >> (32 - shamt)));
       store_rd (cpu, rd, result);
       break;
     case MATCH_CLMUL:
