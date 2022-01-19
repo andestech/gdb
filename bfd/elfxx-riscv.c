@@ -2128,6 +2128,7 @@ static const char * const riscv_std_z_ext_strtab[] =
 
 static const char * const riscv_std_s_ext_strtab[] =
   {
+    "svinval",
     NULL
   };
 

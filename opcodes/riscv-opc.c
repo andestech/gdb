@@ -2645,6 +2645,14 @@ const struct riscv_opcode riscv_opcodes[] =
 {"sm3p0",    0, {"ZKSH", 0},    "d,s",    MATCH_SM3P0, MASK_SM3P0, match_opcode, 0 },
 {"sm3p1",    0, {"ZKSH", 0},    "d,s",    MATCH_SM3P1, MASK_SM3P1, match_opcode, 0 },
 
+/* { RVSvinval  */
+{"sinval.vma",      0, {"SVINVAL", 0}, "s,t",  MATCH_SINVAL_VMA, MASK_SINVAL_VMA, match_opcode, 0 },
+{"sfence.w.inval",  0, {"SVINVAL", 0}, "",     MATCH_SFENCE_W_INVAL, MASK_SFENCE_W_INVAL, match_opcode, 0 },
+{"sfence.inval.ir", 0, {"SVINVAL", 0}, "",     MATCH_SFENCE_INVAL_IR, MASK_SFENCE_INVAL_IR, match_opcode, 0 },
+{"hinval.vvma",     0, {"SVINVAL", 0}, "s,t",  MATCH_HINVAL_VVMA, MASK_HINVAL_VVMA, match_opcode, 0 },
+{"hinval.gvma",     0, {"SVINVAL", 0}, "s,t",  MATCH_HINVAL_GVMA, MASK_HINVAL_GVMA, match_opcode, 0 },
+/* } RVSvinval  */
+
 /* Terminate the list.  */
 {0, 0, {0}, 0, 0, 0, 0, 0}
 };
@@ -2825,6 +2833,9 @@ const struct riscv_ext_version riscv_ext_version_table[] =
 {"n", ISA_SPEC_CLASS_20190608, 1, 1},
 {"n", ISA_SPEC_CLASS_ANDES,    1, 1},
 {"n", ISA_SPEC_CLASS_2P2,      1, 1},
+
+{"svinval", ISA_SPEC_CLASS_ANDES, 1, 0},
+{"svinval", ISA_SPEC_CLASS_DRAFT, 1, 0},
 
 {"zfh", ISA_SPEC_CLASS_ANDES,  0, 1},
 {"zfh", ISA_SPEC_CLASS_2P2,    0, 1},
