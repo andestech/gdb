@@ -1,2 +1,2 @@
 Assembler messages:
-Fatal error: -march=rv32iC: unsupported ISA subset `C'
+Error: -march=rv32iC: ISA string cannot contain uppercase letters
