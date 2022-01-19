@@ -91,15 +91,17 @@ nds_issue_qrcmd (const char *cmd, string_file &str)
      if gdbserver doesn't support the monitor command.  */
 
   str.clear ();
-  TRY
+  try
     {
       target_rcmd (cmd, &str);
     }
-  CATCH (except, RETURN_MASK_ERROR)
+  catch (const gdb_exception &exception)
     {
-      return -1;
+      if (exception.reason == RETURN_ERROR)
+        {
+          return -1;
+        }
     }
-  END_CATCH
 
   /* Trim trailing newline characters.  */
   std::size_t found = str.string ().find_last_not_of (whitespaces);
@@ -120,10 +122,10 @@ nds_print_human_table (int col, int row, const char *scsv)
   int i;
   char *buf = NULL;
   char symbol_text[256];
-  struct cleanup *cleanup = NULL;
+  /* struct cleanup *cleanup = NULL; mark do_cleanups */
 
   buf = xstrdup (scsv);
-  cleanup = make_cleanup (xfree, buf);
+  /* cleanup = make_cleanup (xfree, buf); mark do_cleanups */
 
   /* Allocate header structures.  */
   gdb::unique_xmalloc_ptr<char *[]> col_fldname
@@ -197,7 +199,7 @@ nds_print_human_table (int col, int row, const char *scsv)
 		}
 	      else
 		{
-		  const char *name = MSYMBOL_PRINT_NAME (msymbol.minsym);
+		  const char *name = msymbol.minsym->print_name ();
 		  int offset = addr - BMSYMBOL_VALUE_ADDRESS (msymbol);
 
 		  if (offset)
@@ -214,7 +216,8 @@ nds_print_human_table (int col, int row, const char *scsv)
     }
 
 bye:
-  do_cleanups (cleanup);
+	;
+  /* do_cleanups (cleanup); mark do_cleanups */
 }
 
 /* Callback for "nds query profiling" command.  */
@@ -352,8 +355,8 @@ nds_target_type_make_value (struct gdbarch *gdbarch, struct internalvar *var,
 {
   int val = 0;
 
-  if (strcmp (target_shortname, "remote") == 0
-      || strcmp (target_shortname, "extended-remote") == 0)
+  if (strcmp (target_shortname (), "remote") == 0
+      || strcmp (target_shortname (), "extended-remote") == 0)
     val = target_has_registers ? nds_remote_info.type
 			       : nds_rt_unknown;
 
@@ -415,8 +418,8 @@ nds_query_target_command (const char *args, int from_tty)
 
   nds_remote_info_init ();
 
-  if (strcmp (target_shortname, "remote") != 0
-      && strcmp (target_shortname, "extended-remote") != 0)
+  if (strcmp (target_shortname (), "remote") != 0
+      && strcmp (target_shortname (), "extended-remote") != 0)
     return;
 
   /* Try to find out the type of target - SID or OCD.  */
@@ -433,18 +436,18 @@ nds_endian_check_command (const char *args, int from_tty)
   enum bfd_endian elf_endian = BFD_ENDIAN_UNKNOWN;
 
   /* ELF file is necessary for endian comparison.  */
-  if (exec_bfd == NULL)
+  if (current_program_space->exec_bfd () == NULL)
     return;
 
   /* The comparison is only for remote debugging.  */
-  if (strcmp (target_shortname, "remote") != 0
-      && strcmp (target_shortname, "extended-remote") != 0)
+  if (strcmp (target_shortname (), "remote") != 0
+      && strcmp (target_shortname (), "extended-remote") != 0)
     return;
 
   if (nds_remote_info.type == nds_rt_unknown)
     return;
 
-  elf_endian = exec_bfd->xvec->byteorder;
+  elf_endian = current_program_space->exec_bfd ()->xvec->byteorder;
 
   if (nds_remote_info.endian != elf_endian)
     warning ("Target and elf have different endian");
@@ -568,7 +571,7 @@ nds_print_acr_command (const char *args, int from_tty)
 }
 
 /* Convert hex digit A to a number.  */
-
+#if 0
 static int
 fromhex (int a)
 {
@@ -581,7 +584,7 @@ fromhex (int a)
   else
     error (_("Given value contains invalid hex digit %d"), a);
 }
-
+#endif
 /* Callback for "nds set" command, which is used to construct
    the content of ACR from the given hex string.  */
 
@@ -729,7 +732,7 @@ nds_init_remote_cmds (void)
 
   /* nds query (profiling|perf-meter|target)  */
   add_prefix_cmd ("query", no_class, nds_query_command,
-		  _("Query remote data."), &nds_query_cmdlist, "query ",
+		  _("Query remote data."), &nds_query_cmdlist,
 		  0, &nds_cmdlist);
   add_cmd ("profiling", no_class, nds_query_profiling_command,
 	   _("Query profiling results."), &nds_query_cmdlist);
@@ -740,7 +743,7 @@ nds_init_remote_cmds (void)
 
   /* nds reset (profiling|perf-meter)  */
   add_prefix_cmd ("reset", no_class, nds_reset_command,
-		  _("Reset profiling."), &nds_reset_cmdlist, "reset ",
+		  _("Reset profiling."), &nds_reset_cmdlist,
 		  0, &nds_cmdlist);
   add_cmd ("profiling", no_class, nds_reset_profiling_command,
 	   _("Query profiling results."), &nds_reset_cmdlist);
@@ -750,7 +753,7 @@ nds_init_remote_cmds (void)
   /* nds pipeline (on|off) */
   add_prefix_cmd ("pipeline", no_class, nds_pipeline_command,
 		  _("nds-sid profiling commands."),
-		  &nds_pipeline_cmdlist, "pipeline ", 0, &nds_cmdlist);
+		  &nds_pipeline_cmdlist, 0, &nds_cmdlist);
   add_cmd ("on", no_class, nds_pipeline_on_command,
 	   _("Turn on pipeline for profiling."), &nds_pipeline_cmdlist);
   add_cmd ("off", no_class, nds_pipeline_off_command,

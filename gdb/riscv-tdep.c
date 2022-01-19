@@ -4307,7 +4307,7 @@ this option can be used."),
 
   add_prefix_cmd ("nds", no_class, nds_command,
 		  _("ANDES specific commands."), &nds_cmdlist,
-		  "nds ", 0, &cmdlist);
+		  0, &cmdlist);
 
   nds_init_remote_cmds ();
 }
