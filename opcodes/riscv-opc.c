@@ -2848,6 +2848,9 @@ const struct riscv_ext_version riscv_ext_version_table[] =
 {"n", ISA_SPEC_CLASS_ANDES,    1, 1},
 {"n", ISA_SPEC_CLASS_2P2,      1, 1},
 
+{"sscofpmf", ISA_SPEC_CLASS_ANDES, 1, 0},
+{"sscofpmf", ISA_SPEC_CLASS_DRAFT, 1, 0},
+
 {"svinval", ISA_SPEC_CLASS_ANDES, 1, 0},
 {"svinval", ISA_SPEC_CLASS_DRAFT, 1, 0},
 

@@ -1152,8 +1152,11 @@ riscv_csr_class_check (enum riscv_csr_class csr_class)
       return (xlen == 32 && riscv_subset_supports ("i"));
     case CSR_CLASS_ZKR:
       return riscv_subset_supports ("zkr");
+    case CSR_CLASS_SSCOFPMF:
+      return riscv_subset_supports ("sscofpmf");
     case CSR_CLASS_DEBUG:
       return TRUE;
+
     default:
       return FALSE;
     }
