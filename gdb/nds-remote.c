@@ -567,7 +567,7 @@ typedef struct ace_operand
 extern struct riscv_opcode *ace_opcs;
 extern ace_op_t *ace_ops;
 /* Represent whether ACE shared library is loaded successfully */
-extern bfd_boolean ace_lib_load_success;
+extern bool ace_lib_load_success;
 
 static void
 nds_handle_ace(const char *ace_lib_path)

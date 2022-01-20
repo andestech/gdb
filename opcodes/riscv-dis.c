@@ -62,6 +62,23 @@ enum riscv_seg_mstate last_map_state;
 static const char * const *riscv_gpr_names;
 static const char * const *riscv_fpr_names;
 
+/* Data structures used by ACE */
+typedef struct ace_operand
+{
+  const char *name;  /* operand name */
+  int bitpos;  /* operand start position */
+  int bitsize;  /* operand width */
+  int shift;  /* operand shift amount */
+  int hw_res;  /* hardware resource */
+  const char *hw_name;  /* hardware/register name */
+} ace_op_t;
+
+/* Pointers for storing symbols from ACE shared library */
+struct riscv_opcode *ace_opcs;
+ace_op_t *ace_ops;
+/* Represent whether ACE shared library is loaded successfully */
+bool ace_lib_load_success = false;
+
 /* If set, disassemble as most general instruction.  */
 static int no_aliases;
 
