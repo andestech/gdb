@@ -782,10 +782,6 @@ print_insn_args (const char *d, insn_t l, bfd_vma pc,
 	  print (info->stream, "%d", (int)EXTRACT_TYPE_CIMM6 (l));
 	  break;
 
-	case 'f':
-	  print (info->stream, "%d", (int)EXTRACT_TYPE_IMM8 (l));
-	  break;
-
 	case 'r':
 	  print (info->stream, "%d", (int)EXTRACT_TYPE_SIMM8 (l));
 	  break;
@@ -876,6 +872,20 @@ print_insn_args (const char *d, insn_t l, bfd_vma pc,
 			 field_name);
 	      }
 	    d--;
+	  }
+	  break;
+
+	case 'N': /* Andes extensions */
+	  {
+	    switch (*++d)
+	      {
+	      case 'f':
+		print (info->stream, "%d", (int)EXTRACT_TYPE_IMM8 (l));
+		break;
+	      default:
+		print (info->stream, _("# internal error, undefined modifier (N%c)"), *d);
+		break;
+	      }
 	  }
 	  break;
 

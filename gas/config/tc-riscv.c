@@ -1401,7 +1401,6 @@ validate_riscv_insn (const struct riscv_opcode *opc, int length)
       case 'l': used_bits |= ENCODE_ITYPE_IMM (-1U); break;
       case 'i': used_bits |= ENCODE_STYPE_IMM7 (-1U); break;
       case 'g': used_bits |= ENCODE_STYPE_IMM10 (-1U); break;
-      case 'f': used_bits |= ENCODE_TYPE_IMM8 (-1U); break;
       case 'k': used_bits |= ENCODE_TYPE_CIMM6 (-1U); break;
       case 'z': break;
       case '[': break;
@@ -1516,6 +1515,17 @@ validate_riscv_insn (const struct riscv_opcode *opc, int length)
 		    c, opc->name, opc->args);
 	}
 	break;
+
+      case 'N': /* Andes extensions */
+	{
+	  switch (c = *p++)
+	    {
+	    case 'f': used_bits |= ENCODE_TYPE_IMM8 (-1U); break;
+	    default: break;
+	    }
+	}
+	break;
+
       default:
 	as_bad (_("internal: bad RISC-V opcode "
 		  "(unknown operand type `%c'): %s %s"),
@@ -4283,17 +4293,6 @@ jump:
 	      s = expr_end;
 	      continue;
 
-	    case 'f':
-	      my_getExpression (imm_expr, s);
-	      if (imm_expr->X_op != O_constant
-		  || imm_expr->X_add_number >= (signed) RISCV_IMM8_REACH/2
-		  || imm_expr->X_add_number < -(signed) RISCV_IMM8_REACH/2)
-		break;
-	      ip->insn_opcode |= ENCODE_TYPE_IMM8 (imm_expr->X_add_number);
-	      s = expr_end;
-	      imm_expr->X_op = O_absent;
-	      continue;
-
 	    case 'H':
 	    case 'G':
 	      {
@@ -4501,6 +4500,27 @@ jump:
 		}
 	      else
 		break;
+
+	    case 'N': /* Andes extensions */
+	      {
+		switch (*++args)
+		  {
+		  case 'f': /* TO REMOVE */
+		    my_getExpression (imm_expr, s);
+		    if (imm_expr->X_op != O_constant
+			|| imm_expr->X_add_number >= (signed) RISCV_IMM8_REACH/2
+			|| imm_expr->X_add_number < -(signed) RISCV_IMM8_REACH/2)
+		      break;
+		    ip->insn_opcode |= ENCODE_TYPE_IMM8 (imm_expr->X_add_number);
+		    s = expr_end;
+		    imm_expr->X_op = O_absent;
+		    continue;
+		  default:
+		    as_bad (_("Unknown Anndes extension operand 'N%c'"), *args);
+		    break;
+		  }
+	      }
+	      break;
 
 	    default:
 	      as_fatal (_("internal error: bad argument type %c"), *args);
