@@ -705,6 +705,20 @@ const struct riscv_opcode riscv_opcodes[] =
 {"c.fswsp",   32, {"F", "C", 0}, "CT,CM(Cc)",  MATCH_C_FSWSP, MASK_C_FSWSP, match_opcode, INSN_DREF|INSN_4_BYTE },
 {"c.fsw",     32, {"F", "C", 0}, "CD,Ck(Cs)",  MATCH_C_FSW, MASK_C_FSW, match_opcode, INSN_DREF|INSN_4_BYTE },
 
+/* prefetch.i is a HINT of ori  */
+/* { Zicbom */
+/* Zicbom */
+{"cbo.inval",  0, {"ZICBOM", 0}, "s", MATCH_CBO_INVAL, MASK_CBO_INVAL, match_opcode, 0 },
+{"cbo.clean",  0, {"ZICBOM", 0}, "s", MATCH_CBO_CLEAN, MASK_CBO_CLEAN, match_opcode, 0 },
+{"cbo.flush",  0, {"ZICBOM", 0}, "s", MATCH_CBO_FLUSH, MASK_CBO_FLUSH, match_opcode, 0 },
+/* Zicboz */
+{"cbo.zero",   0, {"ZICBOZ", 0}, "s", MATCH_CBO_ZERO, MASK_CBO_ZERO, match_opcode, 0 },
+/* Zicbop */
+{"prefetch.i", 0, {"ZICBOP", 0}, "f(s)", MATCH_PREFETCH_I, MASK_PREFETCH_I, match_opcode, 0 },
+{"prefetch.r", 0, {"ZICBOP", 0}, "f(s)", MATCH_PREFETCH_R, MASK_PREFETCH_R, match_opcode, 0 },
+{"prefetch.w", 0, {"ZICBOP", 0}, "f(s)", MATCH_PREFETCH_W, MASK_PREFETCH_W, match_opcode, 0 },
+/* } Zicbo */
+
 /* RVI instructions and RVC instructions without "c." suffix.  */
 {"ebreak",      0, {"C", 0},   "",  MATCH_C_EBREAK, MASK_C_EBREAK, match_opcode, INSN_ALIAS },
 {"ebreak",      0, {"I", 0},   "",    MATCH_EBREAK, MASK_EBREAK, match_opcode, 0 },
@@ -2845,6 +2859,13 @@ const struct riscv_ext_version riscv_ext_version_table[] =
 {"zicsr", ISA_SPEC_CLASS_20190608, 2, 0},
 
 // {"zifencei", ISA_SPEC_CLASS_ANDES, 2, 0},
+
+{"zicbom", ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zicbom", ISA_SPEC_CLASS_DRAFT, 1, 0},
+{"zicbop", ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zicbop", ISA_SPEC_CLASS_DRAFT, 1, 0},
+{"zicboz", ISA_SPEC_CLASS_ANDES, 1, 0},
+{"zicboz", ISA_SPEC_CLASS_DRAFT, 1, 0},
 
 {"zvamo",   ISA_SPEC_CLASS_ANDES, 1, 0},
 {"zvamo",   ISA_SPEC_CLASS_NONE,  1, 0},

@@ -1396,6 +1396,7 @@ validate_riscv_insn (const struct riscv_opcode *opc, int length)
       case 'a':	used_bits |= ENCODE_UJTYPE_IMM (-1U); break;
       case 'p':	used_bits |= ENCODE_SBTYPE_IMM (-1U); break;
       case 'q':	used_bits |= ENCODE_STYPE_IMM (-1U); break;
+      case 'f': used_bits |= ENCODE_STYPE_IMM (-1U); break;
       case 'u':	used_bits |= ENCODE_UTYPE_IMM (-1U); break;
       case 'h': used_bits |= ENCODE_ITYPE_IMM (-1U); break;
       case 'l': used_bits |= ENCODE_ITYPE_IMM (-1U); break;
@@ -4228,6 +4229,22 @@ jump:
 		  continue;
 		}
 	      break;
+
+	    case 'f': /* Prefetch offset, pseudo S-type but lower 5-bits zero.  */
+	      if (riscv_handle_implicit_zero_offset (imm_expr, s))
+		continue;
+	      my_getExpression (imm_expr, s);
+	      check_absolute_expr (ip, imm_expr, FALSE);
+	      if (((unsigned) (imm_expr->X_add_number) & 0x1f)
+		  || imm_expr->X_add_number >= (signed)RISCV_IMM_REACH/2
+		  || imm_expr->X_add_number < -(signed)RISCV_IMM_REACH/2)
+		as_bad (_("improper prefetch offset (%ld)"),
+			(long) imm_expr->X_add_number);
+	      ip->insn_opcode |= ENCODE_STYPE_IMM (imm_expr->X_add_number);
+	      ip->insn_opcode &= ~ ENCODE_STYPE_IMM (0x1fU);
+	      imm_expr->X_op = O_absent;
+	      s = expr_end;
+	      continue;
 
 	    case 'h':		/* Upper unsigned 6-bit immediate.  */
 	      my_getExpression (imm_expr, s);

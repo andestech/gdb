@@ -668,6 +668,10 @@ print_insn_args (const char *d, insn_t l, bfd_vma pc,
 	  print (info->stream, "%d", rs1);
 	  break;
 
+	case 'f':
+	  print (info->stream, "%d", (int)EXTRACT_STYPE_IMM (l));
+	  break;
+
 	case 'V': /* RVV */
 	  switch (*++d)
 	    {
