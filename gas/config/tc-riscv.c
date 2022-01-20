@@ -65,6 +65,7 @@ enum riscv_csr_class
   CSR_CLASS_F,		/* f-ext only */
   CSR_CLASS_ZKR,	/* zkr only */
   CSR_CLASS_V,		/* rvv only */
+  CSR_CLASS_SSCOFPMF,	/* sscofpmf only */
   /* { Andes  */
   CSR_CLASS_P,
   CSR_CLASS_XANDES,
@@ -934,6 +935,9 @@ riscv_csr_address (const char *csr_name,
       need_check_version = false;
       break;
     case CSR_CLASS_DEBUG:
+      need_check_version = false;
+      break;
+    case CSR_CLASS_SSCOFPMF:
       need_check_version = false;
       break;
     /* { Andes  */
