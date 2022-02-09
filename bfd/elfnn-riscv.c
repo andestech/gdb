@@ -8450,8 +8450,6 @@ andes_execit_render_hash (execit_context_t *ctx)
 	      isec = elf_elfsections (abfd)[shndx]->bfd_section;
 
 	      ctx->ie.addend = st_value + irel->r_addend;
-	      ctx->ie.relocation = isec ? (sec_addr (isec) + ctx->ie.addend) :
-					  0;
 	      ctx->ie.isym = isym + r_symndx;
 	      ctx->ie.isym_copy = *ctx->ie.isym;
 	      ctx->ie.isec = isec;
@@ -8487,16 +8485,25 @@ andes_execit_render_hash (execit_context_t *ctx)
 		      && h->root.type != bfd_link_hash_undefined
 		      && h->root.type != bfd_link_hash_undefweak
 		      ))
-		  {
+		{
 		#ifdef DEBUG_EXECIT
-		    printf("%s: skip global symbol.\n", __FUNCTION__);
+		  printf("%s: skip global symbol.\n", __FUNCTION__);
 		#endif
-		    return rz;
-		  }
-	      ctx->ie.isec = h->root.u.def.section; /* TODO: rename isec  */
-	      ctx->ie.addend = h->root.u.def.value + irel->r_addend;
-	      ctx->ie.relocation = sec_addr (ctx->ie.isec) + ctx->ie.addend;
+		  return rz;
+		}
+
 	      ctx->ie.h = h;
+	      if ((h->root.type == bfd_link_hash_defined) ||
+		  (h->root.type == bfd_link_hash_defweak))
+		{
+		  ctx->ie.isec = h->root.u.def.section; /* TODO: rename isec  */
+		  ctx->ie.addend = h->root.u.def.value + irel->r_addend;
+		}
+	      else
+		{
+		  ctx->ie.isec = h->root.u.undef.abfd;
+		  ctx->ie.addend = irel->r_addend;
+		}
 
 	      if (h->plt.offset != MINUS_ONE)
 		{
