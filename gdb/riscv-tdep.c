@@ -3354,7 +3354,7 @@ riscv_frame_cache (struct frame_info *this_frame, void **this_cache)
 
   /* When pc does not fall in a valid function, not to scan prologue
      to avoid extra useless memory access.  */
-  if (find_pc_partial_function (pc, NULL, NULL, NULL) == 0)
+  if (find_pc_partial_function (pc, NULL, &start_addr, NULL) == 0)
     {
       cache->this_id = outer_frame_id;
       return cache;
