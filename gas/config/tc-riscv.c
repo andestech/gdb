@@ -2411,6 +2411,9 @@ pcrel_access (int destreg, int tempreg, expressionS *ep,
       strcpy (lo_pattern_ex, lo_pattern);
       strcat (lo_pattern_ex, ",C");
 
+      /* ensure folloiwng instructions continously within the same frag.  */
+      frag_grow(4 * 5);
+
       /* index 0: argument, C: state, type, index, offset.  */
       index = CSI_INDIRECT_SYMBOL;
       macro_build (&ep_ind, "nop", "j,C", hi_reloc, 0, type, index, 0);
@@ -2474,6 +2477,9 @@ static void
       ep_ref.X_add_symbol = make_internal_label ();
       ep_ref.X_add_number = 0;
       ep_ref.X_md = 0; /* for ICT logic within fix_new_exp */
+
+      /* ensure folloiwng instructions continously within the same frag.  */
+      frag_grow(4 * 7);
 
       /* index 0: argument, C: state, type, index, offset.  */
       index = CSI_INDIRECT_SYMBOL;
