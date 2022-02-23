@@ -8860,12 +8860,12 @@ execute_b (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op,
     case MATCH_BCLR:
       TRACE_INSN (cpu, "bclr %s, %s, %s", rd_name, rs1_name, rs2_name);
       shamt = cpu->regs[rs2].u & (xlen - 1);
-      store_rd (cpu, rd, cpu->regs[rs1].u & ~(1UL << shamt));
+      store_rd (cpu, rd, cpu->regs[rs1].u & ~(1ULL << shamt));
       break;
     case MATCH_BCLRI:
       TRACE_INSN (cpu, "bclri %s, %s, %" PRIiTW, rd_name, rs1_name, shamt_imm);
       shamt = shamt_imm & (xlen - 1);
-      store_rd (cpu, rd, cpu->regs[rs1].u & ~(1UL << shamt));
+      store_rd (cpu, rd, cpu->regs[rs1].u & ~(1ULL << shamt));
       break;
     case MATCH_BEXT:
       TRACE_INSN (cpu, "bext %s, %s, %s", rd_name, rs1_name, rs2_name);
@@ -8880,22 +8880,22 @@ execute_b (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op,
     case MATCH_BINV:
       TRACE_INSN (cpu, "binv %s, %s, %s", rd_name, rs1_name, rs2_name);
       shamt = cpu->regs[rs2].u & (xlen - 1);
-      store_rd (cpu, rd, cpu->regs[rs1].u ^ (1UL << shamt));
+      store_rd (cpu, rd, cpu->regs[rs1].u ^ (1ULL << shamt));
       break;
     case MATCH_BINVI:
       TRACE_INSN (cpu, "binvi %s, %s, %" PRIiTW, rd_name, rs1_name, shamt_imm);
       shamt = shamt_imm & (xlen - 1);
-      store_rd (cpu, rd, cpu->regs[rs1].u ^ (1UL << shamt));
+      store_rd (cpu, rd, cpu->regs[rs1].u ^ (1ULL << shamt));
       break;
     case MATCH_BSET:
       TRACE_INSN (cpu, "bset %s, %s, %s", rd_name, rs1_name, rs2_name);
       shamt = cpu->regs[rs2].u & (xlen - 1);
-      store_rd (cpu, rd, cpu->regs[rs1].u | (1UL << shamt));
+      store_rd (cpu, rd, cpu->regs[rs1].u | (1ULL << shamt));
       break;
     case MATCH_BSETI:
       TRACE_INSN (cpu, "bseti %s, %s, %" PRIiTW, rd_name, rs1_name, shamt_imm);
       shamt = shamt_imm & (xlen - 1);
-      store_rd (cpu, rd, cpu->regs[rs1].u | (1UL << shamt));
+      store_rd (cpu, rd, cpu->regs[rs1].u | (1ULL << shamt));
       break;
     case MATCH_ANDN:
       TRACE_INSN (cpu, "andn %s, %s, %s", rd_name, rs1_name, rs2_name);
