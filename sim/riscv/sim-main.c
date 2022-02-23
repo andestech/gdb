@@ -8953,6 +8953,28 @@ execute_b (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op,
 	store_rd (cpu, rd, rs1u_64 << shamt);
       }
       break;
+    case MATCH_GREVI | MATCH_SHAMT_REV8_32:
+      TRACE_INSN (cpu, "rev8 %s, %s", rd_name, rs1_name);
+      rs1u = 0;
+      for (int i = 0; i < xlen; i = i + 8)
+	{
+	  rs1u_64 |= (cpu->regs[rs1].u >> i & 0xff);
+	  if (i + 8 < xlen)
+	    rs1u_64 <<= 8;
+	}
+      store_rd (cpu, rd, rs1u);
+      break;
+    case MATCH_GREVI | MATCH_SHAMT_REV8_64:
+      TRACE_INSN (cpu, "rev8 %s, %s", rd_name, rs1_name);
+      rs1u_64 = 0;
+      for (int i = 0; i < xlen; i = i + 8)
+	{
+	  rs1u_64 |= (cpu->regs[rs1].u >> i & 0xff);
+	  if (i + 8 < xlen)
+	    rs1u_64 <<= 8;
+	}
+      store_rd (cpu, rd, rs1u_64);
+      break;
     default:
       TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
       sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
