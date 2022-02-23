@@ -65,6 +65,54 @@ static const char * const *riscv_fpr_names;
 /* If set, disassemble as most general instruction.  */
 static int no_aliases;
 
+/* { Andes  */
+static int
+riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info);
+
+static void
+riscv_execit_info (bfd_vma pc ATTRIBUTE_UNUSED,
+		   disassemble_info *info, uint32_t execit_index)
+{
+  uint32_t insn;
+  static asection *section = NULL;
+  bfd_byte buffer[4];
+  int insnlen;
+
+  /* If no section info can be related to this exec.it insn, this may be just
+     a uninitiated memory content, so not to decode it.  */
+  if (info->section == NULL)
+    return;
+
+  /* Lookup section in which itb is located.  */
+  if (!section)
+    {
+      section = bfd_get_section_by_name (info->section->owner, ".exec.itable");
+
+      /* Lookup it only once, in case .exec.itable doesn't exist at all.  */
+      if (section == NULL)
+	section = (void *) -1;
+    }
+
+  if (section == (void *) -1)
+    return;
+
+  if (!section->owner)
+    return;
+
+  bfd_get_section_contents (section->owner, section, buffer,
+			    execit_index * 4, 4);
+  insn = bfd_get_32 (section->owner, buffer);
+  insnlen = riscv_insn_length (insn);
+
+  /* 16-bit instructions in .exec.itable.  */
+  if (insnlen == 2)
+    riscv_disassemble_insn (pc, (insn & 0x0000FFFF), info);
+  /* 32-bit instructions in .exec.itable.  */
+  else
+    riscv_disassemble_insn (pc, insn, info);
+}
+/* } Andes  */
+
 static void
 set_default_riscv_dis_options (void)
 {
@@ -288,6 +336,21 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 	      print (info->stream, "%s",
 		     riscv_fpr_names[EXTRACT_OPERAND (CRS2S, l) + 8]);
 	      break;
+	    /* { Andes  */
+	    case 'e':
+	      switch (*++oparg)
+		{
+		case 'i':
+		  print (info->stream, "#%d	!", (int)EXTRACT_RVC_EX9IT_IMM (l) >> 2);
+		  riscv_execit_info (pc, info, (int)EXTRACT_RVC_EX9IT_IMM (l) >> 2);
+		  break;
+		case 't':
+		  print (info->stream, "#%d     !", (int)EXTRACT_RVC_EXECIT_IMM (l) >> 2);
+		  riscv_execit_info (pc, info, (int)EXTRACT_RVC_EXECIT_IMM (l) >> 2);
+		  break;
+		}
+	      break;
+	    /* } Andes  */
 	    }
 	  break;
 
@@ -361,6 +424,71 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 	  break;
 
 	/* { Andes  */
+	case 'g':
+	  info->target = EXTRACT_STYPE_IMM10 (l) + pc;
+	  (*info->print_address_func) (info->target, info);
+	  break;
+
+	case 'h':
+	  print (info->stream, "%d", (int)EXTRACT_ITYPE_IMM6H (l));
+	  break;
+
+	case 'i':
+	  print (info->stream, "%d", (int)EXTRACT_STYPE_IMM7 (l));
+	  break;
+
+	case 'k':
+	  print (info->stream, "%d", (int)EXTRACT_TYPE_CIMM6 (l));
+	  break;
+
+	case 'l':
+	  print (info->stream, "%d", (int)EXTRACT_ITYPE_IMM6L (l));
+	  break;
+
+	case 'G':
+	  switch (*++oparg)
+	    {
+	    case 'b':
+	      maybe_print_address (pd, X_GP, EXTRACT_GPTYPE_LB_IMM (l), 0);
+	      print (info->stream, "%d", (int)EXTRACT_GPTYPE_LB_IMM (l));
+	      break;
+	    case 'h':
+	      maybe_print_address (pd, X_GP, EXTRACT_GPTYPE_LH_IMM (l), 0);
+	      print (info->stream, "%d", (int)EXTRACT_GPTYPE_LH_IMM (l));
+	      break;
+	    case 'w':
+	      maybe_print_address (pd, X_GP, EXTRACT_GPTYPE_LW_IMM (l), 0);
+	      print (info->stream, "%d", (int)EXTRACT_GPTYPE_LW_IMM (l));
+	      break;
+	    case 'd':
+	      maybe_print_address (pd, X_GP, EXTRACT_GPTYPE_LD_IMM (l), 0);
+	      print (info->stream, "%d", (int)EXTRACT_GPTYPE_LD_IMM (l));
+	      break;
+	    }
+	  break;
+
+	case 'H':
+	  switch (*++oparg)
+	    {
+	    case 'b':
+	      maybe_print_address (pd, X_GP, EXTRACT_GPTYPE_SB_IMM (l), 0);
+	      print (info->stream, "%d", (int)EXTRACT_GPTYPE_SB_IMM (l));
+	      break;
+	    case 'h':
+	      maybe_print_address (pd, X_GP, EXTRACT_GPTYPE_SH_IMM (l), 0);
+	      print (info->stream, "%d", (int)EXTRACT_GPTYPE_SH_IMM (l));
+	      break;
+	    case 'w':
+	      maybe_print_address (pd, X_GP, EXTRACT_GPTYPE_SW_IMM (l), 0);
+	      print (info->stream, "%d", (int)EXTRACT_GPTYPE_SW_IMM (l));
+	      break;
+	    case 'd':
+	      maybe_print_address (pd, X_GP, EXTRACT_GPTYPE_SD_IMM (l), 0);
+	      print (info->stream, "%d", (int)EXTRACT_GPTYPE_SD_IMM (l));
+	      break;
+	    }
+	  break;
+
 	case 'N':
 	  switch (*++oparg)
 	    {

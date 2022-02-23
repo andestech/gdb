@@ -217,6 +217,106 @@ static const char * const riscv_pred_succ[16] =
 #define VALID_PTYPE_IMM5U(x) (EXTRACT_PTYPE_IMM5U(ENCODE_PTYPE_IMM5U(x)) == (x))
 #define VALID_PTYPE_IMM6U(x) (EXTRACT_PTYPE_IMM6U(ENCODE_PTYPE_IMM6U(x)) == (x))
 #define VALID_PTYPE_IMM15S(x) (EXTRACT_PTYPE_IMM15S(ENCODE_PTYPE_IMM15S(x)) == (x))
+
+/* RVXAndes */
+#define EXTRACT_UJTYPE_IMM_EXECIT_TAB(x) \
+  ((RV_X(x, 21, 10) << 1) | (RV_X(x, 20, 1) << 11) | (RV_X(x, 12, 8) << 12) | (RV_X(x, 31, 1) << 20))
+#define EXTRACT_RVC_EX9IT_IMM(x) \
+  ((RV_X(x, 4, 1) << 2) | (RV_X(x, 10, 2) << 3) | (RV_X(x, 2, 1) << 5) | (RV_X(x, 5, 2) << 6) | (RV_X(x, 9, 1) << 8) | (RV_X(x, 3, 1) << 9) | (RV_X(x, 12, 1) << 10))
+#define EXTRACT_RVC_EXECIT_IMM(x) \
+  ((RV_X(x, 4, 1) << 2) | (RV_X(x, 10, 2) << 3) | (RV_X(x, 2, 1) << 5) | (RV_X(x, 5, 2) << 6) | (RV_X(x, 9, 1) << 8) | (RV_X(x, 3, 1) << 9) | (RV_X(x, 12, 1) << 10) | (RV_X(x, 8, 1) << 11))
+#define EXTRACT_ITYPE_IMM6H(x) \
+  (RV_X(x, 26, 6))
+#define EXTRACT_ITYPE_IMM6L(x) \
+  (RV_X(x, 20, 6))
+#define EXTRACT_STYPE_IMM7(x) \
+  ((RV_X(x, 20, 5)) | (RV_X(x, 7, 1)) << 5 | RV_X(x, 30, 1) << 6)
+#define EXTRACT_TYPE_CIMM6(x) \
+  ((RV_X(x, 20, 5)) | (RV_X(x, 7, 1)) << 5)
+#define EXTRACT_TYPE_IMM8(x) \
+  ((RV_X(x, 20, 7)) | (RV_IMM_SIGN(x)) << 7)
+#define EXTRACT_TYPE_SIMM8(x) \
+  ((RV_X(x, 7, 5)) | (RV_X(x, 25, 2) << 5) | (RV_IMM_SIGN(x)) << 7)
+#define EXTRACT_STYPE_IMM10(x) \
+  (RV_X(x, 8, 4) << 1 | (RV_X(x, 25, 5) << 5) | (RV_IMM_SIGN(x) << 10))
+#define EXTRACT_GPTYPE_LB_IMM(x) \
+  ((RV_X(x, 14, 1)) | (RV_X(x, 21, 10) << 1) | (RV_X(x, 20, 1) << 11) | (RV_X(x, 17, 3) << 12) | (RV_X(x, 15, 2) << 15) | (RV_IMM_SIGN(x) << 17))
+#define EXTRACT_GPTYPE_LH_IMM(x) \
+  ((RV_X(x, 21, 10) << 1) | (RV_X(x, 20, 1) << 11) | (RV_X(x, 17, 3) << 12) | (RV_X(x, 15, 2) << 15) | (RV_IMM_SIGN(x) << 17))
+#define EXTRACT_GPTYPE_LW_IMM(x) \
+  ((RV_X(x, 22, 9) << 2) | (RV_X(x, 20, 1) << 11) | (RV_X(x, 17, 3) << 12) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 21, 1) << 17) | (RV_IMM_SIGN(x) << 18))
+#define EXTRACT_GPTYPE_LD_IMM(x) \
+  ((RV_X(x, 23, 8) << 3) | (RV_X(x, 20, 1) << 11) | (RV_X(x, 17, 3) << 12) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 21, 2) << 17) | (RV_IMM_SIGN(x) << 19))
+#define EXTRACT_GPTYPE_SB_IMM(x) \
+  ((RV_X(x, 14, 1)) | (RV_X(x, 8, 4) << 1) | (RV_X(x, 25, 6) << 5) | (RV_X(x, 7, 1) << 11) | (RV_X(x, 17, 3) << 12) | (RV_X(x, 15, 2) << 15) | (RV_IMM_SIGN(x) << 17))
+#define EXTRACT_GPTYPE_SH_IMM(x) \
+  ((RV_X(x, 8, 4) << 1) | (RV_X(x, 25, 6) << 5) | (RV_X(x, 7, 1) << 11) | (RV_X(x, 17, 3) << 12) | (RV_X(x, 15, 2) << 15) | (RV_IMM_SIGN(x) << 17))
+#define EXTRACT_GPTYPE_SW_IMM(x) \
+  ((RV_X(x, 9, 3) << 2) | (RV_X(x, 25, 6) << 5) | (RV_X(x, 7, 1) << 11) | (RV_X(x, 17, 3) << 12) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 8, 1) << 17) | (RV_IMM_SIGN(x) << 18))
+#define EXTRACT_GPTYPE_SD_IMM(x) \
+  ((RV_X(x, 10, 2) << 3) | (RV_X(x, 25, 6) << 5) | (RV_X(x, 7, 1) << 11) | (RV_X(x, 17, 3) << 12) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 8, 2) << 17) | (RV_IMM_SIGN(x) << 19))
+
+#define ENCODE_SBTYPE_IMM6H(x) \
+  (RV_X(x, 0, 6) << 26)
+#define ENCODE_SBTYPE_IMM6L(x) \
+  (RV_X(x, 0, 6) << 20)
+#define ENCODE_STYPE_IMM7(x) \
+  ((RV_X(x, 0, 5) << 20) | (RV_X(x, 5, 1) << 7) | (RV_X(x, 6, 1) << 30))
+#define ENCODE_STYPE_IMM10(x) \
+  ((RV_X(x, 1, 4) << 8) | (RV_X(x, 5, 5) <<25) | (RV_X(x, 10, 1) << 31))
+#define ENCODE_TYPE_CIMM6(x) \
+  ((RV_X(x, 0, 5) << 20) | (RV_X(x, 5, 1) << 7))
+#define ENCODE_TYPE_IMM8(x) \
+  ((RV_X(x, 0, 7) << 20) | (RV_X(x, 7, 1) << 31))
+#define ENCODE_TYPE_SIMM8(x) \
+  ((RV_X(x, 0, 5) << 7) | (RV_X(x, 5, 2) << 25) | (RV_X(x, 7, 1) << 31))
+#define ENCODE_GPTYPE_LB_IMM(x) \
+  ((RV_X(x, 0, 1) << 14) | (RV_X(x, 1, 10) << 21) | (RV_X(x, 11, 1) << 20) | (RV_X(x, 12, 3) << 17) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 17, 1) << 31))
+#define ENCODE_GPTYPE_LH_IMM(x) \
+  ((RV_X(x, 1, 10) << 21) | (RV_X(x, 11, 1) << 20) | (RV_X(x, 12, 3) << 17) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 17, 1) << 31))
+#define ENCODE_GPTYPE_LW_IMM(x) \
+  ((RV_X(x, 2, 9) << 22) | (RV_X(x, 11, 1) << 20) | (RV_X(x, 12, 3) << 17) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 17, 1) << 21) | (RV_X(x, 18, 1) << 31))
+#define ENCODE_GPTYPE_LD_IMM(x) \
+  ((RV_X(x, 3, 8) << 23) | (RV_X(x, 11, 1) << 20) | (RV_X(x, 12, 3) << 17) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 17, 2) << 21) | (RV_X(x, 19, 1) << 31))
+#define ENCODE_GPTYPE_SB_IMM(x) \
+  ((RV_X(x, 0, 1) << 14) | (RV_X(x, 1, 4) << 8) | (RV_X(x, 5, 6) << 25) | (RV_X(x, 11, 1) << 7) | (RV_X(x, 12, 3) << 17) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 17, 1) << 31))
+#define ENCODE_GPTYPE_SH_IMM(x) \
+  ((RV_X(x, 1, 4) << 8) | (RV_X(x, 5, 6) << 25) | (RV_X(x, 11, 1) << 7) | (RV_X(x, 12, 3) << 17) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 17, 1) << 31))
+#define ENCODE_GPTYPE_SW_IMM(x) \
+  ((RV_X(x, 2, 3) << 9) | (RV_X(x, 5, 6) << 25) | (RV_X(x, 11, 1) << 7) | (RV_X(x, 12, 3) << 17) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 17, 1) << 8) | (RV_X(x, 18, 1) << 31))
+#define ENCODE_GPTYPE_SD_IMM(x) \
+  ((RV_X(x, 3, 2) << 10) | (RV_X(x, 5, 6) << 25) | (RV_X(x, 11, 1) << 7) | (RV_X(x, 12, 3) << 17) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 17, 2) << 8) | (RV_X(x, 19, 1) << 31))
+#define ENCODE_RVC_EX9IT_IMM(x) \
+  ((RV_X(x, 2, 1) << 4) | (RV_X(x, 3, 2) << 10) | (RV_X(x, 5, 1) << 2) | (RV_X(x, 6, 2) << 5) | (RV_X(x, 8, 1) << 9) | (RV_X(x, 9, 1) << 3) | (RV_X(x, 10, 1) << 12))
+#define ENCODE_RVC_EXECIT_IMM(x) \
+  ((RV_X(x, 2, 1) << 4) | (RV_X(x, 3, 2) << 10) | (RV_X(x, 5, 1) << 2) | (RV_X(x, 6, 2) << 5) | (RV_X(x, 8, 1) << 9) | (RV_X(x, 9, 1) << 3) | (RV_X(x, 10, 1) << 12) | (RV_X(x, 11, 1) << 8))
+
+#define VALID_STYPE_IMM10(x) (EXTRACT_STYPE_IMM10(ENCODE_STYPE_IMM10(x)) == (x))
+#define VALID_RVC_LUI_IMM(x) (EXTRACT_CITYPE_IMM(ENCODE_CITYPE_IMM(x)) == (x))
+#define VALID_GPTYPE_LB_IMM(x) (EXTRACT_GPTYPE_LB_IMM(ENCODE_GPTYPE_LB_IMM(x)) == (x))
+#define VALID_GPTYPE_LH_IMM(x) (EXTRACT_GPTYPE_LH_IMM(ENCODE_GPTYPE_LH_IMM(x)) == (x))
+#define VALID_GPTYPE_LW_IMM(x) (EXTRACT_GPTYPE_LW_IMM(ENCODE_GPTYPE_LW_IMM(x)) == (x))
+#define VALID_GPTYPE_LD_IMM(x) (EXTRACT_GPTYPE_LD_IMM(ENCODE_GPTYPE_LD_IMM(x)) == (x))
+#define VALID_GPTYPE_SB_IMM(x) (EXTRACT_GPTYPE_SB_IMM(ENCODE_GPTYPE_SB_IMM(x)) == (x))
+#define VALID_GPTYPE_SH_IMM(x) (EXTRACT_GPTYPE_SH_IMM(ENCODE_GPTYPE_SH_IMM(x)) == (x))
+#define VALID_GPTYPE_SW_IMM(x) (EXTRACT_GPTYPE_SW_IMM(ENCODE_GPTYPE_SW_IMM(x)) == (x))
+#define VALID_GPTYPE_SD_IMM(x) (EXTRACT_GPTYPE_SD_IMM(ENCODE_GPTYPE_SD_IMM(x)) == (x))
+#define VALID_RVC_EX9IT_IMM(x) (EXTRACT_RVC_EX9IT_IMM(ENCODE_RVC_EX9IT_IMM(x)) == (x))
+#define VALID_RVC_EXECIT_IMM(x) (EXTRACT_RVC_EXECIT_IMM(ENCODE_RVC_EXECIT_IMM(x)) == (x))
+
+#define RISCV_IMM10_BITS 10
+#define RISCV_IMM10_REACH (1LL << RISCV_IMM10_BITS)
+#define RISCV_10_PCREL_REACH (RISCV_IMM10_REACH * RISCV_BRANCH_ALIGN)
+#define RISCV_IMM18_BITS 18
+#define RISCV_IMM18_REACH (1LL << RISCV_IMM18_BITS)
+#define RISCV_IMM19_BITS 19
+#define RISCV_IMM19_REACH (1LL << RISCV_IMM19_BITS)
+#define RISCV_IMM20_BITS 20
+#define RISCV_IMM20_REACH (1LL << RISCV_IMM20_BITS)
+#define RISCV_IMM7_BITS 7
+#define RISCV_IMM7_REACH (1LL << RISCV_IMM7_BITS)
+#define RISCV_IMM8_BITS 8
+#define RISCV_IMM8_REACH (1LL << RISCV_IMM8_BITS)
 /* } Andes  */
 
 #define RISCV_RTYPE(insn, rd, rs1, rs2) \
@@ -435,6 +535,7 @@ enum riscv_insn_class
   INSN_CLASS_SVINVAL,
   /* { Andes  */
   INSN_CLASS_P,
+  INSN_CLASS_XANDES,
   /* } Andes  */
 };
 
@@ -543,6 +644,9 @@ enum
   M_SEXTH,
   M_VMSGE,
   M_VMSGEU,
+  /* { Andes  */
+  M_LA_LO,
+  /* } Andes  */
   M_NUM_MACROS
 };
 

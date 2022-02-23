@@ -67,6 +67,7 @@ enum riscv_csr_class
   CSR_CLASS_V,		/* rvv only */
   /* { Andes  */
   CSR_CLASS_P,
+  CSR_CLASS_XANDES,
   /* } Andes  */
   CSR_CLASS_DEBUG	/* debug CSR */
 };
@@ -216,13 +217,6 @@ riscv_set_default_priv_spec (const char *s)
 	    "privileged elf attributes"), major, minor, revision);
   return 0;
 }
-
-/* { Andes  */
-enum CMODEL_TYPES {
-  CMODEL_DEFAULT,
-  CMODEL_LARGE,
-};
-/* } Andes  */
 
 /* This is the set of options which the .option pseudo-op may modify.  */
 struct riscv_set_options
@@ -946,6 +940,9 @@ riscv_csr_address (const char *csr_name,
     case CSR_CLASS_P:
       result = riscv_subset_supports (&riscv_rps_as, "p");
       break;
+    case CSR_CLASS_XANDES:
+      result = riscv_subset_supports (&riscv_rps_as, "xandes");
+      break;
     /* } Andes  */
     default:
       as_bad (_("internal: bad RISC-V CSR class (0x%x)"), csr_class);
@@ -1140,12 +1137,51 @@ validate_riscv_insn (const struct riscv_opcode *opc, int length)
 		  goto unknown_validate_operand;
 		}
 	      break;
+	    /* { Andes  */
+	    case 'e':
+	      switch (*++oparg)
+		{
+		case 'i':
+		  used_bits |= ENCODE_RVC_EX9IT_IMM (-1U); break;
+		case 't':
+		  used_bits |= ENCODE_RVC_EXECIT_IMM (-1U); break;
+		default:
+		  goto unknown_validate_operand;
+		}
+	      break;
+	    /* } Andes  */
 	    default:
 	      goto unknown_validate_operand;
 	    }
 	  break;  /* end RVC */
 	/* { Andes  */
+	case 'g': used_bits |= ENCODE_STYPE_IMM10 (-1U); break;
+	case 'h': used_bits |= ENCODE_ITYPE_IMM (-1U); break;
+	case 'i': used_bits |= ENCODE_STYPE_IMM7 (-1U); break;
+	case 'k': used_bits |= ENCODE_TYPE_CIMM6 (-1U); break;
 	case 'l': used_bits |= ENCODE_ITYPE_IMM (-1U); break;
+	case 'H':
+	  switch (*++oparg)
+	    {
+	    case 'b': used_bits |= ENCODE_GPTYPE_SB_IMM (-1U); break;
+	    case 'h': used_bits |= ENCODE_GPTYPE_SH_IMM (-1U); break;
+	    case 'w': used_bits |= ENCODE_GPTYPE_SW_IMM (-1U); break;
+	    case 'd': used_bits |= ENCODE_GPTYPE_SD_IMM (-1U); break;
+	    default:
+	      goto unknown_validate_operand;
+	    }
+	  break;
+	case 'G':
+	  switch (*++oparg)
+	    {
+	    case 'b': used_bits |= ENCODE_GPTYPE_LB_IMM (-1U); break;
+	    case 'h': used_bits |= ENCODE_GPTYPE_LH_IMM (-1U); break;
+	    case 'w': used_bits |= ENCODE_GPTYPE_LW_IMM (-1U); break;
+	    case 'd': used_bits |= ENCODE_GPTYPE_LD_IMM (-1U); break;
+	    default:
+	      goto unknown_validate_operand;
+	    }
+	  break;
 	case 'N': /* Andes extensions: RVP  */
 	  switch (*++oparg)
 	    {
@@ -1396,6 +1432,9 @@ append_insn (struct riscv_cl_insn *ip, expressionS *address_expr,
 
       gas_assert (address_expr);
       if (reloc_type == BFD_RELOC_12_PCREL
+          /* { Andes  */
+	  || reloc_type == BFD_RELOC_RISCV_10_PCREL
+	  /* } Andes  */
 	  || reloc_type == BFD_RELOC_RISCV_JMP)
 	{
 	  int j = reloc_type == BFD_RELOC_RISCV_JMP;
@@ -2668,7 +2707,29 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 			goto unknown_riscv_ip_operand;
 		    }
 		  break;
-
+		/* { Andes  */
+		case 'e': /* exec.it imm  */
+		  switch (*++oparg)
+		    {
+		    case 'i':
+		      if (my_getSmallExpression (imm_expr, imm_reloc, asarg, p)
+			  || imm_expr->X_op != O_constant
+			  || !VALID_RVC_EX9IT_IMM (imm_expr->X_add_number << 2))
+			break;
+		      ip->insn_opcode |= ENCODE_RVC_EX9IT_IMM (imm_expr->X_add_number << 2);
+		      goto rvc_imm_done;
+		    case 't':
+		      if (my_getSmallExpression (imm_expr, imm_reloc, asarg, p)
+			  || imm_expr->X_op != O_constant
+			  || !VALID_RVC_EXECIT_IMM (imm_expr->X_add_number << 2))
+			break;
+		      ip->insn_opcode |= ENCODE_RVC_EXECIT_IMM (imm_expr->X_add_number << 2);
+		      goto rvc_imm_done;
+		    default:
+		      goto unknown_riscv_ip_operand;
+		    }
+		  break;
+		/* } Andes  */
 		default:
 		  goto unknown_riscv_ip_operand;
 		}
@@ -3231,6 +3292,41 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 	      continue;
 
 	    /* { Andes  */
+	    case 'g': /* 10bits PC-relative offset.  */
+	      *imm_reloc = BFD_RELOC_RISCV_10_PCREL;
+	      my_getExpression (imm_expr, asarg);
+	      asarg = expr_end;
+	      continue;
+	    case 'h': /* Upper unsigned 6-bit immediate.  */
+	      my_getExpression (imm_expr, asarg);
+	      if (imm_expr->X_op != O_constant
+		  || imm_expr->X_add_number >= xlen
+		  || imm_expr->X_add_number < 0)
+		break;
+	      asarg = expr_end;
+	      ip->insn_opcode |= ENCODE_SBTYPE_IMM6H (imm_expr->X_add_number);
+	      imm_expr->X_op = O_absent;
+	      continue;
+	    case 'i': /* Signed 7-bit immediate in [31:25].  */
+	      my_getExpression (imm_expr, asarg);
+	      if (imm_expr->X_op != O_constant
+		  || imm_expr->X_add_number >= (signed) RISCV_IMM7_REACH
+		  || imm_expr->X_add_number < 0)
+		break;
+	      ip->insn_opcode |= ENCODE_STYPE_IMM7 (imm_expr->X_add_number);
+	      asarg = expr_end;
+	      imm_expr->X_op = O_absent;
+	      continue;
+	    case 'k': /* Cimm unsigned 6-bit immediate.  */
+	      my_getExpression (imm_expr, asarg);
+	      if (imm_expr->X_op != O_constant
+		  || imm_expr->X_add_number >= xlen
+		  || imm_expr->X_add_number < 0)
+		break;
+	      asarg = expr_end;
+	      ip->insn_opcode |= ENCODE_TYPE_CIMM6 (imm_expr->X_add_number);
+	      imm_expr->X_op = O_absent;
+	      continue;
 	    case 'l': /* Lower unsigned 6-bit immediate.  */
 	      my_getExpression (imm_expr, asarg);
 	      if (imm_expr->X_op != O_constant
@@ -3241,6 +3337,116 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 	      asarg = expr_end;
 	      imm_expr->X_op = O_absent;
 	      continue;
+	    case 'H':
+	    case 'G':
+	      {
+		bfd_boolean store = FALSE;
+		if (*oparg == 'H')
+		  store = TRUE;
+
+		my_getExpression (imm_expr, asarg);
+		switch (*++oparg)
+		  {
+		  case 'b':
+		    if (imm_expr->X_op == O_constant
+			&& imm_expr->X_add_number < (signed) RISCV_IMM18_REACH/2
+			&& imm_expr->X_add_number >= -(signed) RISCV_IMM18_REACH/2)
+		      {
+			if (store)
+			  ip->insn_opcode |= ENCODE_GPTYPE_SB_IMM (imm_expr->X_add_number);
+			else
+			  ip->insn_opcode |= ENCODE_GPTYPE_LB_IMM (imm_expr->X_add_number);
+			asarg = expr_end;
+			continue;
+		      }
+		    else if (imm_expr->X_op == O_symbol)
+		      {
+			if (store)
+			  *imm_reloc = BFD_RELOC_RISCV_SGP18S0;
+			else
+			  *imm_reloc = BFD_RELOC_RISCV_LGP18S0;
+			asarg = expr_end;
+			continue;
+		      }
+		    break;
+
+		  case 'h':
+		    if (imm_expr->X_op == O_constant
+			&& imm_expr->X_add_number < (signed) RISCV_IMM18_REACH/2
+			&& imm_expr->X_add_number >= -(signed) RISCV_IMM18_REACH/2
+			&& (imm_expr->X_add_number & 0x1) == 0)
+		      {
+			if (store)
+			  ip->insn_opcode |= ENCODE_GPTYPE_SH_IMM (imm_expr->X_add_number);
+			else
+			  ip->insn_opcode |= ENCODE_GPTYPE_LH_IMM (imm_expr->X_add_number);
+			asarg = expr_end;
+			continue;
+		      }
+		    else if (imm_expr->X_op == O_symbol)
+		      {
+			if (store)
+			  *imm_reloc = BFD_RELOC_RISCV_SGP17S1;
+			else
+			  *imm_reloc = BFD_RELOC_RISCV_LGP17S1;
+			asarg = expr_end;
+			continue;
+		      }
+		    break;
+
+		  case 'w':
+		    if (imm_expr->X_op == O_constant
+			&& imm_expr->X_add_number < (signed) RISCV_IMM19_REACH/2
+			&& imm_expr->X_add_number >= -(signed) RISCV_IMM19_REACH/2
+			&& (imm_expr->X_add_number & 0x3) == 0)
+		      {
+			if (store)
+			  ip->insn_opcode |= ENCODE_GPTYPE_SW_IMM (imm_expr->X_add_number);
+			else
+			  ip->insn_opcode |= ENCODE_GPTYPE_LW_IMM (imm_expr->X_add_number);
+			asarg = expr_end;
+			continue;
+		      }
+		    else if (imm_expr->X_op == O_symbol)
+		      {
+			if (store)
+			  *imm_reloc = BFD_RELOC_RISCV_SGP17S2;
+			else
+			  *imm_reloc = BFD_RELOC_RISCV_LGP17S2;
+			asarg = expr_end;
+			continue;
+		      }
+		    break;
+
+		  case 'd':
+		    if (imm_expr->X_op == O_constant
+			&& imm_expr->X_add_number < (signed) RISCV_IMM20_REACH/2
+			&& imm_expr->X_add_number >= -(signed) RISCV_IMM20_REACH/2
+			&& (imm_expr->X_add_number & 0x7) == 0)
+		      {
+			if (store)
+			  ip->insn_opcode |= ENCODE_GPTYPE_SD_IMM (imm_expr->X_add_number);
+			else
+			  ip->insn_opcode |= ENCODE_GPTYPE_LD_IMM (imm_expr->X_add_number);
+			asarg = expr_end;
+			continue;
+		      }
+		    else if (imm_expr->X_op == O_symbol)
+		      {
+			if (store)
+			  *imm_reloc = BFD_RELOC_RISCV_SGP17S3;
+			else
+			  *imm_reloc = BFD_RELOC_RISCV_LGP17S3;
+			asarg = expr_end;
+			continue;
+		      }
+		    break;
+
+		  default:
+		    goto unknown_riscv_ip_operand;
+		  }
+		break;
+	      }
 	    case 'N': /* Andes extensions: RVP  */
 	      ++oparg;
 	      if ((*oparg == 'c') /* rc */
