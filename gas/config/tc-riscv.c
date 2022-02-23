@@ -3397,7 +3397,6 @@ rvc_imm_done:
 		    case 'i':
 		      if (my_getSmallExpression (imm_expr, imm_reloc, s, p)
 			  || imm_expr->X_op != O_constant
-			  || imm_expr->X_add_number == 0
 			  || !VALID_RVC_EX9IT_IMM (imm_expr->X_add_number << 2))
 			break;
 		      ip->insn_opcode |= ENCODE_RVC_EX9IT_IMM (imm_expr->X_add_number << 2);
@@ -3405,7 +3404,6 @@ rvc_imm_done:
 		    case 't':
 		      if (my_getSmallExpression (imm_expr, imm_reloc, s, p)
 			  || imm_expr->X_op != O_constant
-			  || imm_expr->X_add_number == 0
 			  || !VALID_RVC_EXECIT_IMM (imm_expr->X_add_number << 2))
 			break;
 		      ip->insn_opcode |= ENCODE_RVC_EXECIT_IMM (imm_expr->X_add_number << 2);
@@ -3413,6 +3411,7 @@ rvc_imm_done:
 		    default:
 		      break;
 		    }
+		  break;
 		case 'k':
 		  if (riscv_handle_implicit_zero_offset (imm_expr, s))
 		    continue;
