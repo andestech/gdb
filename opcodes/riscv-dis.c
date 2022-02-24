@@ -423,6 +423,10 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 	    }
 	  break;
 
+	case 'f':
+	  print (info->stream, "%d", (int)EXTRACT_STYPE_IMM (l));
+	  break;
+
 	/* { Andes  */
 	case 'g':
 	  info->target = EXTRACT_STYPE_IMM10 (l) + pc;
@@ -785,6 +789,9 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
 	    continue;
 
 	  if (!riscv_multi_subset_supports (&riscv_rps_dis, op->insn_class))
+	    continue;
+
+	  if (!riscv_disassemble_subset_tweak (&riscv_rps_dis, op, word))
 	    continue;
 
 	  /* It's a match.  */

@@ -1223,6 +1223,11 @@ static struct riscv_supported_ext riscv_supported_std_z_ext[] =
   {"zvl16384b",		ISA_SPEC_CLASS_DRAFT,		1, 0,  0 },
   {"zvl32768b",		ISA_SPEC_CLASS_DRAFT,		1, 0,  0 },
   {"zvl65536b",		ISA_SPEC_CLASS_DRAFT,		1, 0,  0 },
+  /* { Zicob */
+  {"zicbom",		ISA_SPEC_CLASS_DRAFT,		1, 0,  0 },
+  {"zicboz",		ISA_SPEC_CLASS_DRAFT,		1, 0,  0 },
+  {"zicbop",		ISA_SPEC_CLASS_DRAFT,		1, 0,  0 },
+  /* } Zicob */
   {NULL, 0, 0, 0, 0}
 };
 
@@ -2422,9 +2427,30 @@ riscv_multi_subset_supports (riscv_parse_subset_t *rps,
 	      || riscv_subset_supports (rps, "zve32f"));
     case INSN_CLASS_SVINVAL:
       return riscv_subset_supports (rps, "svinval");
+    case INSN_CLASS_ZICBOM:
+      return riscv_subset_supports (rps, "zicbom");
+    case INSN_CLASS_ZICBOZ:
+      return riscv_subset_supports (rps, "zicboz");
+    case INSN_CLASS_ZICBOP:
+      return riscv_subset_supports (rps, "zicbop");
     default:
       rps->error_handler
         (_("internal: unreachable INSN_CLASS_*"));
       return false;
+    }
+}
+
+bool
+riscv_disassemble_subset_tweak (riscv_parse_subset_t *rps,
+				const struct riscv_opcode *op,
+				insn_t insn)
+{
+  switch (op->insn_class)
+    {
+    case INSN_CLASS_I:
+      if ((op->match == MATCH_ORI) && (RV_X(insn, 7, 5) == 0))
+	return ! riscv_subset_supports (rps, "zicbop");
+    default:
+      return true;
     }
 }

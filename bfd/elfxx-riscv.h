@@ -104,6 +104,11 @@ riscv_subset_supports (riscv_parse_subset_t *, const char *);
 extern bool
 riscv_multi_subset_supports (riscv_parse_subset_t *, enum riscv_insn_class);
 
+extern bool
+riscv_disassemble_subset_tweak (riscv_parse_subset_t *,
+				const struct riscv_opcode *op,
+				insn_t insn);
+
 extern void
 bfd_elf32_riscv_set_data_segment_info (struct bfd_link_info *, int *);
 extern void
