@@ -1,8 +1,8 @@
   vle4.v        v4, (a0)
 # vle4.v        v8, (s0), v0.t
 
-  vln.v         v4, (a0)
-  vln.v         v8, (s0), v0.t
+#  vln.v         v4, (a0)
+#  vln.v         v8, (s0), v0.t
 
   vfwcvt.f.n.v  v0, v4
   vfwcvt.f.nu.v v1, v5

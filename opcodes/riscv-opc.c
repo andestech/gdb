@@ -1344,8 +1344,6 @@ const struct riscv_opcode riscv_opcodes[] =
 {"vfwcvt.f.bu.v", 0, INSN_CLASS_XANDES, "Vd,VtVm", MATCH_VFWCVT_F_BU_V, MASK_VFWCVT_F_BU_V, match_opcode, 0},
 {"vfpmadt.vf", 0, INSN_CLASS_XANDES, "Vd,S,VtVm", MATCH_VFPMADT_VF, MASK_VFPMADT_VF, match_opcode, 0},
 {"vfpmadb.vf", 0, INSN_CLASS_XANDES, "Vd,S,VtVm", MATCH_VFPMADB_VF, MASK_VFPMADB_VF, match_opcode, 0},
-{"vln.v", 0, INSN_CLASS_XANDES, "Vd,0(s)Vm", MATCH_VLN_V, MASK_VLN_V, match_opcode, INSN_DREF | INSN_ALIAS},
-{"vlnu.v", 0, INSN_CLASS_XANDES, "Vd,0(s)Vm", MATCH_VLNU_V, MASK_VLNU_V, match_opcode, INSN_DREF},
 {"vln8.v", 0, INSN_CLASS_XANDES, "Vd,0(s)Vm", MATCH_VLN8_V, MASK_VLN8_V, match_opcode, INSN_DREF},
 {"vlnu8.v", 0, INSN_CLASS_XANDES, "Vd,0(s)Vm", MATCH_VLNU8_V, MASK_VLNU8_V, match_opcode, INSN_DREF},
 /* } Andes  */
