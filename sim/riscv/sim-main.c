@@ -8958,9 +8958,9 @@ execute_b (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op,
       rs1u = 0;
       for (int i = 0; i < xlen; i = i + 8)
 	{
-	  rs1u_64 |= (cpu->regs[rs1].u >> i & 0xff);
+	  rs1u |= (cpu->regs[rs1].u >> i & 0xff);
 	  if (i + 8 < xlen)
-	    rs1u_64 <<= 8;
+	    rs1u <<= 8;
 	}
       store_rd (cpu, rd, rs1u);
       break;
