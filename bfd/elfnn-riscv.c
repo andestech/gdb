@@ -39,7 +39,10 @@
 #endif
 
 /* Internal relocations used exclusively by the relaxation pass.  */
+/* bug!
+ELFNN_R_TYPE (R_RISCV_DELETE) != R_RISCV_DELETE for 32-bit toolchains
 #define R_RISCV_DELETE (R_RISCV_max + 1)
+*/
 
 #define ARCH_SIZE NN
 
@@ -114,6 +117,7 @@ elfNN_riscv_mkobject (bfd *abfd)
 #include "elf/common.h"
 #include "elf/internal.h"
 
+#if 0 /* moved to elfxx-riscv.h  */
 struct riscv_elf_link_hash_table
 {
   struct elf_link_hash_table elf;
@@ -138,6 +142,7 @@ struct riscv_elf_link_hash_table
   /* Relocations for variant CC symbols may be present.  */
   int variant_cc;
 };
+#endif
 
 /* Instruction access functions. */
 #define riscv_get_insn(bits, ptr)		\
@@ -1732,6 +1737,56 @@ perform_relocation (const reloc_howto_type *howto,
     case R_RISCV_DELETE:
       return bfd_reloc_ok;
 
+    /* { Andes  */
+    case R_RISCV_LGP18S0:
+      if (!VALID_GPTYPE_LB_IMM (value))
+	return bfd_reloc_overflow;
+      value = ENCODE_GPTYPE_LB_IMM (value);
+      break;
+
+    case R_RISCV_LGP17S1:
+      if (!VALID_GPTYPE_LH_IMM (value))
+	return bfd_reloc_overflow;
+      value = ENCODE_GPTYPE_LH_IMM (value);
+      break;
+
+    case R_RISCV_LGP17S2:
+      if (!VALID_GPTYPE_LW_IMM (value))
+	return bfd_reloc_overflow;
+      value = ENCODE_GPTYPE_LW_IMM (value);
+      break;
+
+    case R_RISCV_LGP17S3:
+      if (!VALID_GPTYPE_LD_IMM (value))
+	return bfd_reloc_overflow;
+      value = ENCODE_GPTYPE_LD_IMM (value);
+      break;
+
+    case R_RISCV_SGP18S0:
+      if (!VALID_GPTYPE_SB_IMM (value))
+	return bfd_reloc_overflow;
+      value = ENCODE_GPTYPE_SB_IMM (value);
+      break;
+
+    case R_RISCV_SGP17S1:
+      if (!VALID_GPTYPE_SH_IMM (value))
+	return bfd_reloc_overflow;
+      value = ENCODE_GPTYPE_SH_IMM (value);
+      break;
+
+    case R_RISCV_SGP17S2:
+      if (!VALID_GPTYPE_SW_IMM (value))
+	return bfd_reloc_overflow;
+      value = ENCODE_GPTYPE_SW_IMM (value);
+      break;
+
+    case R_RISCV_SGP17S3:
+      if (!VALID_GPTYPE_SD_IMM (value))
+	return bfd_reloc_overflow;
+      value = ENCODE_GPTYPE_SD_IMM (value);
+      break;
+    /* } Andes  */
+
     default:
       return bfd_reloc_notsupported;
     }
@@ -2770,6 +2825,23 @@ riscv_elf_relocate_section (bfd *output_bfd,
 	    r = bfd_reloc_overflow;
 	  unresolved_reloc = false;
 	  break;
+
+	/* { Andes  */
+	case R_RISCV_LGP18S0:
+	case R_RISCV_LGP17S1:
+	case R_RISCV_LGP17S2:
+	case R_RISCV_LGP17S3:
+	case R_RISCV_SGP18S0:
+	case R_RISCV_SGP17S1:
+	case R_RISCV_SGP17S2:
+	case R_RISCV_SGP17S3:
+	  {
+	    bfd_vma gp = riscv_global_pointer_value (info);
+	    relocation -= gp;	
+	    unresolved_reloc = false;
+	    break;
+	  }
+	/* } Andes  */
 
 	default:
 	  r = bfd_reloc_notsupported;
@@ -3921,6 +3993,19 @@ typedef struct
   riscv_pcgp_lo_reloc *lo;
 } riscv_pcgp_relocs;
 
+/* { Andes  */
+static bool
+_bfd_riscv_relax_lui_gp_insn (bfd *abfd, asection *sec, asection *sym_sec,
+			      struct bfd_link_info *link_info,
+			      Elf_Internal_Rela *rel,
+			      bfd_vma symval,
+			      bfd_vma max_alignment,
+			      bfd_vma reserve_size,
+			      bool *again ATTRIBUTE_UNUSED,
+			      riscv_pcgp_relocs *pcgp_relocs ATTRIBUTE_UNUSED,
+			      bool undefined_weak ATTRIBUTE_UNUSED);
+/* } Andes  */
+
 /* Initialize the pcgp reloc info in P.  */
 
 static bool
@@ -4676,9 +4761,29 @@ bfd_elfNN_riscv_set_data_segment_info (struct bfd_link_info *info,
 
 /* Relax a section.
 
-   Pass 0: Shortens code sequences for LUI/CALL/TPREL/PCREL relocs.
-   Pass 1: Deletes the bytes that PCREL relaxation in pass 0 made obsolete.
-   Pass 2: Which cannot be disabled, handles code alignment directives.  */
+   Lazy initializations: option handling (relax/exec.it), internal stuff.
+   Pass gp1: GP instruction relaxation: low part
+   Pass gp2:                          : high part
+   Pass 0:   Shortens code sequences for LUI/CALL/TPREL/PCREL relocs.
+   Pass 1:   Deletes the bytes that PCREL relaxation in pass 0 made obsolete.
+   Pass ex1: Exec.it #1 collection
+   Pass ex2:         #2 replacement
+   Pass 2:   Which cannot be disabled, handles code alignment directives.
+   Pass res: Reslove special relocations (exec.it)
+   Pass red: Reduce .exec.itable section iff secure
+*/
+
+enum relax_pass {
+  PASS_ANDES_GP_1 = 0,
+  PASS_ANDES_GP_2,
+  PASS_SHORTEN_ORG,
+  PASS_DELETE_ORG,
+  PASS_EXECIT_1,
+  PASS_EXECIT_2,
+  PASS_ALIGN_ORG,
+  PASS_RESLOVE,
+  PASS_REDUCE,
+};
 
 static bool
 _bfd_riscv_relax_section (bfd *abfd, asection *sec,
@@ -4694,18 +4799,42 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
   bfd_vma max_alignment, reserve_size = 0;
   riscv_pcgp_relocs pcgp_relocs;
 
+  /* { Andes  */
+  andes_ld_options_t *andes = &htab->andes;
+  /* initialize stuff here  */
+  static int is_init = 0;
+  if (is_init == 0)
+    {
+      is_init = 1;
+    }
+  /* } Andes  */
+
   *again = false;
 
+  /* if relax disabled  */
   if (bfd_link_relocatable (info)
       || sec->sec_flg0
       || (sec->flags & SEC_RELOC) == 0
       || sec->reloc_count == 0
       || (info->disable_target_specific_optimizations
-	  && info->relax_pass == 0)
+	  && info->relax_pass <= PASS_SHORTEN_ORG)
       /* The exp_seg_relro_adjust is enum phase_enum (0x4),
 	 and defined in ld/ldexp.h.  */
       || *(htab->data_segment_phase) == 4)
     return true;
+
+  /* { Andes  */
+  /* if gp-insn-relax disabled  */
+  if (andes->gp_relative_insn == 0
+      && info->relax_pass <= PASS_ANDES_GP_2)
+    return true;
+
+  /* if execit disabled  */
+  if ((andes->target_optimization & RISCV_RELAX_EXECIT_ON) == 0 &&
+      info->relax_pass >= PASS_EXECIT_1 &&
+      info->relax_pass <= PASS_EXECIT_2)
+    return true;
+  /* } Andes  */
 
   riscv_init_pcgp_relocs (&pcgp_relocs);
 
@@ -4740,7 +4869,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
       bool undefined_weak = false;
 
       relax_func = NULL;
-      if (info->relax_pass == 0)
+      if (info->relax_pass == PASS_SHORTEN_ORG)
 	{
 	  if (type == R_RISCV_CALL
 	      || type == R_RISCV_CALL_PLT)
@@ -4771,9 +4900,28 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	  /* Skip over the R_RISCV_RELAX.  */
 	  i++;
 	}
-      else if (info->relax_pass == 1 && type == R_RISCV_DELETE)
+      else if (((info->relax_pass == PASS_ANDES_GP_1
+		 && (type == R_RISCV_LO12_I
+		     || type == R_RISCV_LO12_S))
+		|| (info->relax_pass == PASS_ANDES_GP_2
+		    && type == R_RISCV_HI20))
+	       && andes->set_relax_lui)
+	{
+	  BFD_ASSERT (andes->gp_relative_insn);
+	  relax_func = _bfd_riscv_relax_lui_gp_insn;
+
+	  /* Only relax this reloc if it is paired with R_RISCV_RELAX.  */
+	  if (i == sec->reloc_count - 1
+	      || ELFNN_R_TYPE ((rel + 1)->r_info) != R_RISCV_RELAX
+	      || rel->r_offset != (rel + 1)->r_offset)
+	    continue;
+
+	  /* Skip over the R_RISCV_RELAX.  */
+	  i++;
+	}
+      else if (info->relax_pass == PASS_DELETE_ORG && type == R_RISCV_DELETE)
 	relax_func = _bfd_riscv_relax_delete;
-      else if (info->relax_pass == 2 && type == R_RISCV_ALIGN)
+      else if (info->relax_pass == PASS_ALIGN_ORG && type == R_RISCV_ALIGN)
 	relax_func = _bfd_riscv_relax_align;
       else
 	continue;
@@ -5237,6 +5385,275 @@ riscv_elf_merge_symbol_attribute (struct elf_link_hash_entry *h,
   if (isym_sto & STO_RISCV_VARIANT_CC)
     h->other |= STO_RISCV_VARIANT_CC;
 }
+
+/* { Andes  */
+/* Return the symbol DATA_START_SYMBOLS value, or 0 if it is not in use.  */
+
+static bfd_vma
+riscv_data_start_value (struct bfd_link_info *info)
+{
+  struct bfd_link_hash_entry *h;
+
+  h = bfd_link_hash_lookup (info->hash, "__DATA_BEGIN__", false, false, true);
+  if (h == NULL || h->type != bfd_link_hash_defined)
+    return 0;
+
+  return h->u.def.value + sec_addr (h->u.def.section);
+}
+
+/* Record the symbol info for relaxing gp in relax_lui.  */
+typedef struct relax_gp_sym_info
+{
+  Elf_Internal_Sym *lsym;
+  struct elf_link_hash_entry *h;
+  asection *sec;
+  struct relax_gp_sym_info *next;
+} relax_gp_sym_info_t;
+
+static relax_gp_sym_info_t *relax_gp_sym_info_head = NULL;
+
+static relax_gp_sym_info_t*
+record_and_find_relax_gp_syms (asection *sec,
+			       Elf_Internal_Sym *lsym,
+			       struct elf_link_hash_entry *h,
+			       int record)
+{
+  struct relax_gp_sym_info *ptr, *pre_ptr;
+  ptr = relax_gp_sym_info_head;
+  pre_ptr = ptr;
+
+  /* Check whether the symbol is recorded.  */
+  while (ptr)
+    {
+      if ((h && h == ptr->h && sec == ptr->sec)
+	  || (lsym && lsym == ptr->lsym && sec == ptr->sec))
+	return ptr;
+      pre_ptr = ptr;
+      ptr = ptr->next;
+    }
+
+  if (!ptr && record)
+    {
+      ptr = bfd_malloc (sizeof (struct relax_gp_sym_info));
+      ptr->sec = sec;
+      ptr->lsym = lsym;
+      ptr->h = h;
+      ptr->next = NULL;
+
+      if (!relax_gp_sym_info_head)
+	relax_gp_sym_info_head = ptr;
+      else
+	pre_ptr->next = ptr;
+    }
+
+  return NULL;
+}
+
+/* Relax non-PIC global variable references to gp relative instructions.  */
+/* Relax pass 1: only low part insns
+   Relax pass 2: only hi part isns.  */
+
+static bool
+_bfd_riscv_relax_lui_gp_insn (bfd *abfd, asection *sec, asection *sym_sec,
+			      struct bfd_link_info *link_info,
+			      Elf_Internal_Rela *rel,
+			      bfd_vma symval,
+			      bfd_vma max_alignment,
+			      bfd_vma reserve_size,
+			      bool *again ATTRIBUTE_UNUSED,
+			      riscv_pcgp_relocs *pcgp_relocs ATTRIBUTE_UNUSED,
+			      bool undefined_weak ATTRIBUTE_UNUSED)
+{
+  bfd_byte *contents = elf_section_data (sec)->this_hdr.contents;
+  bfd_vma gp = riscv_global_pointer_value (link_info);
+  bfd_vma data_start = riscv_data_start_value (link_info);
+  struct riscv_elf_link_hash_table *htab = riscv_elf_hash_table (link_info);
+  andes_ld_options_t *andes = &htab->andes;
+  int gp_relative_insn = andes->gp_relative_insn;
+  Elf_Internal_Shdr *symtab_hdr = &elf_symtab_hdr (abfd);
+  Elf_Internal_Sym *isym = NULL;
+  struct elf_link_hash_entry *h = NULL;
+
+  /* Mergeable symbols and code might later move out of range.  */
+  /* For bug-14274, symbols defined in the .rodata (the sections
+     before .data, may also later move out of range.  */
+  if (sym_sec->flags & (SEC_MERGE | SEC_CODE)
+      || (data_start && sec_addr (sym_sec) < data_start))
+    return true;
+
+  BFD_ASSERT (rel->r_offset + 4 <= sec->size);
+
+  if (gp)
+    {
+      /* If gp and the symbol are in the same output section, then
+	 consider only that section's alignment.  */
+      struct bfd_link_hash_entry *gp_sym =
+	bfd_link_hash_lookup (link_info->hash, RISCV_GP_SYMBOL, false, false,
+			      true);
+      if (gp_sym->u.def.section->output_section == sym_sec->output_section)
+	max_alignment = (bfd_vma) 1 << sym_sec->output_section->alignment_power;
+    }
+
+  /* For the gp relative insns, gp must be set to 4/8 bytes aligned
+     address (Bug-14634).  */
+  int gp_align;
+  if ((ARCH_SIZE == 64))
+    gp_align = 8;
+  else
+    gp_align = 4;
+  if (gp_relative_insn
+      && ((gp % gp_align) != 0))
+    {
+      (*_bfd_error_handler) (_("error: Please set gp to %x-byte aligned address "
+			       "or turn off the gp relative instructions "
+			       "(--mno-gp-insn).\n"), gp_align);
+      return false;
+    }
+
+  /* FIXME: Since we do not have grouping mechanism like v3, we may
+     delete the high part insn that the corresponding low part insn
+     isn't converted to gp relative one. Therefore, we record the
+     symbols referenced by the non-relaxed low part insns in the
+     relax Pass 1 round, and then do not delete the high part insns,
+     which reference these symbols in the relax Pass 2 round.  */
+
+  if (symtab_hdr->sh_info != 0
+      && !symtab_hdr->contents
+      && !(symtab_hdr->contents =
+	   (unsigned char *) bfd_elf_get_elf_syms (abfd, symtab_hdr,
+						   symtab_hdr->sh_info,
+						   0, NULL, NULL, NULL)))
+    return false;
+
+  if (ELFNN_R_SYM (rel->r_info) < symtab_hdr->sh_info)
+    /* A local symbol.  */
+    isym = ((Elf_Internal_Sym *) symtab_hdr->contents
+	    + ELFNN_R_SYM (rel->r_info));
+  else
+    {
+      /* A global symbol.  */
+      unsigned long indx;
+      indx = ELFNN_R_SYM (rel->r_info) - symtab_hdr->sh_info;
+      h = elf_sym_hashes (abfd)[indx];
+
+      while (h->root.type == bfd_link_hash_indirect
+	     || h->root.type == bfd_link_hash_warning)
+	h = (struct elf_link_hash_entry *) h->root.u.i.link;
+    }
+
+  /* Enable nds v5 gp relative insns.  */
+  int do_replace = 0;
+  uint32_t insn = bfd_get_32 (abfd, contents + rel->r_offset);
+  /* For Bug-16488, check if gp-relative offset is in range.  */
+  if ((symval >= gp
+       && (symval - gp + max_alignment + reserve_size) < 0x20000)
+      || (symval < gp
+	  && (gp - symval + max_alignment + reserve_size) <= 0x20000))
+    {
+      do_replace = 1;
+      unsigned sym = ELFNN_R_SYM (rel->r_info);
+      if (ELFNN_R_TYPE (rel->r_info) == R_RISCV_HI20
+	  && !record_and_find_relax_gp_syms (sym_sec, isym, h, 0))
+	{
+	  /* The HI20 can be deleted safely.  */
+	  rel->r_info = ELFNN_R_INFO (0, R_RISCV_DELETE);
+	  rel->r_addend = 4;
+	  return true;
+	}
+      else
+	{
+	  /* For Bug-16488, we don not need to consider max_alignment and
+	     reserve_size here, since they may cause the alignment checking
+	     fail.  */
+	  if ((insn & MASK_ADDI) == MATCH_ADDI
+	      && VALID_GPTYPE_LB_IMM (symval - gp))
+	    {
+	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP18S0);
+	      insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_ADDIGP;
+	    }
+	  else if ((insn & MASK_LB) == MATCH_LB
+		   && VALID_GPTYPE_LB_IMM (symval - gp))
+	    {
+	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP18S0);
+	      insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LBGP;
+	    }
+	  else if ((insn & MASK_LBU) == MATCH_LBU
+		   && VALID_GPTYPE_LB_IMM (symval - gp))
+	    {
+	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP18S0);
+	      insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LBUGP;
+	    }
+	  else if ((insn & MASK_LH) == MATCH_LH
+		   && VALID_GPTYPE_LH_IMM (symval - gp))
+	    {
+	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S1);
+	      insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LHGP;
+	    }
+	  else if ((insn & MASK_LHU) == MATCH_LHU
+		   && VALID_GPTYPE_LH_IMM (symval - gp))
+	    {
+	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S1);
+	      insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LHUGP;
+	    }
+	  else if ((insn & MASK_LW) == MATCH_LW
+		   && VALID_GPTYPE_LW_IMM (symval - gp))
+	    {
+	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S2);
+	      insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LWGP;
+	    }
+	  else if ((insn & MASK_LWU) == MATCH_LWU
+		   && VALID_GPTYPE_LW_IMM (symval - gp))
+	    {
+	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S2);
+	      insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LWUGP;
+	    }
+	  else if ((insn & MASK_LD) == MATCH_LD
+		   && VALID_GPTYPE_LD_IMM (symval - gp))
+	    {
+	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S3);
+	      insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LDGP;
+	    }
+	  else if ((insn & MASK_SB) == MATCH_SB
+		   && VALID_GPTYPE_SB_IMM (symval - gp))
+	    {
+	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_SGP18S0);
+	      insn = (insn & (OP_MASK_RS2 << OP_SH_RS2)) | MATCH_SBGP;
+	    }
+	  else if ((insn & MASK_SH) == MATCH_SH
+		   && VALID_GPTYPE_SH_IMM (symval - gp))
+	    {
+	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_SGP17S1);
+	      insn = (insn & (OP_MASK_RS2 << OP_SH_RS2)) | MATCH_SHGP;
+	    }
+	  else if ((insn & MASK_SW) == MATCH_SW
+		   && VALID_GPTYPE_SW_IMM (symval - gp))
+	    {
+	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_SGP17S2);
+	      insn = (insn & (OP_MASK_RS2 << OP_SH_RS2)) | MATCH_SWGP;
+	    }
+	  else if ((insn & MASK_SD) == MATCH_SD
+		   && VALID_GPTYPE_SD_IMM (symval - gp))
+	    {
+	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_SGP17S3);
+	      insn = (insn & (OP_MASK_RS2 << OP_SH_RS2)) | MATCH_SDGP;
+	    }
+	  else
+	    do_replace = 0;
+	}
+
+      if (do_replace)
+	bfd_put_32 (abfd, insn, contents + rel->r_offset);
+      else
+	/* The low insn can not be relaxed to v5 gp-relative insn.
+	   Record the referenced symbol.  */
+	record_and_find_relax_gp_syms (sym_sec, isym, h, 1);
+    }
+
+  /* Do not relax lui to c.lui here since the dangerous delete
+     behavior.  */
+  return true;
+}
+/* } Andes  */
 
 #define TARGET_LITTLE_SYM			riscv_elfNN_vec
 #define TARGET_LITTLE_NAME			"elfNN-littleriscv"

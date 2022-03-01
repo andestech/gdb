@@ -66,7 +66,7 @@ riscv_elf_before_allocation (void)
 	ENABLE_RELAXATION;
     }
 
-  link_info.relax_pass = 3;
+  link_info.relax_pass = 9;
 }
 
 static void
@@ -134,6 +134,8 @@ riscv_create_output_section_statements (void)
 	       " whilst linking %s binaries\n"), "RISC-V");
       return;
     }
+
+  riscv_elf_set_target_option (&link_info);
 }
 
 EOF
