@@ -49,6 +49,20 @@ static andes_ld_options_t andes =
 };
 /* } Andes  */
 
+/* { Andes  */
+static void
+riscv_elf_set_target_option (struct bfd_link_info *info)
+{
+  struct riscv_elf_link_hash_table *htab;
+
+  htab = riscv_elf_hash_table (info);
+  if (htab == NULL)
+    return;
+
+  htab->andes = andes;
+}
+/* { Andes  */
+
 static void
 riscv_elf_before_allocation (void)
 {
@@ -120,6 +134,8 @@ riscv_create_output_section_statements (void)
 	       " whilst linking %s binaries\n"), "RISC-V");
       return;
     }
+
+  riscv_elf_set_target_option (&link_info);
 }
 
 EOF
