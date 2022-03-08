@@ -1,6 +1,25 @@
 dnl Process this file with autoconf to produce a configure script.
+AC_PREREQ(2.64)dnl
 AC_INIT(Makefile.in)
 AC_CONFIG_MACRO_DIRS([../m4 ../.. ../../config])
+sinclude(../common/acinclude.m4)
+
+SIM_AC_COMMON
+
+SIM_AC_OPTION_ENDIAN(LITTLE)
+SIM_AC_OPTION_ALIGNMENT(NONSTRICT_ALIGNMENT)
+SIM_AC_OPTION_HOSTENDIAN
+SIM_AC_OPTION_ENVIRONMENT
+SIM_AC_OPTION_INLINE
+SIM_AC_OPTION_WARNINGS
+
+# Select the default model for the target.
+riscv_model=
+case "${target}" in
+riscv32*) riscv_model="RV32G" ;;
+riscv*) riscv_model="RV64G" ;;
+esac
+SIM_AC_OPTION_DEFAULT_MODEL(${riscv_model})
 
 # Select the bitsize of the target.
 riscv_addr_bitsize=
