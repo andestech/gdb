@@ -113,3 +113,77 @@ extern void
 bfd_elf32_riscv_set_data_segment_info (struct bfd_link_info *, int *);
 extern void
 bfd_elf64_riscv_set_data_segment_info (struct bfd_link_info *, int *);
+
+/* { Andes  */
+/* Get the RISC-V ELF linker hash table from a link_info structure.  */
+#define riscv_elf_hash_table(p) \
+  ((is_elf_hash_table ((p)->hash)					\
+    && elf_hash_table_id (elf_hash_table (p)) == RISCV_ELF_DATA)	\
+   ? (struct riscv_elf_link_hash_table *) (p)->hash : NULL)
+
+#include "hashtab.h"
+typedef struct andes_ld_options
+{
+  /* Export global symbols into linker script.  */
+  FILE *sym_ld_script;
+  /* Defalut do relax align.  */
+  int set_relax_align;
+  /* Defalut do target aligned.  */
+  int target_aligned;
+  /* Support gp relative insn relaxation.  */
+  int gp_relative_insn;
+  /* Default avoid BTB miss.  */
+  int avoid_btb_miss;
+  /* Defalut do relax lui.  */
+  int set_relax_lui;
+  /* Defalut do relax pc.  */
+  int set_relax_pc;
+  /* Defalut do relax call.  */
+  int set_relax_call;
+  /* Defalut do relax tls le.  */
+  int set_relax_tls_le;
+  /* Defalut do relax cross section call.  */
+  int set_relax_cross_section_call;
+  /* Defalut do workaround.  */
+  int set_workaround;
+  /* exec.it options  */
+  int target_optimization;
+} andes_ld_options_t;
+
+struct riscv_elf_link_hash_table
+{
+  struct elf_link_hash_table elf;
+
+  /* Short-cuts to get to dynamic linker sections.  */
+  asection *sdyntdata;
+
+  /* The max alignment of output sections.  */
+  bfd_vma max_alignment;
+
+  /* Used by local STT_GNU_IFUNC symbols.  */
+  htab_t loc_hash_table;
+  void * loc_hash_memory;
+
+  /* The index of the last unused .rel.iplt slot.  */
+  bfd_vma last_iplt_index;
+
+  /* The data segment phase, don't relax the section
+     when it is exp_seg_relro_adjust.  */
+  int *data_segment_phase;
+
+  /* Relocations for variant CC symbols may be present.  */
+  int variant_cc;
+
+  /* { Andes  */
+  andes_ld_options_t andes;
+  /* } Andes  */
+};
+
+/* EXECIT extention.  */
+
+/* Optimization turn on mask.  */
+#define RISCV_RELAX_EXECIT_ON	(1 << 0)
+
+/* Optimization status mask.  */
+#define RISCV_RELAX_EXECIT_DONE	(1 << 1)
+/* } Andes  */
