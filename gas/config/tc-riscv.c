@@ -87,6 +87,7 @@ enum riscv_csr_class
   CSR_CLASS_P,
   CSR_CLASS_XANDES,
   /* } Andes  */
+  CSR_CLASS_ZCMT,	/* zcmt only */
   CSR_CLASS_DEBUG	/* debug CSR */
 };
 
@@ -1298,6 +1299,10 @@ riscv_csr_address (const char *csr_name,
       result = riscv_subset_supports (&riscv_rps_as, "xandes");
       break;
     /* } Andes  */
+    case CSR_CLASS_ZCMT:
+      result = riscv_subset_supports (&riscv_rps_as, "zcmt");
+      need_check_version = false;
+      break;
     default:
       as_bad (_("internal: bad RISC-V CSR class (0x%x)"), csr_class);
     }
