@@ -38,6 +38,7 @@
 #include "opcode/riscv.h"
 
 #include "gdb/sim-riscv.h"
+#include "target-newlib-syscall.h"
 
 #define TRACE_REG(cpu, reg) \
   TRACE_REGISTER (cpu, "wrote %s = %#" PRIxTW, riscv_gpr_names_abi[reg], \
@@ -1837,7 +1838,7 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	{
 	  switch (sys_id)
 	    {
-	    case TARGET_SYS_link:
+	    case TARGET_NEWLIB_RISCV_SYS_link:
 	      {
 		char oldpath[1024], newpath[1024];
 		cb_get_string (cb, &sc, oldpath, sizeof (oldpath), sc.arg1);
@@ -1845,7 +1846,7 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 		cpu->a0 = link (oldpath, newpath);
 		break;
 	      }
-	    case TARGET_SYS_brk:
+	    case TARGET_NEWLIB_RISCV_SYS_brk:
 	      {
 		/* FIXME: Check the invalid access.  */
 		if (cpu->a0 == 0)
@@ -1859,7 +1860,7 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 		  }
 		break;
 	      }
-	    case TARGET_SYS_gettimeofday:
+	    case TARGET_NEWLIB_RISCV_SYS_gettimeofday:
 	      {
 		int rv;
 		struct timeval tv;

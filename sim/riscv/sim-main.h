@@ -30,51 +30,6 @@ typedef uint64_t unsigned64;
 typedef int32_t signed32;
 typedef uint32_t unsigned32;
 
-/* The values are from ./build/sim/riscv/targ-vals.h.  (generated from older-binutils gentmap.c /sim/common/nltvals.def) */
-/* syscall values */
-#define TARGET_SYS_access 1033
-#define TARGET_SYS_brk 214
-#define TARGET_SYS_chdir 49
-#define TARGET_SYS_close 57
-#define TARGET_SYS_dup 23
-#define TARGET_SYS_exit 93
-#define TARGET_SYS_exit_group 94
-#define TARGET_SYS_faccessat 48
-#define TARGET_SYS_fcntl 25
-#define TARGET_SYS_fstat 80
-#define TARGET_SYS_fstatat 79
-#define TARGET_SYS_getcwd 17
-#define TARGET_SYS_getdents 61
-#define TARGET_SYS_getegid 177
-#define TARGET_SYS_geteuid 175
-#define TARGET_SYS_getgid 176
-#define TARGET_SYS_getmainvars 2011
-#define TARGET_SYS_getpid 172
-#define TARGET_SYS_gettimeofday 169
-#define TARGET_SYS_getuid 174
-#define TARGET_SYS_kill 129
-#define TARGET_SYS_link 1025
-#define TARGET_SYS_lseek 62
-#define TARGET_SYS_lstat 1039
-#define TARGET_SYS_mkdir 1030
-#define TARGET_SYS_mmap 222
-#define TARGET_SYS_mremap 216
-#define TARGET_SYS_munmap 215
-#define TARGET_SYS_open 1024
-#define TARGET_SYS_openat 56
-#define TARGET_SYS_pread 67
-#define TARGET_SYS_pwrite 68
-#define TARGET_SYS_read 63
-#define TARGET_SYS_rt_sigaction 134
-#define TARGET_SYS_stat 1038
-#define TARGET_SYS_time 1062
-#define TARGET_SYS_times 153
-#define TARGET_SYS_uname 160
-#define TARGET_SYS_unlink 1026
-#define TARGET_SYS_write 64
-#define TARGET_SYS_writev 66
-#define TARGET_SYS_rename 1034
-
 typedef union FRegisterValue
 {
   uint64_t     v[2];
