@@ -470,3 +470,6 @@ typedef struct andes_linker_state
   int check_start_export_sym : 1;
 } andes_linker_state_t;
 /* } Andes  */
+
+extern int
+riscv_get_base_spimm (insn_t, riscv_parse_subset_t *);
