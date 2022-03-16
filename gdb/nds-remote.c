@@ -45,6 +45,7 @@
 #ifndef __MINGW32__
 #include "nds-elf.h"
 #endif
+#include "opcode/riscv.h"
 
 void nds_init_remote_cmds (void);
 
@@ -433,6 +434,26 @@ nds_query_target_command (const char *args, int from_tty)
   /* Prepend anything target return to prompt.  */
   xsnprintf (buf, sizeof (buf), "%s(gdb) ", nds_remote_info.cpuid);
   set_prompt (buf);
+}
+
+/* for IDE query next-pc to set breakpoint and continue */
+CORE_ADDR nds_next_pc_addr = 0x1234;
+static void
+nds_query_next_pc_command (const char *args, int from_tty)
+{
+  fprintf_unfiltered (gdb_stdlog, "next_pc: 0x%08lx\r\n", nds_next_pc_addr);
+}
+
+int nds_get_insn_length (CORE_ADDR addr)
+{
+  gdb_byte buf[1];
+  int instlen = 0;
+
+  target_read_code (addr, buf, 1);
+
+  /* If we need more, grab it now.  */
+  instlen = riscv_insn_length (buf[0]);
+  return instlen;
 }
 
 #ifndef __MINGW32__
@@ -922,6 +943,8 @@ nds_init_remote_cmds (void)
 	   _("Query perf-meter results."), &nds_query_cmdlist);
   add_cmd ("target", no_class, nds_query_target_command,
 	   _("Query target information."), &nds_query_cmdlist);
+  add_cmd ("next-stop-pc", no_class, nds_query_next_pc_command,
+	   _("Query next-pc addr."), &nds_query_cmdlist);
 
   /* nds reset (profiling|perf-meter)  */
   add_prefix_cmd ("reset", no_class, nds_reset_command,

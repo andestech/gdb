@@ -68,6 +68,10 @@
 #include "common/gdb_optional.h"
 #include "arch-utils.h"
 
+/* define in nds-remote.c for IDE query */
+int nds_next_pc_was_set = 0;
+extern CORE_ADDR nds_next_pc_addr;
+extern int nds_get_insn_length (CORE_ADDR addr);
 /* Prototypes for local functions */
 
 static void sig_print_info (enum gdb_signal);
@@ -2871,6 +2875,30 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 
   pc = regcache_read_pc (regcache);
   thread_info *cur_thr = inferior_thread ();
+
+  if (nds_next_pc_was_set) {  // from finish_forward()
+    nds_next_pc_was_set = 0;
+    if (debug_infrun)
+      fprintf_unfiltered (gdb_stdlog, "proceed: nds_next_pc_addr=0x%lx was set (finish_forward) ", nds_next_pc_addr);
+  }
+  else {
+    struct symtab_and_line stop_pc_sal;
+    stop_pc_sal = find_pc_line (pc, 0);
+
+    if (stop_pc_sal.symtab != NULL) {
+      nds_next_pc_addr = stop_pc_sal.end;
+      if (debug_infrun)
+        fprintf_unfiltered (gdb_stdlog, "proceed: stepping inside range [0x%lx-0x%lx], nds_next_pc_addr=0x%lx \n",
+           stop_pc_sal.pc,  stop_pc_sal.end, nds_next_pc_addr);
+    }
+    else {
+      nds_next_pc_addr = pc;
+      int insn_length = nds_get_insn_length (pc);
+      nds_next_pc_addr += insn_length;
+      if (debug_infrun)
+        fprintf_unfiltered (gdb_stdlog, "proceed: nds_next_pc_addr=0x%lx, insn_length=0x%x ", nds_next_pc_addr, insn_length);
+    }
+  }
 
   /* Fill in with reasonable starting values.  */
   init_thread_stepping_state (cur_thr);

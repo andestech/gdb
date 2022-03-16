@@ -107,6 +107,9 @@ int stopped_by_random_signal;
 
 int startup_with_shell = 1;
 
+/* define in nds-remote.c for IDE query */
+extern CORE_ADDR nds_next_pc_addr;
+extern int nds_next_pc_was_set;
 
 /* Accessor routines.  */
 
@@ -1925,6 +1928,10 @@ finish_forward (struct finish_command_fsm *sm, struct frame_info *frame)
 
   sal = find_pc_line (get_frame_pc (frame), 0);
   sal.pc = get_frame_pc (frame);
+  nds_next_pc_addr = sal.pc;
+  nds_next_pc_was_set = 1;
+  if (debug_infrun)
+    fprintf_unfiltered (gdb_stdlog, "finish_forward: nds_next_pc_addr=0x%lx ", nds_next_pc_addr);
 
   sm->breakpoint = set_momentary_breakpoint (gdbarch, sal,
 					     get_stack_frame_id (frame),
