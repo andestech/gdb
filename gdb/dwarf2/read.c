@@ -8211,6 +8211,7 @@ scan_partial_symbols (struct partial_die_info *first_die, CORE_ADDR *lowpc,
 		add_partial_enumeration (pdi, cu);
 	      break;
 	    case DW_TAG_base_type:
+	    case DW_TAG_generic_subrange:
 	    case DW_TAG_subrange_type:
 	      /* File scope base type definitions are added to the partial
 		 symbol table.  */
@@ -8537,6 +8538,7 @@ add_partial_symbol (struct partial_die_info *pdi, struct dwarf2_cu *cu)
     case DW_TAG_typedef:
     case DW_TAG_base_type:
     case DW_TAG_subrange_type:
+    case DW_TAG_generic_subrange:
       psymbol.domain = VAR_DOMAIN;
       psymbol.aclass = LOC_TYPEDEF;
       where = psymbol_placement::STATIC;
@@ -10264,6 +10266,7 @@ process_die (struct die_info *die, struct dwarf2_cu *cu)
       /* FALLTHROUGH */
     case DW_TAG_base_type:
     case DW_TAG_subrange_type:
+    case DW_TAG_generic_subrange:
     case DW_TAG_typedef:
       /* Add a typedef symbol for the type definition, if it has a
 	 DW_AT_name.  */
@@ -17168,7 +17171,8 @@ read_array_type (struct die_info *die, struct dwarf2_cu *cu)
   child_die = die->child;
   while (child_die && child_die->tag)
     {
-      if (child_die->tag == DW_TAG_subrange_type)
+      if (child_die->tag == DW_TAG_subrange_type
+	  || child_die->tag == DW_TAG_generic_subrange)
 	{
 	  struct type *child_type = read_type_die (child_die, cu);
 
@@ -20325,6 +20329,7 @@ is_type_tag_for_partial (int tag, enum language lang)
     case DW_TAG_enumeration_type:
     case DW_TAG_structure_type:
     case DW_TAG_subrange_type:
+    case DW_TAG_generic_subrange:
     case DW_TAG_typedef:
     case DW_TAG_union_type:
       return 1;
@@ -20458,6 +20463,7 @@ load_partial_dies (const struct die_reader_specs *reader,
 	  && ((pdi.tag == DW_TAG_typedef && !pdi.has_children)
 	      || pdi.tag == DW_TAG_base_type
 	      || pdi.tag == DW_TAG_array_type
+	      || pdi.tag == DW_TAG_generic_subrange
 	      || pdi.tag == DW_TAG_subrange_type))
 	{
 	  if (building_psymtab && pdi.raw_name != NULL)
@@ -23388,6 +23394,7 @@ new_symbol (struct die_info *die, struct type *type, struct dwarf2_cu *cu,
 	case DW_TAG_array_type:
 	case DW_TAG_base_type:
 	case DW_TAG_subrange_type:
+	case DW_TAG_generic_subrange:
 	  sym->set_aclass_index (LOC_TYPEDEF);
 	  sym->set_domain (VAR_DOMAIN);
 	  list_to_add = cu->list_in_scope;
@@ -23881,6 +23888,7 @@ read_type_die_1 (struct die_info *die, struct dwarf2_cu *cu)
     case DW_TAG_typedef:
       this_type = read_typedef (die, cu);
       break;
+    case DW_TAG_generic_subrange:
     case DW_TAG_subrange_type:
       this_type = read_subrange_type (die, cu);
       break;
@@ -26162,6 +26170,15 @@ set_die_type (struct die_info *die, struct type *type, struct dwarf2_cu *cu,
       struct type *prop_type = cu->addr_sized_int_type (false);
       if (attr_to_dynamic_prop (attr, die, cu, &prop, prop_type))
 	type->add_dyn_prop (DYN_PROP_ASSOCIATED, prop);
+    }
+
+  /* Read DW_AT_rank and set in type.  */
+  attr = dwarf2_attr (die, DW_AT_rank, cu);
+  if (attr != NULL)
+    {
+      struct type *prop_type = cu->addr_sized_int_type (false);
+      if (attr_to_dynamic_prop (attr, die, cu, &prop, prop_type))
+	type->add_dyn_prop (DYN_PROP_RANK, prop);
     }
 
   /* Read DW_AT_data_location and set in type.  */
