@@ -24,6 +24,7 @@
 #include "elf/internal.h"
 #include "opcode/riscv.h"
 #include "cpu-riscv.h"
+#include "hashtab.h"
 
 #define RISCV_UNKNOWN_VERSION -1
 
@@ -130,7 +131,46 @@ riscv_parse_add_implicit_subsets (riscv_parse_subset_t *rps);
 bool
 riscv_parse_check_conflicts (riscv_parse_subset_t *rps);
 
+/* Hash table for storing table jump candidate entries.  */
+typedef struct
+{
+  htab_t tbljt_htab;
+  htab_t tbljalt_htab;
+  bfd_vma *tbj_indexes;
+  asection *tablejump_sec;
+  bfd *tablejump_sec_owner;
+
+  /* debug use.  */
+  unsigned int *savings;
+  const char **names;
+} riscv_table_jump_htab_t;
+
+typedef struct
+{
+  bfd_vma address;
+  unsigned int index;
+
+  /* debug use.  */
+  const char *name;
+  unsigned int benefit;
+} riscv_table_jump_htab_entry;
+
 /* { Andes  */
+enum relax_pass {
+  PASS_ANDES_INIT = 0,
+  PASS_ZCE_TABLE_JUMP,
+  PASS_ANDES_GP_PCREL,
+  PASS_ANDES_GP_1,
+  PASS_ANDES_GP_2,
+  PASS_SHORTEN_ORG,
+  PASS_DELETE_ORG,
+  PASS_EXECIT_1,
+  PASS_EXECIT_2,
+  PASS_ALIGN_ORG,
+  PASS_RESLOVE,
+  PASS_REDUCE,
+};
+
 #define ANDES_ALIGN_DONE (1u << 31)
 
 extern unsigned int ict_model;
@@ -196,7 +236,6 @@ enum
 typedef struct { void *next; } list_entry_t;
 typedef int (*list_iter_cb_t)(void *list_pp, void *obj, void *a, void *b);
 
-#include "hashtab.h"
 typedef struct andes_ld_options
 {
   /* Export global symbols into linker script.  */
@@ -369,6 +408,8 @@ struct riscv_elf_link_hash_table
   /* { Andes  */
   andes_ld_options_t andes;
   /* } Andes  */
+
+  riscv_table_jump_htab_t *table_jump_htab;
 };
 
 typedef struct riscv_elf_link_hash_table link_hash_table_t;

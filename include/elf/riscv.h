@@ -89,6 +89,8 @@ START_RELOC_NUMBERS (elf_riscv_reloc_type)
   RELOC_NUMBER (R_RISCV_SET32, 56)
   RELOC_NUMBER (R_RISCV_32_PCREL, 57)
   RELOC_NUMBER (R_RISCV_IRELATIVE, 58)
+  /* ZCMT Specific Relocation */
+  RELOC_NUMBER (R_RISCV_TABLE_JUMP, 226)
   /* Relocations for XAndes.  */
   RELOC_NUMBER (R_RISCV_ANDES_TAG, 230)
   RELOC_NUMBER (R_RISCV_EXECIT_ITE, 231)
@@ -143,6 +145,10 @@ END_RELOC_NUMBERS (R_RISCV_max)
 
 /* The name of the global pointer symbol.  */
 #define RISCV_GP_SYMBOL "__global_pointer$"
+
+#define RISCV_TABLE_JUMP_BASE_SYMBOL "__jvt_base$"
+
+#define TABLE_JUMP_SEC_NAME ".text.tbljal"
 
 /* Processor specific dynamic array tags.  */
 #define DT_RISCV_VARIANT_CC (DT_LOPROC + 1)
