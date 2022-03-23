@@ -914,12 +914,12 @@ static reloc_howto_type howto_table[] =
   EMPTY_HOWTO (216), EMPTY_HOWTO (217), EMPTY_HOWTO (218), EMPTY_HOWTO (219),
   EMPTY_HOWTO (220), EMPTY_HOWTO (221), EMPTY_HOWTO (222), EMPTY_HOWTO (223),
   EMPTY_HOWTO (224), EMPTY_HOWTO (225), EMPTY_HOWTO (226), EMPTY_HOWTO (227),
-  EMPTY_HOWTO (228), EMPTY_HOWTO (229), EMPTY_HOWTO (230),
+  EMPTY_HOWTO (228), EMPTY_HOWTO (229),
 
   /* Relocations for xAndes.  */
 
   /* Mark the end of the region that can not do some linker relaxations.  */
-  HOWTO (R_RISCV_NDS_MISC,		/* type */
+  HOWTO (R_RISCV_ANDES_TAG,		/* type */
 	 0,				/* rightshift */
 	 0,				/* size */
 	 0,				/* bitsize */
@@ -927,10 +927,25 @@ static reloc_howto_type howto_table[] =
 	 0,				/* bitpos */
 	 complain_overflow_dont,	/* complain_on_overflow */
 	 bfd_elf_generic_reloc,		/* special_function */
-	 "R_RISCV_NDS_MISC",		/* name */
+	 "R_RISCV_ANDES_TAG",		/* name */
 	 false,				/* partial_inplace */
 	 0,				/* src_mask */
 	 0,				/* dst_mask */
+	 false),			/* pcrel_offset */
+
+  /* EXEC.IT itable entry index.  */
+  HOWTO (R_RISCV_EXECIT_ITE,		/* type */
+	 0,				/* rightshift */
+	 2,				/* size */
+	 16,				/* bitsize */
+	 false,				/* pc_relative */
+	 0,				/* bitpos */
+	 complain_overflow_dont,	/* complain_on_overflow */
+	 bfd_elf_generic_reloc,		/* special_function */
+	 "R_RISCV_EXECIT_ITE",		/* name */
+	 false,				/* partial_inplace */
+	 0,				/* src_mask */
+	 ENCODE_RVC_EXECIT_IMM (-1U),	/* dst_mask */
 	 false),			/* pcrel_offset */
 
   /* Jump-patch table relocations.  */
@@ -1358,7 +1373,39 @@ static const struct elf_reloc_map riscv_reloc_map[] =
   { BFD_RELOC_RISCV_SET16, R_RISCV_SET16 },
   { BFD_RELOC_RISCV_SET32, R_RISCV_SET32 },
   { BFD_RELOC_RISCV_32_PCREL, R_RISCV_32_PCREL },
+  /* { Andes */
+  { BFD_RELOC_RISCV_ANDES_TAG, R_RISCV_ANDES_TAG },
+  { BFD_RELOC_RISCV_EXECIT_ITE, R_RISCV_EXECIT_ITE },
+  { BFD_RELOC_RISCV_ICT_HI20, R_RISCV_ICT_HI20 },
+  { BFD_RELOC_RISCV_ICT_LO12_I, R_RISCV_ICT_LO12_I },
+  { BFD_RELOC_RISCV_PCREL_ICT_HI20, R_RISCV_PCREL_ICT_HI20 },
+  { BFD_RELOC_RISCV_CALL_ICT, R_RISCV_CALL_ICT },
+  { BFD_RELOC_RISCV_ICT_64, R_RISCV_ICT_64 },
+  { BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN, R_RISCV_NO_RVC_REGION_BEGIN },
+  { BFD_RELOC_RISCV_NO_RVC_REGION_END, R_RISCV_NO_RVC_REGION_END },
+  { BFD_RELOC_RISCV_DELETE, R_RISCV_DELETE },
+  { BFD_RELOC_RISCV_ALIGN_BTB, R_RISCV_ALIGN_BTB },
+  { BFD_RELOC_RISCV_10_PCREL, R_RISCV_10_PCREL },
+  { BFD_RELOC_RISCV_DATA, R_RISCV_DATA },
+  { BFD_RELOC_RISCV_LALO_HI20, R_RISCV_LALO_HI20 },
+  { BFD_RELOC_RISCV_LALO_LO12_I, R_RISCV_LALO_LO12_I },
+  { BFD_RELOC_RISCV_RELAX_ENTRY, R_RISCV_RELAX_ENTRY },
+  { BFD_RELOC_RISCV_LGP18S0, R_RISCV_LGP18S0 },
+  { BFD_RELOC_RISCV_LGP17S1, R_RISCV_LGP17S1 },
+  { BFD_RELOC_RISCV_LGP17S2, R_RISCV_LGP17S2 },
+  { BFD_RELOC_RISCV_LGP17S3, R_RISCV_LGP17S3 },
+  { BFD_RELOC_RISCV_SGP18S0, R_RISCV_SGP18S0 },
+  { BFD_RELOC_RISCV_SGP17S1, R_RISCV_SGP17S1 },
+  { BFD_RELOC_RISCV_SGP17S2, R_RISCV_SGP17S2 },
+  { BFD_RELOC_RISCV_SGP17S3, R_RISCV_SGP17S3 },
+  { BFD_RELOC_RISCV_RELAX_REGION_BEGIN, R_RISCV_RELAX_REGION_BEGIN },
+  { BFD_RELOC_RISCV_RELAX_REGION_END, R_RISCV_RELAX_REGION_END },
+  /* } Andes */
 };
+
+/* { Andes  */
+const unsigned int number_of_howto_table = (unsigned int) ARRAY_SIZE (howto_table);
+/* } Andes  */
 
 /* Given a BFD reloc type, return a howto structure.  */
 

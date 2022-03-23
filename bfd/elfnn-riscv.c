@@ -162,6 +162,28 @@ struct riscv_elf_link_hash_table
     && elf_hash_table_id (elf_hash_table (p)) == RISCV_ELF_DATA)	\
    ? (struct riscv_elf_link_hash_table *) (p)->hash : NULL)
 
+/* { Andes */
+static bool
+execit_set_itb_base (struct bfd_link_info *link_info);
+static void
+andes_execit_relocate_itable (struct bfd_link_info *link_info);
+static asection*
+execit_get_itable_section (bfd *input_bfds);
+static bfd_vma
+riscv_elf_execit_reloc_insn (execit_itable_t *ptr,
+			     struct bfd_link_info *link_info);
+static bfd_vma
+riscv_elf_encode_relocation (bfd *abfd,
+			     Elf_Internal_Rela *irel, bfd_vma relocation);
+static void
+riscv_insertion_sort (void *base, size_t nmemb, size_t size,
+		      int (*compar) (const void *lhs, const void *rhs));
+static int
+compar_reloc (const void *lhs, const void *rhs);
+
+static execit_state_t execit;
+/* } Andes */
+
 static bool
 riscv_info_to_howto_rela (bfd *abfd,
 			  arelent *cache_ptr,
@@ -1785,6 +1807,11 @@ perform_relocation (const reloc_howto_type *howto,
 	return bfd_reloc_overflow;
       value = ENCODE_GPTYPE_SD_IMM (value);
       break;
+
+    case R_RISCV_ANDES_TAG:
+    case R_RISCV_EXECIT_ITE:
+      BFD_ASSERT (0); /* shall be all cleared in relaxation phases  */
+      break;
     /* } Andes  */
 
     default:
@@ -2063,6 +2090,23 @@ riscv_elf_relocate_section (bfd *output_bfd,
   if (!riscv_init_pcrel_relocs (&pcrel_relocs))
     return false;
 
+  /* { Andes */
+  andes_ld_options_t *andes = &htab->andes;
+  if (execit.is_itb_base_set == 0)
+    { /* Set the _ITB_BASE_.  */
+      if (! execit_set_itb_base (info))
+	{
+	  (*_bfd_error_handler) (_("%pB: error: Cannot set _ITB_BASE_"),
+				 output_bfd);
+	  bfd_set_error (bfd_error_bad_value);
+	}
+    }
+
+  /* Relocation for .exec.itable.  */
+  if (andes->target_optimization & RISCV_RELAX_EXECIT_ON)
+    andes_execit_relocate_itable (info);
+  /* } Andes */
+
   relend = relocs + input_section->reloc_count;
   for (rel = relocs; rel < relend; rel++)
     {
@@ -2083,6 +2127,14 @@ riscv_elf_relocate_section (bfd *output_bfd,
       bool resolved_to_zero;
 
       if (howto == NULL
+	  /* { Andes */
+	  || r_type == R_RISCV_RELAX_ENTRY
+	  || r_type == R_RISCV_ANDES_TAG
+	  || r_type == R_RISCV_RELAX_REGION_BEGIN
+	  || r_type == R_RISCV_RELAX_REGION_END
+	  || r_type == R_RISCV_NO_RVC_REGION_BEGIN
+	  || r_type == R_RISCV_NO_RVC_REGION_END
+	  /* } Andes */
 	  || r_type == R_RISCV_GNU_VTINHERIT || r_type == R_RISCV_GNU_VTENTRY)
 	continue;
 
@@ -3488,7 +3540,7 @@ riscv_i_or_e_p (bfd *ibfd,
 /* Merge standard extensions.
 
    Return Value:
-     Return FALSE if failed to merge.
+     Return false if failed to merge.
 
    Arguments:
      `bfd`: bfd handler.
@@ -3564,8 +3616,8 @@ riscv_merge_std_ext (bfd *ibfd,
 }
 
 /* Merge multi letter extensions.  PIN is a pointer to the head of the input
-   object subset list.  Likewise for POUT and the output object.  Return TRUE
-   on success and FALSE when a conflict is found.  */
+   object subset list.  Likewise for POUT and the output object.  Return true
+   on success and false when a conflict is found.  */
 
 static bool
 riscv_merge_multi_letter_ext (riscv_subset_t **pin,
@@ -4004,6 +4056,534 @@ _bfd_riscv_relax_lui_gp_insn (bfd *abfd, asection *sec, asection *sym_sec,
 			      bool *again ATTRIBUTE_UNUSED,
 			      riscv_pcgp_relocs *pcgp_relocs ATTRIBUTE_UNUSED,
 			      bool undefined_weak ATTRIBUTE_UNUSED);
+static int
+andes_execit_render_hash (execit_context_t *ctx);
+static void
+riscv_elf_get_insn_with_reg (const bfd* abfd, const Elf_Internal_Rela *irel,
+			     uint32_t insn, uint32_t *insn_with_reg);
+static int
+riscv_get_local_syms (const bfd *abfd, asection *sec ATTRIBUTE_UNUSED,
+		      Elf_Internal_Sym **isymbuf_p);
+static bool
+execit_check_pchi_for_jal (bfd_vma relocation, bfd_vma insn_pc);
+static bfd_vma
+riscv_data_start_value (const struct bfd_link_info *info);
+static bool
+andes_execit_hash_insn (bfd *abfd, asection *sec,
+			struct bfd_link_info *link_info);
+static void
+andes_execit_traverse_insn_hash (int (*func) (execit_hash_t*));
+static int
+andes_execit_rank_insn (execit_hash_t *he);
+static int
+andes_execit_rank_imported_insn (execit_hash_t *he);
+static void
+andes_execit_build_itable (struct bfd_link_info *info);
+static bool
+andes_execit_replace_insn (struct bfd_link_info *link_info,
+			   bfd *abfd, asection *sec);
+static void
+andes_execit_delete_blank (struct bfd_link_info *info);
+static asection*
+andes_execit_get_section (bfd *input_bfds);
+static int
+riscv_get_section_contents (bfd *abfd, asection *sec,
+			    bfd_byte **contents_p, bool cache);
+static Elf_Internal_Rela *
+find_relocs_at_address (Elf_Internal_Rela *reloc,
+			Elf_Internal_Rela *relocs,
+			Elf_Internal_Rela *irelend,
+			enum elf_riscv_reloc_type reloc_type);
+static int
+riscv_relocation_check (struct bfd_link_info *info,
+			Elf_Internal_Rela **irel,
+			Elf_Internal_Rela *irelend,
+			asection *sec, bfd_vma *off,
+			bfd_byte *contents, int optimize);
+static bool
+riscv_elf_execit_check_insn_available (uint32_t insn,
+				       struct riscv_elf_link_hash_table *htab);
+static int
+list_iterate (list_entry_t **lst, void *obj,
+	      list_iter_cb_t each, list_iter_cb_t final);
+static int
+append_final_cb (list_entry_t **lst, list_entry_t *j,
+		 list_entry_t *p, list_entry_t *q);
+static int 
+free_each_cb (void *l ATTRIBUTE_UNUSED, void *j ATTRIBUTE_UNUSED,
+	      void *p ATTRIBUTE_UNUSED, execit_vma_t *q);
+static void
+andes_execit_estimate_lui (execit_hash_t *he, execit_vma_t **lst_pp);
+static int
+rank_each_cb (void *l ATTRIBUTE_UNUSED, execit_rank_t *j, execit_rank_t *p,
+	      void *q ATTRIBUTE_UNUSED);
+static bool
+andes_execit_push_insn (execit_context_t *ctx, execit_hash_t* h);
+static int 
+andes_execit_estimate_lui_each_cb (void *l ATTRIBUTE_UNUSED,
+				   void *j ATTRIBUTE_UNUSED,
+				   execit_irel_t *p,
+				   void *q ATTRIBUTE_UNUSED);
+static int 
+collect_lui_vma_each_cb (void *l, void *j_pp, execit_irel_t *p,
+			 void *q ATTRIBUTE_UNUSED);
+static int 
+insert_vma_each_cb (void *l ATTRIBUTE_UNUSED, execit_vma_t *j,
+		    execit_vma_t *p, void *q ATTRIBUTE_UNUSED);
+static int 
+insert_vma_final_cb (void *l, execit_vma_t *j, execit_vma_t *p, void *q);
+static execit_itable_t *
+andes_execit_itable_lookup (execit_context_t *ctx,
+			    execit_hash_t* h);
+static bool
+execit_push_blank (execit_context_t *ctx, bfd_vma delta, bfd_vma size);
+static bool
+andes_execit_mark_irel (Elf_Internal_Rela *irel, int index);
+static execit_irelx_t*
+andes_extend_irel (Elf_Internal_Rela *irel, int subtype,
+		   execit_irelx_t **list);
+static execit_blank_abfd_t*
+execit_lookup_blank_abfd (execit_context_t *ctx);
+static execit_blank_section_t*
+execit_lookup_blank_section (execit_context_t *ctx,
+			     execit_blank_abfd_t *blank_abfd);
+static bool
+andes_relax_execit_ite (
+  bfd *abfd,
+  asection *sec,
+  asection *sym_sec  ATTRIBUTE_UNUSED,
+  struct bfd_link_info *info ATTRIBUTE_UNUSED,
+  Elf_Internal_Rela *rel,
+  bfd_vma symval,
+  bfd_vma max_alignment,
+  bfd_vma reserve_size ATTRIBUTE_UNUSED,
+  bool *again ATTRIBUTE_UNUSED,
+  riscv_pcgp_relocs *pcgp_relocs ATTRIBUTE_UNUSED,
+  bool undefined_weak ATTRIBUTE_UNUSED);
+
+/* Exec.it hash function.  */
+
+static struct bfd_hash_entry *
+riscv_elf_code_hash_newfunc (struct bfd_hash_entry *entry,
+			     struct bfd_hash_table *table,
+			     const char *string ATTRIBUTE_UNUSED)
+{
+  static int id = 0;
+  const size_t sz_entry = sizeof (execit_hash_t);
+  const size_t sz_head = sizeof (struct bfd_hash_entry);
+  const size_t sz_body = sz_entry - sz_head;
+
+  /* Allocate the structure if it has not already been
+     allocated by a subclass.  */
+  if (entry == NULL)
+    {
+      entry = (void *)
+	bfd_hash_allocate (table, sz_entry);
+
+      if (entry == NULL)
+	return entry;
+    }
+
+  memset ((void *) entry + sz_head, 0, sz_body);
+  ((execit_hash_t*) entry)->id = id++;
+
+  return entry;
+}
+
+/* Initialize EXECIT hash table.  */
+
+static int
+andes_execit_init (struct bfd_link_info *info)
+{
+  /* init execit code hash  */
+  if (!bfd_hash_table_init_n (&execit.code_hash, riscv_elf_code_hash_newfunc,
+			      sizeof (execit_hash_t),
+			      1023))
+    {
+      (*_bfd_error_handler) (_("Linker: cannot init EXECIT hash table error \n"));
+      return false;
+    }
+
+  /* get the first 2M-windown base for JAL  */
+  /* Traverse all output sections and return the min SHF_EXECINSTR addr.
+     the sh_flags of output bfd by now is not finalized,
+     check input bfd's instead.  */
+  if (true)
+    {
+      bfd_vma min_execinstr_addr = -1u;
+      bfd *ibfd;
+      for (ibfd = info->input_bfds; ibfd ; ibfd = ibfd->link.next)
+	{
+	  asection *isec, *osec;
+	  bfd_vma base;
+	  for (isec = ibfd->sections; isec != NULL; isec = isec->next)
+	    {
+	      Elf_Internal_Shdr *shdr = &(elf_section_data(isec)->this_hdr);
+	      if ((shdr->sh_flags & SHF_EXECINSTR) == 0)
+		continue;
+	      /* osec->output_offset is 0 by now, while
+	       * isec->output_offset is the addr before relaxation.
+	       */
+	      osec = isec->output_section;
+	      base = osec->vma + isec->output_offset;
+	      if (min_execinstr_addr > base)
+		min_execinstr_addr = base;
+	    }
+	}
+	execit.jal_window_end = MASK_2M | min_execinstr_addr;
+    }
+
+  /* sanity check  */
+  BFD_ASSERT (execit.jal_window_end);
+  if (!execit.jal_window_end)
+    execit.jal_window_end = MASK_2M;
+
+  return true;
+}
+
+/* Import .exec.itable and then build list.  */
+
+static void
+riscv_elf_execit_import_table (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info ATTRIBUTE_UNUSED)
+{
+  int num = 0;
+  bfd_byte buf[0x10];
+  bfd_byte *contents;
+  unsigned long insn;
+  FILE *execit_import_file;
+  struct riscv_elf_link_hash_table *htab;
+  andes_ld_options_t *andes;
+
+  htab = riscv_elf_hash_table (info);
+  andes = &htab->andes;
+  execit_import_file = andes->execit_import_file;
+  rewind (andes->execit_import_file);
+
+  contents = &buf[0];
+
+  /* Read instructions from the input file, and then build the list.  */
+  while (!feof (execit_import_file))
+    {
+      /* insert exec.it entry to hash  */
+      execit_context_t ctx;
+      execit_hash_t *he;
+      size_t nread;
+
+      const char *hash = ctx.buf;
+      memset (&ctx, 0, sizeof (ctx));
+
+      nread = fread (contents, sizeof (bfd_byte) * 4, 1, execit_import_file);
+      /* Ignore the final byte 0x0a.  */
+      if (nread < 1)
+	break;
+      insn = bfd_getl32 (contents);
+
+      ctx.ie.insn = insn;
+      if (andes_execit_render_hash (&ctx) != EXECIT_HASH_OK)
+	{
+	  BFD_ASSERT (0);
+	  continue;
+	}
+
+      /* add hash entry.  */
+      he = (execit_hash_t*)
+	bfd_hash_lookup (&execit.code_hash, hash, true, true);
+      if (he == NULL)
+	{
+	  (*_bfd_error_handler)
+	    (_("Linker: failed import exec.it %s hash table\n"), hash);
+	  continue;
+	}
+      else
+	{
+	  he->is_imported = 1;
+	  he->is_chosen = 1;
+	  he->ie.entries = 1;
+	  he->ie.itable_index = execit.next_itable_index++;
+	  /* to pass andes_execit_itable_lookup  */
+	  he->ie.fixed = ctx.ie.fixed;
+	}
+
+      num++;
+    }
+  fclose (execit_import_file);
+
+  /* Default set the maximun number of the EXECIT entries to 1024.
+     There are still 1024 entries in .exec.itable even though the
+     EXECIT limit setting exceeds the remaining entries.  */
+  execit.import_number = num;
+  if (andes->update_execit_table
+      && andes->execit_limit != -1
+      && (execit.import_number + andes->execit_limit) > EXECIT_HW_ENTRY_MAX)
+    (*_bfd_error_handler)
+      (_("Warning: There are only %d entries of .exec.itable left for this time."),
+       (EXECIT_HW_ENTRY_MAX - execit.import_number));
+}
+
+/* Generate EXECIT hash from insn and its relocation.
+ * key: "{code_pattern:x}|{rel_section:x}|{rel_offset:x}|{symbol:s}"
+ *   code_pattern: opcode|registers
+ *   rel_section:  vma of symbol
+ *   rel_offset:   offset of symbol, or offset/(lui, auipc)
+ *   symbol:       # SYM/global, LAB/local, ABS/constant
+ * relocation is separated into section and offset instead of VMA
+ * to merge aliases.
+ */
+static int
+andes_execit_render_hash (execit_context_t *ctx)
+{
+  const bfd_vma off = ctx->off;
+  bfd *abfd = ctx->abfd;
+  asection *sec = ctx->sec;
+  const struct bfd_link_info *info = ctx->info;
+  const Elf_Internal_Rela *irel = ctx->irel;
+  const uint32_t insn = ctx->ie.insn;
+  bfd_vma relocation_section = 0;
+  bfd_vma relocation_offset = 0;
+
+  const char *symbol ="ABS";
+  int rz = EXECIT_HASH_NG;
+  BFD_ASSERT (ctx->ie.fixed || ctx->ie.relocation == 0);
+  ctx->buf[0] = 0;
+  ctx->ie.pc = off + (sec ? sec_addr(sec) : 0);
+  ctx->ie.sec = sec;
+
+  if (irel)
+    {
+      Elf_Internal_Shdr *symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
+      andes_ld_options_t *andes = &execit.htab->andes;
+      asection *sym_sec;
+      bfd_vma symval;
+      char symtype;
+      riscv_elf_get_insn_with_reg (abfd, irel, insn, &ctx->ie.fixed);
+      if ((!andes->execit_flags.noji && ELFNN_R_TYPE (irel->r_info) == R_RISCV_JAL)
+	  || (!andes->execit_flags.nols
+	      && (ELFNN_R_TYPE (irel->r_info) == R_RISCV_HI20
+	      || ELFNN_R_TYPE (irel->r_info) == R_RISCV_LO12_I
+	      || ELFNN_R_TYPE (irel->r_info) == R_RISCV_LO12_S
+	      || ELFNN_R_TYPE (irel->r_info) == R_RISCV_GPREL_I
+	      || ELFNN_R_TYPE (irel->r_info) == R_RISCV_GPREL_S
+	      || (ELFNN_R_TYPE (irel->r_info) >= R_RISCV_LGP18S0
+		  && ELFNN_R_TYPE (irel->r_info) <= R_RISCV_SGP17S3))))
+	{
+	  unsigned long r_symndx = ELFNN_R_SYM (irel->r_info);
+	  if (r_symndx < symtab_hdr->sh_info)
+	    { /* Local symbol.  */
+	      Elf_Internal_Sym *isym = NULL;
+	      symbol ="LAB";
+	      if (!riscv_get_local_syms (abfd, sec, &isym))
+		{
+		  BFD_ASSERT(0);
+		  return rz;
+		}
+	      asection *isec;
+	      unsigned int shndx = isym[r_symndx].st_shndx;
+	      bfd_vma st_value = isym[r_symndx].st_value;
+	      isec = elf_elfsections (abfd)[shndx]->bfd_section;
+
+	      ctx->ie.addend = st_value + irel->r_addend;
+	      ctx->ie.isym = isym + r_symndx;
+	      ctx->ie.isym_copy = *ctx->ie.isym;
+	      ctx->ie.isec = isec;
+
+	      if (shndx == SHN_UNDEF)
+		sym_sec = sec, symval = irel->r_offset;
+	      else
+		{
+		  BFD_ASSERT (shndx < elf_numsections (abfd));
+		  sym_sec = isec;
+		  symval = st_value;
+		}
+	      symtype = ELF_ST_TYPE (isym[r_symndx].st_info);
+	    }
+	  else
+	    { /* Global symbol.  */
+	      struct elf_link_hash_entry *h;
+	      struct elf_link_hash_entry **sym_hashes;
+	      unsigned long indx;
+	      symbol ="SYM";
+	      sym_hashes = elf_sym_hashes (abfd);
+	      indx = ELFNN_R_SYM (irel->r_info) - symtab_hdr->sh_info;
+	      h = sym_hashes[indx];
+
+	      while (h->root.type == bfd_link_hash_indirect
+		     || h->root.type == bfd_link_hash_warning)
+		h = (struct elf_link_hash_entry *) h->root.u.i.link;
+
+	      /* TODO: the global symbol _FP_BASE_ should be skipped, too.  */
+	      if (h->root.u.def.section->output_section == NULL
+		  || (h->root.type != bfd_link_hash_defined
+		      && h->root.type != bfd_link_hash_defweak
+		      && h->root.type != bfd_link_hash_undefined
+		      && h->root.type != bfd_link_hash_undefweak
+		      ))
+		{
+		#ifdef DEBUG_EXECIT
+		  printf("%s: skip global symbol.\n", __FUNCTION__);
+		#endif
+		  return rz;
+		}
+
+	      ctx->ie.h = h;
+	      if ((h->root.type == bfd_link_hash_defined) ||
+		  (h->root.type == bfd_link_hash_defweak))
+		{
+		  ctx->ie.isec = h->root.u.def.section; /* TODO: rename isec  */
+		  ctx->ie.addend = h->root.u.def.value + irel->r_addend;
+		}
+	      else
+		{
+		  ctx->ie.isec = (asection*) h->root.u.undef.abfd;
+		  ctx->ie.addend = irel->r_addend;
+		}
+
+	      if (h->plt.offset != MINUS_ONE)
+		{
+		  sym_sec = execit.htab->elf.splt;
+		  symval = h->plt.offset;
+		}
+	      else if (h->root.u.def.section->output_section == NULL
+		       || (h->root.type != bfd_link_hash_defined
+			   && h->root.type != bfd_link_hash_defweak))
+		return rz;
+	      else
+		{
+		  symval = h->root.u.def.value;
+		  sym_sec = h->root.u.def.section;
+		}
+	      symtype = h->type;
+	    }
+
+	  if (sym_sec->sec_info_type == SEC_INFO_TYPE_MERGE
+	      && (sym_sec->flags & SEC_MERGE))
+	    {
+	      if (symtype == STT_SECTION)
+		symval += irel->r_addend;
+
+	      symval = _bfd_merged_section_offset (abfd, &sym_sec,
+				elf_section_data (sym_sec)->sec_info,
+				symval);
+
+	      if (symtype != STT_SECTION)
+		symval += irel->r_addend;
+	    }
+	  else
+	    symval += irel->r_addend;
+
+	  /* section start address might be changed before execit replace stage.
+	   * use HOST_ADDR(section)/offset as hashing elements.
+	   * Why not use relocation/VMA as it?
+	   * the same relocations are not necessary aliases but of the same
+	   * section and offset are (almost?) (b23753)  */
+	  relocation_section = (intptr_t) ctx->ie.isec;
+	  relocation_offset = ctx->ie.addend;
+
+	  symval += sec_addr (sym_sec);
+	  ctx->ie.relocation = symval;
+
+	  /* special treaments for certain types of relocations.  */
+	  if ((ELFNN_R_TYPE (irel->r_info) == R_RISCV_JAL) &&
+	      !execit_check_pchi_for_jal (ctx->ie.relocation, ctx->ie.pc))
+	    return rz;
+	  else if (ELFNN_R_TYPE (irel->r_info) == R_RISCV_HI20)
+	    { /* LUI symbols having the same HI20 part can be exec.ited.
+	       * # Spliting LUIs into 2 groups by __DATA_BEGIN__ to avoid to
+	       * the DATA_SEGMENT_ALIGN issue  */
+	      if (ARCH_SIZE > 32 &&
+		  !VALID_UTYPE_IMM (RISCV_CONST_HIGH_PART (ctx->ie.relocation)))
+		return rz;
+	      bfd_vma data_start = riscv_data_start_value (info);
+	      relocation_section = 0;
+	      relocation_offset = (ctx->ie.relocation >= data_start) ? 1 : 0;
+	    }
+
+	  ctx->ie.irel = ctx->irel;
+	  ctx->ie.irel_copy = *ctx->irel;
+	  rz = EXECIT_HASH_OK;
+	}
+    }
+  else
+    { /* has no reloc  */
+      ctx->ie.fixed = ctx->ie.insn;
+      rz = EXECIT_HASH_OK;
+    }
+
+  if (rz == EXECIT_HASH_OK)
+    snprintf (ctx->buf, sizeof(ctx->buf), "%x|%llx|%llx|%s",
+	      ctx->ie.fixed,
+	      (long long unsigned int)relocation_section,
+	      (long long unsigned int)relocation_offset,
+	      symbol);
+  else
+    BFD_ASSERT (irel);
+
+  return rz;
+}
+
+/* Get insn with registers according to relocation type.  */
+
+static void
+riscv_elf_get_insn_with_reg (const bfd* abfd, const Elf_Internal_Rela *irel,
+			     uint32_t insn, uint32_t *insn_with_reg)
+{
+  reloc_howto_type *howto = NULL;
+
+  if (irel == NULL
+      || (ELFNN_R_TYPE (irel->r_info) >= number_of_howto_table))
+    {
+      *insn_with_reg = insn;
+      return;
+    }
+
+  howto = riscv_elf_rtype_to_howto ((bfd*) abfd, ELFNN_R_TYPE (irel->r_info));
+  *insn_with_reg = insn & (~howto->dst_mask);
+}
+
+/* Get the contents of the internal symbol of abfd.  */
+
+static int
+riscv_get_local_syms (const bfd *abfd, asection *sec ATTRIBUTE_UNUSED,
+		      Elf_Internal_Sym **isymbuf_p)
+{
+  Elf_Internal_Shdr *symtab_hdr;
+  symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
+
+  /* Read this BFD's local symbols if we haven't done so already.  */
+  if (*isymbuf_p == NULL && symtab_hdr->sh_info != 0)
+    {
+      *isymbuf_p = (Elf_Internal_Sym *) symtab_hdr->contents;
+      if (*isymbuf_p == NULL)
+	{
+	  *isymbuf_p = bfd_elf_get_elf_syms ((bfd*)abfd, symtab_hdr,
+					     symtab_hdr->sh_info, 0,
+					     NULL, NULL, NULL);
+	  if (*isymbuf_p == NULL)
+	    return false;
+	}
+    }
+  symtab_hdr->contents = (bfd_byte *) (*isymbuf_p);
+
+  return true;
+}
+
+/* Check whether the high 11 bits of pc is different from
+   the high 11 bits of relocation after EXECIT relaxation.
+   Return True if the jal can be replaced with exec.it safely.  */
+
+static bool
+execit_check_pchi_for_jal (bfd_vma relocation, bfd_vma insn_pc)
+{
+  /* after relocation, EXECIT_JALs might be distributed across 2M window,
+   * which would fail the execit relaxation.
+   * so far, only the first 2M window are accepted.
+   */
+  if ((relocation > execit.jal_window_end) ||
+      (insn_pc > execit.jal_window_end))
+    return false;
+
+  return true;
+}
+
 /* } Andes  */
 
 /* Initialize the pcgp reloc info in P.  */
@@ -4813,7 +5393,9 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
   /* initialize stuff here  */
   static int is_init = 0;
   if (is_init == 0)
-    {
+    { /* init execit state here  */
+      memset (&execit, 0, sizeof (execit));
+      execit.htab = riscv_elf_hash_table (info);
       is_init = 1;
     }
   /* } Andes  */
@@ -4822,7 +5404,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 
   /* if relax disabled  */
   if (bfd_link_relocatable (info)
-      || sec->sec_flg0
+      || (sec->sec_flg0 && info->relax_pass <= PASS_ALIGN_ORG)
       || (sec->flags & SEC_RELOC) == 0
       || sec->reloc_count == 0
       || (info->disable_target_specific_optimizations
@@ -4835,14 +5417,43 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
   /* { Andes  */
   /* if gp-insn-relax disabled  */
   if (andes->gp_relative_insn == 0
+      && info->relax_pass >= PASS_ANDES_GP_1
       && info->relax_pass <= PASS_ANDES_GP_2)
     return true;
 
   /* if execit disabled  */
-  if ((andes->target_optimization & RISCV_RELAX_EXECIT_ON) == 0 &&
-      info->relax_pass >= PASS_EXECIT_1 &&
-      info->relax_pass <= PASS_EXECIT_2)
+  if ((andes->target_optimization & RISCV_RELAX_EXECIT_ON) == 0
+      && info->relax_pass >= PASS_EXECIT_1
+      && info->relax_pass <= PASS_EXECIT_2)
     return true;
+
+  /* exec.it initializatoin if enabled.  */
+  if (info->relax_pass == PASS_EXECIT_1 && !execit.is_init)
+    {
+      bfd *output_bfd = info->output_bfd;
+      if ((andes->target_optimization & RISCV_RELAX_EXECIT_ON) &&
+	  (output_bfd) &&
+	  (elf_elfheader (output_bfd)->e_flags & EF_RISCV_RVC))
+	{
+	  andes_execit_init (info);
+	  /* For EXECIT update, we replace execit candiadtes to exec.it
+	     according to the imported table first. After that,
+	     we build the EXECIT hash table for the remaining patterns
+	     to do EXECIT replacement again.  */
+	  if (andes->execit_import_file)
+	    {
+	      execit.is_built = 1;
+	      riscv_elf_execit_import_table (abfd, info);
+	    }
+	}
+      else
+	{
+	  execit.is_built = 1;
+	  execit.is_replaced = 1;
+	}
+
+      execit.is_init = 1;
+    }
   /* } Andes  */
 
   riscv_init_pcgp_relocs (&pcgp_relocs);
@@ -4853,6 +5464,87 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
   else if (!(relocs = _bfd_elf_link_read_relocs (abfd, sec, NULL, NULL,
 						 info->keep_memory)))
     goto fail;
+
+  /* { Andes  */
+  /* Sort relocation by r_offset.  */
+  riscv_insertion_sort (relocs, sec->reloc_count,
+			sizeof (Elf_Internal_Rela), compar_reloc);
+
+  switch (info->relax_pass)
+    {
+    case PASS_ANDES_INIT:
+      if (execit.is_built && execit.is_replaced)
+	return true;
+      execit.final_sec = sec;
+      return true;
+    /* Here is the entrance of EXECIT relaxation. There are two pass of
+	EXECIT relaxation. The one is to traverse all instructions and build
+	the hash table. The other one is to compare instructions and replace
+	it by exec.it.  */
+    case PASS_EXECIT_1:
+      if (andes->execit_import_file && andes->keep_import_execit
+	  && !andes->update_execit_table && sec == execit.final_sec)
+	{ /* special case that itable needs to be built explicitly.  */
+	  andes_execit_traverse_insn_hash (andes_execit_rank_imported_insn);
+	  andes_execit_build_itable (info);
+	}
+      if (execit.is_built)
+	return true;
+      if (!andes_execit_hash_insn (abfd, sec, info))
+	return false;
+      if (sec == execit.final_sec)
+	{ /* rank instruction patterns.  */
+	  andes_execit_traverse_insn_hash (andes_execit_rank_insn);
+	  if (andes->execit_import_file)
+	    andes_execit_traverse_insn_hash (andes_execit_rank_imported_insn);
+	  andes_execit_build_itable (info);
+	  execit.is_built = 1;
+	}
+      return true;
+    case PASS_EXECIT_2:
+      if (execit.is_replaced)
+	return true;
+      if (!andes_execit_replace_insn (info, abfd, sec))
+	return false;
+      if (sec == execit.final_sec)
+	{
+	  execit.is_replaced = 1;
+	  andes_execit_delete_blank (info);
+	  if (andes->update_execit_table && !execit.is_replace_again)
+	    {
+	      execit.is_replace_again = 1;
+	      execit.is_built = 0;
+	      execit.is_replaced = 0;
+	      info->relax_pass = PASS_EXECIT_1;
+	      *again = true;
+	    }
+	}
+      return true;
+    case PASS_REDUCE: /* after PASS_RESLOVE */
+      if (!execit.is_itable_finalized)
+	{ /* finalize itable size  */
+	  execit.is_itable_finalized = 1;
+	  if ((andes->execit_import_file == NULL) ||
+	      andes->keep_import_execit ||
+	      andes->update_execit_table)
+	    {
+	      asection *table_sec;
+	      table_sec = andes_execit_get_section (info->input_bfds);
+	      BFD_ASSERT (table_sec != NULL);
+	      #ifdef ITABLE_IS_SAFE_TO_REDUCE
+	      table_sec->size = execit.next_itable_index << 2;
+	      #endif
+	    }
+	}
+      return true;
+    case PASS_ANDES_GP_1 ... PASS_DELETE_ORG:
+    case PASS_ALIGN_ORG ... PASS_RESLOVE:
+      break;
+    default:
+      (*_bfd_error_handler) (_("error: Unknow relax pass."));
+      break;
+    }
+  /* } Andes  */
 
   if (htab)
     {
@@ -4932,6 +5624,18 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	relax_func = _bfd_riscv_relax_delete;
       else if (info->relax_pass == PASS_ALIGN_ORG && type == R_RISCV_ALIGN)
 	relax_func = _bfd_riscv_relax_align;
+      else if (info->relax_pass == PASS_RESLOVE && type == R_RISCV_ANDES_TAG
+	       && (ELFNN_R_SYM (rel->r_info) == R_RISCV_EXECIT_ITE))
+	{ /* convert relocation to execit_ite from andes_misc  */
+	  execit_irelx_t *irel_ext = (execit_irelx_t *) rel->r_addend;
+	  max_alignment = irel_ext->annotation; /* execit_index  */
+	  /* rel->r_offset might be changed!  */
+	  rel->r_info = irel_ext->saved_irel.r_info;
+	  /* TODO: assert addend unchanged?  */
+	  rel->r_addend = irel_ext->saved_irel.r_addend;
+/*	  rel->r_info = ELFNN_R_INFO (ELFNN_R_SYM (rel->r_info), R_RISCV_EXECIT_ITE); */
+	  relax_func = andes_relax_execit_ite;
+	}
       else
 	continue;
 
@@ -5399,7 +6103,7 @@ riscv_elf_merge_symbol_attribute (struct elf_link_hash_entry *h,
 /* Return the symbol DATA_START_SYMBOLS value, or 0 if it is not in use.  */
 
 static bfd_vma
-riscv_data_start_value (struct bfd_link_info *info)
+riscv_data_start_value (const struct bfd_link_info *info)
 {
   struct bfd_link_hash_entry *h;
 
@@ -5661,6 +6365,1797 @@ _bfd_riscv_relax_lui_gp_insn (bfd *abfd, asection *sec, asection *sym_sec,
      behavior.  */
   return true;
 }
+
+/* Generate EXECIT hash table.  */
+
+static bool
+andes_execit_hash_insn (bfd *abfd, asection *sec,
+			struct bfd_link_info *link_info)
+{
+  bfd_byte *contents = NULL;
+  Elf_Internal_Sym *isym = NULL;
+  struct riscv_elf_link_hash_table *htab = riscv_elf_hash_table (link_info);
+  bfd_vma off = 0;
+  Elf_Internal_Rela *internal_relocs;
+  Elf_Internal_Rela *irelend;
+  Elf_Internal_Rela *irel;
+  uint32_t insn;
+  int data_flag;
+  int is_on_relocation;
+  execit_context_t ctx;
+  const char *hash = ctx.buf;
+
+  ctx.abfd = abfd;
+  ctx.sec = sec;
+  ctx.info = link_info;
+
+  /* Load section instructions, relocations, and symbol table.  */
+  if (!riscv_get_section_contents (abfd, sec, &contents, true)
+      || !riscv_get_local_syms (abfd, sec, &isym))
+    return false;
+
+  internal_relocs = _bfd_elf_link_read_relocs (abfd, sec, NULL, NULL,
+					       true /* keep_memory  */);
+  irelend = internal_relocs + sec->reloc_count;
+
+  /* Check the input section enable EXECIT?  */
+  irel = find_relocs_at_address (internal_relocs, internal_relocs, irelend,
+				 R_RISCV_RELAX_ENTRY);
+
+  /* Check this input section trigger EXECIT relaxation.  */
+  if (irel == NULL
+      || irel >= irelend
+      || ELFNN_R_TYPE (irel->r_info) != R_RISCV_RELAX_ENTRY
+      || (ELFNN_R_TYPE (irel->r_info) == R_RISCV_RELAX_ENTRY
+	  && !(irel->r_addend & R_RISCV_RELAX_ENTRY_EXECIT_FLAG)))
+    return true;
+
+  /* hash insn. in andes_gen_execit_hash()  */
+  while (off < sec->size)
+    {
+      execit_hash_t *he;
+
+      /* locate next nearby relocation  */
+      while (irel != NULL && irel < irelend && irel->r_offset < off)
+	irel++;
+
+      data_flag = riscv_relocation_check (link_info, &irel, irelend, sec,
+					  &off, contents, 1);
+
+      if (data_flag & DATA_EXIST)
+	{
+	  off += (data_flag >> 24);
+	  continue;
+	}
+      else if (data_flag & RELAX_REGION_END)
+	{
+	  continue;
+	}
+
+      /* skip 16-bit instruction.  */
+      if ((*(contents + off) & 0x3) != 0x3)
+	{
+	  off += 2;
+	  continue;
+	}
+
+      /* filter out some sorts of pattern unsafe or hard to exec.it  */
+      insn = bfd_get_32 (abfd, contents + off);
+      if (!riscv_elf_execit_check_insn_available (insn, htab))
+	{
+	  off += 4;
+	  continue;
+	}
+
+      is_on_relocation =
+	(irel != NULL &&
+         irel < irelend &&
+	 irel->r_offset == off &&
+	 data_flag & SYMBOL_RELOCATION) ?
+	true : false;
+
+      memset (&ctx.ie, 0, sizeof (ctx.ie));
+      ctx.ie.insn = insn;
+      ctx.irel = is_on_relocation ? irel : NULL;
+      ctx.off = off;
+#ifdef DEBUG_EXECIT
+	  execit.render_hash_count++;
+#endif /* DEBUG_EXECIT */
+      if (andes_execit_render_hash (&ctx) != EXECIT_HASH_OK)
+	{
+#ifdef DEBUG_EXECIT
+	  execit.render_hash_ng_count++;
+#endif /* DEBUG_EXECIT */
+	  off += 4;
+	  continue;
+	}
+
+      /* add hash entry.  */
+      he = (execit_hash_t*)
+	bfd_hash_lookup (&execit.code_hash, hash, true, true);
+      if (he == NULL)
+	{
+	  (*_bfd_error_handler)
+	    (_("Linker: failed creating exec.it %s hash table\n"), hash);
+	  return false;
+	}
+
+      /* special handlings:
+       *  LUI: log addresses to calcute itable entries to reserve.
+       */
+      if (ctx.irel && (ELFNN_R_TYPE (ctx.irel->r_info) == R_RISCV_HI20))
+	{
+	  execit_irel_t *e = bfd_zmalloc (sizeof (execit_irel_t));
+	  e->ie = ctx.ie;
+	  LIST_APPEND(&he->irels, e);
+	}
+
+      if (he->ie.est_count == 0)
+	{
+#ifdef DEBUG_EXECIT
+	  //printf("hash[%d]: %08lx, size=%d\n", execit.hash_count, (intptr_t)he, execit_code_hash.count);
+	  execit.hash_count++;
+#endif /* DEBUG_EXECIT */
+	  he->ie = ctx.ie;
+	}
+
+      he->ie.est_count++;
+
+      off += 4;
+    }
+  return true;
+}
+
+/* Hash table traverse function.  */
+
+static void
+andes_execit_traverse_insn_hash (int (*func) (execit_hash_t*))
+{
+  unsigned int i;
+
+  execit.code_hash.frozen = 1;
+  for (i = 0; i < execit.code_hash.size; i++)
+    {
+      struct bfd_hash_entry *p;
+
+      for (p = execit.code_hash.table[i]; p != NULL; p = p->next)
+	if (!func ((execit_hash_t *) p))
+	  goto out;
+    }
+out:
+  execit.code_hash.frozen = 0;
+}
+
+/* Examine each insn times in hash table.
+   Handle multi-link hash entry.
+
+   NOTE: always return true to continue traversing
+   TODO: This function doesn't assign so much info since it is fake.  */
+
+static int
+andes_execit_rank_insn (execit_hash_t *he)
+{
+  execit_itable_t *ie = &he->ie;
+  Elf_Internal_Rela *irel = ie->irel;
+
+  if (irel && ELFNN_R_TYPE (irel->r_info) == R_RISCV_HI20)
+    {
+      execit_vma_t *lst = NULL;
+#ifdef DEBUG_EXECIT_LUI
+      printf("%s: hash=%s\n", __FUNCTION__, he->root.string);
+#endif
+      andes_execit_estimate_lui (he, &lst);
+      he->ie.entries = LIST_LEN(&lst);
+#ifdef DEBUG_EXECIT_LUI
+      printf("%s: entries=%d\n", __FUNCTION__, he->ie.entries);
+#endif
+      LIST_EACH(&lst, free_each_cb);
+      if (ie->est_count <= ie->entries * 2)
+	return true;
+    }
+  else if (ie->est_count > 2)
+    ie->entries = 1;
+  else
+    return true;
+
+  execit_rank_t *re = bfd_zmalloc (sizeof (execit_rank_t));
+  re->he = he;
+  he->is_worthy = true;
+  LIST_ITER(&execit.rank_list, re, rank_each_cb, append_final_cb);
+
+  return true;
+}
+
+/* Examine each insn hash entry for imported exec.itable instructions
+   NOTE: always return true to continue traversing
+*/
+
+static int
+andes_execit_rank_imported_insn (execit_hash_t *he)
+{
+  execit_rank_t *re, *p, *pp;
+
+  if (! he->is_imported)
+    return true;
+
+  re = bfd_zmalloc (sizeof (execit_rank_t));
+  re->he = he;
+  he->is_worthy = true;
+
+  /* insert imported exec.it entries  */
+  pp = NULL;
+  p = execit.rank_list;
+  while (p)
+    {
+      if ((! p->he->is_imported) ||
+	  (p->he->ie.itable_index > he->ie.itable_index))
+	break;
+      pp = p;
+      p = p->next;
+    }
+
+  re->next = p;
+  if (pp)
+    pp->next = re;
+  else
+    execit.rank_list = re;
+
+  return true;
+}
+
+/* Build .exec.itable section.  */
+
+static void
+andes_execit_build_itable (struct bfd_link_info *info)
+{
+  bfd *abfd;
+  asection *table_sec;
+  execit_rank_t *p;
+  bfd_byte *contents = NULL;
+  struct riscv_elf_link_hash_table *table;
+  andes_ld_options_t *andes;
+  int limit; /* hardware available entries  */
+  int total; /* software used entries  */
+  int count; /* total insns to be replaced  */
+  int order; /* rank order of (raw) hash  */
+  int index; /* next entry index  */
+  int has_entry = false;
+
+  while (true)
+    {
+      /* Find the section .exec.itable, and put all entries into it.  */
+      table_sec = andes_execit_get_section (info->input_bfds);
+      if (table_sec == NULL)
+	break;
+
+      table = riscv_elf_hash_table (info);
+      andes = &table->andes;
+      abfd = table_sec->owner;
+      /* TODO: hacky! try to do with SEC_LINKER_CREATED  */
+      flagword keep = bfd_section_flags (table_sec);
+      table_sec->flags |= SEC_LINKER_CREATED;
+      riscv_get_section_contents (abfd, table_sec, &contents, true);
+      table_sec->flags = keep;
+      if (contents == NULL)
+	break;
+
+      /* skip ITB checking if there is no candidate. bug#23317  */
+      if (execit.rank_list == NULL)
+	break;
+
+      /* Check ITB register if set.  */
+      if (!andes->execit_import_file
+	  && !bfd_link_hash_lookup (info->hash, "_ITB_BASE_",
+				    false, false, true))
+	{
+	  (*_bfd_error_handler) (_(
+	    "\nError: Instruction Table(IT) is used, but Instruction "
+	    "Table Base($ITB) isn't set.\nPlease add the following "
+	    "instructions in _start of the startup code"
+	    "(crt0.S or start.S):\n"
+	    "\"la a0, _ITB_BASE_; csrrw x0, uitb, a0\""));
+	  exit (1);
+	}
+
+      /* skip if itable is imported and not to keep or to update  */
+      if (andes->execit_import_file &&
+	  ! andes->keep_import_execit &&
+	  ! andes->update_execit_table)
+	break;
+
+      has_entry = true;
+      break;
+    };
+
+  if (has_entry == false)
+    {
+      if (table_sec)
+	table_sec->size = 0;
+      return;
+    }
+
+  /* TODO: change the e_flag for EXECIT.  */
+
+  limit = andes->execit_limit;
+  /* odd old definition (v5_toolmisc_test)  */
+  if (andes->execit_import_file &&
+      andes->update_execit_table &&
+      andes->execit_limit >= 0)
+    limit += execit.next_itable_index;
+  if ((limit < 0) || (limit > EXECIT_HW_ENTRY_MAX))
+    limit = EXECIT_HW_ENTRY_MAX;
+
+  /* Write EXECIT candidates into .exec.itable. We will
+     relocate the patterns with relocations later
+     in andes_execit_relocate_itable.  */
+
+  /* might have imported some  */
+  total = count = order = index = 0;
+  for (p = execit.rank_list;
+       p && index < limit;
+       p = p->next)
+    {
+      execit_hash_t *he = p->he;
+      execit_itable_t *ie = &he->ie;
+
+      if ((total + ie->entries) > limit)
+	continue;
+
+      bfd_put_32 (abfd, (bfd_vma) ie->fixed, (char *) contents + (index << 2));
+
+      he->is_chosen = true;
+      ie->rank_order = order++;
+      ie->itable_index = index++;
+      /* reserve one here, to allocate others on demand (R_RISCV_EXECIT_ITE)  */
+      total += ie->entries;
+      count += ie->est_count;
+    }
+
+  table_sec->size = total << 2;
+
+  /* build itable[0..size] = [*hash, ...]  */
+  execit.itable_array = bfd_zmalloc (sizeof (execit_hash_t *) * total);
+  index = 0;
+  for (p = execit.rank_list;
+       p && index < limit;
+       p = p->next)
+    {
+      execit_hash_t *he = p->he;
+      if (!he->is_chosen)
+	continue;
+
+      execit.itable_array[index] = he;
+      index++;
+    }
+
+  execit.raw_itable_entries = index;
+  execit.next_itable_index = index;
+}
+
+/* Replace input file instruction which is in the .exec.itable.  */
+
+static bool
+andes_execit_replace_insn (struct bfd_link_info *link_info,
+			   bfd *abfd, asection *sec)
+{
+  bfd_byte *contents = NULL;
+  Elf_Internal_Sym *isym = NULL;
+  struct riscv_elf_link_hash_table *htab = riscv_elf_hash_table (link_info);
+  bfd_vma off = 0;
+  Elf_Internal_Rela *internal_relocs;
+  Elf_Internal_Rela *irelend;
+  Elf_Internal_Rela *irel;
+  uint32_t insn;
+  int data_flag;
+  int is_on_relocation;
+  execit_context_t ctx;
+  
+  memset (&ctx.ie, 0, sizeof (ctx.ie));
+  ctx.abfd = abfd;
+  ctx.sec = sec;
+  ctx.info = link_info;
+
+  /* Load section instructions, relocations, and symbol table.  */
+  if (!riscv_get_section_contents (abfd, sec, &contents, true)
+      || !riscv_get_local_syms (abfd, sec, &isym))
+    return false;
+
+  internal_relocs = _bfd_elf_link_read_relocs (abfd, sec, NULL, NULL,
+					       true /* keep_memory  */);
+  irelend = internal_relocs + sec->reloc_count;
+
+  /* Check the input section enable EXECIT?  */
+  irel = find_relocs_at_address (internal_relocs, internal_relocs, irelend,
+				 R_RISCV_RELAX_ENTRY);
+
+  /* Check this input section trigger EXECIT relaxation.  */
+  if (irel == NULL
+      || irel >= irelend
+      || ELFNN_R_TYPE (irel->r_info) != R_RISCV_RELAX_ENTRY
+      || (ELFNN_R_TYPE (irel->r_info) == R_RISCV_RELAX_ENTRY
+	  && !(irel->r_addend & R_RISCV_RELAX_ENTRY_EXECIT_FLAG)))
+    return true;
+
+  /* hash insn. in andes_gen_execit_hash()  */
+  char *hash = ctx.buf;
+  while (off < sec->size)
+    {
+      execit_hash_t* entry;
+
+      /* locate next nearby relocation  */
+      while (irel != NULL && irel < irelend && irel->r_offset < off)
+	irel++;
+
+      data_flag = riscv_relocation_check (link_info, &irel, irelend, sec,
+					  &off, contents, 1);
+
+      if (data_flag & DATA_EXIST)
+	{
+	  off += (data_flag >> 24);
+	  continue;
+	}
+      else if (data_flag & RELAX_REGION_END)
+	{
+	  continue;
+	}
+
+      /* skip 16-bit instruction.  */
+      if ((*(contents + off) & 0x3) != 0x3)
+	{
+	  off += 2;
+	  continue;
+	}
+
+      /* filter out some sorts of pattern unsafe or hard to exec.it  */
+      insn = bfd_get_32 (abfd, contents + off);
+      if (!riscv_elf_execit_check_insn_available (insn, htab))
+	{
+	  off += 4;
+	  continue;
+	}
+
+      is_on_relocation =
+	(irel != NULL &&
+         irel < irelend &&
+	 irel->r_offset == off &&
+	 data_flag & SYMBOL_RELOCATION) ?
+	true : false;
+
+      ctx.irel = is_on_relocation ? irel : NULL;
+      ctx.off = off;
+      memset (&ctx.ie, 0, sizeof (ctx.ie));
+      ctx.ie.insn = insn;
+#ifdef DEBUG_EXECIT
+	  execit.repplace_insn_count++;
+#endif /* DEBUG_EXECIT */
+      if (andes_execit_render_hash (&ctx) != EXECIT_HASH_OK)
+	{
+#ifdef DEBUG_EXECIT
+	  execit.repplace_insn_ng_count++;
+#endif /* DEBUG_EXECIT */
+	  off += 4;
+	  continue;
+	}
+
+      /* lookup hash table.  */
+      entry = (execit_hash_t*)
+	bfd_hash_lookup (&execit.code_hash, hash, false, false);
+      if (!(entry && entry->is_chosen))
+	{
+#ifdef DEBUG_EXECIT
+	  execit.repplace_insn_ng_count++;
+#endif /* DEBUG_EXECIT */
+	  off += 4;
+	  continue;
+	}
+
+      /* replace insn now.  */
+      ctx.contents = contents;
+      if (!andes_execit_push_insn (&ctx, entry))
+	{
+#ifdef DEBUG_EXECIT
+	  execit.repplace_insn_ng_count++;
+#endif /* DEBUG_EXECIT */
+	}
+
+      off += 4;
+    } /* while off  */
+
+  return true;
+}
+
+/* Delete blanks according to blank_list.  */
+
+static void
+andes_execit_delete_blank (struct bfd_link_info *info)
+{
+  execit_blank_abfd_t *pabfd = execit.blank_list;
+  execit_blank_abfd_t *qabfd = NULL;
+
+  while (pabfd)
+    {
+      qabfd = pabfd;
+      pabfd = pabfd->next;
+
+      execit_blank_section_t *psec = qabfd->sec;
+      execit_blank_section_t *qsec = NULL;
+      while (psec)
+	{
+	  qsec = psec;
+	  psec = psec->next;
+
+	  execit_blank_unit_t *p = qsec->unit;
+	  execit_blank_unit_t *q = NULL;
+	  size_t total_deleted_size = 0;
+	  bfd_vma offset;
+	  while (p)
+	    {
+	      q = p;
+	      p = p->next;
+
+	      offset = q->offset - total_deleted_size;
+	      riscv_relax_delete_bytes (qabfd->abfd, qsec->sec, offset,
+					q->size, info, NULL);
+	      total_deleted_size += q->size;
+	      free (q);
+	    }
+	  free (qsec);
+	}
+	free (qabfd);
+    }
+  execit.blank_list = NULL;
+}
+
+/* Get section .exec.itable.  */
+
+static asection*
+andes_execit_get_section (bfd *input_bfds)
+{
+  asection *sec = NULL;
+  bfd *abfd;
+
+  if (execit.itable_section != NULL)
+    return execit.itable_section;
+
+  for (abfd = input_bfds; abfd != NULL; abfd = abfd->link.next)
+    {
+      sec = bfd_get_section_by_name (abfd, EXECIT_SECTION);
+      if (sec != NULL)
+	break;
+    }
+
+  execit.itable_section = sec;
+  return sec;
+}
+
+/* Get the contents of a section.  */
+
+static int
+riscv_get_section_contents (bfd *abfd, asection *sec,
+			    bfd_byte **contents_p, bool cache)
+{
+  /* Get the section contents.  */
+  if (elf_section_data (sec)->this_hdr.contents != NULL)
+    *contents_p = elf_section_data (sec)->this_hdr.contents;
+  else
+    {
+      if (!bfd_malloc_and_get_section (abfd, sec, contents_p))
+	return false;
+      if (cache)
+	elf_section_data (sec)->this_hdr.contents = *contents_p;
+    }
+
+  return true;
+}
+
+/* Find a relocation of type specified by reloc_type
+   of the same r_offset with reloc. If not found, return irelend.
+
+   Note that relocations must be sorted by r_offset,
+   we find the relocation from "reloc" backward untill relocs,
+   or find it from "reloc" forward untill irelend.  */
+
+static Elf_Internal_Rela *
+find_relocs_at_address (Elf_Internal_Rela *reloc,
+			Elf_Internal_Rela *relocs,
+			Elf_Internal_Rela *irelend,
+			enum elf_riscv_reloc_type reloc_type)
+{
+  Elf_Internal_Rela *rel_t;
+
+  /* Find backward.  */
+  for (rel_t = reloc;
+       rel_t >= relocs && rel_t->r_offset == reloc->r_offset;
+       rel_t--)
+    if (ELFNN_R_TYPE (rel_t->r_info) == reloc_type)
+      return rel_t;
+
+  /* We didn't find it backward.
+     Try find it forward.  */
+  for (rel_t = reloc;
+       rel_t < irelend && rel_t->r_offset == reloc->r_offset;
+       rel_t++)
+    if (ELFNN_R_TYPE (rel_t->r_info) == reloc_type)
+      return rel_t;
+
+  return irelend;
+}
+
+/* For target aligned, optimize is zero.
+   For EXECIT, optimize is one.  */
+
+static int
+riscv_relocation_check (struct bfd_link_info *info,
+			Elf_Internal_Rela **irel,
+			Elf_Internal_Rela *irelend,
+			asection *sec, bfd_vma *off,
+			bfd_byte *contents, int optimize)
+{
+  /* We use the highest 1 byte of result to record
+     how many bytes location counter has to move.  */
+  int result = 0;
+  Elf_Internal_Rela *irel_save = NULL;
+  int nested_execit_depth;
+  bool execit_loop_aware;
+  bool is_no_execit, is_inner_loop;
+  struct riscv_elf_link_hash_table *table;
+  andes_ld_options_t *andes;
+
+  table = riscv_elf_hash_table (info);
+  andes = &table->andes;
+  execit_loop_aware = andes->execit_loop_aware;
+
+  while ((*irel) != NULL && (*irel) < irelend && (*off) == (*irel)->r_offset)
+    {
+      switch (ELFNN_R_TYPE ((*irel)->r_info))
+	{
+	case R_RISCV_RELAX_REGION_BEGIN:
+	  result = 0;
+	  irel_save = *irel; /* in case multiple relocations.  */
+	  /* to ignore code block.  */
+	  is_no_execit = (*irel)->r_addend & R_RISCV_RELAX_REGION_NO_EXECIT_FLAG;
+	  is_inner_loop = execit_loop_aware
+			  && ((*irel)->r_addend & R_RISCV_RELAX_REGION_IMLOOP_FLAG);
+	  nested_execit_depth = 0;
+	  if (optimize /* for execit */
+	      && (is_no_execit || is_inner_loop))
+	    {
+	      /* Check the region if is_inner_loop. if true and execit_loop_aware,
+	         ignore the region till region end.  */
+	      /* To save the status for in .no_execit_X region and
+		 loop region to confirm the block can do EXECIT relaxation.  */
+	      while ((*irel) && (*irel) < irelend && (is_no_execit || is_inner_loop))
+		{
+		  (*irel)++;
+		  if (ELFNN_R_TYPE ((*irel)->r_info) == R_RISCV_RELAX_REGION_BEGIN)
+		    { /* nested region detection.  */
+		      bool next_is_no_execit, next_is_inner_loop;
+		      nested_execit_depth++;
+		      if (nested_execit_depth > 0)
+			(*_bfd_error_handler)(_("%pB(%pA+0x%lx): Nested relax regions!"),
+					      sec->owner, sec, (*irel)->r_offset);
+		      /* since outter setting is still valid  */
+		      next_is_no_execit = (*irel)->r_addend & R_RISCV_RELAX_REGION_NO_EXECIT_FLAG;
+		      if (execit_loop_aware)
+			next_is_inner_loop = (*irel)->r_addend & R_RISCV_RELAX_REGION_IMLOOP_FLAG;
+		      if ((next_is_no_execit != is_no_execit) ||
+			  ((execit_loop_aware) &&
+			   (next_is_inner_loop != is_inner_loop)))
+			(*_bfd_error_handler)(_("%pB(%pA+0x%lx): Conflict nested relax regions!"),
+					      sec->owner, sec, (*irel)->r_offset);
+		    }
+		  else if (ELFNN_R_TYPE ((*irel)->r_info) == R_RISCV_RELAX_REGION_END)
+		    { /* nested regions are parsed but ignored!  */
+		      if (nested_execit_depth)
+			nested_execit_depth--;
+		      else
+			{
+			  bfd_vma end_off = (*irel)->r_offset;
+			  if (end_off != irel_save->r_offset)
+			    { /* rollback to the first relocation with the same end_off.  */
+			      *irel = irel_save;
+			      while (((*irel)->r_offset < end_off) && (*irel) < irelend)
+				(*irel)++;
+			      result |= RELAX_REGION_END;
+			    }
+			  else /* empty region, but might with other relocations.  */
+			    *irel = irel_save + 1; /* skip region begin  */
+			  break;
+			}
+		    }
+		}
+
+	      if ((*irel) >= irelend)
+		*off = sec->size;
+	      else
+		*off = (*irel)->r_offset;
+	      irel_save = NULL;
+	    }
+	  break;
+	case R_RISCV_DATA:
+	  /* Data in text section.  */
+	  result |= ((*irel)->r_addend << 24);
+	  result |= DATA_EXIST;
+	  break;
+	  /* Here we regard unsupported relocations as data relocations
+	     and then skip them.   */
+	  /* Since a pair of R_RISCV_ADD (R_RISCV_SET) and R_RISCV_SUB point
+	     to the same address, we only need to skip them once.  */
+	case R_RISCV_SUB6:
+	case R_RISCV_SUB8:
+	  result |= (1 << 24);
+	  result |= DATA_EXIST;
+	  break;
+	case R_RISCV_SUB16:
+	  result |= (2 << 24);
+	  result |= DATA_EXIST;
+	  break;
+	case R_RISCV_RVC_LUI:
+	case R_RISCV_RVC_JUMP:
+	case R_RISCV_RVC_BRANCH:
+	  if (!optimize)
+	    irel_save = *irel;
+	  else
+	    {
+	      result |= (2 << 24);
+	      result |= DATA_EXIST;
+	    }
+	  break;
+	case R_RISCV_32:
+	case R_RISCV_SUB32:
+	case R_RISCV_PCREL_HI20:
+	case R_RISCV_PCREL_LO12_I:
+	case R_RISCV_PCREL_LO12_S:
+	  result |= (4 << 24);
+	  result |= DATA_EXIST;
+	  break;
+	case R_RISCV_10_PCREL:
+	case R_RISCV_BRANCH:
+	    irel_save = *irel;
+	  if (!optimize)
+	    {
+	      result |= (4 << 24);
+	      result |= DATA_EXIST;
+	    }
+	  break;
+	  /* These relocation is supported EXECIT relaxation currently.  */
+	  /* We have to save the relocation for using later, since we have
+	     to check there is any alignment in the same address.  */
+	case R_RISCV_JAL:
+	  irel_save = *irel;
+	  if (!optimize)
+	    {
+	      result |= (4 << 24);
+	      result |= DATA_EXIST;
+	    }
+	  break;
+	case R_RISCV_HI20:
+	case R_RISCV_LO12_I:
+	case R_RISCV_LO12_S:
+	case R_RISCV_GPREL_I:
+	case R_RISCV_GPREL_S:
+	case R_RISCV_LGP18S0:
+	case R_RISCV_LGP17S1:
+	case R_RISCV_LGP17S2:
+	case R_RISCV_LGP17S3:
+	case R_RISCV_SGP18S0:
+	case R_RISCV_SGP17S1:
+	case R_RISCV_SGP17S2:
+	case R_RISCV_SGP17S3:
+	  if (optimize)
+	    irel_save = *irel;
+	  else
+	    {
+	      result |= (4 << 24);
+	      result |= DATA_EXIST;
+	    }
+	  break;
+	case R_RISCV_64:
+	case R_RISCV_SUB64:
+	case R_RISCV_CALL:
+	  /* skip auipc/jalr for R_RISCV_CALL
+	   * TODO: auipc should be replaced with EXECIT
+	   */
+	  result |= (8 << 24);
+	  result |= DATA_EXIST;
+	  break;
+	case R_RISCV_RELATIVE:
+	case R_RISCV_COPY:
+	case R_RISCV_JUMP_SLOT:
+	case R_RISCV_TLS_DTPMOD32:
+	case R_RISCV_TLS_DTPMOD64:
+	case R_RISCV_TLS_DTPREL32:
+	case R_RISCV_TLS_DTPREL64:
+	case R_RISCV_TLS_TPREL32:
+	case R_RISCV_TLS_TPREL64:
+	  /* These relocations are used by dynamic linker. In general, we
+	     should not see them here.  */
+	  (*_bfd_error_handler)
+	    (_("Linker: find dynamic relocation when doing relaxation\n"));
+	  break;
+	default:
+	  /* Relocation not supported.  */
+	  if (ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_RELAX
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_ANDES_TAG
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_NONE
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_RELAX_ENTRY
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_ADD8
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_ADD16
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_ADD32
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_ADD64
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_SET6
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_SET8
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_SET16
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_SET32
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_NO_RVC_REGION_BEGIN
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_NO_RVC_REGION_END
+	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_RELAX_REGION_END)
+	    {
+	      /* Since we already consider all relocations above, this won't
+		 happen unless supporting new relocations. */
+	      /* TODO: Maybe we should show warning message here.  */
+	      result |= DATA_EXIST;
+	      if ((*(contents + (*off)) & 0x3) != 0x3)
+		/* 16-bit instruction.  */
+		result |= (2 << 24);
+	      else
+		/* 32-bit instruction.  */
+		result |= (4 << 24);
+	      break;
+	    }
+	}
+      if (result & RELAX_REGION_END)
+	break;
+      (*irel)++;
+    }
+  if (irel_save)
+    {
+      *irel = irel_save;
+      result |= SYMBOL_RELOCATION;
+    }
+  return result;
+}
+
+#define MASK_IMM ENCODE_ITYPE_IMM (-1U)
+#define MASK_RS1 (OP_MASK_RS1 << OP_SH_RS1)
+#define MASK_RD (OP_MASK_RD << OP_SH_RD)
+#define MASK_MAJOR_OP OP_MASK_OP
+#define MATCH_OP_V (0x57)
+#define MATCH_OP_P (0x77)
+#define MATCH_OP_XDSP (0x7f)
+#define MATCH_OP_AMO (0x2f)
+#define MATCH_OP_LOAD_FP (0x07)
+#define MATCH_OP_STORE_FP (0x27)
+#define MASK_OP_XDSP_A  (0xfff0007f)
+#define MATCH_OP_XDSP_A (0x80100073)
+
+static bool
+riscv_elf_execit_check_insn_available (uint32_t insn,
+				       struct riscv_elf_link_hash_table *htab)
+{
+  andes_ld_options_t *andes = &htab->andes;
+  /* For bug-11621, system call should not be replaced by exec.it.  */
+  /* According to spec, SCALL and SBREAK have been renamed to
+     ECALL and EBREAK. Their encoding and functionality are unchanged.  */
+  /* Invalid insns: ecall, ebreak, ACE, ret.  */
+  if ((insn & MASK_ECALL) == MATCH_ECALL
+      || (insn) == MATCH_ADDI /* NOP (not c.nop)  */
+      || (insn & MASK_EBREAK) == MATCH_EBREAK
+      || (insn & 0x7f) == 0x7b /* ACE  */
+      || ((insn & (MASK_JALR | MASK_RD | MASK_RS1 | MASK_IMM))
+	  == (MATCH_JALR | (X_RA << OP_SH_RS1)))) /* ret  */
+    return false;
+
+  /* configurable sets  */
+  uint32_t major = insn & MASK_MAJOR_OP;
+  uint32_t width = (insn >> 12) & 0x7;
+  if (!andes->execit_flags.rvv)
+    { /* RVV is excluded.  */
+      if (major == MATCH_OP_V)
+	return false;
+      else
+	{
+	  /* Zvamo is removed, TODO: review this  */
+	  if ((major == MATCH_OP_AMO) && (width > 5))
+	    return false;
+	  /* partial FLS  */
+	  if (((major == MATCH_OP_LOAD_FP) ||
+	       (major == MATCH_OP_STORE_FP)) &&
+	      ((width == 0) || (width > 4)))
+	    return false;
+	}
+    }
+
+  if (!andes->execit_flags.rvp)
+    { /* RVP is excluded.  */
+      if (major == MATCH_OP_P)
+	return false;
+    }
+
+  if (!andes->execit_flags.fls)
+    { /* Float Load/Store. is excluded.  */
+      /* Standard scalar FP  */
+      if (((major == MATCH_OP_LOAD_FP) ||
+	   (major == MATCH_OP_STORE_FP)) &&
+	  ((width > 0) && (width < 5)))
+	return false;
+    }
+
+  if (!andes->execit_flags.xdsp)
+    { /* Andes Xdsp is excluded.  */
+      if ((major == MATCH_OP_XDSP) ||
+          ((insn & MASK_OP_XDSP_A) == MATCH_OP_XDSP_A))
+	return false;
+    }
+
+  /* others  */
+  return true;
+}
+
+static int
+list_iterate (list_entry_t **lst, void *obj,
+	      list_iter_cb_t each, list_iter_cb_t final)
+{
+  list_entry_t *p, *q, *pp;
+  int count = 0;
+
+  p = *lst;
+  q = NULL;
+  while (p)
+    {
+      count++;
+
+      /* p might be freed within following call.  */
+      pp = p->next;
+      if (each && each(lst, obj, p, q))
+	break;
+
+      q = p;
+      p = pp;
+
+    }
+
+  if (final)
+    final(lst, obj, p, q);
+
+  return count;
+}
+
+static int
+append_final_cb (list_entry_t **lst, list_entry_t *j,
+		 list_entry_t *p, list_entry_t *q)
+{
+  if (q)
+    q->next = j;
+  else
+    *lst = j;
+
+  j->next = p;
+
+  return 0;
+}
+
+static int 
+free_each_cb (void *l ATTRIBUTE_UNUSED, void *j ATTRIBUTE_UNUSED,
+	      void *p ATTRIBUTE_UNUSED, execit_vma_t *q)
+{
+  if (q)
+    free (q);
+  return false; /* to the end  */
+}
+
+static void
+andes_execit_estimate_lui (execit_hash_t *he, execit_vma_t **lst_pp)
+{
+  LIST_EACH(&he->irels, andes_execit_estimate_lui_each_cb);
+  /* count itable entries are required  */
+  collect_lui_vma_each_cb(NULL, NULL, NULL, NULL); /* reset cache  */
+  LIST_EACH1(&he->irels, collect_lui_vma_each_cb, lst_pp);
+}
+
+/*  EXECIT rank list helpers  */
+
+static int
+rank_each_cb (void *l ATTRIBUTE_UNUSED, execit_rank_t *j, execit_rank_t *p,
+	      void *q ATTRIBUTE_UNUSED)
+{
+  int a, b;
+
+  if (!p)
+    return -1;
+
+  a = j->he->ie.est_count / j->he->ie.entries;
+  b = p->he->ie.est_count / p->he->ie.entries;
+
+  if (a != b)
+    return (a > b);
+  else if (j->he->ie.fixed != p->he->ie.fixed)
+    return (j->he->ie.fixed < p->he->ie.fixed); /* smaller op/reg first */
+
+  /* earliy id first  */
+  return (j->he->id < p->he->id);
+}
+
+/* Replace with exec.it instruction.  */
+
+static bool
+andes_execit_push_insn (execit_context_t *ctx, execit_hash_t* h)
+{
+  uint16_t insn16;
+  execit_itable_t *e = andes_execit_itable_lookup (ctx, h);
+  if (e == NULL)
+    return false;
+
+  /* replace code.  */
+  insn16 = (uint16_t)EXECIT_INSN | ENCODE_RVC_EXECIT_IMM (e->itable_index << 2);
+  bfd_put_16 (ctx->abfd, insn16, ctx->contents + ctx->off);
+
+  if (!execit_push_blank (ctx, 2, 2))
+    return false;
+
+  /* NOT necessary the one in hash  */
+  if (ctx->irel && !andes_execit_mark_irel (ctx->irel, h->ie.itable_index))
+    return false;
+
+  return true;
+}
+
+static int 
+andes_execit_estimate_lui_each_cb(void *l ATTRIBUTE_UNUSED,
+				  void *j ATTRIBUTE_UNUSED,
+				  execit_irel_t *p,
+				  void *q ATTRIBUTE_UNUSED)
+{
+  bfd_vma addr, hi20;
+  BFD_ASSERT (p);
+  addr = p->ie.relocation;
+  if (ARCH_SIZE > 32)
+    BFD_ASSERT (VALID_UTYPE_IMM (RISCV_CONST_HIGH_PART (addr)));
+  hi20 = ENCODE_UTYPE_IMM (RISCV_CONST_HIGH_PART (addr));
+  p->ie.relocation = hi20;
+  return false; /* to iter to the end  */
+}
+
+static int 
+collect_lui_vma_each_cb(void *l, void *j_pp, execit_irel_t *p, void *q ATTRIBUTE_UNUSED)
+{
+  static bfd_vma last = -1u;
+
+  if (l == NULL) /* reset cache  */
+    {
+      last = -1u;
+      return last;
+    }
+
+  BFD_ASSERT (p);
+
+  if (p->ie.relocation != last)
+    {
+      execit_vma_t e;
+      last = p->ie.relocation; /* chache for speed  */
+
+      /* reserve one more entry in case crossing range.
+       * NOT doing so when determining final relocations. 
+       */
+      if (!execit.is_determining_lui && p->ie.relocation)
+	{
+	  e.vma = p->ie.relocation - (1u << 12);
+	  LIST_ITER(j_pp, &e, insert_vma_each_cb, insert_vma_final_cb);
+	}
+      e.vma = p->ie.relocation;
+      LIST_ITER(j_pp, &e, insert_vma_each_cb, insert_vma_final_cb);
+    }
+
+  return false; /* to iter to the end  */
+}
+
+static int 
+insert_vma_each_cb(void *l ATTRIBUTE_UNUSED, execit_vma_t *j, execit_vma_t *p, void *q ATTRIBUTE_UNUSED)
+{
+  BFD_ASSERT (p);
+  return (j->vma <= p->vma); /* ascending set */
+}
+
+static int 
+insert_vma_final_cb(void *l, execit_vma_t *j, execit_vma_t *p, void *q)
+{
+  if (p && (p->vma == j->vma))
+    return true;
+
+  execit_vma_t *e = bfd_zmalloc(sizeof(execit_vma_t));
+  e->vma = j->vma;
+  return append_final_cb(l, (void*) e, (void*) p, q);
+}
+
+/*  Lookup EXECIT times entry.  */
+static execit_itable_t *
+andes_execit_itable_lookup (execit_context_t *ctx,
+			    execit_hash_t* h)
+{
+  /* TODO: remove this function if sanity chcek is not a necessary.  */
+  execit_itable_t *a = &ctx->ie;
+  execit_itable_t *b = &h->ie;
+
+  while (true)
+    {
+      if (a->fixed != b->fixed)
+	break;
+      /* relocation might be changed  *//*
+      if (a->relocation != b->relocation)
+	break;  */
+      if ((a->irel == NULL) ^ (b->irel == NULL))
+        break;
+      if (a->irel) /* skip b->irel (checked above)  */
+	{
+	  if ((ELFNN_R_TYPE(a->irel_copy.r_info) == R_RISCV_HI20)
+	       && (ELFNN_R_TYPE(b->irel_copy.r_info) == R_RISCV_HI20))
+	    return b; /* skip future check  */
+	  if ((ELFNN_R_SYM(a->irel_copy.r_info)
+		!= ELFNN_R_SYM(b->irel_copy.r_info))
+	      && a->isec != b->isec)
+	    break;
+	}
+      return b; /* Pass  */
+    }
+
+  /* NG  */
+  printf("ctx  = %s, off = %08lx, abfd = %s\n", ctx->buf, a->pc - sec_addr(a->sec), a->sec->owner->filename);
+  printf("hash = %s, off = %08lx, abfd = %s\n", h->root.string, b->pc, b->sec->owner->filename);
+  printf("fixed = %08x:%08x\n", a->fixed, b->fixed);
+  printf("reloc = %08lx:%08lx\n", a->relocation, b->relocation);
+  printf("adden = %08lx:%08lx\n", a->addend, b->addend);
+  printf("r_info   = %08lx:%08lx\n", a->irel_copy.r_info, b->irel_copy.r_info);
+  printf("r_addend = %08lx:%08lx\n", a->irel_copy.r_addend, b->irel_copy.r_addend);
+  printf("r_offset = %08lx:%08lx\n", a->irel_copy.r_offset, b->irel_copy.r_offset);
+  printf("h = %08lx:%08lx\n", (intptr_t)a->h, (intptr_t)b->h);
+  printf("isym = %08lx:%08lx\n", (intptr_t)a->isym, (intptr_t)b->isym);
+  BFD_ASSERT (0);
+
+  return NULL;
+}
+
+static bool
+execit_push_blank (execit_context_t *ctx, bfd_vma delta, bfd_vma size)
+{
+  /* TODO: abfd can be found from sec->owner  */
+  execit_blank_abfd_t *pabfd = execit_lookup_blank_abfd (ctx);
+  if (pabfd == NULL)
+    return false;
+
+  execit_blank_section_t *psec = execit_lookup_blank_section (ctx, pabfd);
+  if (psec == NULL)
+    return false;
+
+  execit_blank_unit_t *p, *q;
+  bfd_vma offset = ctx->off + delta;
+
+  /* TODO: merge overlapped units  */
+  p = q = psec->unit;
+  while (p)
+    {
+      if ((p->offset == offset) &&
+	  (p->size == size))
+	break;
+      q = p;
+      p = p->next;
+    }
+
+  if (p == NULL)
+    {
+      p = bfd_zmalloc(sizeof (execit_blank_unit_t));
+      if (q)
+	q->next = p;
+      else
+	psec->unit = p;
+      p->offset = offset;
+      p->size = size;
+    }
+
+  return true;
+}
+
+static bool
+andes_execit_mark_irel (Elf_Internal_Rela *irel, int index)
+{
+  if ((ELFNN_R_TYPE (irel->r_info) == R_RISCV_HI20)
+      || (ELFNN_R_TYPE (irel->r_info) == R_RISCV_JAL))
+    {
+      execit_irelx_t *irel_ext =
+	andes_extend_irel(irel, R_RISCV_EXECIT_ITE, &execit.irelx_list);
+      irel_ext->annotation = index;
+    }
+  else
+    { /* replaced insns has no neeed to relocate  */
+      irel->r_info = ELFNN_R_INFO (ELFNN_R_SYM (irel->r_info), R_RISCV_NONE);
+    }
+  return true;
+}
+
+/* TODO: free allocated memory at a proper timing  */
+static execit_irelx_t*
+andes_extend_irel (Elf_Internal_Rela *irel, int subtype,
+		   execit_irelx_t **list)
+{  /* new one  */
+  execit_irelx_t *one = bfd_zmalloc (sizeof (execit_irelx_t));
+  BFD_ASSERT (one);
+  /* init  */
+  one->saved_irel = *irel;
+  irel->r_addend = (bfd_vma) one;
+  irel->r_info = ELFNN_R_INFO (subtype, R_RISCV_ANDES_TAG);
+  /* link  */
+  if (*list)
+    (*list)->next = one;
+  else
+    (*list) = one;
+  return one;
+}
+
+static execit_blank_abfd_t*
+execit_lookup_blank_abfd (execit_context_t *ctx)
+{
+  execit_blank_abfd_t *p, *q;
+  p = q = execit.blank_list;
+
+  while (p)
+    {
+      if (p->abfd == ctx->abfd)
+	break;
+      q = p;
+      p = p->next;
+    }
+
+  if (p == NULL)
+    {
+      p = bfd_zmalloc(sizeof (execit_blank_abfd_t));
+      if (q)
+	q->next = p;
+      else
+	execit.blank_list = p;
+      p->abfd = ctx->abfd;
+    }
+
+  return p;
+}
+
+static execit_blank_section_t*
+execit_lookup_blank_section (execit_context_t *ctx, execit_blank_abfd_t *blank_abfd)
+{
+  execit_blank_section_t *p, *q;
+  p = q = blank_abfd->sec;
+
+  while (p)
+    {
+      if (p->sec == ctx->sec)
+	break;
+      q = p;
+      p = p->next;
+    }
+
+  if (p == NULL)
+    {
+      p = bfd_zmalloc(sizeof (execit_blank_section_t));
+      if (q)
+	q->next = p;
+      else
+	blank_abfd->sec = p;
+      p->sec = ctx->sec;
+    }
+
+  return p;
+}
+
+/* Set the _ITB_BASE_, and point it to .exec.itable.  */
+
+static bool
+execit_set_itb_base (struct bfd_link_info *link_info)
+{
+  asection *sec;
+  bfd *output_bfd = NULL;
+  struct bfd_link_hash_entry *bh = NULL;
+
+  if (execit.is_itb_base_set == 1 || link_info->type == type_relocatable)
+    return true;
+
+  execit.is_itb_base_set = 1;
+
+  sec = execit_get_itable_section (link_info->input_bfds);
+  if (sec != NULL)
+    output_bfd = sec->output_section->owner;
+
+  if (output_bfd == NULL)
+    {
+      output_bfd = link_info->output_bfd;
+      if (output_bfd->sections == NULL)
+	return true;
+      else
+	sec = bfd_abs_section_ptr;
+    }
+
+  /* Do not define _ITB_BASE_ if it is not used.
+     And remain user to set it if needed.  */
+
+  bh = bfd_link_hash_lookup (link_info->hash, "_ITB_BASE_",
+			     false, false, true);
+  if (!bh)
+    return true;
+
+  return (_bfd_generic_link_add_one_symbol
+	  (link_info, output_bfd, "_ITB_BASE_", BSF_GLOBAL | BSF_WEAK | BSF_SECTION_SYM_USED,
+	   sec, 0, (const char *) NULL, false,
+	   get_elf_backend_data (output_bfd)->collect, &bh));
+}
+
+/* Adjust relocations in the .exec.itable, and then
+   export it if needed.  */
+
+static void
+andes_execit_relocate_itable (struct bfd_link_info *link_info)
+{
+  bfd *abfd;
+  asection *itable_sec = NULL;
+  execit_hash_t **itable = execit.itable_array;
+  uint32_t insn, insn_with_reg;
+  bfd_byte *contents = NULL;
+  int size = 0;
+  Elf_Internal_Rela rel_backup;
+  struct riscv_elf_link_hash_table *table;
+  andes_ld_options_t *andes;
+  bfd_vma gp;
+
+  /* Only need to be done once.  */
+  if (execit.relocate_itable_done)
+    return;
+  execit.relocate_itable_done = true;
+
+  table = riscv_elf_hash_table (link_info);
+  andes = &table->andes;
+
+  FILE *export_file = NULL;
+  if (andes->execit_export_file != NULL)
+    {
+      export_file = fopen (andes->execit_export_file, "wb");
+      if (export_file == NULL)
+	{
+	  (*_bfd_error_handler)
+	    (_("Warning: cannot open the exported .exec.itable %s."),
+	     andes->execit_export_file);
+	}
+    }
+
+  /* TODO: Maybe we should close the export file here, too.  */
+  if (andes->execit_import_file && !andes->update_execit_table)
+    return;
+
+  itable_sec = execit_get_itable_section (link_info->input_bfds);
+  if (itable_sec == NULL)
+    {
+      (*_bfd_error_handler) (_("ld: error cannot find .exec.itable section.\n"));
+      return;
+    }
+
+  gp = riscv_global_pointer_value (link_info);
+  if (itable_sec->size == 0)
+    return;
+
+  abfd = itable_sec->owner;
+  /* TODO: hacky! try to do with SEC_LINKER_CREATED  */
+  flagword keep = bfd_section_flags (itable_sec);
+  itable_sec->flags |= SEC_LINKER_CREATED;
+  riscv_get_section_contents (abfd, itable_sec, &contents, true);
+  itable_sec->flags = keep;
+  if (contents == NULL)
+   return;
+
+  /* Relocate instruction.  */
+  /* TODO: mark relocated entries to avoid redundancy calculations  */
+  for (int index = 0; index < execit.raw_itable_entries; ++index)
+    {
+      execit_hash_t *he = itable[index];
+      bfd_vma relocation; //, min_relocation = 0xffffffff;
+
+      BFD_ASSERT (he->is_chosen);
+
+      if ((he->is_relocated) &&
+	  (ELFNN_R_TYPE (he->ie.irel_copy.r_info) != R_RISCV_HI20))
+	continue;
+
+      insn = he->ie.insn;
+      if (he->ie.irel)
+	{
+	  rel_backup = he->ie.irel_copy;
+	  insn_with_reg = he->ie.fixed;
+	if (ELFNN_R_TYPE (rel_backup.r_info) == R_RISCV_JAL)
+	  {
+	    /* TODO: check est/ref counts for JAL window crossing.  */
+	    bfd_vma insn_pc = sec_addr(he->ie.sec) + he->ie.irel->r_offset;
+	    relocation = riscv_elf_execit_reloc_insn (&he->ie, link_info);
+	    he->ie.relocation = relocation; /* keep for later sanity check  */
+	    BFD_ASSERT ((relocation & 0xffe00000) == (insn_pc & 0xffe00000));
+	    relocation &= 0x001fffffu;
+	    insn = insn_with_reg
+	      | riscv_elf_encode_relocation (abfd, &rel_backup, relocation);
+	    bfd_put_32 (abfd, insn, contents + (he->ie.itable_index) * 4);
+	  }
+	else if (ELFNN_R_TYPE (rel_backup.r_info) == R_RISCV_LO12_I ||
+		 ELFNN_R_TYPE (rel_backup.r_info) == R_RISCV_LO12_S)
+	  {
+	    relocation = riscv_elf_execit_reloc_insn (&he->ie, link_info);
+	    insn = insn_with_reg
+	      | riscv_elf_encode_relocation (abfd, &rel_backup, relocation);
+	    bfd_put_32 (abfd, insn, contents + (he->ie.itable_index) * 4);
+	  }
+	else if (ELFNN_R_TYPE (rel_backup.r_info) == R_RISCV_GPREL_I
+		 || ELFNN_R_TYPE (rel_backup.r_info) == R_RISCV_GPREL_S)
+	  {
+	    relocation = riscv_elf_execit_reloc_insn (&he->ie, link_info) - gp;
+	    insn = insn_with_reg & ~(OP_MASK_RS1 << OP_SH_RS1);
+	    insn |= X_GP << OP_SH_RS1;
+	    insn |= riscv_elf_encode_relocation (abfd, &rel_backup, relocation);
+	    bfd_put_32 (abfd, insn, contents + (he->ie.itable_index) * 4);
+	  }
+	else if (ELFNN_R_TYPE (rel_backup.r_info) >= R_RISCV_LGP18S0
+		 && ELFNN_R_TYPE (rel_backup.r_info) <= R_RISCV_SGP17S3)
+	  {
+	    relocation = riscv_elf_execit_reloc_insn (&he->ie, link_info) - gp;
+	    insn = insn_with_reg
+	      | riscv_elf_encode_relocation (abfd, &rel_backup, relocation);
+	    bfd_put_32 (abfd, insn, contents + (he->ie.itable_index) * 4);
+	  }
+	else if (ELFNN_R_TYPE (rel_backup.r_info) == R_RISCV_HI20)
+	  {
+	    /* estimate lui relocation again (final).  */
+	//     andes_execit_determine_lui (he, &he->vmas, link_info);
+	    for (int i = 0; i < he->ie.entries; ++i)
+	      {
+		if (he->is_final == false)
+		  break;
+		relocation = he->ie.relocation;
+		insn = insn_with_reg
+		  | riscv_elf_encode_relocation (abfd, &rel_backup, relocation);
+		bfd_put_32 (abfd, insn, contents + (he->ie.itable_index << 2));
+		he->is_relocated = true;
+		if (he->next == 0)
+		  break;
+		he = itable[he->next];
+	      }
+	  }
+
+	  if (ELFNN_R_TYPE (rel_backup.r_info) != R_RISCV_HI20)
+	    he->is_final = he->is_relocated = true;
+      }
+      else
+	{
+	  /* No need to do relocation for insn without relocation.*/
+	}
+      size += 4;
+    }
+
+  size = execit.next_itable_index << 2;
+  itable_sec->size = size; /* could we do this at this phase ??  */
+
+  if (!andes->update_execit_table)
+    size = itable_sec->size;
+
+  if (export_file != NULL)
+    {
+      fwrite (contents, sizeof (bfd_byte), size, export_file);
+      fclose (export_file);
+    }
+}
+
+static asection*
+execit_get_itable_section (bfd *input_bfds)
+{
+  asection *sec = NULL;
+  bfd *abfd;
+
+  if (execit.itable_section != NULL)
+    return execit.itable_section;
+
+  for (abfd = input_bfds; abfd != NULL; abfd = abfd->link.next)
+    {
+      sec = bfd_get_section_by_name (abfd, EXECIT_SECTION);
+      if (sec != NULL)
+	break;
+    }
+
+  execit.itable_section = sec;
+  return sec;
+}
+
+/* Relocate the entries in .exec.itable.  */
+
+static bfd_vma
+riscv_elf_execit_reloc_insn (execit_itable_t *ptr,
+			     struct bfd_link_info *link_info)
+{
+  Elf_Internal_Sym *isym = NULL;
+  bfd_vma relocation = -1;
+  struct elf_link_hash_entry *h;
+  if (ptr->h)
+    { /* global symbol.  */
+      h = ptr->h;
+      if ((h->root.type == bfd_link_hash_defined
+	   || h->root.type == bfd_link_hash_defweak)
+	  && h->root.u.def.section != NULL
+	  && h->root.u.def.section->output_section != NULL)
+	{
+
+	  relocation = h->root.u.def.value +
+	    h->root.u.def.section->output_section->vma +
+	    h->root.u.def.section->output_offset;
+	  relocation += ptr->irel_copy.r_addend;
+	}
+      else
+	relocation = 0;
+    }
+  else if (ptr->isym)
+    {
+      /* Local symbol.  */
+      bfd *abfd = ptr->isec->owner;
+      Elf_Internal_Rela irel = ptr->irel_copy;
+      asection *sec = ptr->isec;
+      bfd_vma value_backup;
+
+      if (!riscv_get_local_syms (abfd, sec, &isym))
+	return false;
+
+      isym = isym + ELFNN_R_SYM (irel.r_info);
+      BFD_ASSERT (isym == ptr->isym);
+
+      value_backup = isym->st_value;
+      /* According to elf_link_input_bfd, linker had called
+	 _bfd_merged_section_offset to adjust the address of
+	 symbols in the SEC_MERGE sections, and get the merged
+	 sections. Since ptr->isec is the section before merging
+	 (linker hasn't found the correct merge section in relax
+	 time), we must call _bfd_merged_section_offset to find
+	 the correct symbol address here, too.  */
+      /* Note that we have to store the local symbol value for the
+	 last relaxation before, since the symbol value here had
+	 been modified in elf_link_input_bfd.  */
+      if (sec->sec_info_type == SEC_INFO_TYPE_MERGE
+	  && ELF_ST_TYPE (isym->st_info) != STT_SECTION)
+	isym->st_value =
+	  _bfd_merged_section_offset (link_info->output_bfd, &sec,
+				      elf_section_data (sec)->sec_info,
+				      ptr->isym_copy.st_value); /* copied one  */
+
+      relocation = _bfd_elf_rela_local_sym (link_info->output_bfd, isym,
+					    &sec,
+					    &irel);
+      relocation += irel.r_addend;
+
+      /* Restore origin value.  */
+      isym->st_value = value_backup;
+    }
+
+  return relocation;
+}
+
+/* Encode relocation into Imm field.  */
+
+static bfd_vma
+riscv_elf_encode_relocation (bfd *abfd,
+			     Elf_Internal_Rela *irel, bfd_vma relocation)
+{
+  reloc_howto_type *howto = NULL;
+
+  if (irel == NULL
+      || (ELFNN_R_TYPE (irel->r_info) >= number_of_howto_table))
+    return 0;
+
+  howto = riscv_elf_rtype_to_howto (abfd, ELFNN_R_TYPE (irel->r_info));
+  switch (ELFNN_R_TYPE (irel->r_info))
+    {
+    case R_RISCV_HI20:
+    case R_RISCV_PCREL_HI20:
+      if (ARCH_SIZE > 32 && !VALID_UTYPE_IMM (RISCV_CONST_HIGH_PART (relocation)))
+	return 0;
+      relocation = ENCODE_UTYPE_IMM (RISCV_CONST_HIGH_PART (relocation));
+      break;
+    case R_RISCV_LO12_I:
+    case R_RISCV_PCREL_LO12_I:
+    case R_RISCV_GPREL_I:
+      relocation = ENCODE_ITYPE_IMM (relocation);
+      break;
+    case R_RISCV_LO12_S:
+    case R_RISCV_PCREL_LO12_S:
+    case R_RISCV_GPREL_S:
+      relocation = ENCODE_STYPE_IMM (relocation);
+      break;
+    case R_RISCV_JAL:
+      relocation = ENCODE_UJTYPE_IMM (relocation);
+      break;
+    case R_RISCV_LGP18S0:
+      relocation = ENCODE_GPTYPE_LB_IMM (relocation);
+      break;
+    case R_RISCV_LGP17S1:
+      relocation = ENCODE_GPTYPE_LH_IMM (relocation);
+      break;
+    case R_RISCV_LGP17S2:
+      relocation = ENCODE_GPTYPE_LW_IMM (relocation);
+      break;
+    case R_RISCV_LGP17S3:
+      relocation= ENCODE_GPTYPE_LD_IMM (relocation);
+      break;
+    case R_RISCV_SGP18S0:
+      relocation = ENCODE_GPTYPE_SB_IMM (relocation);
+      break;
+    case R_RISCV_SGP17S1:
+      relocation = ENCODE_GPTYPE_SH_IMM (relocation);
+      break;
+    case R_RISCV_SGP17S2:
+      relocation = ENCODE_GPTYPE_SW_IMM (relocation);
+      break;
+    case R_RISCV_SGP17S3:
+      relocation = ENCODE_GPTYPE_SD_IMM (relocation);
+      break;
+    default:
+      return 0;
+    }
+
+  return (relocation & howto->dst_mask);
+}
+
+/* Sort relocation by r_offset.
+   We didn't use qsort () in stdlib, because quick-sort is not a stable sorting
+   algorithm.  Relocations at the same r_offset must keep their order.
+
+   Currently, this function implements insertion-sort.
+
+   FIXME: If we already sort them in assembler, why bother sort them
+   here again?  */
+
+static void
+riscv_insertion_sort (void *base, size_t nmemb, size_t size,
+		      int (*compar) (const void *lhs, const void *rhs))
+{
+  char *ptr = (char *) base;
+  int i, j;
+  char *tmp = malloc (size);
+
+  /* If i is less than j, i is inserted before j.
+
+     |---- j ----- i --------------|
+     \	      / \		  /
+     sorted		unsorted
+  */
+
+  for (i = 1; i < (int) nmemb; i++)
+    {
+      for (j = (i - 1); j >= 0; j--)
+	if (compar (ptr + i * size, ptr + j * size) >= 0)
+	  break;
+      j++;
+
+      if (i == j)
+	continue; /* i is in order.  */
+
+      memcpy (tmp, ptr + i * size, size);
+      memmove (ptr + (j + 1) * size, ptr + j * size, (i - j) * size);
+      memcpy (ptr + j * size, tmp, size);
+    }
+}
+
+static int
+compar_reloc (const void *lhs, const void *rhs)
+{
+  const Elf_Internal_Rela *l = (const Elf_Internal_Rela *) lhs;
+  const Elf_Internal_Rela *r = (const Elf_Internal_Rela *) rhs;
+
+  if (l->r_offset > r->r_offset)
+    return 1;
+  else if (l->r_offset == r->r_offset)
+    return 0;
+  else
+    return -1;
+}
+
+static bool
+andes_relax_execit_ite (
+  bfd *abfd,
+  asection *sec,
+  asection *sym_sec  ATTRIBUTE_UNUSED,
+  struct bfd_link_info *info ATTRIBUTE_UNUSED,
+  Elf_Internal_Rela *rel,
+  bfd_vma symval,
+  bfd_vma max_alignment,
+  bfd_vma reserve_size ATTRIBUTE_UNUSED,
+  bool *again ATTRIBUTE_UNUSED,
+  riscv_pcgp_relocs *pcgp_relocs ATTRIBUTE_UNUSED,
+  bool undefined_weak ATTRIBUTE_UNUSED)
+{
+  int execit_index = (int) max_alignment;
+  bfd_vma relocation = symval;
+  bfd_vma pc = sec_addr (sec) + rel->r_offset;
+  execit_hash_t *he = execit.itable_array[execit_index];
+  execit_itable_t *ie = &he->ie;
+  if (ELFNN_R_TYPE (ie->irel_copy.r_info) == R_RISCV_HI20)
+    { /* handle multiple reloction LUIs  */
+      int i;
+      Elf_Internal_Rela reduction = *rel;
+      reduction.r_info = ELFNN_R_INFO (ELFNN_R_SYM (rel->r_info), R_RISCV_HI20);
+      bfd_vma hi20 = riscv_elf_encode_relocation (abfd, &reduction, relocation);
+      if (he->is_final == false)
+        {
+	  ie->relocation = hi20;
+	  he->is_final = true;
+        }
+      else
+        {
+	  int is_found = false;
+	  for (i = 0; i < ie->entries; ++i)
+	    {
+	    #ifdef DEBUG_EXECIT_LUI
+	      printf("%s: [%d/%d] %c hash[%d].relocation=%08lx\n", __FUNCTION__, i, ie->entries, he->is_final ? 'V':'X', he->ie.itable_index, he->ie.relocation);
+	    #endif
+	      if (he->is_final)
+		{
+		  is_found = (ie->relocation == hi20);
+		  if (is_found)
+		    break;
+		  else if (he->next)
+		    { /* try next  */
+		      he = execit.itable_array[he->next];
+		      ie = &he->ie;
+		      continue;
+		    }
+		}
+	      break;
+	    }
+
+	  if (!is_found)
+	    { /* try allocate one  */
+	      if ((i + 1) >= ie->entries)
+		{
+		  BFD_ASSERT (0);
+		  /* TODO: fatal handling
+		   *   not enough entry reverved.
+		   */
+		  return false;
+		}
+	      else
+		{
+		  /* allocate index  */
+		  int index = execit.next_itable_index++;
+		  /* new a hash and init it (copy raw hash)  */
+		  execit_hash_t *t = bfd_malloc (sizeof (execit_hash_t));
+		  *t = *execit.itable_array[execit_index];
+		  t->next = 0;
+		  t->ie.itable_index = index;
+		  t->ie.relocation = hi20;
+		  /* bind to table  */
+		  execit.itable_array[index] = t;
+
+		  he->next = index;
+		  he = t;
+		  ie = &he->ie;
+		}
+	    }
+	}
+      /* apply relocation  */
+      bfd_byte *contents = elf_section_data (sec)->this_hdr.contents;
+      uint16_t insn16 = (uint16_t)EXECIT_INSN | ENCODE_RVC_EXECIT_IMM (ie->itable_index << 2);
+      bfd_put_16 (abfd, insn16, contents + rel->r_offset);
+    }
+  else if (ELFNN_R_TYPE (he->ie.irel_copy.r_info) == R_RISCV_JAL)
+    { /* sanity check only  */
+      BFD_ASSERT ((pc >> 21) == (he->ie.relocation >> 21));
+    }
+  else
+    {
+      BFD_ASSERT ((pc >> 21) == (he->ie.relocation >> 21));
+    }
+
+  /* execit.itable_array index tagged in addend has be cleared here.
+   * so the relocation R_RISCV_EXECIT_ITE must be clear here, too
+   */
+  rel->r_info = ELFNN_R_INFO (0, R_RISCV_NONE);
+
+  return true;
+}
+
 /* } Andes  */
 
 #define TARGET_LITTLE_SYM			riscv_elfNN_vec

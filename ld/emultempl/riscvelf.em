@@ -29,8 +29,12 @@ fragment <<EOF
 #include "ldctor.h"
 #include "elf/riscv.h"
 #include "elfxx-riscv.h"
+/* { Andes */
+#include "libbfd.h"
+/* } Andes */
 
 /* { Andes  */
+#define RISCV_EXECIT_EXT
 static andes_ld_options_t andes =
 {
   .sym_ld_script = NULL,
@@ -45,7 +49,14 @@ static andes_ld_options_t andes =
   .set_relax_cross_section_call = $D4_RCSC,
   .set_workaround = 1,
   /* exec.it options  */
+  .execit_import_file = NULL,
+  .execit_export_file = NULL,
   .target_optimization = 0,
+  .execit_limit = -1, /* default */
+  .execit_flags = {0},
+  .update_execit_table = 0,
+  .keep_import_execit = 0,
+  .execit_loop_aware = 0,
 };
 /* } Andes  */
 
@@ -115,6 +126,22 @@ gld${EMULATION_NAME}_after_allocation (void)
   bfd_elf${ELFSIZE}_riscv_set_data_segment_info (&link_info, (int *) phase);
 
   ldelf_map_segments (need_layout);
+
+  /* { Andes */
+  /* Add a symbol for linker script check the max size.  */
+  if (link_info.output_bfd->sections)
+    {
+      struct bfd_link_hash_entry *h;
+      h = bfd_link_hash_lookup (link_info.hash, "_RELAX_END_",
+				false, false, false);
+      if (!h)
+	_bfd_generic_link_add_one_symbol
+	  (&link_info, link_info.output_bfd, "_RELAX_END_",
+	   BSF_GLOBAL | BSF_WEAK, link_info.output_bfd->sections,
+	   0, (const char *) NULL, false,
+	   get_elf_backend_data (link_info.output_bfd)->collect, &h);
+    }
+  /* } Andes */
 }
 
 /* This is a convenient point to tell BFD about target specific flags.
@@ -137,6 +164,71 @@ riscv_create_output_section_statements (void)
 
   riscv_elf_set_target_option (&link_info);
 }
+
+/* { Andes */
+static void
+riscv_elf_create_target_section (struct bfd_link_info *info, bfd *abfd,
+				 char *sec_name, char *sym_name,
+				 bfd_size_type sec_size,
+				 unsigned int sec_aligned_power,
+				 flagword flags)
+{
+  asection *itable;
+  struct bfd_link_hash_entry *h;
+
+  /* Create section.  */
+  itable = bfd_make_section_with_flags (abfd, sec_name, flags);
+  if (itable)
+    {
+      itable->size = sec_size;
+      itable->alignment_power = sec_aligned_power;
+      itable->contents = bfd_zalloc (abfd, itable->size);
+      itable->gc_mark = 1;
+
+      /* Add a symbol in the head of target section to objdump clearly.  */
+      h = bfd_link_hash_lookup (info->hash, sym_name,
+				false, false, false);
+      _bfd_generic_link_add_one_symbol
+	(info, info->output_bfd, sym_name,
+	 BSF_GLOBAL | BSF_WEAK, itable, 0, (const char *) NULL, false,
+	 get_elf_backend_data (info->output_bfd)->collect, &h);
+    }
+}
+
+static void
+riscv_elf_after_open (void)
+{
+  bfd *abfd;
+  flagword flags;
+
+  flags = (SEC_CODE | SEC_ALLOC | SEC_LOAD
+	   | SEC_HAS_CONTENTS | SEC_READONLY
+	   | SEC_IN_MEMORY | SEC_KEEP
+	   | SEC_RELOC);
+
+  if ((andes.target_optimization & RISCV_RELAX_EXECIT_ON)
+      && (andes.execit_import_file == NULL
+	  || andes.keep_import_execit
+	  || andes.update_execit_table))
+    {
+      for (abfd = link_info.input_bfds; abfd != NULL; abfd = abfd->link.next)
+	{
+	  /* Create execit section in the last input object file.  */
+	  /* Default size of .exec.itable can not be zero, so we can not set
+	     it according to execit_limit. Since we will adjust the table size
+	     in riscv_elf_execit_build_itable, it is okay to set the size to
+	     the maximum value 0x1000 here.  */
+	  if (abfd->link.next == NULL)
+	    riscv_elf_create_target_section (&link_info, abfd, EXECIT_SECTION,
+					     "_EXECIT_BASE_", 0x1000, 2, flags);
+	}
+    }
+
+  /* Call the standard elf routine.  */
+  gld${EMULATION_NAME}_after_open ();
+}
+
+/* } Andes */
 
 EOF
 
@@ -334,9 +426,9 @@ PARSE_AND_LIST_ARGS_CASES='
 
 #if defined RISCV_EXECIT_EXT
   case OPTION_EX9_TABLE:
-    if (execit_limit == -1
-	|| execit_limit > 512)
-    execit_limit = 512;
+    if (andes.execit_limit == -1
+	|| andes.execit_limit > 512)
+    andes.execit_limit = 512;
     /* FALL THROUGH.  */
   case OPTION_EXECIT_TABLE:
     andes.target_optimization |= RISCV_RELAX_EXECIT_ON;
@@ -348,35 +440,35 @@ PARSE_AND_LIST_ARGS_CASES='
     if (!optarg)
       einfo (_("Missing file for --mexport-execit=<file>.\n"));
 
-      execit_export_file = optarg;
+      andes.execit_export_file = optarg;
       /* Open file in the riscv_elf_relocate_execit_table.  */
       break;
   case OPTION_IMPORT_EXECIT:
     if (!optarg)
       einfo (_("Missing file for --mimport-execit=<file>.\n"));
 
-    execit_import_file = fopen (optarg, "rb+");
-    if(execit_import_file == NULL)
+    andes.execit_import_file = fopen (optarg, "rb+");
+    if(andes.execit_import_file == NULL)
       einfo (_("ERROR %P%F: cannot open execit import file %s.\n"), optarg);
     break;
   case OPTION_KEEP_IMPORT_EXECIT:
-    keep_import_execit = 1;
+    andes.keep_import_execit = 1;
     break;
   case OPTION_UPDATE_EXECIT:
-    update_execit_table = 1;
+    andes.update_execit_table = 1;
     break;
   case OPTION_EXECIT_LIMIT:
     if (optarg)
       {
-	if (execit_limit != -1
-	    && atoi (optarg) > execit_limit)
+	if (andes.execit_limit != -1
+	    && atoi (optarg) > andes.execit_limit)
 	  einfo (_("Warning: the value of execit_limit (%d) is larger "
 		   "than the current setting (%d)\n"),
-		 atoi (optarg), execit_limit);
+		 atoi (optarg), andes.execit_limit);
 	else
-	  execit_limit = atoi (optarg);
+	  andes.execit_limit = atoi (optarg);
 
-	if (execit_limit > 1024 || execit_limit < 0)
+	if (andes.execit_limit > 1024 || andes.execit_limit < 0)
 	  {
 	    einfo (_("ERROR: the range of execit_limit must between "
 		     "0 and 1024 (default 1024)\n"));
@@ -385,17 +477,17 @@ PARSE_AND_LIST_ARGS_CASES='
       }
     break;
   case OPTION_EXECIT_LOOP:
-    execit_loop_aware = 1;
+    andes.execit_loop_aware = 1;
     break;
   case OPTION_EXECIT_NO_JI:
-    execit_noji = 1;
+    andes.execit_flags.noji = 1;
     break;
   case OPTION_EXECIT_NO_LS:
-    execit_nols = 1;
+    andes.execit_flags.nols = 1;
     break;
   case OPTION_EXECIT_NO_REL:
-    execit_noji = 1;
-    execit_nols = 1;
+    andes.execit_flags.noji = 1;
+    andes.execit_flags.nols = 1;
     break;
 #endif
   case OPTION_DEBUG_EXECIT_LIMIT:
@@ -421,3 +513,6 @@ PARSE_AND_LIST_ARGS_CASES='
 LDEMUL_BEFORE_ALLOCATION=riscv_elf_before_allocation
 LDEMUL_AFTER_ALLOCATION=gld${EMULATION_NAME}_after_allocation
 LDEMUL_CREATE_OUTPUT_SECTION_STATEMENTS=riscv_create_output_section_statements
+/* { Andes */
+LDEMUL_AFTER_OPEN=riscv_elf_after_open
+/* } Andes */

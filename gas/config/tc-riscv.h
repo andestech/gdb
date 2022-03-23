@@ -133,6 +133,12 @@ extern int riscv_convert_symbolic_attribute (const char *);
 #define md_cons_align(nbytes) riscv_mapping_state (MAP_DATA, 0)
 void riscv_mapping_state (enum riscv_seg_mstate, int);
 
+/* { Andes */
+#define md_post_relax_hook riscv_post_relax_hook ()
+extern void riscv_post_relax_hook (void);
+
+/* } Andes */
+
 /* Define target segment type.  */
 #define TC_SEGMENT_INFO_TYPE struct riscv_segment_info_type
 struct riscv_segment_info_type
@@ -145,6 +151,7 @@ struct riscv_segment_info_type
 struct riscv_frag_type
 {
   symbolS *first_map_symbol, *last_map_symbol;
+  unsigned int rvc:1;
 };
 
 #define TC_FRAG_INIT(fragp, max_bytes) riscv_init_frag (fragp, max_bytes)

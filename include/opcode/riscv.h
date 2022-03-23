@@ -317,6 +317,11 @@ static const char * const riscv_pred_succ[16] =
 #define RISCV_IMM7_REACH (1LL << RISCV_IMM7_BITS)
 #define RISCV_IMM8_BITS 8
 #define RISCV_IMM8_REACH (1LL << RISCV_IMM8_BITS)
+
+/* exec.it */
+#define ENCODE_UJTYPE_IMM(x) \
+  ((RV_X(x, 1, 10) << 21) | (RV_X(x, 11, 1) << 20) | (RV_X(x, 12, 8) << 12) | (RV_X(x, 20, 1) << 31))
+
 /* } Andes  */
 
 #define RISCV_RTYPE(insn, rd, rs1, rs2) \

@@ -127,6 +127,10 @@ riscv_execit_info (bfd_vma pc ATTRIBUTE_UNUSED,
   /* 32-bit instructions in .exec.itable.  */
   else
     riscv_disassemble_insn (pc, insn, info);
+
+  /* bytes_per_chunk is referred to dump insn binary after v2.32
+     fix it here for exec.it.  */
+  info->bytes_per_chunk = 2;
 }
 /* } Andes  */
 

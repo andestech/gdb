@@ -4094,6 +4094,15 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
     case BFD_RELOC_RISCV_ALIGN:
       break;
 
+    /* { Andes */
+    case BFD_RELOC_RISCV_RELAX_ENTRY:
+    case BFD_RELOC_RISCV_RELAX_REGION_BEGIN:
+    case BFD_RELOC_RISCV_RELAX_REGION_END:
+    case BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN:
+    case BFD_RELOC_RISCV_NO_RVC_REGION_END:
+      break;
+    /* } Andes */
+
     default:
       /* We ignore generic BFD relocations we don't know about.  */
       if (bfd_reloc_type_lookup (stdoutput, fixP->fx_r_type) != NULL)
@@ -4795,6 +4804,305 @@ riscv_md_end (void)
   riscv_set_public_attributes ();
 }
 
+/* { Andes */
+/* We don't allow the overlapped NO_RVC_REGION_BEGIN and NO_RVC_REGION_END.
+   Therefore, we choose the last NO_RVC_REGION as the effective setting
+   at the same address.  */
+
+static void
+riscv_find_next_effective_rvc_region (fixS **fixp)
+{
+  fixS *effective_fixp = NULL;
+
+  while (*fixp && (*fixp)->fx_r_type != BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN)
+    *fixp = (*fixp)->fx_next;
+  effective_fixp = *fixp;
+  if (!effective_fixp)
+    return;
+
+  *fixp = (*fixp)->fx_next;
+  while (*fixp
+	 && (*fixp)->fx_frag == effective_fixp->fx_frag
+	 && (*fixp)->fx_where == effective_fixp->fx_where)
+    {
+      if ((*fixp)->fx_r_type == BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN)
+	{
+	  effective_fixp->fx_offset = 2;
+	  effective_fixp->fx_done = 1;
+	  effective_fixp = *fixp;
+	}
+      *fixp = (*fixp)->fx_next;
+    }
+  *fixp = effective_fixp;
+}
+
+/* The Addend of BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN means,
+   0: norvc, unchecked
+   1: rvc, unchecked
+   2: Already checked.  */
+
+static void
+riscv_final_no_rvc_region (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
+			   void *xxx ATTRIBUTE_UNUSED)
+{
+  segment_info_type *seginfo;
+  frchainS *frch;
+  fixS *fixp, *pre_fixp_begin;
+  int current_rvc = 0;
+
+  seginfo = seg_info (sec);
+  if (!seginfo || !symbol_rootP || !subseg_text_p (sec) || sec->size == 0)
+    return;
+
+  subseg_change (sec, 0);
+
+  frch = seginfo->frchainP;
+  pre_fixp_begin = NULL;
+  current_rvc = frch->frch_root->tc_frag_data.rvc;
+  if (current_rvc == -1)
+    {
+      fixp = fix_at_start (frch->frch_root, 0, abs_section_sym, 0x2,
+			   0, BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN);
+      pre_fixp_begin = fixp;
+      fixp = seginfo->fix_root->fx_next;
+    }
+  else
+    fixp = seginfo->fix_root;
+
+  /* Assume the offset of the NO_RVC_REGION are in order.  */
+  for (; fixp; fixp = fixp->fx_next)
+    {
+      /* Find the next effective NO_RVC_REGION relocations.  */
+      riscv_find_next_effective_rvc_region (&fixp);
+      if (!fixp)
+	break;
+
+      /* Remove the redundant NO_RVC_REGION relocations.  */
+      if (fixp->fx_offset == 0)
+	{
+	  /* norvc to norvc.  */
+	  if (current_rvc == -1)
+	    fixp->fx_done = 1;
+	  else
+	    {
+	      /* rvc to norvc.  */
+	      current_rvc = -1;
+	      pre_fixp_begin = fixp;
+	    }
+	}
+      else if (fixp->fx_offset == 1)
+	{
+	  /* Cannot find the corresponding NO_RVC_REGION_BEGIN
+	     or rvc to rvc.  */
+	  if (!pre_fixp_begin
+	      || current_rvc == 1)
+	    fixp->fx_done = 1;
+	  else
+	    {
+	      /* norvc to rvc.  */
+	      current_rvc = 1;
+	      pre_fixp_begin = NULL;
+	      fixp->fx_r_type = BFD_RELOC_RISCV_NO_RVC_REGION_END;
+	    }
+	}
+      fixp->fx_offset = 2;
+    }
+}
+
+/* final both .no_execit_[begin|end]
+ *        and .innermost_loop_[begin|end]
+ */
+static void
+riscv_final_no_execit_region (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
+			      void *xxx ATTRIBUTE_UNUSED)
+{
+  segment_info_type *seginfo;
+  fixS *fixp;
+  int no_execit_count;
+  int innermost_loop_count;
+
+  seginfo = seg_info (sec);
+  if (!seginfo || !symbol_rootP || !subseg_text_p (sec) || sec->size == 0)
+    return;
+
+  subseg_change (sec, 0);
+
+  /* First, we also need to insert noexecit directives according to
+     the NO_RVC_REGION directives set at riscv_final_no_rvc_region.  */
+  fixp = seginfo->fix_root;
+  for (; fixp; fixp = fixp->fx_next)
+    {
+      /* skip redundant fixes  */
+      if (fixp->fx_done)
+	continue;
+
+      if (fixp->fx_r_type == BFD_RELOC_RISCV_NO_RVC_REGION_BEGIN)
+	fix_new (fixp->fx_frag, fixp->fx_where, 0, abs_section_sym,
+		 R_RISCV_RELAX_REGION_NO_EXECIT_FLAG, 0,
+		 BFD_RELOC_RISCV_RELAX_REGION_BEGIN);
+      else if (fixp->fx_r_type == BFD_RELOC_RISCV_NO_RVC_REGION_END)
+	fix_new (fixp->fx_frag, fixp->fx_where, 0, abs_section_sym,
+		 R_RISCV_RELAX_REGION_NO_EXECIT_FLAG, 0,
+		 BFD_RELOC_RISCV_RELAX_REGION_END);
+    }
+
+  /* Assume the offset of the BFD_RELOC_RISCV_RELAX_REGION_BEGIN/END
+     are in order.  */
+  no_execit_count = 0;
+  innermost_loop_count = 0;
+  fixp = seginfo->fix_root;
+  for (; fixp; fixp = fixp->fx_next)
+    {
+      if (fixp->fx_r_type == BFD_RELOC_RISCV_RELAX_REGION_BEGIN)
+	{
+	  if (fixp->fx_offset == R_RISCV_RELAX_REGION_NO_EXECIT_FLAG)
+	    {
+	      /* We must find the corresponding REGION_END later.  */
+	      if (no_execit_count > 0)
+		fixp->fx_done = 1;
+	      no_execit_count++;
+	    }
+	  else if (fixp->fx_offset == R_RISCV_RELAX_REGION_IMLOOP_FLAG)
+	    {
+	      /* eliminate nested ".innermost_loop_begin".  */
+	      if (innermost_loop_count > 0)
+		fixp->fx_done = 1;
+	      innermost_loop_count++;
+	    }
+	}
+      else if (fixp->fx_r_type == BFD_RELOC_RISCV_RELAX_REGION_END)
+        {
+	  if (fixp->fx_offset == R_RISCV_RELAX_REGION_NO_EXECIT_FLAG)
+	    {
+	      no_execit_count--;
+	      if (no_execit_count > 0)
+		fixp->fx_done = 1;
+	      else if (no_execit_count < 0)
+		{
+		  /* Find the unmatched REGION_END, ignore it.  */
+		  no_execit_count++;
+		  fixp->fx_done = 1;
+		}
+	    }
+	  else if (fixp->fx_offset == R_RISCV_RELAX_REGION_IMLOOP_FLAG)
+	    {
+	      innermost_loop_count--;
+	      /* eliminate nested ".innermost_loop_end".  */
+	      if (innermost_loop_count > 0)
+		fixp->fx_done = 1;
+	      else if (innermost_loop_count < 0)
+		{
+		  /* unmatched ".innermost_loop_end", ignore it.  */
+		  innermost_loop_count++;
+		  fixp->fx_done = 1;
+		}
+	    }
+	}
+    }
+
+  /* We have handle the negative no_execit_count cases above.  */
+  if (no_execit_count > 0)
+    {
+      /* Find the unmatched REGION_BEGIN, we should print
+	 warning/error msg here.  */
+    }
+}
+
+static void
+riscv_insert_relax_entry (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
+			  void *xxx ATTRIBUTE_UNUSED)
+{
+  segment_info_type *seginfo;
+  frchainS *frch;
+  fixS *fixp;
+  offsetT X_add_number;
+
+  seginfo = seg_info (sec);
+  if (!seginfo || !symbol_rootP || !subseg_text_p (sec) || sec->size == 0)
+    return;
+
+  subseg_change (sec, 0);
+
+  /* The original code says that it is not necessary to insert the
+     R_RISCV_RELAX_ENTRY when there is no relocation and the execit
+     is disabled. It is weird for me now, I think always insert the
+     R_RISCV_RELAX_ENTRY is fine and do no harm.  */
+
+  /* Set RELAX_ENTRY flags for linker.  */
+  frch = seginfo->frchainP;
+  X_add_number = 0;
+
+  if (!riscv_opts.relax)
+    X_add_number |= R_RISCV_RELAX_ENTRY_DISABLE_RELAX_FLAG;
+  if (riscv_opts.execit)
+    X_add_number |= R_RISCV_RELAX_ENTRY_EXECIT_FLAG;
+
+  fixp = fix_at_start (frch->frch_root, 0, abs_section_sym, X_add_number,
+		       0, BFD_RELOC_RISCV_RELAX_ENTRY);
+  fixp->fx_no_overflow = 1;
+}
+
+void
+riscv_post_relax_hook (void)
+{
+  /* TODO: Maybe we can sort the relocations here to reduce the burden
+     of linker.  */
+  bfd_map_over_sections (stdoutput, riscv_final_no_rvc_region, NULL);
+  bfd_map_over_sections (stdoutput, riscv_final_no_execit_region, NULL);
+  bfd_map_over_sections (stdoutput, riscv_insert_relax_entry, NULL);
+}
+
+/* Insert relocations to mark the region that can not do EXECIT relaxation.  */
+
+static void
+riscv_no_execit (int mode)
+{
+  expressionS exp;
+
+  exp.X_op = O_symbol;
+  exp.X_add_symbol = abs_section_sym;
+  if (mode == 1)
+    {
+      /* The begin of the region without EXECIT.  */
+      exp.X_add_number = R_RISCV_RELAX_REGION_NO_EXECIT_FLAG;
+      fix_new_exp (frag_now, frag_now_fix (), 0, &exp, 0,
+		   BFD_RELOC_RISCV_RELAX_REGION_BEGIN);
+    }
+  else
+    {
+      /* The end of the region without EXECIT.  */
+      exp.X_add_number = R_RISCV_RELAX_REGION_NO_EXECIT_FLAG;
+      fix_new_exp (frag_now, frag_now_fix (), 0, &exp, 0,
+		   BFD_RELOC_RISCV_RELAX_REGION_END);
+    }
+}
+
+/* Insert relocations to mark the innermost loop region.  */
+
+static void
+riscv_innermost_loop (int mode)
+{
+  /* Insert loop region relocation here.  */
+  expressionS exp;
+
+  exp.X_op = O_symbol;
+  exp.X_add_symbol = abs_section_sym;
+  if (mode == 1)
+    {
+      exp.X_add_number = R_RISCV_RELAX_REGION_IMLOOP_FLAG;
+      fix_new_exp (frag_now, frag_now_fix (), 0, &exp, 0,
+		   BFD_RELOC_RISCV_RELAX_REGION_BEGIN);
+    }
+  else
+    {
+      exp.X_add_number = R_RISCV_RELAX_REGION_IMLOOP_FLAG;
+      fix_new_exp (frag_now, frag_now_fix (), 0, &exp, 0,
+		   BFD_RELOC_RISCV_RELAX_REGION_END);
+    }
+}
+
+/* } Andes */
+
 /* Adjust the symbol table.  */
 
 void
@@ -4955,6 +5263,15 @@ static const pseudo_typeS riscv_pseudo_table[] =
   {"attribute", s_riscv_attribute, 0},
   {"variant_cc", s_variant_cc, 0},
   {"float16", float_cons, 'h'},
+
+  /* { Andes */
+  {"no_ex9_begin", riscv_no_execit, 1},
+  {"no_ex9_end", riscv_no_execit, 0},
+  {"no_execit_begin", riscv_no_execit, 1},
+  {"no_execit_end", riscv_no_execit, 0},
+  {"innermost_loop_begin", riscv_innermost_loop, 1},
+  {"innermost_loop_end", riscv_innermost_loop, 0},
+  /* } Andes */
 
   { NULL, NULL, 0 },
 };
