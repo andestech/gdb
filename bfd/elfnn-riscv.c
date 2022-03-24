@@ -9269,12 +9269,10 @@ riscv_relocation_check (struct bfd_link_info *info,
      how many bytes location counter has to move.  */
   int result = 0;
   Elf_Internal_Rela *irel_save = NULL;
-  Elf_Internal_Rela *irel_from = *irel;
-  bfd_vma off_from = *off;
-  bfd_boolean nested_execit, nested_loop;
-  bfd_boolean execit_loop_aware;
-  bfd_boolean pre_nested_execit, pre_nested_loop;
   int nested_execit_depth;
+  bfd_boolean execit_loop_aware;
+  bfd_boolean is_no_execit, is_inner_loop;
+  bfd_boolean pre_is_no_execit, pre_is_inner_loop;
 
   struct riscv_elf_link_hash_table *table;
 
@@ -9288,78 +9286,46 @@ riscv_relocation_check (struct bfd_link_info *info,
 	case R_RISCV_RELAX_REGION_BEGIN:
 	  result = 0;
 	  irel_save = NULL;
-	  /* Ignore code block.  */
-	  nested_execit = FALSE;
-	  nested_loop = FALSE;
+	  /* to ignore code block.  */
+	  is_no_execit = (*irel)->r_addend & R_RISCV_RELAX_REGION_NO_EXECIT_FLAG;
+	  is_inner_loop = execit_loop_aware
+			  && ((*irel)->r_addend & R_RISCV_RELAX_REGION_LOOP_FLAG);
 	  nested_execit_depth = 0;
-	  if (optimize
-	      && (((*irel)->r_addend & R_RISCV_RELAX_REGION_NO_EXECIT_FLAG)
-		  || (execit_loop_aware
-		      && ((*irel)->r_addend & R_RISCV_RELAX_REGION_LOOP_FLAG))))
+	  if (optimize /* for execit */
+	      && (is_no_execit || is_inner_loop))
 	    {
-	      /* Check the region if loop or not.  If it is true and
-		 execit_loop_aware is true, ignore the region till region end.  */
-	      /* To save the status for in .no_relax execit region and
-		 loop region to conform the block can do EXECIT relaxation.  */
-	      nested_execit = ((*irel)->r_addend & R_RISCV_RELAX_REGION_NO_EXECIT_FLAG);
-	      nested_loop = (execit_loop_aware
-			     && ((*irel)->r_addend & R_RISCV_RELAX_REGION_LOOP_FLAG));
-	      while ((*irel) && (*irel) < irelend && (nested_execit || nested_loop))
+	      /* Check the region if is_inner_loop. if true and execit_loop_aware,
+	         ignore the region till region end.  */
+	      /* To save the status for in .no_execit_X region and
+		 loop region to confirm the block can do EXECIT relaxation.  */
+	      while ((*irel) && (*irel) < irelend && (is_no_execit || is_inner_loop))
 		{
 		  (*irel)++;
 		  if (ELFNN_R_TYPE ((*irel)->r_info) == R_RISCV_RELAX_REGION_BEGIN)
-		    {
-		      /* nested region.  */
+		    { /* nested region detection.  */
 		      nested_execit_depth++;
 		      if (nested_execit_depth > 1)
 			(*_bfd_error_handler)(_("Warning: Deep nested relax region!\n"));
-		      pre_nested_execit = nested_execit;
-		      pre_nested_loop = nested_loop;
-		      if (((*irel)->r_addend & R_RISCV_RELAX_REGION_NO_EXECIT_FLAG) != 0)
-			nested_execit = TRUE;
-		      else if (execit_loop_aware
-			       && ((*irel)->r_addend & R_RISCV_RELAX_REGION_LOOP_FLAG))
-			nested_loop = TRUE;
+		      pre_is_no_execit = is_no_execit;
+		      pre_is_inner_loop = is_inner_loop;
+		      is_no_execit = (*irel)->r_addend & R_RISCV_RELAX_REGION_NO_EXECIT_FLAG;
+		      if (execit_loop_aware)
+			is_inner_loop = (*irel)->r_addend & R_RISCV_RELAX_REGION_LOOP_FLAG;
 		      /* outter setting is still valid  */
-		      nested_execit |= pre_nested_execit;
-		      nested_loop |= pre_nested_loop;
+		      is_no_execit |= pre_is_no_execit;
+		      is_inner_loop |= pre_is_inner_loop;
 		    }
 		  else if (ELFNN_R_TYPE ((*irel)->r_info) == R_RISCV_RELAX_REGION_END)
-		    {
-		      /* The end of region.  */
-		      if (((*irel)->r_addend & R_RISCV_RELAX_REGION_NO_EXECIT_FLAG) != 0)
-			nested_execit = FALSE;
-		      else if (execit_loop_aware
-			       && ((*irel)->r_addend & R_RISCV_RELAX_REGION_LOOP_FLAG))
-			nested_loop = FALSE;
-		      if (nested_execit_depth--)
-			{
-			  nested_execit |= pre_nested_execit;
-			  nested_loop |= pre_nested_loop;
-			}
+		    { /* max depth = 2 supported  */
+		      is_no_execit = pre_is_no_execit;
+		      is_inner_loop = pre_is_inner_loop;
+		      if (nested_execit_depth)
+			nested_execit_depth--;
 		      else
-			result |= RELAX_REGION_END;
-		    }
-		  else if (ELFNN_R_TYPE ((*irel)->r_info) == R_RISCV_ALIGN
-			   && ((*irel)->r_addend & (1 << 31)))
-		    {
-#ifdef TO_REMOVE
-		      /* Estimate the total relaxed size for EXECIT before this point.  */
-		      struct execit_blank_entry *blank_t = execit_blank_list;
-		      int relax_size = 0;
-		      while (blank_t && blank_t->offset < (*off))
 			{
-			  relax_size += blank_t->size;
-			  blank_t = blank_t->next;
+			  result |= RELAX_REGION_END;
+			  break;
 			}
-		      /* Check whether this point is align or not.  */
-		      result |= ALIGN_CLEAN_PRE;
-		      if (((*irel)->r_offset
-			   + ((*irel)->r_addend & 0x1f)
-			   - relax_size)
-			  & 0x02)
-			result |= ALIGN_PUSH_PRE;
-#endif
 		    }
 		}
 
@@ -9367,37 +9333,7 @@ riscv_relocation_check (struct bfd_link_info *info,
 		*off = sec->size;
 	      else
 		*off = (*irel)->r_offset;
-
-	      /* rescan relocations on the target offset  */
-	      if (*off != off_from)
-		{
-		  while ((*irel) != NULL && (*irel) > irel_from && (*off) == (*irel)->r_offset)
-		    (*irel)--;
-		}
 	    }
-	  break;
-	case R_RISCV_ALIGN:
-#ifdef TO_REMOVE
-	  /* Just consider 4-byte aligned with EXECIT.  */
-	  if (optimize && ((*irel)->r_addend & (1 << 31)))
-	    {
-	      /* Estimate the total relaxed size for EXECIT before this point.  */
-	      struct execit_blank_entry *blank_t = execit_blank_list;
-	      int relax_size = 0;
-	      while (blank_t && blank_t->offset < (*off))
-		{
-		  relax_size += blank_t->size;
-		  blank_t = blank_t->next;
-		}
-	      /* Check whether this point is align or not.  */
-	      result |= ALIGN_CLEAN_PRE;
-	      if (((*irel)->r_offset
-		   + ((*irel)->r_addend & 0x1f)
-		   - relax_size)
-		  & 0x02)
-		result |= ALIGN_PUSH_PRE;
-	    }
-#endif
 	  break;
 	case R_RISCV_DATA:
 	  /* Data in text section.  */
