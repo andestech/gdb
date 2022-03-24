@@ -8502,7 +8502,7 @@ andes_execit_render_hash (execit_context_t *ctx)
 		}
 	      else
 		{
-		  ctx->ie.isec = h->root.u.undef.abfd;
+		  ctx->ie.isec = (asection*) h->root.u.undef.abfd;
 		  ctx->ie.addend = irel->r_addend;
 		}
 
