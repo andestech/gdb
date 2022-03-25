@@ -7773,88 +7773,6 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       sim_core_write_unaligned_1 (cpu, cpu->pc, write_map,
 				  cpu->regs[rs1].u + s_imm, cpu->regs[rs2].u);
       break;
-    case MATCH_CSRRC:
-      TRACE_INSN (cpu, "csrrc");
-      switch (csr)
-	{
-#define DECLARE_CSR(name, num, ...) \
-	case num: \
-	  store_rd (cpu, rd, fetch_csr (cpu, #name, num, &cpu->csr.name)); \
-	  store_csr (cpu, #name, num, &cpu->csr.name, \
-		     cpu->csr.name & !cpu->regs[rs1].u); \
-	  break;
-#include "opcode/riscv-opc.h"
-#undef DECLARE_CSR
-	}
-      break;
-    case MATCH_CSRRCI:
-      TRACE_INSN (cpu, "csrrci");
-      switch (csr)
-	{
-#define DECLARE_CSR(name, num, ...) \
-	case num: \
-	  store_rd (cpu, rd, fetch_csr (cpu, #name, num, &cpu->csr.name)); \
-	  store_csr (cpu, #name, num, &cpu->csr.name, \
-		     cpu->csr.name & !rs1); \
-	  break;
-#include "opcode/riscv-opc.h"
-#undef DECLARE_CSR
-	}
-      break;
-    case MATCH_CSRRS:
-      TRACE_INSN (cpu, "csrrs");
-      switch (csr)
-	{
-#define DECLARE_CSR(name, num, ...) \
-	case num: \
-	  store_rd (cpu, rd, fetch_csr (cpu, #name, num, &cpu->csr.name)); \
-	  store_csr (cpu, #name, num, &cpu->csr.name, \
-		     cpu->csr.name | cpu->regs[rs1].u); \
-	  break;
-#include "opcode/riscv-opc.h"
-#undef DECLARE_CSR
-	}
-      break;
-    case MATCH_CSRRSI:
-      TRACE_INSN (cpu, "csrrsi");
-      switch (csr)
-	{
-#define DECLARE_CSR(name, num, ...) \
-	case num: \
-	  store_rd (cpu, rd, fetch_csr (cpu, #name, num, &cpu->csr.name)); \
-	  store_csr (cpu, #name, num, &cpu->csr.name, \
-		     cpu->csr.name | rs1); \
-	  break;
-#include "opcode/riscv-opc.h"
-#undef DECLARE_CSR
-	}
-      break;
-    case MATCH_CSRRW:
-      TRACE_INSN (cpu, "csrrw");
-      switch (csr)
-	{
-#define DECLARE_CSR(name, num, ...) \
-	case num: \
-	  store_rd (cpu, rd, fetch_csr (cpu, #name, num, &cpu->csr.name)); \
-	  store_csr (cpu, #name, num, &cpu->csr.name, cpu->regs[rs1].u); \
-	  break;
-#include "opcode/riscv-opc.h"
-#undef DECLARE_CSR
-	}
-      break;
-    case MATCH_CSRRWI:
-      TRACE_INSN (cpu, "csrrwi");
-      switch (csr)
-	{
-#define DECLARE_CSR(name, num, ...) \
-	case num: \
-	  store_rd (cpu, rd, fetch_csr (cpu, #name, num, &cpu->csr.name)); \
-	  store_csr (cpu, #name, num, &cpu->csr.name, rs1); \
-	  break;
-#include "opcode/riscv-opc.h"
-#undef DECLARE_CSR
-	}
-      break;
 
     case MATCH_RDCYCLE:
       TRACE_INSN (cpu, "rdcycle %s;", rd_name);
@@ -7975,6 +7893,106 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
     }
 
+  return pc;
+}
+
+static sim_cia
+execute_zicsr (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
+{
+  SIM_DESC sd = CPU_STATE (cpu);
+  int rd = (iw >> OP_SH_RD) & OP_MASK_RD;
+  int rs1 = (iw >> OP_SH_RS1) & OP_MASK_RS1;
+  unsigned int csr = (iw >> OP_SH_CSR) & OP_MASK_CSR;
+  sim_cia pc = cpu->pc + 4;
+
+  switch (op->match)
+    {
+    case MATCH_CSRRC:
+      TRACE_INSN (cpu, "csrrc");
+      switch (csr)
+	{
+#define DECLARE_CSR(name, num, ...) \
+	case num: \
+	  store_rd (cpu, rd, fetch_csr (cpu, #name, num, &cpu->csr.name)); \
+	  store_csr (cpu, #name, num, &cpu->csr.name, \
+		     cpu->csr.name & !cpu->regs[rs1].u); \
+	  break;
+#include "opcode/riscv-opc.h"
+#undef DECLARE_CSR
+	}
+      break;
+    case MATCH_CSRRCI:
+      TRACE_INSN (cpu, "csrrci");
+      switch (csr)
+	{
+#define DECLARE_CSR(name, num, ...) \
+	case num: \
+	  store_rd (cpu, rd, fetch_csr (cpu, #name, num, &cpu->csr.name)); \
+	  store_csr (cpu, #name, num, &cpu->csr.name, \
+		     cpu->csr.name & !rs1); \
+	  break;
+#include "opcode/riscv-opc.h"
+#undef DECLARE_CSR
+	}
+      break;
+    case MATCH_CSRRS:
+      TRACE_INSN (cpu, "csrrs");
+      switch (csr)
+	{
+#define DECLARE_CSR(name, num, ...) \
+	case num: \
+	  store_rd (cpu, rd, fetch_csr (cpu, #name, num, &cpu->csr.name)); \
+	  store_csr (cpu, #name, num, &cpu->csr.name, \
+		     cpu->csr.name | cpu->regs[rs1].u); \
+	  break;
+#include "opcode/riscv-opc.h"
+#undef DECLARE_CSR
+	}
+      break;
+    case MATCH_CSRRSI:
+      TRACE_INSN (cpu, "csrrsi");
+      switch (csr)
+	{
+#define DECLARE_CSR(name, num, ...) \
+	case num: \
+	  store_rd (cpu, rd, fetch_csr (cpu, #name, num, &cpu->csr.name)); \
+	  store_csr (cpu, #name, num, &cpu->csr.name, \
+		     cpu->csr.name | rs1); \
+	  break;
+#include "opcode/riscv-opc.h"
+#undef DECLARE_CSR
+	}
+      break;
+    case MATCH_CSRRW:
+      TRACE_INSN (cpu, "csrrw");
+      switch (csr)
+	{
+#define DECLARE_CSR(name, num, ...) \
+	case num: \
+	  store_rd (cpu, rd, fetch_csr (cpu, #name, num, &cpu->csr.name)); \
+	  store_csr (cpu, #name, num, &cpu->csr.name, cpu->regs[rs1].u); \
+	  break;
+#include "opcode/riscv-opc.h"
+#undef DECLARE_CSR
+	}
+      break;
+    case MATCH_CSRRWI:
+      TRACE_INSN (cpu, "csrrwi");
+      switch (csr)
+	{
+#define DECLARE_CSR(name, num, ...) \
+	case num: \
+	  store_rd (cpu, rd, fetch_csr (cpu, #name, num, &cpu->csr.name)); \
+	  store_csr (cpu, #name, num, &cpu->csr.name, rs1); \
+	  break;
+#include "opcode/riscv-opc.h"
+#undef DECLARE_CSR
+	}
+      break;
+    default:
+      TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
+      sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
+    }
   return pc;
 }
 
@@ -8329,6 +8347,8 @@ execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int 
       return execute_f (cpu, iw, op, ex9);
     case INSN_CLASS_I:
       return execute_i (cpu, iw, op, ex9);
+    case INSN_CLASS_ZICSR:
+      return execute_zicsr (cpu, iw, op);
     case INSN_CLASS_M:
       return execute_m (cpu, iw, op, ex9);
     case INSN_CLASS_P:
