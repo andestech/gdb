@@ -9661,13 +9661,14 @@ riscv_elf_final_write_processing (bfd *abfd ATTRIBUTE_UNUSED,
       /* The exported ict table can not be linked with the patch code
 	 that use the different ict model.  */
       if (ict_model == 0)
-	fprintf (ict_table_file, "\t.attribute\tTag_ict_model, \"tiny\"\n");
+	fprintf (ict_table_file, "\t.attribute ict_model, \"tiny\"\n");
       else if (ict_model == 1)
-	fprintf (ict_table_file, "\t.attribute\tTag_ict_model, \"small\"\n");
+	fprintf (ict_table_file, "\t.attribute ict_model, \"small\"\n");
       else
-	fprintf (ict_table_file, "\t.attribute\tTag_ict_model, \"large\"\n");
+	fprintf (ict_table_file, "\t.attribute ict_model, \"large\"\n");
       fprintf (ict_table_file, ".global _INDIRECT_CALL_TABLE_BASE_\n"
 	       "_INDIRECT_CALL_TABLE_BASE_:\n");
+      fprintf (ict_table_file, "\t.option push\n\t.option norelax\n");
 
       /* Output each entry of ict table according to different
 	 ict models.  */
@@ -9685,6 +9686,8 @@ riscv_elf_final_write_processing (bfd *abfd ATTRIBUTE_UNUSED,
 		     head->h->root.root.string);
 	  head = head->next;
 	}
+
+      fprintf (ict_table_file, "\t.option pop\n");
 
       /* Finish exporting the ict table, close it
 	 and free the unused data.  */
