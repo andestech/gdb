@@ -1230,11 +1230,6 @@ execute_c (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 					  cpu->regs[crs2s].u);
 	    }
 	  return pc;
-	case MATCH_EXEC_IT:
-	  iw = sim_core_read_unaligned_4 (cpu, cpu->pc, exec_map,
-					  cpu->csr.uitb + EXTRACT_RVC_EXECIT_IMM (iw));
-	  pc = riscv_decode (cpu, iw, cpu->pc, 1);
-	  return pc;
 	default:
 	  TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
 	  sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
@@ -1795,6 +1790,11 @@ execute_andes(SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int
 	store_rd (cpu, rd, (int64_t) (j - RISCV_XLEN (cpu)) / 8);
       }
       break;
+    case MATCH_EXEC_IT:
+      iw = sim_core_read_unaligned_4 (cpu, cpu->pc, exec_map,
+                                      cpu->csr.uitb + EXTRACT_RVC_EXECIT_IMM (iw));
+      pc = riscv_decode (cpu, iw, cpu->pc, 1);
+      return pc;
     default:
       TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
       sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
