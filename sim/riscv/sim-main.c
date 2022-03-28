@@ -7808,9 +7808,6 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_FENCE:
       TRACE_INSN (cpu, "fence;");
       break;
-    case MATCH_FENCE_I:
-      TRACE_INSN (cpu, "fence.i;");
-      break;
     case MATCH_SBREAK:
       TRACE_INSN (cpu, "sbreak;");
       /* GDB expects us to step over SBREAK.  */
@@ -7993,6 +7990,25 @@ execute_zicsr (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
       TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
       sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
     }
+  return pc;
+}
+
+static sim_cia
+execute_zifencei (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
+{
+  SIM_DESC sd = CPU_STATE (cpu);
+  sim_cia pc = cpu->pc + 4;
+
+  switch (op->match)
+    {
+    case MATCH_FENCE_I:
+      TRACE_INSN (cpu, "fence.i;");
+      break;
+    default:
+      TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
+      sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
+    }
+
   return pc;
 }
 
@@ -8349,6 +8365,8 @@ execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int 
       return execute_i (cpu, iw, op, ex9);
     case INSN_CLASS_ZICSR:
       return execute_zicsr (cpu, iw, op);
+    case INSN_CLASS_ZIFENCEI:
+      return execute_zifencei (cpu, iw, op);
     case INSN_CLASS_M:
       return execute_m (cpu, iw, op, ex9);
     case INSN_CLASS_P:
