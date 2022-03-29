@@ -129,9 +129,9 @@ dump_objfile (struct objfile *objfile)
 	  for (symtab *symtab : cu->filetabs ())
 	    {
 	      printf_filtered ("%s at %s",
-			       symtab_to_filename_for_display (symtab),
-			       host_address_to_string (symtab));
-	      if (symtab->objfile () != objfile)
+			  symtab_to_filename_for_display (symtab),
+			  host_address_to_string (symtab));
+	      if (symtab->compunit ()->objfile () != objfile)
 		printf_filtered (", NOT ON CHAIN!");
 	      printf_filtered ("\n");
 	    }
@@ -234,7 +234,7 @@ dump_msymbols (struct objfile *objfile, struct ui_file *outfile)
 static void
 dump_symtab_1 (struct symtab *symtab, struct ui_file *outfile)
 {
-  struct objfile *objfile = symtab->objfile ();
+  struct objfile *objfile = symtab->compunit ()->objfile ();
   struct gdbarch *gdbarch = objfile->arch ();
   int i;
   struct mdict_iterator miter;
