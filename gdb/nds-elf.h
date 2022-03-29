@@ -288,20 +288,30 @@ static const char *base_isas[BASE_ISA_COUNT] =
   { "RV32E", "RV32I", "RV64I", "RV128I" };
 
 // RISC-V extensions must appear in this order.
-static const char *riscv_extensions = "MAFDQLCBJTPVNXZSH"; // It will be updated to "MAFDQLCBJTPVNZSHX" in the future.
+static const char *riscv_extensions = "MAFDQCBKJPVZSHX"; // It will be updated to "MAFDQLCBKJTPVNZSHX" in the future.
 
 // RISC-V Non-standard extensions
 // "xandesv" is equals to "Xv5-"(old version)
 static const char *riscv_x_extensions[] = { "xandesv", "Xv5-", "xdsp", "xefhw" };
 
-
+static const char *riscv_b_extensions[] = { "Zba", "Zbb", "Zbc", "Zbk", "Zbs" };
+static const char *riscv_k_extensions[] = { "Zkn", "Zks", "Zkt", "Zkr", "Zk"  };
 
 enum RISCV_EXT
 {
   // It doesn't check mmsc_cfg/cfg2 for fp16 extension to compatible with the current released HW. by Dabid in 2019.08.23
   // It will be updated to EXT_X = 16 when recognize 'z', 's', 'h' multi-letter extensions
-  EXT_X = 13,
+  EXT_X = 14,
   EXT_COUNT
+};
+
+enum ext_type
+{
+  STANDARD,
+  X_EXT,
+  B_EXT,
+  K_EXT,
+  EXT_TYPE_COUNT
 };
 
 enum RISCV_X_EXT
@@ -311,6 +321,26 @@ enum RISCV_X_EXT
   X_EXT_DSP,
   X_EXT_FHW,
   X_EXT_COUNT
+};
+
+enum RISCV_B_EXT
+{
+  B_EXT_ZBA,
+  B_EXT_ZBB,
+  B_EXT_ZBC,
+  B_EXT_ZBK,
+  B_EXT_ZBS,
+  B_EXT_COUNT
+};
+
+enum RISCV_K_EXT
+{
+  K_EXT_ZKN,
+  K_EXT_ZKS,
+  K_EXT_ZKT,
+  K_EXT_ZKR,
+  K_EXT_ZK,
+  K_EXT_COUNT
 };
 
 typedef struct
@@ -324,6 +354,9 @@ typedef struct
   bool x_ext_use[X_EXT_COUNT];
   int x_ext_major[X_EXT_COUNT];
   int x_ext_minor[X_EXT_COUNT];
+  bool b_ext_use[B_EXT_COUNT];
+  bool k_ext_use[K_EXT_COUNT];
+
 } riscv_elf_info;
 
 static riscv_elf_info nds_info;
@@ -420,21 +453,29 @@ get_riscv_x_ext_info_i (int i, bool * use, int *major, int *minor)
 
 /* Does ELF use the extension located by index. */
 static bool
-elf_use_ext_i (int i, bool std)
+elf_use_ext_i (int i, ext_type type)
 {
-  bool use;
+  bool use = false;
   int major, minor;
-
-  if (std)
-    {
-      if (get_riscv_ext_info_i (i, &use, &major, &minor) == -1)
-	return false;
-    }
-  else
-    {
-      if (get_riscv_x_ext_info_i (i, &use, &major, &minor) == -1)
-	return false;
-    }
+  switch (type)
+  {
+  case STANDARD:
+    if (get_riscv_ext_info_i (i, &use, &major, &minor) == -1)
+      use = false;
+    break;
+  case X_EXT:
+    if (get_riscv_x_ext_info_i (i, &use, &major, &minor) == -1)
+      use = false;
+    break;
+  case B_EXT:
+    use = nds_info.b_ext_use[i];
+    break;
+  case K_EXT:
+    use = nds_info.k_ext_use[i];
+    break;
+  default:
+    break;
+  }
 
   return use;
 }
@@ -444,16 +485,85 @@ cpu_support_std_ext (reg_t misa, reg_t mmsc_cfg, char ext)
 {
   // I-Extension allow E-Extension
   int i = ext - 'A';
-  
-  bool is_ext_en = (misa & (1 << i)) != 0;
 
+  bool is_ext_en = (misa & (1 << i)) != 0;
   if (ext == 'E')
   {
       is_ext_en = is_ext_en || ((misa & (1 << ('I' - 'A'))) != 0);
   }
+
+  if (ext == 'B')
+  {
+      is_ext_en = is_ext_en || ((misa & (1 << ('B' - 'A'))) != 0);
+  }
+  if (ext == 'K')
+  {
+      is_ext_en = is_ext_en || ((misa & (1 << ('K' - 'A'))) != 0);
+  }
   if (ext == 'P')
   {
       is_ext_en = is_ext_en || ((mmsc_cfg & (1 << 29)) != 0);
+  }
+
+  return is_ext_en;
+}
+
+static bool cpu_support_arch_config (reg_t misa, reg_t mrvarch_cfg, const char *ext)
+{
+  bool is_ext_en = false;
+
+  if (strncmp(ext, "Zba", 3) == 0)
+  {
+    is_ext_en = ((misa & (1 << ('B' - 'A'))) != 0) && ((mrvarch_cfg & 0x1) != 0);
+  }
+  else if (strncmp(ext, "Zbb", 3) == 0)
+  {
+    is_ext_en = ((misa & (1 << ('B' - 'A'))) != 0) && ((mrvarch_cfg & 0x2) != 0);
+  }
+  else if (strncmp(ext, "Zbc", 3) == 0)
+  {
+    is_ext_en = ((misa & (1 << ('B' - 'A'))) != 0) && ((mrvarch_cfg & 0x4) != 0);
+  }
+  else if (strncmp(ext, "Zbs", 3) == 0)
+  {
+    is_ext_en = ((misa & (1 << ('B' - 'A'))) != 0) && ((mrvarch_cfg & 0x8) != 0);
+  }
+  else if (strncmp(ext, "Zicbom", 6) == 0)
+  {
+    is_ext_en = is_ext_en || ((mrvarch_cfg & 0x200) != 0);
+  }
+  else if (strncmp(ext, "Zicbop", 6) == 0)
+  {
+    is_ext_en = is_ext_en || ((mrvarch_cfg & 0x400) != 0);
+  }
+  else if (strncmp(ext, "Zicboz", 6) == 0)
+  {
+    is_ext_en = is_ext_en || ((mrvarch_cfg & 0x800) != 0);
+  }
+  else if (strncmp(ext, "Zbk", 3) == 0)
+  {
+    is_ext_en = is_ext_en || ((mrvarch_cfg & 0x1000) != 0);
+  }
+  else if (strncmp(ext, "Zkn", 3) == 0)
+  {
+    is_ext_en = ((misa & (1 << ('K' - 'A'))) != 0) && ((mrvarch_cfg & 0x2000) != 0);
+  }
+  else if (strncmp(ext, "Zks", 3) == 0)
+  {
+    is_ext_en = ((misa & (1 << ('K' - 'A'))) != 0) && ((mrvarch_cfg & 0x4000) != 0);
+  }
+  else if (strncmp(ext, "Zkt", 3) == 0)
+  {
+    is_ext_en = ((misa & (1 << ('K' - 'A'))) != 0) && ((mrvarch_cfg & 0x8000) != 0);
+  }
+  else if (strncmp(ext, "Zkr", 3) == 0)
+  {
+    is_ext_en = ((misa & (1 << ('K' - 'A'))) != 0) && ((mrvarch_cfg & 0x10000) != 0);
+  }
+  else if (strncmp(ext, "Zk", 2) == 0)
+  {
+    is_ext_en = ((misa & (1 << ('K' - 'A'))) != 0) && ((mrvarch_cfg & 0x2000) != 0) &&
+        ((mrvarch_cfg & 0x4000) != 0) && ((mrvarch_cfg & 0x8000) != 0) && ((mrvarch_cfg & 0x10000) != 0);
   }
 
   return is_ext_en;
@@ -762,7 +872,7 @@ parse_riscv_isa_string (const char *s)
 	die ("Invalid extension `%c'", *s);
       if (e < ext)
 	die ("Out of order extension `%c'", *s);
-      else if (e == ext && tolower (*e) != 'x')
+      else if (e == ext && (tolower (*e) != 'x' && tolower (*e) != 'z'))
 	die ("Duplicate extension `%c'", *s);
       else
 	ext = e;
@@ -780,6 +890,8 @@ parse_riscv_isa_string (const char *s)
       else
 	{
 	  char x_ext[8] = { 0 };
+      ext_type type = ext_type::X_EXT;
+
 	  // For multi-letter extensions, it is followed by multiple alphabets and the version.
 
 	  // We speically handle xv5- here because it contains a
@@ -808,6 +920,106 @@ parse_riscv_isa_string (const char *s)
 	      s += 5;
 	      strncpy (x_ext, riscv_x_extensions[X_EXT_FHW], 8);
 	    }
+      // b-ext
+	  else if (strncasecmp (s, "zba", 3) == 0)
+        {
+          print_indent ("%.3s ", s);
+	      s += 3;
+          type = ext_type::B_EXT;
+          nds_info.b_ext_use[B_EXT_ZBA] = true;
+        }
+      else if (strncasecmp (s, "zbb", 3) == 0)
+        {
+          print_indent ("%.3s ", s);
+	      s += 3;
+          type = ext_type::B_EXT;
+          nds_info.b_ext_use[B_EXT_ZBB] = true;
+        }
+      else if (strncasecmp (s, "zbc", 3) == 0)
+        {
+          print_indent ("%.3s ", s);
+	      s += 3;
+          type = ext_type::B_EXT;
+          nds_info.b_ext_use[B_EXT_ZBC] = true;
+        }
+      else if (strncasecmp (s, "zbkb", 4) == 0 || (strncasecmp (s, "zbkc", 4) == 0) || strncasecmp (s, "zbkx", 4) == 0)
+        {
+          print_indent ("%.4s ", s);
+	      s += 4;
+          type = ext_type::B_EXT;
+          nds_info.b_ext_use[B_EXT_ZBK] = true;
+        }
+      else if (strncasecmp (s, "zbk", 3) == 0)
+        {
+          print_indent ("%.3s ", s);
+	      s += 3;
+          type = ext_type::B_EXT;
+          nds_info.b_ext_use[B_EXT_ZBK] = true;
+        }
+      else if (strncasecmp (s, "zbs", 3) == 0)
+        {
+          print_indent ("%.3s ", s);
+	      s += 3;
+          type = ext_type::B_EXT;
+          nds_info.b_ext_use[B_EXT_ZBS] = true;
+        }
+      // k-ext
+      else if (strncasecmp (s, "zknd", 4) == 0 || strncasecmp (s, "zkne", 4) == 0 || strncasecmp (s, "zknh", 4) == 0)
+        {
+          print_indent ("%.4s ", s);
+	      s += 4;
+          type = ext_type::K_EXT;
+          nds_info.k_ext_use[K_EXT_ZKN] = true;
+        }
+      else if (strncasecmp (s, "zkn", 3) == 0)
+        {
+          print_indent ("%.3s ", s);
+	      s += 3;
+          type = ext_type::K_EXT;
+          nds_info.k_ext_use[K_EXT_ZKN] = true;
+        }
+      else if (strncasecmp (s, "zksed", 5) == 0)
+        {
+          print_indent ("%.5s ", s);
+	      s += 5;
+          type = ext_type::K_EXT;
+          nds_info.k_ext_use[K_EXT_ZKS] = true;
+        }
+      else if (strncasecmp (s, "zksh", 4) == 0)
+        {
+          print_indent ("%.4s ", s);
+	      s += 4;
+          type = ext_type::K_EXT;
+          nds_info.k_ext_use[K_EXT_ZKS] = true;
+        }
+      else if (strncasecmp (s, "zks", 3) == 0)
+        {
+          print_indent ("%.3s ", s);
+	      s += 3;
+          type = ext_type::K_EXT;
+          nds_info.k_ext_use[K_EXT_ZKS] = true;
+        }
+      else if (strncasecmp (s, "zkt", 3) == 0)
+        {
+          print_indent ("%.3s ", s);
+	      s += 3;
+          type = ext_type::K_EXT;
+          nds_info.k_ext_use[K_EXT_ZKT] = true;
+        }
+      else if (strncasecmp (s, "zkr", 3) == 0)
+        {
+          print_indent ("%.3s ", s);
+	      s += 3;
+          type = ext_type::K_EXT;
+          nds_info.k_ext_use[K_EXT_ZKR] = true;
+        }
+      else if (strncasecmp (s, "zk", 2) == 0)
+        {
+          print_indent ("%.2s ", s);
+	      s += 2;
+          type = ext_type::K_EXT;
+          nds_info.k_ext_use[K_EXT_ZK] = true;
+        }
 	  else
 	    {
 	      const char *end = s;
@@ -822,7 +1034,8 @@ parse_riscv_isa_string (const char *s)
 	    return -1;
 	  Debug_printf ("\n");
 
-	  set_riscv_x_ext_info (x_ext, major, minor);
+      if (type == ext_type::X_EXT)
+        set_riscv_x_ext_info (x_ext, major, minor);
 	  // Each multi-letter extension must be separated by an underscore ('_').
 	  if (*s != '\0')
 	    {
@@ -1128,8 +1341,10 @@ elf_check (void *file_data, unsigned int file_size,
   int mxl = 0;
   reg_t CSR_misa;
   reg_t CSR_mmsc_cfg;
+  reg_t CSR_mrvarch_cfg;
   CSR_misa = reg_read_callback (0x301);
   CSR_mmsc_cfg = reg_read_callback (0xFC2);
+  CSR_mrvarch_cfg = reg_read_callback(0xFCA);
   mxl = (CSR_misa >> 30) & 0x3;
   if (mxl == 0)			/* 64bit CPU */
     mxl = (CSR_misa >> 62) & 0x3;
@@ -1166,35 +1381,56 @@ elf_check (void *file_data, unsigned int file_size,
       ext_str[0] = riscv_extensions[i];
       NEC_snprintf (temp, sizeof (temp), "Extension '%s'", ext_str);
       if (NEC_check_bool (EFT_ERROR, temp,
-			  cpu_support_std_ext (CSR_misa, CSR_mmsc_cfg, riscv_extensions[i]),
-			  elf_use_ext_i (i, true)))
-	n_error++;
-
+                  cpu_support_std_ext (CSR_misa, CSR_mmsc_cfg, riscv_extensions[i]),
+			  elf_use_ext_i (i, ext_type::STANDARD)))
+          n_error++;
     }
 
-  /* Non-standard extension. */
-  if (elf_use_ext_i (X_EXT_V5, false))
+  // check b-ext
+  for (i = 0; i < B_EXT_COUNT; i++)
+  {
+    if (elf_use_ext_i (i, ext_type::B_EXT))
+    {
+      NEC_snprintf (temp, sizeof (temp), "'%s' extension", riscv_b_extensions[i]);
+      if (NEC_check_bool (EFT_ERROR, temp,
+                  cpu_support_arch_config(CSR_misa, CSR_mrvarch_cfg, riscv_b_extensions[i]), nds_info.b_ext_use[i]))
+          n_error++;
+    }
+  }
+
+  // check k-ext
+  for (i = 0; i < K_EXT_COUNT; i++)
+  {
+    if (elf_use_ext_i (i, ext_type::K_EXT))
+    {
+      NEC_snprintf (temp, sizeof (temp), "'%s' extension", riscv_k_extensions[i]);
+      if (NEC_check_bool (EFT_ERROR, temp,
+                  cpu_support_arch_config(CSR_misa, CSR_mrvarch_cfg, riscv_k_extensions[i]), nds_info.k_ext_use[i]))
+          n_error++;
+    }
+  }
+
+   /* Non-standard extension. */
+  if (elf_use_ext_i (X_EXT_V5, ext_type::X_EXT))
     {
       if (NEC_check_bool (EFT_ERROR, "V5 Extension",
 			  cpu_support_v5_ext (CSR_mmsc_cfg), true))
 	n_error++;
     }
-
-  if (elf_use_ext_i (X_EXT_V5_OLD, false))
+  if (elf_use_ext_i (X_EXT_V5_OLD, ext_type::X_EXT))
     {
       if (NEC_check_bool (EFT_ERROR, "V5 Extension",
 			  cpu_support_v5_ext (CSR_mmsc_cfg), true))
 	n_error++;
     }
-
-  if (elf_use_ext_i (X_EXT_DSP, false))
+  if (elf_use_ext_i (X_EXT_DSP, ext_type::X_EXT))
     {
       if (NEC_check_bool (EFT_ERROR, "V5 DSP Extension",
 			  cpu_support_v5dsp_ext (CSR_mmsc_cfg, CSR_misa), true))
 	n_error++;
     }
 
-  if (elf_use_ext_i (X_EXT_FHW, false))
+  if (elf_use_ext_i (X_EXT_FHW, ext_type::X_EXT))
     {
       if (NEC_check_bool (EFT_ERROR, "V5 EFHW Extension",
 			  cpu_support_v5efhw_ext (CSR_mmsc_cfg, CSR_misa), true))
