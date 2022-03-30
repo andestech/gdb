@@ -2330,6 +2330,8 @@ riscv_parse_add_implicit_subsets (riscv_parse_subset_t *rps)
 					RISCV_UNKNOWN_VERSION, TRUE);
 	      }
 	  }
+	else
+	  while (implicit_isa_table[i]) i++; /* skip implicit_isa  */
 	i++;
       }
   } /* } handle implicit isa  */
