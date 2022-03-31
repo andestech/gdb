@@ -41,6 +41,10 @@
 
 #include "gdb/sim-riscv.h"
 #include "target-newlib-syscall.h"
+
+#include "aes.h"
+#include "sm4.h"
+
 #ifdef __MINGW32__
 #include "windows.h"
 #endif
@@ -8984,6 +8988,392 @@ execute_b (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op,
 }
 
 static sim_cia
+execute_k (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op,
+	   int ex9)
+{
+  SIM_DESC sd = CPU_STATE (cpu);
+  int rd = (iw >> OP_SH_RD) & OP_MASK_RD;
+  int rs1 = (iw >> OP_SH_RS1) & OP_MASK_RS1;
+  int rs2 = (iw >> OP_SH_RS2) & OP_MASK_RS2;
+  const char *rd_name = riscv_gpr_names_abi[rd];
+  const char *rs1_name = riscv_gpr_names_abi[rs1];
+  const char *rs2_name = riscv_gpr_names_abi[rs2];
+  unsigned_word bs = ((iw >> OP_SH_BS) & OP_MASK_BS);
+  uint32_t shamt = bs * 8;
+  unsigned_word rnum = ((iw >> OP_SH_RNUM) & OP_MASK_RNUM);
+  sim_cia pc = cpu->pc + 4;
+
+  int xlen = RISCV_XLEN (cpu);
+  uint32_t rs1u, sb_in, sb_out, rotl;
+  uint64_t rs1u_64;
+
+  if (ex9)
+    pc -= 2;
+
+  switch (op->match)
+    {
+      /* Zbkb include Zbb*/
+    case (MATCH_GREVI | MATCH_SHAMT_BREV8):
+      TRACE_INSN (cpu, "brev8 %s, %s", rd_name, rs1_name);
+      if (xlen == 32)
+	{
+	  rs1u = cpu->regs[rs1].u;
+	  rs1u = do_swap32 (rs1u, 0x5555555555555555ull, 1);
+	  rs1u = do_swap32 (rs1u, 0x3333333333333333ull, 2);
+	  rs1u = do_swap32 (rs1u, 0x0f0f0f0f0f0f0f0full, 4);
+	  store_rd (cpu, rd, rs1u);
+	}
+      else
+	{
+	  rs1u_64 = cpu->regs[rs1].u;
+	  rs1u_64 = do_swap64 (rs1u_64, 0x5555555555555555ull, 1);
+	  rs1u_64 = do_swap64 (rs1u_64, 0x3333333333333333ull, 2);
+	  rs1u_64 = do_swap64 (rs1u_64, 0x0f0f0f0f0f0f0f0full, 4);
+	  store_rd (cpu, rd, rs1u_64);
+	}
+      break;
+    case MATCH_PACK:
+      TRACE_INSN (cpu, "pack %s, %s, %s", rd_name, rs1_name, rs2_name);
+      if (xlen == 32)
+	{
+	  uint32_t lower = (cpu->regs[rs1].u << xlen / 2) >> xlen / 2;
+	  uint32_t upper = cpu->regs[rs2].u << xlen / 2;
+	  store_rd (cpu, rd, lower | upper);
+	}
+      else
+	{
+	  uint64_t lower = (cpu->regs[rs1].u << xlen / 2) >> xlen / 2;
+	  uint64_t upper = cpu->regs[rs2].u << xlen / 2;
+	  store_rd (cpu, rd, lower | upper);
+	}
+      break;
+    case MATCH_PACKH:
+      TRACE_INSN (cpu, "packh %s, %s, %s", rd_name, rs1_name, rs2_name);
+      if (xlen == 32)
+	{
+	  uint32_t lower = cpu->regs[rs1].u & 0xFF;
+	  uint32_t upper = (cpu->regs[rs2].u & 0xFF) << 8;
+	  store_rd (cpu, rd, lower | upper);
+	}
+      else
+	{
+	  uint64_t lower = cpu->regs[rs1].u & 0xFF;
+	  uint64_t upper = (cpu->regs[rs2].u & 0xFF) << 8;
+	  store_rd (cpu, rd, lower | upper);
+	}
+      break;
+    case MATCH_PACKW:
+      {
+	/* RV64 only */
+	uint64_t lower, upper;
+	TRACE_INSN (cpu, "packw %s, %s, %s", rd_name, rs1_name, rs2_name);
+	lower = cpu->regs[rs1].u & 0xFFFF;
+	upper = (cpu->regs[rs2].u & 0xFFFF) << 16;
+	store_rd (cpu, rd, lower | upper);
+      }
+      break;
+    case (MATCH_SHFLI | MATCH_SHAMT_ZIP_32):
+      /* RV32 only */
+      TRACE_INSN (cpu, "zip %s, %s", rd_name, rs1_name);
+      rs1u = cpu->regs[rs1].u;
+      rs1u = do_shuf_stage (rs1u, shuf_masks[3], shuf_masks[3] >> 8, 8);
+      rs1u = do_shuf_stage (rs1u, shuf_masks[2], shuf_masks[2] >> 4, 4);
+      rs1u = do_shuf_stage (rs1u, shuf_masks[1], shuf_masks[1] >> 2, 2);
+      rs1u = do_shuf_stage (rs1u, shuf_masks[0], shuf_masks[0] >> 1, 1);
+      store_rd (cpu, rd, rs1u);
+      break;
+    case (MATCH_UNSHFLI | MATCH_SHAMT_ZIP_32):
+      /* RV32 only */
+      TRACE_INSN (cpu, "unzip %s, %s", rd_name, rs1_name);
+      rs1u = cpu->regs[rs1].u;
+      rs1u = do_shuf_stage (rs1u, shuf_masks[0], shuf_masks[0] >> 1, 1);
+      rs1u = do_shuf_stage (rs1u, shuf_masks[1], shuf_masks[1] >> 2, 2);
+      rs1u = do_shuf_stage (rs1u, shuf_masks[2], shuf_masks[2] >> 4, 4);
+      rs1u = do_shuf_stage (rs1u, shuf_masks[3], shuf_masks[3] >> 8, 8);
+      store_rd (cpu, rd, rs1u);
+      break;
+      /* Zbkx */
+    case MATCH_XPERM4:
+      TRACE_INSN (cpu, "xperm4 %s, %s, %s", rd_name, rs1_name, rs2_name);
+      if (xlen == 32)
+	store_rd (cpu, rd, do_xperm32 (cpu->regs[rs1].u, cpu->regs[rs2].u, 2));
+      store_rd (cpu, rd, do_xperm64 (cpu->regs[rs1].u, cpu->regs[rs2].u, 2));
+      break;
+    case MATCH_XPERM8:
+      TRACE_INSN (cpu, "xperm8 %s, %s, %s", rd_name, rs1_name, rs2_name);
+      if (xlen == 32)
+	store_rd (cpu, rd, do_xperm32 (cpu->regs[rs1].u, cpu->regs[rs2].u, 3));
+      store_rd (cpu, rd, do_xperm64 (cpu->regs[rs1].u, cpu->regs[rs2].u, 3));
+      break;
+      /* Zknd */
+    case MATCH_AES32DSI:
+      TRACE_INSN (cpu, "aes32dsi %s, %s, %s, %" PRIiTW, rd_name, rs1_name,
+		  rs2_name, bs);
+      rs1u = aes32_operation (shamt, cpu->regs[rs1].u, cpu->regs[rs2].u, false,
+			      false);
+      store_rd (cpu, rd, rs1u);
+      break;
+    case MATCH_AES32DSMI:
+      TRACE_INSN (cpu, "aes32dsmi %s, %s, %s, %" PRIiTW, rd_name, rs1_name,
+		  rs2_name, bs);
+      rs1u = aes32_operation (shamt, cpu->regs[rs1].u, cpu->regs[rs2].u, false,
+			      true);
+      store_rd (cpu, rd, rs1u);
+    case MATCH_AES64DS:
+      TRACE_INSN (cpu, "aes64ds %s, %s, %s", rd_name, rs1_name, rs2_name);
+      rs1u_64
+	= aes64_operation (cpu->regs[rs1].u, cpu->regs[rs2].u, false, false);
+      store_rd (cpu, rd, rs1u_64);
+      break;
+    case MATCH_AES64DSM:
+      TRACE_INSN (cpu, "aes64dsm %s, %s, %s", rd_name, rs1_name, rs2_name);
+      rs1u_64
+	= aes64_operation (cpu->regs[rs1].u, cpu->regs[rs2].u, false, true);
+      store_rd (cpu, rd, rs1u_64);
+      break;
+    case MATCH_AES64IM:
+      {
+	uint32_t col_0, col_1;
+	TRACE_INSN (cpu, "aes64im %s, %s", rd_name, rs1_name);
+	col_0 = (uint64_t) cpu->regs[rs1].u & 0xFFFFFFFF;
+	col_1 = (uint64_t) cpu->regs[rs1].u >> 32;
+	col_0 = AES_INVMIXCOLUMN (col_0);
+	col_1 = AES_INVMIXCOLUMN (col_1);
+	rs1u_64 = ((uint64_t) col_1 << 32) | col_0;
+	store_rd (cpu, rd, rs1u_64);
+      }
+      break;
+    case MATCH_AES64KS1I:
+      {
+	uint64_t RS1 = cpu->regs[rs1].u;
+	uint32_t temp;
+	uint8_t enc_rnum = rnum, rcon_ = 0;
+	static const uint8_t round_consts[10]
+	  = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36};
+	TRACE_INSN (cpu, "aes64ks1i %s, %s, %" PRIiTW, rd_name, rs1_name, rnum);
+	temp = (RS1 >> 32) & 0xFFFFFFFF;
+
+	if (enc_rnum != 0xA)
+	  {
+	    temp = ror32 (temp, 8); /* Rotate right by 8 */
+	    rcon_ = round_consts[enc_rnum];
+	  }
+	temp = ((uint32_t) AES_sbox[(temp >> 24) & 0xFF] << 24)
+	       | ((uint32_t) AES_sbox[(temp >> 16) & 0xFF] << 16)
+	       | ((uint32_t) AES_sbox[(temp >> 8) & 0xFF] << 8)
+	       | ((uint32_t) AES_sbox[(temp >> 0) & 0xFF] << 0);
+	temp ^= rcon_;
+	rs1u_64 = ((uint64_t) temp << 32) | temp;
+	store_rd (cpu, rd, rs1u_64);
+      }
+      break;
+    case MATCH_AES64KS2:
+      {
+	uint32_t rs1_hi = (uint64_t) cpu->regs[rs1].u >> 32;
+	uint32_t rs2_lo = (uint64_t) cpu->regs[rs2].u;
+	uint32_t rs2_hi = (uint64_t) cpu->regs[rs2].u >> 32;
+	uint32_t r_lo = (rs1_hi ^ rs2_lo);
+	uint32_t r_hi = (rs1_hi ^ rs2_lo ^ rs2_hi);
+	TRACE_INSN (cpu, "aes64ks2 %s, %s, %s", rd_name, rs1_name, rs2_name);
+	rs1u_64 = ((uint64_t) r_hi << 32) | r_lo;
+	store_rd (cpu, rd, rs1u_64);
+      }
+      break;
+      /* Zkne */
+    case MATCH_AES32ESI:
+      TRACE_INSN (cpu, "aes32esi %s, %s, %s, %" PRIiTW, rd_name, rs1_name,
+		  rs2_name, bs);
+      rs1u = aes32_operation (shamt, cpu->regs[rs1].u, cpu->regs[rs2].u, true,
+			      false);
+      store_rd (cpu, rd, rs1u);
+      break;
+    case MATCH_AES32ESMI:
+      TRACE_INSN (cpu, "aes32esmi %s, %s, %s, %" PRIiTW, rd_name, rs1_name,
+		  rs2_name, bs);
+      rs1u = aes32_operation (shamt, cpu->regs[rs1].u, cpu->regs[rs2].u, true,
+			      true);
+      store_rd (cpu, rd, rs1u);
+      break;
+    case MATCH_AES64ES:
+      TRACE_INSN (cpu, "aes64es %s, %s, %s", rd_name, rs1_name, rs2_name);
+      rs1u_64
+	= aes64_operation (cpu->regs[rs1].u, cpu->regs[rs2].u, true, false);
+      store_rd (cpu, rd, rs1u_64);
+      break;
+    case MATCH_AES64ESM:
+      TRACE_INSN (cpu, "aes64esm %s, %s, %s", rd_name, rs1_name, rs2_name);
+      rs1u_64
+	= aes64_operation (cpu->regs[rs1].u, cpu->regs[rs2].u, true, true);
+      store_rd (cpu, rd, rs1u_64);
+      break;
+      /* Zknh */
+    case MATCH_SHA256SIG0:
+      TRACE_INSN (cpu, "sha256sig0 %s, %s", rd_name, rs1_name);
+      store_rd (cpu, rd,
+		sext_xlen (ror32 (cpu->regs[rs1].u, 7)
+			   ^ ror32 (cpu->regs[rs1].u, 18)
+			   ^ (cpu->regs[rs1].u >> 3)));
+      break;
+    case MATCH_SHA256SIG1:
+      TRACE_INSN (cpu, "sha256sig1 %s, %s", rd_name, rs1_name);
+      store_rd (cpu, rd,
+		sext_xlen (ror32 (cpu->regs[rs1].u, 17)
+			   ^ ror32 (cpu->regs[rs1].u, 19)
+			   ^ (cpu->regs[rs1].u >> 10)));
+      break;
+    case MATCH_SHA256SUM0:
+      TRACE_INSN (cpu, "sha256sum0 %s, %s", rd_name, rs1_name);
+      store_rd (cpu, rd,
+		sext_xlen (ror32 (cpu->regs[rs1].u, 2)
+			   ^ ror32 (cpu->regs[rs1].u, 13)
+			   ^ ror32 (cpu->regs[rs1].u, 22)));
+      break;
+    case MATCH_SHA256SUM1:
+      TRACE_INSN (cpu, "sha256sum1 %s, %s", rd_name, rs1_name);
+      store_rd (cpu, rd,
+		sext_xlen (ror32 (cpu->regs[rs1].u, 6)
+			   ^ ror32 (cpu->regs[rs1].u, 11)
+			   ^ ror32 (cpu->regs[rs1].u, 25)));
+      break;
+    case MATCH_SHA512SIG0:
+      /* RV64 only */
+      TRACE_INSN (cpu, "sha512sig0 %s, %s", rd_name, rs1_name);
+      store_rd (cpu, rd,
+		ror64 (cpu->regs[rs1].u, 1) ^ ror64 (cpu->regs[rs1].u, 8)
+		  ^ (cpu->regs[rs1].u >> 7));
+      break;
+    case MATCH_SHA512SIG0H:
+      /* RV32 only */
+      TRACE_INSN (cpu, "sha512sig0h %s, %s, %s", rd_name, rs1_name, rs2_name);
+      rs1u_64
+	= (zext32 (cpu->regs[rs1].u) >> 1) ^ (zext32 (cpu->regs[rs1].u) >> 7)
+	  ^ (zext32 (cpu->regs[rs1].u) >> 8) ^ (zext32 (cpu->regs[rs2].u) << 31)
+	  ^ (zext32 (cpu->regs[rs2].u) << 24);
+      store_rd (cpu, rd, sext_xlen (rs1u_64));
+      break;
+    case MATCH_SHA512SIG0L:
+      /* RV32 only */
+      TRACE_INSN (cpu, "sha512sig0l %s, %s, %s", rd_name, rs1_name, rs2_name);
+      rs1u_64
+	= (zext32 (cpu->regs[rs1].u) >> 1) ^ (zext32 (cpu->regs[rs1].u) >> 7)
+	  ^ (zext32 (cpu->regs[rs1].u) >> 8) ^ (zext32 (cpu->regs[rs2].u) << 31)
+	  ^ (zext32 (cpu->regs[rs2].u) << 25)
+	  ^ (zext32 (cpu->regs[rs2].u) << 24);
+      store_rd (cpu, rd, sext_xlen (rs1u_64));
+    case MATCH_SHA512SIG1:
+      /* RV64 only */
+      TRACE_INSN (cpu, "sha512sig1 %s, %s", rd_name, rs1_name);
+      store_rd (cpu, rd,
+		ror64 (cpu->regs[rs1].u, 19) ^ ror64 (cpu->regs[rs1].u, 61)
+		  ^ (cpu->regs[rs1].u >> 6));
+      break;
+    case MATCH_SHA512SIG1H:
+      /* RV32 only */
+      TRACE_INSN (cpu, "sha512sig1h %s, %s, %s", rd_name, rs1_name, rs2_name);
+      rs1u_64 = (zext32 (cpu->regs[rs1].u) << 3)
+		^ (zext32 (cpu->regs[rs1].u) >> 6)
+		^ (zext32 (cpu->regs[rs1].u) >> 19)
+		^ (zext32 (cpu->regs[rs2].u) >> 29)
+		^ (zext32 (cpu->regs[rs2].u) << 13);
+      store_rd (cpu, rd, sext_xlen (rs1u_64));
+      break;
+    case MATCH_SHA512SIG1L:
+      /* RV32 only */
+      TRACE_INSN (cpu, "sha512sig1l %s, %s, %s", rd_name, rs1_name, rs2_name);
+      rs1u_64 = (zext32 (cpu->regs[rs1].u) << 3)
+		^ (zext32 (cpu->regs[rs1].u) >> 6)
+		^ (zext32 (cpu->regs[rs1].u) >> 19)
+		^ (zext32 (cpu->regs[rs2].u) >> 29)
+		^ (zext32 (cpu->regs[rs2].u) << 26)
+		^ (zext32 (cpu->regs[rs2].u) << 13);
+      store_rd (cpu, rd, sext_xlen (rs1u_64));
+      break;
+    case MATCH_SHA512SUM0:
+      /* RV64 only */
+      TRACE_INSN (cpu, "sha512sum0 %s, %s", rd_name, rs1_name);
+      store_rd (cpu, rd,
+		ror64 (cpu->regs[rs1].u, 28) ^ ror64 (cpu->regs[rs1].u, 34)
+		  ^ ror64 (cpu->regs[rs1].u, 39));
+      break;
+    case MATCH_SHA512SUM0R:
+      /* RV32 only */
+      TRACE_INSN (cpu, "sha512sum0r %s, %s, %s", rd_name, rs1_name, rs2_name);
+      rs1u_64
+	= (zext32 (cpu->regs[rs1].u) << 25) ^ (zext32 (cpu->regs[rs1].u) << 30)
+	  ^ (zext32 (cpu->regs[rs1].u) >> 28) ^ (zext32 (cpu->regs[rs2].u) >> 7)
+	  ^ (zext32 (cpu->regs[rs2].u) >> 2) ^ (zext32 (cpu->regs[rs2].u) << 4);
+      store_rd (cpu, rd, sext_xlen (rs1u_64));
+      break;
+    case MATCH_SHA512SUM1:
+      /* RV64 only */
+      TRACE_INSN (cpu, "sha512sum1 %s, %s", rd_name, rs1_name);
+      store_rd (cpu, rd,
+		ror64 (cpu->regs[rs1].u, 14) ^ ror64 (cpu->regs[rs1].u, 18)
+		  ^ ror64 (cpu->regs[rs1].u, 41));
+      break;
+    case MATCH_SHA512SUM1R:
+      /* RV32 only */
+      TRACE_INSN (cpu, "sha512sum1r %s, %s, %s", rd_name, rs1_name, rs2_name);
+      rs1u_64
+	= (zext32 (cpu->regs[rs1].u) << 23) ^ (zext32 (cpu->regs[rs1].u) >> 14)
+	  ^ (zext32 (cpu->regs[rs1].u) >> 18) ^ (zext32 (cpu->regs[rs2].u) >> 9)
+	  ^ (zext32 (cpu->regs[rs2].u) << 18)
+	  ^ (zext32 (cpu->regs[rs2].u) << 14);
+      store_rd (cpu, rd, sext_xlen (rs1u_64));
+      break;
+      /* Zksed */
+    case MATCH_SM4ED:
+      {
+	uint32_t x;
+	TRACE_INSN (cpu, "sm4ed %s, %s, %s, %" PRIiTW, rd_name, rs1_name,
+		    rs2_name, bs);
+	sb_in = (uint8_t) (cpu->regs[rs2].u >> shamt);
+	sb_out = (uint32_t) sm4_sbox[sb_in];
+
+	x = sb_out ^ (sb_out << 8) ^ (sb_out << 2) ^ (sb_out << 18)
+	    ^ ((sb_out & 0x3f) << 26) ^ ((sb_out & 0xC0) << 10);
+
+	rotl = rol32 (x, shamt);
+	store_rd (cpu, rd, sext32_xlen (rotl ^ cpu->regs[rs1].u));
+      }
+      break;
+    case MATCH_SM4KS:
+      {
+	uint32_t y;
+	TRACE_INSN (cpu, "sm4ks %s, %s, %s, %" PRIiTW, rd_name, rs1_name,
+		    rs2_name, bs);
+	sb_in = (uint8_t) (cpu->regs[rs2].u >> shamt);
+	sb_out = sm4_sbox[sb_in];
+
+	y = sb_out ^ ((sb_out & 0x07) << 29) ^ ((sb_out & 0xFE) << 7)
+	    ^ ((sb_out & 0x01) << 23) ^ ((sb_out & 0xF8) << 13);
+
+	rotl = rol32 (y, shamt);
+	store_rd (cpu, rd, zext32 (rotl ^ cpu->regs[rs1].u));
+      }
+      break;
+      /* Zksh */
+    case MATCH_SM3P0:
+      TRACE_INSN (cpu, "sm3p0 %s, %s", rd_name, rs1_name);
+      store_rd (cpu, rd,
+		zext32 (cpu->regs[rs1].u ^ rol32 (cpu->regs[rs1].u, 9)
+			^ rol32 (cpu->regs[rs1].u, 17)));
+      break;
+    case MATCH_SM3P1:
+      TRACE_INSN (cpu, "sm3p1 %s, %s", rd_name, rs1_name);
+      store_rd (cpu, rd,
+		zext32 (cpu->regs[rs1].u ^ rol32 (cpu->regs[rs1].u, 15)
+			^ rol32 (cpu->regs[rs1].u, 23)));
+      break;
+    default:
+      TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
+      sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
+    }
+
+  return pc;
+}
+
+static sim_cia
 execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex9)
 {
   SIM_DESC sd = CPU_STATE (cpu);
@@ -9030,6 +9420,15 @@ execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int 
     case INSN_CLASS_ZBB_OR_ZBKB:
     case INSN_CLASS_ZBC_OR_ZBKC:
       return execute_b (cpu, iw, op, ex9);
+    case INSN_CLASS_ZBKB:
+    case INSN_CLASS_ZBKX:
+    case INSN_CLASS_ZKND:
+    case INSN_CLASS_ZKNE:
+    case INSN_CLASS_ZKNH:
+    case INSN_CLASS_ZKSED:
+    case INSN_CLASS_ZKSH:
+    case INSN_CLASS_ZKND_OR_ZKNE:
+      return execute_k (cpu, iw, op, ex9);
     default:
       TRACE_INSN (cpu, "UNHANDLED EXTENSION: %d", op->insn_class);
       sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
