@@ -2698,3 +2698,68 @@ riscv_arch_str (unsigned xlen, const riscv_subset_list_t *subset)
 
   return attr_str;
 }
+
+/* { Andes  */
+/* ICT stuff  */
+static ict_sym_list_t *ict_sym_list_head = NULL;
+static ict_sym_list_t *ict_sym_list_tail = NULL;
+static int ict_sym_list_len = 0;
+
+ict_sym_list_t *
+get_ict_sym_list_head (void) { return ict_sym_list_head; }
+
+int
+get_ict_sym_list_len (void) { return ict_sym_list_len; }
+
+/* name == NULL for collection, others for ICT_ENTRY inputs from .ld  */
+
+ict_sym_list_t *
+andes_ict_sym_list_add (int index, const char *name, bfd_vma vma)
+{
+  ict_sym_list_t *it = calloc (1, sizeof (ict_sym_list_t));
+  if (it == NULL)
+    (*_bfd_error_handler) (_("Out of memory!"));
+  else
+    {
+      it->index = index;
+      if (name)
+	it->name = strdup (name);
+      it->vma = vma;
+      if (ict_sym_list_tail)
+	ict_sym_list_tail = ict_sym_list_tail->next = it;
+      else
+	ict_sym_list_head = ict_sym_list_tail = it;
+      ict_sym_list_len++;
+    }
+  return it;
+}
+
+ict_sym_list_t *
+andes_ict_sym_list_insert (struct elf_link_hash_entry *h)
+{
+  ict_sym_list_t *p = ict_sym_list_head;
+  while (p)
+    {
+      if (strcmp (h->root.root.string, p->name) == 0)
+	break;
+      p = p->next;
+    }
+
+  if (p)
+    {
+      BFD_ASSERT (p->h == NULL);
+      p->h = h;
+    }
+  else
+    {
+      int index = ict_sym_list_len;
+      if (ict_sym_list_tail)
+	index = ict_sym_list_tail->index + 1;
+      p = andes_ict_sym_list_add (index, h->root.root.string, 0);
+      BFD_ASSERT (p);
+      p->h = h;
+    }
+  return p;
+}
+
+/* } Andes  */

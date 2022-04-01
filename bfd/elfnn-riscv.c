@@ -438,7 +438,7 @@ enum
 /* Helper functions for Rom Patch and ICT.  */
 static void riscv_elf_ict_init (void);
 static void riscv_elf_relocate_ict_table (struct bfd_link_info *, bfd *);
-static void riscv_elf_ict_hash_to_exported_table (void);
+static void riscv_elf_ict_hash_to_exported_table (struct bfd_link_info *info);
 
 /* The entry of the ict hash table.  */
 struct elf_riscv_ict_hash_entry
@@ -449,19 +449,19 @@ struct elf_riscv_ict_hash_entry
 };
 
 /* The entry of the exported ict table.  */
-struct riscv_elf_ict_table_entry
+typedef struct riscv_elf_ict_entry
 {
   struct elf_link_hash_entry *h;
   unsigned int order;
-  struct riscv_elf_ict_table_entry *next;
-};
+  struct riscv_elf_ict_entry *next;
+} ict_entry_t;
 
 /* The exported indirect call table.  */
 static FILE *ict_table_file = NULL;
 /* Indirect call hash table.  */
 static struct bfd_hash_table indirect_call_table;
 /* The exported indirect call table.  */
-static struct riscv_elf_ict_table_entry *exported_ict_table_head = NULL;
+static ict_entry_t *exported_ict_table_head = NULL;
 
 typedef struct andes_context
 {
@@ -978,8 +978,9 @@ riscv_elf_update_ict_hash_table (bfd *abfd, asection *sec,
 	    }
 
 	  riscv_elf_hash_entry (h)->indirect_call = TRUE;
+	  ict_sym_list_t *it = andes_ict_sym_list_insert (h);
 	  entry->h = h;
-	  entry->order = ict_table_entries;
+	  entry->order = it->index;
 	  ict_table_entries++;
 	}
     }
@@ -2381,7 +2382,7 @@ riscv_elf_relocate_section (bfd *output_bfd,
 
   /* Before relocating the ict table, we should order the
      ict hash entries according to the `entry->order'.  */
-  riscv_elf_ict_hash_to_exported_table ();
+  riscv_elf_ict_hash_to_exported_table (info);
   /* Relocation for .nds.ict table.  */
   /* When compiling the patch code, we don't need to relocate
      the imported ict table in the riscv_elf_relocate_ict_table
@@ -6775,6 +6776,29 @@ riscv_elf_output_symbol_hook (struct bfd_link_info *info,
     {
       fprintf (sym_ld_script, "SECTIONS\n{\n");
       check_start_export_sym = 1;
+      
+      /* dump ICT table if necessary  */
+      ict_entry_t *p = exported_ict_table_head;
+      if (p)
+	{
+	  int i = 0;
+	  struct bfd_link_hash_entry *ict_base = bfd_link_hash_lookup (
+	    info->hash, "_INDIRECT_CALL_TABLE_BASE_", FALSE, FALSE, FALSE);
+	  bfd_vma ict_base_vma = ict_base->u.def.value
+				 + sec_addr (ict_base->u.def.section);
+	  fprintf (sym_ld_script, "\t.nds.ict 0x%08lx : {\n", ict_base_vma);
+	  while (p)
+	    {
+	      BFD_ASSERT (riscv_elf_hash_entry (p->h)->indirect_call);
+	      bfd_vma sym_value = p->h->root.u.def.value
+				  + sec_addr (p->h->root.u.def.section);
+	      fprintf (sym_ld_script, "\t\tICT_ENTRY(%d, %s, 0x%08lx);\n",
+		       i, p->h->root.root.string, sym_value);
+	      p = p->next;
+	      i++;
+	    }
+	  fprintf (sym_ld_script, "\t}\n");
+	}
     }
 
   if (h->root.type == bfd_link_hash_defined
@@ -6793,8 +6817,7 @@ riscv_elf_output_symbol_hook (struct bfd_link_info *info,
 	+ h->root.u.def.section->output_offset;
 
       if (riscv_elf_hash_entry (h)->indirect_call)
-	fprintf (sym_ld_script, "\tPROVIDE (%s = 0x%08lx);\t /* %s  */\n",
-		 h->root.root.string, sym_value, source);
+	/* blank by now */;
       else
 	fprintf (sym_ld_script, "\t%s = 0x%08lx;\t /* %s  */\n",
 		 h->root.root.string, sym_value, source);
@@ -8843,7 +8866,7 @@ riscv_elf_ict_init (void)
 static void
 riscv_elf_insert_exported_ict_table (struct elf_riscv_ict_hash_entry *entry)
 {
-  struct riscv_elf_ict_table_entry *head, *new;
+  ict_entry_t *head, *new;
 
   head = exported_ict_table_head;
   while (head
@@ -8857,8 +8880,8 @@ riscv_elf_insert_exported_ict_table (struct elf_riscv_ict_hash_entry *entry)
   else
     {
       /* We need to insert the symbol into the exported ict table.  */
-      new = (struct riscv_elf_ict_table_entry *) bfd_malloc
-	(sizeof (struct riscv_elf_ict_table_entry));
+      new = (ict_entry_t *) bfd_malloc
+	(sizeof (ict_entry_t));
       new->h = entry->h;
       new->order = entry->order;
 
@@ -8881,9 +8904,42 @@ riscv_elf_insert_exported_ict_table (struct elf_riscv_ict_hash_entry *entry)
 }
 
 static void
-riscv_elf_ict_hash_to_exported_table (void)
+riscv_elf_ict_hash_to_exported_table (struct bfd_link_info *info)
 {
   unsigned int i;
+  bfd *abfd;
+  asection *sec;
+  for (abfd = info->input_bfds; abfd != NULL; abfd = abfd->link.next)
+    {
+      if (abfd->link.next == NULL)
+	sec = bfd_get_section_by_name (abfd, ".nds.ict");
+    }
+  if (sec == NULL)
+    return;
+
+  /* try ICT_ENTRY first  */
+  ict_sym_list_t *s = get_ict_sym_list_head ();
+  while (s)
+    {
+      struct elf_riscv_ict_hash_entry ent;
+      ent.order = s->index;
+      ent.h = elf_link_hash_lookup (elf_hash_table (info),
+				    s->name, FALSE, FALSE, FALSE);
+      if (ent.h == NULL)
+	{ /* un-overwritten symbol
+	   * TODO: hacky! find a better way!
+	  */
+	  ent.h = elf_link_hash_lookup (elf_hash_table (info),
+					s->name, TRUE, FALSE, FALSE);
+	  ent.h->root.ldscript_def = 1;
+	  ent.h->root.type = bfd_link_hash_defweak;
+	  ent.h->root.u.def.section = sec;
+	  ent.h->root.u.def.value = s->vma;
+	}
+      BFD_ASSERT (ent.h);
+      riscv_elf_insert_exported_ict_table (&ent);
+      s = s->next;
+    }
 
   indirect_call_table.frozen = 1;
   for (i = 0; i < indirect_call_table.size; i++)
@@ -8913,7 +8969,7 @@ riscv_elf_relocate_ict_table (struct bfd_link_info *info, bfd *output_bfd)
   bfd_vma insn;
   unsigned int ict_entry_size;
   static bfd_boolean done = FALSE;
-  struct riscv_elf_ict_table_entry *head;
+  ict_entry_t *head;
 
   if (done)
     return;
@@ -8954,14 +9010,25 @@ riscv_elf_relocate_ict_table (struct bfd_link_info *info, bfd *output_bfd)
 
       h = head->h;
       order = head->order;
-      if ((h->root.type == bfd_link_hash_defined
-	   || h->root.type == bfd_link_hash_defweak)
-	  && h->root.u.def.section != NULL
-	  && h->root.u.def.section->output_section != NULL)
+      if (((h->root.type == bfd_link_hash_defined
+	    || h->root.type == bfd_link_hash_defweak)
+	   && h->root.u.def.section != NULL
+	   && h->root.u.def.section->output_section != NULL)
+	  || (h->root.type == bfd_link_hash_undefined))
 	{
-	  relocation = h->root.u.def.value
-	    + h->root.u.def.section->output_section->vma
-	    + h->root.u.def.section->output_offset;
+	  bfd_vma secaddr = 0;
+	  if (h->root.u.def.section)
+	    secaddr = sec_addr (h->root.u.def.section);
+	  /* TODO: hacky! find a better way  */
+	  if (h->root.ldscript_def == 1)
+	    {
+	      h->root.u.def.value -= secaddr;
+	      h->root.ldscript_def = 0;
+	    }
+
+	  relocation = h->root.u.def.value;
+	  if (h->root.type != bfd_link_hash_undefined)
+	    relocation += secaddr;
 
 	  if (ict_model == 0)
 	    {
@@ -9643,7 +9710,7 @@ static void
 riscv_elf_final_write_processing (bfd *abfd ATTRIBUTE_UNUSED,
 				  bfd_boolean linker ATTRIBUTE_UNUSED)
 {
-  struct riscv_elf_ict_table_entry *head;
+  ict_entry_t *head;
 
   /* Export the ICT table if needed.  */
   /* TODO: should we support new linker option to let user

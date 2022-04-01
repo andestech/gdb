@@ -107,6 +107,7 @@ exp_print_token (token_code_type code, int infix_p)
     { QUAD, "QUAD" },
     { SQUAD, "SQUAD" },
     { LONG, "LONG" },
+    { ICT_ENTRY, "ICT_ENTRY" },
     { SHORT, "SHORT" },
     { BYTE, "BYTE" },
     { SECTIONS, "SECTIONS" },

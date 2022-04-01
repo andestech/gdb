@@ -312,8 +312,9 @@ riscv_elf_after_check_relocs (void)
   /* We only create the ict table and _INDIRECT_CALL_TABLE_BASE_ symbol
      when we compiling the main project at the first link-time.  */
   if (!find_imported_ict_table
-      && ict_table_entries > 0)
+      && (ict_table_entries || get_ict_sym_list_len ()))
     {
+      int entries = get_ict_sym_list_len ();
       for (abfd = link_info.input_bfds; abfd != NULL; abfd = abfd->link.next)
 	{
 	  /* Create ict table section in the last input object file.  */
@@ -321,7 +322,7 @@ riscv_elf_after_check_relocs (void)
 	  if (abfd->link.next == NULL)
 	    riscv_elf_create_target_section (&link_info, abfd, ".nds.ict",
 					     "_INDIRECT_CALL_TABLE_BASE_",
-					     ict_table_entries * 4 * 2, 2,
+					     entries * 4 * 2, 2,
 					     flags);
 	}
     }
