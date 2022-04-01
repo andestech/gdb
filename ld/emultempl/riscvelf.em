@@ -77,6 +77,24 @@ riscv_elf_set_target_option (struct bfd_link_info *info)
 static void
 riscv_elf_before_allocation (void)
 {
+  /* { Andes */
+  /* in case ICT output section (script) would be GC; set flag SEC_KEEP  */
+  int size = get_ict_table_size ();
+  if (size)
+    {
+      lang_output_section_statement_type *os;
+      for (os = (void *) lang_os_list.head; os != NULL; os = os->next)
+	{
+	  if (os->bfd_section && os->bfd_section->flags == 0
+	      && strcmp (os->name, ANDES_ICT_SECTION) == 0)
+	    {
+	      os->bfd_section->flags |= SEC_KEEP;
+	      break;
+	    }
+	}
+    }
+  /* } Andes */
+
   gld${EMULATION_NAME}_before_allocation ();
 
   if (link_info.discard == discard_sec_merge)
@@ -230,7 +248,7 @@ riscv_elf_after_open (void)
   asection *sec;
   for (abfd = link_info.input_bfds; abfd != NULL; abfd = abfd->link.next)
     {
-      sec = bfd_get_section_by_name (abfd, ".nds.ict");
+      sec = bfd_get_section_by_name (abfd, ANDES_ICT_SECTION);
       if (sec)
 	{
 	  find_imported_ict_table = true;
@@ -261,18 +279,19 @@ riscv_elf_after_check_relocs (void)
 
   /* We only create the ict table and _INDIRECT_CALL_TABLE_BASE_ symbol
      when we compiling the main project at the first link-time.  */
+  int size = get_ict_table_size ();
   if (!find_imported_ict_table
-      && ict_table_entries > 0)
+      && (ict_table_entries || size))
     {
       for (abfd = link_info.input_bfds; abfd != NULL; abfd = abfd->link.next)
 	{
 	  /* Create ict table section in the last input object file.  */
 	  /* The ict_table_entries has been set in the check_relocs.  */
 	  if (abfd->link.next == NULL)
-	    riscv_elf_create_target_section (&link_info, abfd, ".nds.ict",
+	    riscv_elf_create_target_section (&link_info, abfd,
+					     ANDES_ICT_SECTION,
 					     "_INDIRECT_CALL_TABLE_BASE_",
-					     ict_table_entries * 4 * 2, 2,
-					     flags);
+					     size, 2, flags);
 	}
     }
 }

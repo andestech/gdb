@@ -388,4 +388,22 @@ struct riscv_elf_link_hash_table
   /* } Andes  */
 };
 
+/* ICT stuff  */
+#define ANDES_ICT_SECTION ".nds.ict"
+
+typedef struct ict_sym_list
+{
+  struct ict_sym_list *next;
+  struct elf_link_hash_entry *h;
+  char *name;
+  bfd_vma vma;
+  int index;
+} ict_sym_list_t;
+
+extern ict_sym_list_t *get_ict_sym_list_head (void);
+extern int get_ict_table_size (void);
+extern ict_sym_list_t *andes_ict_sym_list_add (int index, const char *name,
+					       bfd_vma vma);
+ict_sym_list_t *andes_ict_sym_list_insert (struct elf_link_hash_entry *h);
+
 /* } Andes  */
