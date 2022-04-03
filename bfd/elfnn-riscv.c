@@ -6261,7 +6261,7 @@ riscv_ranking_table_jump (void **entry_ptr, void *_arg)
   riscv_table_jump_htab_t *htab;
   unsigned int *savings;
   const char **names;
-  bfd_vma *tbj_indexes;
+  uintNN_t *tbj_indexes;
 
   entry = (const riscv_table_jump_htab_entry *) *entry_ptr;
   arg = (riscv_table_jump_args*) _arg;
@@ -6269,7 +6269,7 @@ riscv_ranking_table_jump (void **entry_ptr, void *_arg)
 
   savings = htab->savings;
   names = htab->names;
-  tbj_indexes = htab->tbj_indexes;
+  tbj_indexes = (uintNN_t*) htab->tbj_indexes;
 
   /* search insert position and rank. */
   unsigned int left = arg->start;
@@ -6299,7 +6299,7 @@ riscv_ranking_table_jump (void **entry_ptr, void *_arg)
 
   if (left <= arg->end)
     {
-      tbj_indexes[left] = entry->address;
+      tbj_indexes[left] = (uintNN_t) entry->address;
       savings[left] = entry->benefit;
       names[left] = entry->name;
     }
