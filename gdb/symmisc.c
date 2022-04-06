@@ -249,14 +249,14 @@ dump_symtab_1 (struct symtab *symtab, struct ui_file *outfile)
 		    symtab_to_filename_for_display (symtab),
 		    host_address_to_string (symtab));
 
-  if (symtab->dirname () != NULL)
+  if (symtab->compunit ()->dirname () != NULL)
     fprintf_filtered (outfile, "Compilation directory is %s\n",
-		      symtab->dirname ());
+		symtab->compunit ()->dirname ());
   fprintf_filtered (outfile, "Read from object file %s (%s)\n",
-		    objfile_name (objfile),
-		    host_address_to_string (objfile));
+	      objfile_name (objfile),
+	      host_address_to_string (objfile));
   fprintf_filtered (outfile, "Language: %s\n",
-		    language_str (symtab->language ()));
+	      language_str (symtab->language ()));
 
   /* First print the line table.  */
   l = symtab->linetable ();
