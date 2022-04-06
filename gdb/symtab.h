@@ -1513,8 +1513,6 @@ struct symtab
     m_language = language;
   }
 
-  const struct blockvector *blockvector () const;
-
   struct objfile *objfile () const;
 
   program_space *pspace () const;
@@ -1791,12 +1789,6 @@ struct compunit_symtab
 };
 
 using compunit_symtab_range = next_range<compunit_symtab>;
-
-inline const struct blockvector *
-symtab::blockvector () const
-{
-  return this->compunit ()->blockvector ();
-}
 
 inline struct objfile *
 symtab::objfile () const
