@@ -125,6 +125,7 @@ typedef struct execit_hash_entry
   execit_irel_t *irels;
   execit_vma_t *vmas;
   int next; /* next itable index associated  */
+  int id; /* for determined itable entries  */
   unsigned int is_worthy:1;
   unsigned int is_chosen:1;
   unsigned int is_final:1;
@@ -222,6 +223,7 @@ riscv_elf_code_hash_newfunc (struct bfd_hash_entry *entry,
 			     struct bfd_hash_table *table,
 			     const char *string ATTRIBUTE_UNUSED)
 {
+  static int id = 0;
   const size_t sz_entry = sizeof (execit_hash_t);
   const size_t sz_head = sizeof (struct bfd_hash_entry);
   const size_t sz_body = sz_entry - sz_head;
@@ -245,6 +247,7 @@ riscv_elf_code_hash_newfunc (struct bfd_hash_entry *entry,
 #endif
 
   memset ((void *) entry + sz_head, 0, sz_body);
+  ((execit_hash_t*) entry)->id = id++;
 
   return entry;
 }
@@ -7294,10 +7297,11 @@ int rank_each_cb(void *l ATTRIBUTE_UNUSED, execit_rank_t *j, execit_rank_t *p, v
   a = j->he->ie.est_count / j->he->ie.entries;
   b = p->he->ie.est_count / p->he->ie.entries;
 
-  if (a == b)
+  if (a != b)
+    return (a > b);
+  else if (j->he->ie.fixed != p->he->ie.fixed)
     return (j->he->ie.fixed > p->he->ie.fixed);
-
-  return (a > b);
+  return (j->he->id > p->he->id);
 }
 
 /*  Lookup EXECIT times entry.
