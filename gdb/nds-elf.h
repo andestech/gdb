@@ -1341,13 +1341,30 @@ elf_check (void *file_data, unsigned int file_size,
   int mxl = 0;
   reg_t CSR_misa;
   reg_t CSR_mmsc_cfg;
-  reg_t CSR_mrvarch_cfg;
   CSR_misa = reg_read_callback (0x301);
   CSR_mmsc_cfg = reg_read_callback (0xFC2);
-  CSR_mrvarch_cfg = reg_read_callback(0xFCA);
   mxl = (CSR_misa >> 30) & 0x3;
   if (mxl == 0)			/* 64bit CPU */
     mxl = (CSR_misa >> 62) & 0x3;
+
+  /* mmsc_cfg2:  misa.mxl == 1 & mmsc_cfg[31] == 1 ((mmsc_cfg.MSC_EXT)) */
+  reg_t CSR_mmsc_cfg2 = 0;
+  if ((mxl == 1) && (CSR_mmsc_cfg & 0x80000000))
+    CSR_mmsc_cfg2 = reg_read_callback (0xFC3);
+
+  /* mrvarch_cfg:
+       rv32: mmsc_cfg[31]==1 && mmsc_cfg2[20]==1 (mmsc_cfg.RVARCH)
+       rv64: mmsc_cfg[52]==1 (mmsc_cfg.RVARCH)
+  */
+  int if_mrvarch_cfg = 0;
+  reg_t CSR_mrvarch_cfg = 0;
+  if ((mxl == 1) && (CSR_mmsc_cfg2 & 0x00100000)) {
+    if_mrvarch_cfg = 1;
+  } else if (CSR_mmsc_cfg & 0x0010000000000000) {
+    if_mrvarch_cfg = 1;
+  }
+  if (if_mrvarch_cfg)
+    CSR_mrvarch_cfg = reg_read_callback(0xFCA);
 
   error_type = EFT_NONE;
   /* BASE_ISA_COUNT has been checked. */
