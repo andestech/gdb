@@ -1,6 +1,6 @@
 #as: -march=rv64ifdq_zfh
 #source: fp-zfh-insns.s
-#objdump: -dr
+#objdump: -d
 
 .*:[ 	]+file format .*
 
