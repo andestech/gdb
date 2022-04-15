@@ -508,8 +508,14 @@ cpu_support_std_ext (reg_t misa, reg_t mmsc_cfg, char ext)
   return is_ext_en;
 }
 
-static bool cpu_support_arch_config (reg_t misa, reg_t mrvarch_cfg, const char *ext)
+static bool cpu_support_arch_config (reg_t misa, reg_t mrvarch_cfg, const char *ext, bool is_mrvarch_cfg_exist)
 {
+
+  if (!is_mrvarch_cfg_exist)
+  {
+    return false;
+  }
+
   bool is_ext_en = false;
 
   if (strncmp(ext, "Zba", 3) == 0)
@@ -1339,32 +1345,16 @@ elf_check (void *file_data, unsigned int file_size,
   get_riscv_base_isa_info (&elf_base_isa, &base_isa_major, &base_isa_minor);
 
   int mxl = 0;
+  bool is_mrvarch_exist = false;
+
   reg_t CSR_misa;
-  reg_t CSR_mmsc_cfg;
+  reg_t CSR_mmsc_cfg, CSR_mmsc_cfg2;
+  reg_t CSR_mrvarch_cfg = 0;
   CSR_misa = reg_read_callback (0x301);
   CSR_mmsc_cfg = reg_read_callback (0xFC2);
   mxl = (CSR_misa >> 30) & 0x3;
   if (mxl == 0)			/* 64bit CPU */
     mxl = (CSR_misa >> 62) & 0x3;
-
-  /* mmsc_cfg2:  misa.mxl == 1 & mmsc_cfg[31] == 1 ((mmsc_cfg.MSC_EXT)) */
-  reg_t CSR_mmsc_cfg2 = 0;
-  if ((mxl == 1) && (CSR_mmsc_cfg & 0x80000000))
-    CSR_mmsc_cfg2 = reg_read_callback (0xFC3);
-
-  /* mrvarch_cfg:
-       rv32: mmsc_cfg[31]==1 && mmsc_cfg2[20]==1 (mmsc_cfg.RVARCH)
-       rv64: mmsc_cfg[52]==1 (mmsc_cfg.RVARCH)
-  */
-  int if_mrvarch_cfg = 0;
-  reg_t CSR_mrvarch_cfg = 0;
-  if ((mxl == 1) && (CSR_mmsc_cfg2 & 0x00100000)) {
-    if_mrvarch_cfg = 1;
-  } else if (CSR_mmsc_cfg & 0x0010000000000000) {
-    if_mrvarch_cfg = 1;
-  }
-  if (if_mrvarch_cfg)
-    CSR_mrvarch_cfg = reg_read_callback(0xFCA);
 
   error_type = EFT_NONE;
   /* BASE_ISA_COUNT has been checked. */
@@ -1403,6 +1393,29 @@ elf_check (void *file_data, unsigned int file_size,
           n_error++;
     }
 
+  // The code in ELF checking to access mrvarch_cfg should check mmsc_cfg.RVARCH == 1(for RV64),
+  // mmsc2_cfg.RVARCH (for RV32). For mmsc_cfg2, it should check the condition, misa.MXL==1 && mmsc_cfg[31] == 1 (RV32 Only).
+  if (elf_base_isa == BASE_ISA_RV32I || elf_base_isa == BASE_ISA_RV32E)
+  {
+    if ((CSR_mmsc_cfg & 0x80000000) != 0)
+    {
+      CSR_mmsc_cfg2 = reg_read_callback (0xFC3);
+      if ((CSR_mmsc_cfg2 & 0x100000) != 0)
+      {
+        CSR_mrvarch_cfg = reg_read_callback(0xFCA);
+        is_mrvarch_exist = true;
+      }
+    }
+  }
+  else if (elf_base_isa == BASE_ISA_RV64I)
+  {
+    if ((CSR_mmsc_cfg & 0x10000000000000) != 0)
+    {
+      CSR_mrvarch_cfg = reg_read_callback(0xFCA);
+      is_mrvarch_exist = true;
+    }
+  }
+
   // check b-ext
   for (i = 0; i < B_EXT_COUNT; i++)
   {
@@ -1410,7 +1423,7 @@ elf_check (void *file_data, unsigned int file_size,
     {
       NEC_snprintf (temp, sizeof (temp), "'%s' extension", riscv_b_extensions[i]);
       if (NEC_check_bool (EFT_ERROR, temp,
-                  cpu_support_arch_config(CSR_misa, CSR_mrvarch_cfg, riscv_b_extensions[i]), nds_info.b_ext_use[i]))
+                  cpu_support_arch_config(CSR_misa, CSR_mrvarch_cfg, riscv_b_extensions[i], is_mrvarch_exist), nds_info.b_ext_use[i]))
           n_error++;
     }
   }
@@ -1422,7 +1435,7 @@ elf_check (void *file_data, unsigned int file_size,
     {
       NEC_snprintf (temp, sizeof (temp), "'%s' extension", riscv_k_extensions[i]);
       if (NEC_check_bool (EFT_ERROR, temp,
-                  cpu_support_arch_config(CSR_misa, CSR_mrvarch_cfg, riscv_k_extensions[i]), nds_info.k_ext_use[i]))
+                  cpu_support_arch_config(CSR_misa, CSR_mrvarch_cfg, riscv_k_extensions[i], is_mrvarch_exist), nds_info.k_ext_use[i]))
           n_error++;
     }
   }
