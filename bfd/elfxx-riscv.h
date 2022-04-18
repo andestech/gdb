@@ -139,6 +139,10 @@ typedef struct
   bfd_vma *tbj_indexes;
   asection *tablejump_sec;
   bfd *tablejump_sec_owner;
+  /* end_idx is used to calculate size of used slots at table jump section,
+     and it is set to -1 if the profiling stage completed.  */
+  int end_idx;
+  unsigned int total_saving;
 
   /* debug use.  */
   unsigned int *savings;
