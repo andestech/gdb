@@ -113,7 +113,7 @@ elfNN_riscv_mkobject (bfd *abfd)
 
 #include "elf/common.h"
 #include "elf/internal.h"
-
+#if 0 /* moved to elfxx-riscv.h */
 struct riscv_elf_link_hash_table
 {
   struct elf_link_hash_table elf;
@@ -138,7 +138,7 @@ struct riscv_elf_link_hash_table
   /* Relocations for variant CC symbols may be present.  */
   int variant_cc;
 };
-
+#endif
 /* Instruction access functions. */
 #define riscv_get_insn(bits, ptr)		\
   ((bits) == 16 ? bfd_getl16 (ptr)		\
@@ -4680,6 +4680,35 @@ bfd_elfNN_riscv_set_data_segment_info (struct bfd_link_info *info,
    Pass 1: Deletes the bytes that PCREL relaxation in pass 0 made obsolete.
    Pass 2: Which cannot be disabled, handles code alignment directives.  */
 
+/* Extended relax passes
+
+   Lazy initializations: option handling (relax/exec.it), internal stuff.
+   Pass 0:   Shortens code sequences for LUI/CALL/TPREL/PCREL relocs.
+   Pass gp0: GP instruction relaxation: pcrel
+   Pass gp1:                          : low part
+   Pass gp2:                          : high part
+   Pass 1:   Deletes the bytes that PCREL relaxation in pass 0 made obsolete.
+   Pass ex1: Exec.it #1 collection
+   Pass ex2:         #2 replacement
+   Pass 2:   Which cannot be disabled, handles code alignment directives.
+   Pass res: Reslove special relocations (exec.it)
+   Pass red: Reduce .exec.itable section iff secure
+*/
+
+enum relax_pass {
+  PASS_ANDES_INIT = 0,
+  PASS_ANDES_GP_PCREL,
+  PASS_ANDES_GP_1,
+  PASS_ANDES_GP_2,
+  PASS_SHORTEN_ORG,
+  PASS_DELETE_ORG,
+  PASS_EXECIT_1,
+  PASS_EXECIT_2,
+  PASS_ALIGN_ORG,
+  PASS_RESLOVE,
+  PASS_REDUCE,
+};
+
 static bool
 _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 			  struct bfd_link_info *info,
@@ -4701,7 +4730,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
       || (sec->flags & SEC_RELOC) == 0
       || sec->reloc_count == 0
       || (info->disable_target_specific_optimizations
-	  && info->relax_pass == 0)
+	  && info->relax_pass < PASS_EXECIT_1)
       /* The exp_seg_relro_adjust is enum phase_enum (0x4),
 	 and defined in ld/ldexp.h.  */
       || *(htab->data_segment_phase) == 4)

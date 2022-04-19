@@ -66,7 +66,7 @@ riscv_elf_before_allocation (void)
 	ENABLE_RELAXATION;
     }
 
-  link_info.relax_pass = 3;
+  link_info.relax_pass = 10;
 }
 
 static void
@@ -105,20 +105,6 @@ gld${EMULATION_NAME}_after_allocation (void)
 
 /* This is a convenient point to tell BFD about target specific flags.
    After the output has been created, but before inputs are read.  */
-
-/* { Andes  */
-static void
-riscv_elf_set_target_option (struct bfd_link_info *info)
-{
-  struct riscv_elf_link_hash_table *htab;
-
-  htab = riscv_elf_hash_table (info);
-  if (htab == NULL)
-    return;
-
-  htab->andes = andes;
-}
-/* { Andes  */
 
 static void
 riscv_create_output_section_statements (void)
