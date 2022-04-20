@@ -199,6 +199,8 @@ typedef struct andes_ld_options
   int set_relax_cross_section_call;
   /* Defalut do workaround.  */
   int set_workaround;
+  /* Default page size  */
+  int set_relax_page_size;
   /* For EXECIT.  */
   /* exec.it options  */
   FILE *execit_import_file;
