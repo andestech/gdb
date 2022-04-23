@@ -5208,10 +5208,6 @@ _bfd_riscv_relax_align (bfd *abfd, asection *sec,
   /* Delete the reloc.  */
   rel->r_info = ELFNN_R_INFO (0, R_RISCV_NONE);
 
-  /* If the number of NOPs is already correct, there's nothing to do.  */
-  if (nop_bytes == rel->r_addend)
-    return true;
-
   /* Write as many RISC-V NOPs as we need.  */
   for (pos = 0; pos < (nop_bytes & -4); pos += 4)
     bfd_putl32 (RISCV_NOP, contents + rel->r_offset + pos);
@@ -5219,6 +5215,10 @@ _bfd_riscv_relax_align (bfd *abfd, asection *sec,
   /* Write a final RVC NOP if need be.  */
   if (nop_bytes % 4 != 0)
     bfd_putl16 (RVC_NOP, contents + rel->r_offset + pos);
+
+  /* If the number of NOPs is already correct, there's nothing to do.  */
+  if (nop_bytes == rel->r_addend)
+    return true;
 
   /* Delete the excess bytes.  */
   return riscv_relax_delete_bytes (abfd, sec, rel->r_offset + nop_bytes,
