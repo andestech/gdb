@@ -428,6 +428,26 @@ static char *expr_end;
 #define RELAX_BRANCH_LENGTH(i) (((i) >> 2) & 0xF)
 #define RELAX_BRANCH_RVC(i) (((i) & 2) != 0)
 #define RELAX_BRANCH_UNCOND(i) (((i) & 1) != 0)
+/* { Andes */
+#define RELAX_BRANCH_ENCODE_EX(uncond, rvc, length, range) \
+  (RELAX_BRANCH_ENCODE(uncond, rvc, length) \
+  | ((range) << 6))
+#define RELAX_BRANCH_RANGE(i) (((i) >> 6) & 0xF)
+
+enum branch_range
+{
+  RANGE_JMP = 1,
+  RANGE_BRANCH = 2,
+  RANGE_10_PCREL = 3
+};
+
+#define ENUM_BRANCH_RANGE(reloc)					\
+  ((reloc == BFD_RELOC_RISCV_JMP) ? RANGE_JMP				\
+    : ((reloc == BFD_RELOC_12_PCREL) ? RANGE_BRANCH			\
+      : (reloc == BFD_RELOC_RISCV_10_PCREL) ? RANGE_10_PCREL : 0))
+
+/* } Andes */
+
 
 /* Is the given value a sign-extended 32-bit value?  */
 #define IS_SEXT_32BIT_NUM(x)						\
@@ -681,6 +701,7 @@ static unsigned
 relaxed_branch_length (fragS *fragp, asection *sec, int update)
 {
   int jump, rvc, length = 8;
+  enum branch_range range;
 
   if (!fragp)
     return length;
@@ -688,6 +709,7 @@ relaxed_branch_length (fragS *fragp, asection *sec, int update)
   jump = RELAX_BRANCH_UNCOND (fragp->fr_subtype);
   rvc = RELAX_BRANCH_RVC (fragp->fr_subtype);
   length = RELAX_BRANCH_LENGTH (fragp->fr_subtype);
+  range = RELAX_BRANCH_RANGE (fragp->fr_subtype);
 
   /* Assume jumps are in range; the linker will catch any that aren't.  */
   length = jump ? 4 : 8;
@@ -703,14 +725,17 @@ relaxed_branch_length (fragS *fragp, asection *sec, int update)
 
       if (rvc && (bfd_vma)(val + rvc_range/2) < rvc_range)
 	length = 2;
-      else if ((bfd_vma)(val + RISCV_BRANCH_REACH/2) < RISCV_BRANCH_REACH)
+      else if (range == RANGE_BRANCH
+	       && (bfd_vma)(val + RISCV_BRANCH_REACH/2) < RISCV_BRANCH_REACH)
+	length = 4;
+      else if  ((bfd_vma)(val + RISCV_10_PCREL_REACH/2) < RISCV_10_PCREL_REACH)
 	length = 4;
       else if (!jump && rvc)
 	length = 6;
     }
 
   if (update)
-    fragp->fr_subtype = RELAX_BRANCH_ENCODE (jump, rvc, length);
+    fragp->fr_subtype = RELAX_BRANCH_ENCODE_EX (jump, rvc, length, range);
 
   return length;
 }
@@ -1445,6 +1470,7 @@ append_insn (struct riscv_cl_insn *ip, expressionS *address_expr,
 	  int j = reloc_type == BFD_RELOC_RISCV_JMP;
 	  int best_case = riscv_insn_length (ip->insn_opcode);
 	  unsigned worst_case = relaxed_branch_length (NULL, NULL, 0);
+	  int range = ENUM_BRANCH_RANGE (reloc_type);
 
 	  if (now_seg == absolute_section)
 	    {
@@ -1453,7 +1479,8 @@ append_insn (struct riscv_cl_insn *ip, expressionS *address_expr,
 	    }
 
 	  add_relaxed_insn (ip, worst_case, best_case,
-			    RELAX_BRANCH_ENCODE (j, best_case == 2, worst_case),
+			    RELAX_BRANCH_ENCODE_EX (j, best_case == 2,
+						    worst_case, range),
 			    address_expr->X_add_symbol,
 			    address_expr->X_add_number);
 	  return;
@@ -4095,6 +4122,16 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
       break;
 
     /* { Andes */
+    case BFD_RELOC_RISCV_10_PCREL:
+      if (fixP->fx_addsy)
+	{
+	  /* Fill in a tentative value to improve objdump readability.  */
+	  bfd_vma target = S_GET_VALUE (fixP->fx_addsy) + *valP;
+	  bfd_vma delta = target - md_pcrel_from (fixP);
+	  bfd_putl32 (bfd_getl32 (buf) | ENCODE_STYPE_IMM10 (delta), buf);
+	}
+      break;
+
     case BFD_RELOC_RISCV_RELAX_ENTRY:
     case BFD_RELOC_RISCV_RELAX_REGION_BEGIN:
     case BFD_RELOC_RISCV_RELAX_REGION_END:
@@ -4500,7 +4537,7 @@ riscv_relax_frag (asection *sec, fragS *fragp, long stretch ATTRIBUTE_UNUSED)
 /* Expand far branches to multi-instruction sequences.  */
 
 static void
-md_convert_frag_branch (fragS *fragp)
+md_convert_frag_branch (fragS *fragp, segT sec)
 {
   bfd_byte *buf;
   expressionS exp;
@@ -4515,6 +4552,10 @@ md_convert_frag_branch (fragS *fragp)
   exp.X_add_number = fragp->fr_offset;
 
   gas_assert (fragp->fr_var == RELAX_BRANCH_LENGTH (fragp->fr_subtype));
+
+  /* Andes: the relocation for the branch over jump has to be kept.
+     since the linker optimizations, inlcuding target aligned and EXECIT,
+     may change the immediate field of the branch.  */
 
   if (RELAX_BRANCH_RVC (fragp->fr_subtype))
     {
@@ -4544,6 +4585,12 @@ md_convert_frag_branch (fragS *fragp)
 	    insn ^= MATCH_C_BEQZ ^ MATCH_C_BNEZ;
 	    insn |= ENCODE_CBTYPE_IMM (6);
 	    bfd_putl16 (insn, buf);
+	    /* Keep the relocation for the RVC branch.  */
+	    exp.X_add_symbol = symbol_temp_new (sec, fragp->fr_next, 0);
+	    exp.X_add_number = 0;
+	    reloc = BFD_RELOC_RISCV_RVC_BRANCH;
+	    fixp = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+				2, &exp, FALSE, reloc);
 	    buf += 2;
 	    goto jump;
 
@@ -4568,13 +4615,38 @@ md_convert_frag_branch (fragS *fragp)
 
       /* Invert the branch condition.  Branch over the jump.  */
       insn = bfd_getl32 (buf);
-      insn ^= MATCH_BEQ ^ MATCH_BNE;
-      insn |= ENCODE_BTYPE_IMM (8);
+      if (((insn & MASK_BEQC) == MATCH_BEQC)
+	  || ((insn & MASK_BNEC) == MATCH_BNEC))
+	{
+	  insn ^= MATCH_BEQC ^ MATCH_BNEC;
+	  insn |= ENCODE_STYPE_IMM10 (8);
+	  reloc = BFD_RELOC_RISCV_10_PCREL;
+	}
+      else if (((insn & MASK_BBC) == MATCH_BBC)
+	       || ((insn & MASK_BBS) == MATCH_BBS))
+	{
+	  insn ^= MATCH_BBC ^ MATCH_BBS;
+	  insn |= ENCODE_STYPE_IMM10 (8);
+	  reloc = BFD_RELOC_RISCV_10_PCREL;
+	}
+      else
+	{
+	  insn ^= MATCH_BEQ ^ MATCH_BNE;
+	  insn |= ENCODE_BTYPE_IMM (8);
+	  reloc = BFD_RELOC_12_PCREL;
+	}
       bfd_putl32 (insn, buf);
+      /* Keep the relocation for the branch.  */
+      exp.X_add_symbol = symbol_temp_new (sec, fragp->fr_next, 0);
+      exp.X_add_number = 0;
+      fixp = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+			  4, &exp, FALSE, reloc);
       buf += 4;
 
     jump:
       /* Jump to the target.  */
+      exp.X_add_symbol = fragp->fr_symbol;
+      exp.X_add_number = fragp->fr_offset;
       fixp = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
 			  4, &exp, false, BFD_RELOC_RISCV_JMP);
       bfd_putl32 (MATCH_JAL, buf);
@@ -4582,8 +4654,22 @@ md_convert_frag_branch (fragS *fragp)
       break;
 
     case 4:
-      reloc = RELAX_BRANCH_UNCOND (fragp->fr_subtype)
+      switch (RELAX_BRANCH_RANGE (fragp->fr_subtype))
+	{
+	case RANGE_JMP:
+	  reloc = BFD_RELOC_RISCV_JMP;
+	  break;
+	case RANGE_BRANCH:
+	    reloc = BFD_RELOC_12_PCREL;
+	    break;
+	case RANGE_10_PCREL:
+	    reloc = BFD_RELOC_RISCV_10_PCREL;
+	    break;
+	default:
+	    reloc = RELAX_BRANCH_UNCOND (fragp->fr_subtype)
 	      ? BFD_RELOC_RISCV_JMP : BFD_RELOC_12_PCREL;
+	    break;
+	}
       fixp = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
 			  4, &exp, false, reloc);
       buf += 4;
@@ -4607,11 +4693,11 @@ md_convert_frag_branch (fragS *fragp)
    the current size of the frag should change.  */
 
 void
-md_convert_frag (bfd *abfd ATTRIBUTE_UNUSED, segT asec ATTRIBUTE_UNUSED,
+md_convert_frag (bfd *abfd ATTRIBUTE_UNUSED, segT asec,
 		 fragS *fragp)
 {
   gas_assert (RELAX_BRANCH_P (fragp->fr_subtype));
-  md_convert_frag_branch (fragp);
+  md_convert_frag_branch (fragp, asec);
 }
 
 void
