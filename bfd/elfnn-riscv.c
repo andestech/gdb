@@ -5193,6 +5193,15 @@ _bfd_riscv_relax_align (bfd *abfd, asection *sec,
   /* Once we've handled an R_RISCV_ALIGN, we can't relax anything else.  */
   sec->sec_flg0 = true;
 
+  /* { Andes */
+  /* TODO: BTB handling, bypass now.  */
+  if (ELFNN_R_TYPE (rel->r_info) == R_RISCV_ALIGN_BTB)
+    {
+      rel->r_addend = 0;
+      nop_bytes = 0;
+    }
+  /* } Andes */
+
   /* Make sure there are enough NOPs to actually achieve the alignment.  */
   if (rel->r_addend < nop_bytes)
     {
@@ -5741,7 +5750,9 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	}
       else if (info->relax_pass == PASS_DELETE_ORG && type == R_RISCV_DELETE)
 	relax_func = _bfd_riscv_relax_delete;
-      else if (info->relax_pass == PASS_ALIGN_ORG && type == R_RISCV_ALIGN)
+      else if (info->relax_pass == PASS_ALIGN_ORG
+	       && (type == R_RISCV_ALIGN
+		   || type == R_RISCV_ALIGN_BTB)) /* Andes */
 	relax_func = _bfd_riscv_relax_align;
       else if (info->relax_pass == PASS_RESLOVE && type == R_RISCV_ANDES_TAG
 	       && (ELFNN_R_SYM (rel->r_info) == R_RISCV_EXECIT_ITE))
