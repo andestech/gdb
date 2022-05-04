@@ -66,6 +66,54 @@ ELFNN_R_TYPE (R_RISCV_DELETE) != R_RISCV_DELETE for 32-bit toolchains
 
 #define RISCV_ATTRIBUTES_SECTION_NAME ".riscv.attributes"
 
+/* Helper functions for Rom Patch and ICT.  */
+static void riscv_elf_ict_init (void);
+static void riscv_elf_relocate_ict_table (struct bfd_link_info *, bfd *);
+static void riscv_elf_ict_hash_to_exported_table (void);
+
+/* The entry of the ict hash table.  */
+struct elf_riscv_ict_hash_entry
+{
+  struct bfd_hash_entry root;
+  struct elf_link_hash_entry *h;
+  unsigned int order;
+};
+
+/* The entry of the exported ict table.  */
+struct riscv_elf_ict_table_entry
+{
+  struct elf_link_hash_entry *h;
+  unsigned int order;
+  struct riscv_elf_ict_table_entry *next;
+};
+
+/* The exported indirect call table.  */
+static FILE *ict_table_file = NULL;
+/* Indirect call hash table.  */
+static struct bfd_hash_table indirect_call_table;
+/* The exported indirect call table.  */
+static struct riscv_elf_ict_table_entry *exported_ict_table_head = NULL;
+
+#define ARCH_SIZE NN
+
+#define MINUS_ONE ((bfd_vma)0 - 1)
+
+#define RISCV_ELF_LOG_WORD_BYTES (ARCH_SIZE == 32 ? 2 : 3)
+
+#define RISCV_ELF_WORD_BYTES (1 << RISCV_ELF_LOG_WORD_BYTES)
+
+/* The name of the dynamic interpreter.  This is put in the .interp
+   section.  */
+
+#define ELF64_DYNAMIC_INTERPRETER "/lib/ld.so.1"
+#define ELF32_DYNAMIC_INTERPRETER "/lib32/ld.so.1"
+
+#define ELF_ARCH			bfd_arch_riscv
+#define ELF_TARGET_ID			RISCV_ELF_DATA
+#define ELF_MACHINE_CODE		EM_RISCV
+#define ELF_MAXPAGESIZE			0x1000
+#define ELF_COMMONPAGESIZE		0x1000
+
 /* RISC-V ELF linker hash entry.  */
 
 struct riscv_elf_link_hash_entry
@@ -78,6 +126,10 @@ struct riscv_elf_link_hash_entry
 #define GOT_TLS_IE	4
 #define GOT_TLS_LE	8
   char tls_type;
+
+  /* { Andes */
+  bool indirect_call;
+  /* } Andes */
 };
 
 #define riscv_elf_hash_entry(ent) \
@@ -195,6 +247,8 @@ typedef struct relax_gp_sym_info
 
 static relax_gp_sym_info_t *relax_gp_sym_info_head = NULL;
 static execit_state_t execit;
+static ict_state_t ict;
+static andes_state_t nds;
 /* } Andes */
 
 static bool
@@ -339,6 +393,7 @@ link_hash_newfunc (struct bfd_hash_entry *entry,
 
       eh = (struct riscv_elf_link_hash_entry *) entry;
       eh->tls_type = GOT_UNKNOWN;
+      eh->indirect_call = false;
     }
 
   return entry;
@@ -662,6 +717,59 @@ bad_static_reloc (bfd *abfd, unsigned r_type, struct elf_link_hash_entry *h)
   return false;
 }
 
+static bool
+riscv_elf_update_ict_hash_table (bfd *abfd, asection *sec,
+				 struct elf_link_hash_entry *h,
+				 const Elf_Internal_Rela *rel)
+{
+  /* I am not sure why the addend isn't allowed.  */
+  if (rel->r_addend != 0)
+    {
+      (*_bfd_error_handler)
+	(_("%pB %s: Error: Rom-patch relocation offset: 0x%lx "
+	   "with addend 0x%lx\n"),
+	 abfd, sec->name, rel->r_offset, rel->r_addend);
+      return false;
+    }
+
+  if (h)
+    {
+      struct elf_riscv_ict_hash_entry *entry;
+      /* First, just check whether the ICT symbol is the hash table.  */
+      entry = (struct elf_riscv_ict_hash_entry *)
+	bfd_hash_lookup (&indirect_call_table, h->root.root.string,
+			 false, false);
+      if (entry == NULL)
+	{
+	  /* Create new hash entry.  */
+	  entry = (struct elf_riscv_ict_hash_entry *)
+	    bfd_hash_lookup (&indirect_call_table, h->root.root.string,
+			     true, true);
+	  if (entry == NULL)
+	    {
+	      (*_bfd_error_handler)
+		(_("%pB: failed to create indirect call %s hash table\n"),
+		 abfd, h->root.root.string);
+	      return false;
+	    }
+
+	  riscv_elf_hash_entry (h)->indirect_call = true;
+	  entry->h = h;
+	  entry->order = ict_table_entries;
+	  ict_table_entries++;
+	}
+    }
+  else
+    {
+      /* Rom-patch functions cannot be local.  */
+      (*_bfd_error_handler)
+	(_("%pB: indirect call relocation with local symbol.\n"), abfd);
+      return false;
+    }
+
+  return true;
+}
+
 /* Look through the relocs for a section during the first phase, and
    allocate space in the global offset table or procedure linkage
    table.  */
@@ -675,6 +783,8 @@ riscv_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
   struct elf_link_hash_entry **sym_hashes;
   const Elf_Internal_Rela *rel;
   asection *sreloc = NULL;
+  bool update_ict_hash_first = false;
+  bool update_ict_hash_second = false;
 
   if (bfd_link_relocatable (info))
     return true;
@@ -685,6 +795,20 @@ riscv_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 
   if (htab->elf.dynobj == NULL)
     htab->elf.dynobj = abfd;
+
+  /* We update the ict hash table when we encountering the
+     R_RISCV_XXX_ICT_XXX relocations at the first link-time.
+     Then we also need to update the ict hash table when we
+     compiling the patch code at the second link-time, but
+     the relocations in the imported ict table are not belonged
+     to the ICT.  Therefore, we handle the following relocations
+     specially at the second link-time: R_RISCV_JAL, R_RISCV_CALL,
+     and R_RISCV_64.  */
+  if (!find_imported_ict_table)
+    update_ict_hash_first = true;
+  else if (find_imported_ict_table
+	   && sec == bfd_get_section_by_name (abfd, ".nds.ict"))
+    update_ict_hash_second = true;
 
   for (rel = relocs; rel < relocs + sec->reloc_count; rel++)
     {
@@ -817,6 +941,11 @@ riscv_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	  /* Fall through.  */
 
 	case R_RISCV_JAL:
+	  if (update_ict_hash_second
+	      && !riscv_elf_update_ict_hash_table (abfd, sec, h, rel))
+	    return false;
+	  /* Fall through.  */
+
 	case R_RISCV_BRANCH:
 	case R_RISCV_RVC_BRANCH:
 	case R_RISCV_RVC_JUMP:
@@ -833,6 +962,12 @@ riscv_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	    riscv_elf_record_tls_type (abfd, h, r_symndx, GOT_TLS_LE);
 	  goto static_reloc;
 
+	case R_RISCV_64:
+	  if (update_ict_hash_second
+	      && !riscv_elf_update_ict_hash_table (abfd, sec, h, rel))
+	    return false;
+	  /* Fall through.  */
+
 	case R_RISCV_HI20:
 	  if (bfd_link_pic (info))
 	    return bad_static_reloc (abfd, r_type, h);
@@ -841,7 +976,6 @@ riscv_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	case R_RISCV_COPY:
 	case R_RISCV_JUMP_SLOT:
 	case R_RISCV_RELATIVE:
-	case R_RISCV_64:
 	case R_RISCV_32:
 	  /* Fall through.  */
 
@@ -979,6 +1113,16 @@ riscv_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 
 	case R_RISCV_GNU_VTENTRY:
 	  if (!bfd_elf_gc_record_vtentry (abfd, sec, h, rel->r_addend))
+	    return false;
+	  break;
+
+	case R_RISCV_ICT_HI20:
+	case R_RISCV_ICT_LO12_I:
+	case R_RISCV_PCREL_ICT_HI20:
+	case R_RISCV_CALL_ICT:
+	case R_RISCV_ICT_64:
+	  if (update_ict_hash_first
+	      && !riscv_elf_update_ict_hash_table (abfd, sec, h, rel))
 	    return false;
 	  break;
 
@@ -1678,6 +1822,8 @@ perform_relocation (const reloc_howto_type *howto,
     case R_RISCV_GOT_HI20:
     case R_RISCV_TLS_GOT_HI20:
     case R_RISCV_TLS_GD_HI20:
+    case R_RISCV_ICT_HI20:
+    case R_RISCV_PCREL_ICT_HI20:
       if (ARCH_SIZE > 32 && !VALID_UTYPE_IMM (RISCV_CONST_HIGH_PART (value)))
 	return bfd_reloc_overflow;
       value = ENCODE_UTYPE_IMM (RISCV_CONST_HIGH_PART (value));
@@ -1688,6 +1834,7 @@ perform_relocation (const reloc_howto_type *howto,
     case R_RISCV_TPREL_LO12_I:
     case R_RISCV_TPREL_I:
     case R_RISCV_PCREL_LO12_I:
+    case R_RISCV_ICT_LO12_I:
       value = ENCODE_ITYPE_IMM (value);
       break;
 
@@ -1701,6 +1848,7 @@ perform_relocation (const reloc_howto_type *howto,
 
     case R_RISCV_CALL:
     case R_RISCV_CALL_PLT:
+    case R_RISCV_CALL_ICT: /* Andes */
       if (ARCH_SIZE > 32 && !VALID_UTYPE_IMM (RISCV_CONST_HIGH_PART (value)))
 	return bfd_reloc_overflow;
       value = ENCODE_UTYPE_IMM (RISCV_CONST_HIGH_PART (value))
@@ -1830,6 +1978,9 @@ perform_relocation (const reloc_howto_type *howto,
     case R_RISCV_ANDES_TAG:
     case R_RISCV_EXECIT_ITE:
       BFD_ASSERT (0); /* shall be all cleared in relaxation phases  */
+      break;
+
+    case R_RISCV_ICT_64:
       break;
     /* } Andes  */
 
@@ -2125,6 +2276,17 @@ riscv_elf_relocate_section (bfd *output_bfd,
   if (andes->target_optimization & RISCV_RELAX_EXECIT_ON)
     andes_execit_relocate_itable (info);
   /* } Andes */
+
+  /* Before relocating the ict table, we should order the
+     ict hash entries according to the `entry->order'.  */
+  riscv_elf_ict_hash_to_exported_table ();
+  /* Relocation for .nds.ict table.  */
+  /* When compiling the patch code, we don't need to relocate
+     the imported ict table in the riscv_elf_relocate_ict_table
+     since the imported ict table already have it's relocations.  */
+  if (!find_imported_ict_table
+      && exported_ict_table_head)
+    riscv_elf_relocate_ict_table (info, output_bfd);
 
   relend = relocs + input_section->reloc_count;
   for (rel = relocs; rel < relend; rel++)
@@ -2444,6 +2606,27 @@ riscv_elf_relocate_section (bfd *output_bfd,
 
       resolved_to_zero = (h != NULL
 			  && UNDEFWEAK_NO_DYNAMIC_RELOC (info, h));
+
+      /* We don't allow any mixed indirect call function.  */
+      if (find_imported_ict_table
+	  && input_section == bfd_get_section_by_name (input_bfd, ".nds.ict"))
+	{
+	  /* Don't need to check the mixed ict cases for the
+	     imported ict table at the second link-time.  */
+	}
+      else if (h && riscv_elf_hash_entry (h)->indirect_call
+	       && r_type != R_RISCV_ICT_HI20
+	       && r_type != R_RISCV_ICT_LO12_I
+	       && r_type != R_RISCV_PCREL_ICT_HI20
+	       && r_type != R_RISCV_CALL_ICT
+	       && r_type != R_RISCV_ICT_64)
+	{
+	  (*_bfd_error_handler)
+	    (_("%pB: Error: there are mixed indirect call function \'%s\' "
+	       "in the ICT model\n"),
+	     input_bfd, h->root.root.string);
+	  return false;
+	}
 
       switch (r_type)
 	{
@@ -2911,6 +3094,48 @@ riscv_elf_relocate_section (bfd *output_bfd,
 	    bfd_vma gp = riscv_global_pointer_value (info);
 	    relocation -= gp;	
 	    unresolved_reloc = false;
+	    break;
+	  }
+
+	case R_RISCV_ICT_HI20:
+	case R_RISCV_ICT_LO12_I:
+	case R_RISCV_PCREL_ICT_HI20:
+	case R_RISCV_CALL_ICT:
+	case R_RISCV_ICT_64:
+	  {
+	    struct elf_riscv_ict_hash_entry *entry;
+	    struct bfd_link_hash_entry *ict_base;
+	    int ict_entry_size;
+
+	    entry = (struct elf_riscv_ict_hash_entry*)
+	      bfd_hash_lookup (&indirect_call_table, h->root.root.string,
+			       false, false);
+	    if (entry == NULL)
+	      {
+		(*_bfd_error_handler)
+		  (_("%pB %pA: internal error indirect call relocation "
+		     "0x%lx without hash.\n"),
+		     input_bfd, sec, rel->r_offset);
+		bfd_set_error (bfd_error_bad_value);
+		return false;
+	      }
+
+	    ict_base = bfd_link_hash_lookup (info->hash,
+					     "_INDIRECT_CALL_TABLE_BASE_",
+					     false, false, false);
+
+	    if (ict_model == 1 || ict_model == 2)
+	      /* Small model, use `call' in the ict table.  */
+	      /* Large model, use `.dword' in the ict table.  */
+	      ict_entry_size = 8;
+	    else
+	      /* Tiny model, use `jal' in the ict table.  */
+	      ict_entry_size = 4;
+
+	    relocation = ((ict_base->u.def.value
+			   + ict_base->u.def.section->output_section->vma
+			   + ict_base->u.def.section->output_offset)
+			  + (entry->order * ict_entry_size));
 	    break;
 	  }
 	/* } Andes  */
@@ -3781,6 +4006,8 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
   bfd *obfd = info->output_bfd;
   obj_attribute *in_attr;
   obj_attribute *out_attr;
+  obj_attribute_list *in_attr_list;
+  obj_attribute_list *out_attr_list;
   bool result = true;
   bool priv_attrs_merged = false;
   const char *sec_name = get_elf_backend_data (ibfd)->obj_attrs_section;
@@ -3806,6 +4033,24 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
       /* Use the Tag_null value to indicate the attributes have been
 	 initialized.  */
       out_attr[0].i = 1;
+
+      /* The function _bfd_elf_copy_obj_attributes only copy the attrs
+	 from input bfd to output bfd. If we only have an input bfd,
+	 we need to store the information of ict_model here.  */
+      for (out_attr_list = elf_other_obj_attributes (obfd)[OBJ_ATTR_PROC];
+	   out_attr_list;
+	   out_attr_list = out_attr_list->next)
+	{
+	  if (out_attr_list->tag == Tag_RISCV_ict_model)
+	    {
+	      if (strcmp (out_attr_list->attr.s, "tiny") == 0)
+		ict_model = 0;
+	      else if (strcmp (out_attr_list->attr.s, "small") == 0)
+		ict_model = 1;
+	      else if (strcmp (out_attr_list->attr.s, "large") == 0)
+		ict_model = 2;
+	    }
+	}
 
       return true;
     }
@@ -3928,16 +4173,103 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
       }
 
       /* If out_attr was copied from in_attr then it won't have a type yet.  */
-      if (in_attr[i].type && !out_attr[i].type)
+      if (i >= LEAST_KNOWN_OBJ_ATTRIBUTE
+	  && i < NUM_KNOWN_OBJ_ATTRIBUTES
+	  && in_attr[i].type
+	  && !out_attr[i].type)
 	out_attr[i].type = in_attr[i].type;
+    }
+
+  /* Handle our v5 attributes (unknown attributes).  */
+  /* I recommend that don't use the riscv_elf_obj_attrs_handle_unknown
+     for checking our v5 attributes, since the function only pass the
+     information of input bfd.  */
+  for (in_attr_list = elf_other_obj_attributes (ibfd)[OBJ_ATTR_PROC];
+       in_attr_list;
+       in_attr_list = in_attr_list->next)
+    {
+      for (out_attr_list = elf_other_obj_attributes (obfd)[OBJ_ATTR_PROC];
+	   out_attr_list;
+	   out_attr_list = out_attr_list->next)
+	{
+	  if (in_attr_list->tag == out_attr_list->tag)
+	    {
+	      /* Find the attr both in the input and output bfds.  */
+	      switch (in_attr_list->tag)
+		{
+		case Tag_RISCV_ict_version:
+		  if (in_attr_list->attr.i
+		      != out_attr_list->attr.i)
+		    {
+		      _bfd_error_handler
+			(_("error: %pB: conflicting ict version %d, "
+			   "the output ict version is %d."),
+			 ibfd, in_attr_list->attr.i,
+			 out_attr_list->attr.i);
+		      result = false;
+		    }
+		  break;
+		case Tag_RISCV_ict_model:
+		  if (strcmp (in_attr_list->attr.s,
+			      out_attr_list->attr.s) != 0)
+		    {
+		      _bfd_error_handler
+			(_("error: %pB: conflicting ict model %s, "
+			   "the output ict model is %s."),
+			 ibfd, in_attr_list->attr.s,
+			 out_attr_list->attr.s);
+		      result = false;
+		    }
+		  /* The information of ict_model is recorded when linking
+		     the first input bfd.  */
+		  break;
+		default:
+		  _bfd_error_handler
+		    (_("Warning: %pB: Unknown RISC-V object attribute %d"),
+		     ibfd, in_attr_list->tag);
+		  result = false;
+		  break;
+		}
+	      break;
+	    }
+	}
+      if (out_attr_list == NULL)
+	{
+	  /* Can not find the input attr in the output, so insert it
+	     into the output bfd.  */
+	  switch (in_attr_list->tag)
+	    {
+	    case Tag_RISCV_ict_version:
+	      bfd_elf_add_obj_attr_int (obfd, OBJ_ATTR_PROC,
+					in_attr_list->tag,
+					in_attr_list->attr.i);
+	      break;
+	    case Tag_RISCV_ict_model:
+	      bfd_elf_add_obj_attr_string (obfd, OBJ_ATTR_PROC,
+					   in_attr_list->tag,
+					   in_attr_list->attr.s);
+
+	      /* Also store the information of ict_model here.  */
+	      if (strcmp (in_attr_list->attr.s, "tiny") == 0)
+		ict_model = 0;
+	      else if (strcmp (in_attr_list->attr.s, "small") == 0)
+		ict_model = 1;
+	      else if (strcmp (in_attr_list->attr.s, "large") == 0)
+		ict_model = 2;
+	      break;
+	    default:
+	      _bfd_error_handler
+		(_("Warning: %pB: Unknown RISC-V object attribute %d"),
+		 ibfd, in_attr_list->tag);
+	      result = false;
+	      break;
+	    }
+	}
     }
 
   /* Merge Tag_compatibility attributes and any common GNU ones.  */
   if (!_bfd_elf_merge_object_attributes (ibfd, info))
     return false;
-
-  /* Check for any attributes not known on RISC-V.  */
-  result &= _bfd_elf_merge_unknown_attribute_list (ibfd, obfd);
 
   return result;
 }
@@ -5474,7 +5806,10 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
   /* initialize stuff here  */
   static int is_init = 0;
   if (is_init == 0)
-    { /* init execit state here  */
+    { /* init states  */
+      memset (&nds, 0, sizeof (nds));
+      memset (&ict, 0, sizeof (ict));
+      /* init execit state here  */
       memset (&execit, 0, sizeof (execit));
       execit.htab = riscv_elf_hash_table (info);
       is_init = 1;
@@ -6124,6 +6459,16 @@ riscv_elf_object_p (bfd *abfd)
     bfd_default_set_arch_mach (abfd, bfd_arch_riscv, bfd_mach_riscv32);
   else
     bfd_default_set_arch_mach (abfd, bfd_arch_riscv, bfd_mach_riscv64);
+
+  /* { Andes */
+  /* Build the ict hash table to store all global symbols attached
+     with ICT suffix.  */
+  if (!ict.is_init)
+    {
+      riscv_elf_ict_init ();
+      ict.is_init = 1;
+    }
+  /* } Andes */
 
   return true;
 }
@@ -8114,6 +8459,246 @@ riscv_elf_encode_relocation (bfd *abfd,
   return (relocation & howto->dst_mask);
 }
 
+/* ROM Patch with Indirect Call Table (ICT).  */
+
+#define RISCV_ICT_SECTION ".nds.ict"
+
+/* Indirect call hash function.  */
+
+static struct bfd_hash_entry *
+riscv_elf_ict_hash_newfunc (struct bfd_hash_entry *entry,
+			    struct bfd_hash_table *table,
+			    const char *string)
+{
+  struct elf_riscv_ict_hash_entry *ret;
+
+  /* Allocate the structure if it has not already been allocated by a
+     subclass.  */
+  if (entry == NULL)
+    {
+      entry = (struct bfd_hash_entry *)
+	bfd_hash_allocate (table, sizeof (*ret));
+      if (entry == NULL)
+	return entry;
+    }
+
+  /* Call the allocation method of the superclass.  */
+  entry = bfd_hash_newfunc (entry, table, string);
+  if (entry == NULL)
+    return entry;
+
+  ret = (struct elf_riscv_ict_hash_entry*) entry;
+  ret->order = 0;
+  return &ret->root;
+}
+
+/* Initialize indirect call hash table.  */
+
+static void
+riscv_elf_ict_init (void)
+{
+  if (!bfd_hash_table_init_n (&indirect_call_table, riscv_elf_ict_hash_newfunc,
+			      sizeof (struct elf_riscv_ict_hash_entry),
+			      1023))
+    (*_bfd_error_handler)
+      (_("Linker: cannot init indirect call hash table.\n"));
+  return;
+}
+
+static void
+riscv_elf_insert_exported_ict_table (struct elf_riscv_ict_hash_entry *entry)
+{
+  struct riscv_elf_ict_table_entry *head, *new;
+
+  head = exported_ict_table_head;
+  while (head
+	 && strcmp (head->h->root.root.string,
+		    entry->h->root.root.string) != 0)
+    head = head->next;
+
+  if (head)
+    /* This symbol is already in the exported ict table.  */
+    return;
+  else
+    {
+      /* We need to insert the symbol into the exported ict table.  */
+      new = (struct riscv_elf_ict_table_entry *) bfd_malloc
+	(sizeof (struct riscv_elf_ict_table_entry));
+      new->h = entry->h;
+      new->order = entry->order;
+
+      head = exported_ict_table_head;
+      if (head == NULL
+	  || head->order >= new->order)
+	{
+	  new->next = head;
+	  exported_ict_table_head = new;
+	}
+      else
+	{
+	  while (head->next != NULL
+		 && head->next->order < new->order)
+	    head = head->next;
+	  new->next = head->next;
+	  head->next = new;
+	}
+    }
+}
+
+static void
+riscv_elf_ict_hash_to_exported_table (void)
+{
+  unsigned int i;
+
+  indirect_call_table.frozen = 1;
+  for (i = 0; i < indirect_call_table.size; i++)
+    {
+      struct bfd_hash_entry *p;
+
+      for (p = indirect_call_table.table[i]; p != NULL; p = p->next)
+	{
+	  struct elf_riscv_ict_hash_entry *entry;
+
+	  entry = (struct elf_riscv_ict_hash_entry *) p;
+	  riscv_elf_insert_exported_ict_table (entry);
+	}
+    }
+  indirect_call_table.frozen = 0;
+}
+
+static void
+riscv_elf_relocate_ict_table (struct bfd_link_info *info, bfd *output_bfd)
+{
+  bfd *input_bfd;
+  asection *sec;
+  bfd_byte *contents = NULL;
+  struct elf_link_hash_entry *h;
+  struct bfd_link_hash_entry *ict_sym;
+  bfd_vma relocation, ict_base;
+  bfd_vma insn;
+  unsigned int i, ict_entry_size;
+  static bool done = false;
+
+  if (done)
+    return;
+  done = true;
+
+  for (input_bfd = info->input_bfds;
+       input_bfd != NULL;
+       input_bfd = input_bfd->link.next)
+    {
+      sec = bfd_get_section_by_name (input_bfd, RISCV_ICT_SECTION);
+      if (sec != NULL)
+        break;
+    }
+
+  if (sec == NULL
+      || !riscv_get_section_contents (sec->owner, sec, &contents, true))
+    {
+      (*_bfd_error_handler)
+	(_("Linker: Can not find .nds.ict table or it's contents.\n"));
+      return;
+    }
+
+  ict_sym = bfd_link_hash_lookup (info->hash, "_INDIRECT_CALL_TABLE_BASE_",
+				  false, false, false);
+  ict_base = (ict_sym->u.def.value
+	      + ict_sym->u.def.section->output_section->vma
+	      + ict_sym->u.def.section->output_offset);
+
+  if (ict_model == 1 || ict_model == 2)
+    ict_entry_size = 8;
+  else
+    ict_entry_size = 4;
+
+  indirect_call_table.frozen = 1;
+  for (i = 0; i < indirect_call_table.size; i++)
+    {
+      struct bfd_hash_entry *p;
+
+      for (p = indirect_call_table.table[i]; p != NULL; p = p->next)
+	{
+	  struct elf_riscv_ict_hash_entry *entry;
+	  int order, ict_table_reloc;
+
+	  entry = (struct elf_riscv_ict_hash_entry *) p;
+	  h = entry->h;
+	  order = entry->order;
+
+	  if ((h->root.type == bfd_link_hash_defined
+	       || h->root.type == bfd_link_hash_defweak)
+	      && h->root.u.def.section != NULL
+	      && h->root.u.def.section->output_section != NULL)
+	    {
+	      relocation = h->root.u.def.value
+		+ h->root.u.def.section->output_section->vma
+		+ h->root.u.def.section->output_offset;
+
+	      if (ict_model == 0)
+		{
+		  /* Tiny model: jal ra, 0x0.  */
+		  bfd_put_32 (output_bfd, RISCV_JTYPE (JAL, X_T1, 0x0),
+			      contents + (order * ict_entry_size));
+		  ict_table_reloc = R_RISCV_JAL;
+
+		  /* PC is the entry of ICT table.  */
+		  relocation -= ict_base + (order * ict_entry_size);
+		  if (!VALID_JTYPE_IMM (relocation))
+		    {
+		      (*_bfd_error_handler)
+			(_("Linker: relocate ICT table failed with tiny model.\n"));
+		      return;
+		    }
+		  relocation = ENCODE_JTYPE_IMM (relocation);
+		}
+	      else if (ict_model == 1)
+		{
+		  /* Small model: tail t1, 0x0.  */
+		  bfd_put_32 (output_bfd, RISCV_UTYPE (AUIPC, X_T1, 0x0),
+			      contents + (order * ict_entry_size));
+		  bfd_put_32 (output_bfd, RISCV_ITYPE (JALR, X_T1, X_T1, 0),
+			      contents + (order * ict_entry_size) + 4);
+		  ict_table_reloc = R_RISCV_CALL;
+
+		  /* PC is the entry of ICT table.  */
+		  relocation -= ict_base + (order * ict_entry_size);
+		  if (ARCH_SIZE > 32
+		      && !VALID_UTYPE_IMM (RISCV_CONST_HIGH_PART (relocation)))
+		    {
+		      (*_bfd_error_handler)
+			(_("Linker: relocate ICT table failed with small model.\n"));
+		      return;
+		    }
+		  relocation =
+		    ENCODE_UTYPE_IMM (RISCV_CONST_HIGH_PART (relocation))
+		    | (ENCODE_ITYPE_IMM (relocation) << 32);
+		}
+	      else if (ict_model == 2)
+		{
+		  /* Large model: .dword 0x0.  */
+		  ict_table_reloc =  R_RISCV_64;
+		}
+
+	      reloc_howto_type *howto =
+		riscv_elf_rtype_to_howto (input_bfd, ict_table_reloc);
+	      insn = bfd_get (howto->bitsize, output_bfd,
+			      contents + (order * ict_entry_size));
+	      insn = (insn & ~howto->dst_mask)
+		| (relocation & howto->dst_mask);
+	      bfd_put (howto->bitsize, output_bfd, insn,
+		       contents + (order * ict_entry_size));
+	    }
+	  else
+	    {
+	      /* Should we allow the case that the ict symbol is undefined?  */
+	    }
+	}
+    }
+  indirect_call_table.frozen = 0;
+}
+
+/* End of ROM Patch with Indirect Call Table (ICT).  */
+
 /* Sort relocation by r_offset.
    We didn't use qsort () in stdlib, because quick-sort is not a stable sorting
    algorithm.  Relocations at the same r_offset must keep their order.
@@ -8539,6 +9124,124 @@ andes_relax_pc_gp_insn_final (riscv_pcgp_relocs *p)
     }
 }
 
+static int
+riscv_elf_output_symbol_hook (struct bfd_link_info *info,
+			      const char *name,
+			      Elf_Internal_Sym *elfsym ATTRIBUTE_UNUSED,
+			      asection *input_sec,
+			      struct elf_link_hash_entry *h ATTRIBUTE_UNUSED)
+{
+  const char *source;
+  FILE *sym_ld_script = NULL;
+  struct riscv_elf_link_hash_table *table;
+  andes_ld_options_t *andes;
+
+  table = riscv_elf_hash_table (info);
+  andes = &table->andes;
+  sym_ld_script = andes->sym_ld_script;
+  if (!sym_ld_script)
+    return true;
+
+  if (!h || !name || *name == '\0')
+    return true;
+
+  if (input_sec->flags & SEC_EXCLUDE)
+    return true;
+
+  if (!nds.check_start_export_sym)
+    {
+      fprintf (sym_ld_script, "SECTIONS\n{\n");
+      nds.check_start_export_sym = 1;
+    }
+
+  if (h->root.type == bfd_link_hash_defined
+      || h->root.type == bfd_link_hash_defweak)
+    {
+      if (!h->root.u.def.section->output_section)
+	return true;
+
+      if (bfd_is_const_section (input_sec))
+	source = input_sec->name;
+      else
+	source = input_sec->owner->filename;
+
+      bfd_vma sym_value = h->root.u.def.value
+	+ h->root.u.def.section->output_section->vma
+	+ h->root.u.def.section->output_offset;
+
+      if (riscv_elf_hash_entry (h)->indirect_call)
+	fprintf (sym_ld_script, "\tPROVIDE (%s = 0x%08lx);\t /* %s  */\n",
+		 h->root.root.string, sym_value, source);
+      else
+	fprintf (sym_ld_script, "\t%s = 0x%08lx;\t /* %s  */\n",
+		 h->root.root.string, sym_value, source);
+    }
+
+  return true;
+}
+
+/* Store the machine number in the flags field.  */
+
+static bool
+riscv_elf_final_write_processing (bfd *abfd ATTRIBUTE_UNUSED)
+{
+  struct riscv_elf_ict_table_entry *head;
+
+  /* Export the ICT table if needed.  */
+  /* TODO: should we support new linker option to let user
+     can define their own ict table name.  */
+  if (exported_ict_table_head)
+    {
+      ict_table_file = fopen ("nds_ict.s", FOPEN_WT);
+      if(ict_table_file == NULL)
+	{
+	  (*_bfd_error_handler) (_("Error: Fail to genertare nds_ict.s."));
+	  return false;
+	}
+
+      fprintf (ict_table_file, "\t.section " RISCV_ICT_SECTION ", \"ax\"\n");
+      /* The exported ict table can not be linked with the patch code
+	 that use the different ict model.  */
+      if (ict_model == 0)
+	fprintf (ict_table_file, "\t.attribute\tTag_ict_model, \"tiny\"\n");
+      else if (ict_model == 1)
+	fprintf (ict_table_file, "\t.attribute\tTag_ict_model, \"small\"\n");
+      else
+	fprintf (ict_table_file, "\t.attribute\tTag_ict_model, \"large\"\n");
+      fprintf (ict_table_file, ".global _INDIRECT_CALL_TABLE_BASE_\n"
+	       "_INDIRECT_CALL_TABLE_BASE_:\n");
+
+      /* Output each entry of ict table according to different
+	 ict models.  */
+      head = exported_ict_table_head;
+      while (head)
+	{
+	  if (ict_model == 2)
+	    fprintf (ict_table_file, "\t.dword\t%s\n",
+		     head->h->root.root.string);
+	  else if (ict_model == 1)
+	    fprintf (ict_table_file, "\ttail\t%s\n",
+		     head->h->root.root.string);
+	  else
+	    fprintf (ict_table_file, "\tjal\tt1, %s\n",
+		     head->h->root.root.string);
+	  head = head->next;
+	}
+
+      /* Finish exporting the ict table, close it
+	 and free the unused data.  */
+      while (exported_ict_table_head)
+	{
+	  head = exported_ict_table_head;
+	  exported_ict_table_head = exported_ict_table_head->next;
+	  free (head);
+	}
+      fclose (ict_table_file);
+    }
+
+  return true;
+}
+
 /* } Andes  */
 
 #define TARGET_LITTLE_SYM			riscv_elfNN_vec
@@ -8580,6 +9283,11 @@ andes_relax_pc_gp_insn_final (riscv_pcgp_relocs *p)
 #define elf_backend_merge_symbol_attribute	riscv_elf_merge_symbol_attribute
 
 #define elf_backend_init_index_section		_bfd_elf_init_1_index_section
+
+/* { Andes */
+#define elf_backend_link_output_symbol_hook  riscv_elf_output_symbol_hook
+#define elf_backend_final_write_processing   riscv_elf_final_write_processing
+/* } Andes */
 
 #define elf_backend_can_gc_sections		1
 #define elf_backend_can_refcount		1

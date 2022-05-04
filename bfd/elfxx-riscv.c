@@ -1404,6 +1404,9 @@ static const struct elf_reloc_map riscv_reloc_map[] =
 };
 
 /* { Andes  */
+unsigned int ict_model = 0;             /* Default set ict to tiny model.  */
+unsigned int ict_table_entries = 0;
+bool find_imported_ict_table = false;
 const unsigned int number_of_howto_table = (unsigned int) ARRAY_SIZE (howto_table);
 /* } Andes  */
 

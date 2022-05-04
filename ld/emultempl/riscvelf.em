@@ -166,6 +166,8 @@ riscv_create_output_section_statements (void)
 }
 
 /* { Andes */
+/* Create the target usage section for RISCV.  */
+
 static void
 riscv_elf_create_target_section (struct bfd_link_info *info, bfd *abfd,
 				 char *sec_name, char *sym_name,
@@ -224,8 +226,55 @@ riscv_elf_after_open (void)
 	}
     }
 
+  /* The ict table is imported in this link time.  */
+  asection *sec;
+  for (abfd = link_info.input_bfds; abfd != NULL; abfd = abfd->link.next)
+    {
+      sec = bfd_get_section_by_name (abfd, ".nds.ict");
+      if (sec)
+	{
+	  find_imported_ict_table = true;
+	  break;
+	}
+    }
+
   /* Call the standard elf routine.  */
   gld${EMULATION_NAME}_after_open ();
+}
+
+static void
+riscv_elf_after_check_relocs (void)
+{
+  bfd *abfd;
+  flagword flags;
+
+  if (ict_model == 2)
+    flags = (SEC_DATA | SEC_ALLOC | SEC_LOAD
+	     | SEC_HAS_CONTENTS | SEC_READONLY
+	     | SEC_IN_MEMORY | SEC_KEEP
+	     | SEC_RELOC);
+  else
+    flags = (SEC_CODE | SEC_ALLOC | SEC_LOAD
+	     | SEC_HAS_CONTENTS | SEC_READONLY
+	     | SEC_IN_MEMORY | SEC_KEEP
+	     | SEC_RELOC);
+
+  /* We only create the ict table and _INDIRECT_CALL_TABLE_BASE_ symbol
+     when we compiling the main project at the first link-time.  */
+  if (!find_imported_ict_table
+      && ict_table_entries > 0)
+    {
+      for (abfd = link_info.input_bfds; abfd != NULL; abfd = abfd->link.next)
+	{
+	  /* Create ict table section in the last input object file.  */
+	  /* The ict_table_entries has been set in the check_relocs.  */
+	  if (abfd->link.next == NULL)
+	    riscv_elf_create_target_section (&link_info, abfd, ".nds.ict",
+					     "_INDIRECT_CALL_TABLE_BASE_",
+					     ict_table_entries * 4 * 2, 2,
+					     flags);
+	}
+    }
 }
 
 /* } Andes */
@@ -515,4 +564,5 @@ LDEMUL_AFTER_ALLOCATION=gld${EMULATION_NAME}_after_allocation
 LDEMUL_CREATE_OUTPUT_SECTION_STATEMENTS=riscv_create_output_section_statements
 /* { Andes */
 LDEMUL_AFTER_OPEN=riscv_elf_after_open
+LDEMUL_AFTER_CHECK_RELOCS=riscv_elf_after_check_relocs
 /* } Andes */

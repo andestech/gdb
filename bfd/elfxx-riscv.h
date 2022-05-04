@@ -115,6 +115,9 @@ extern void
 bfd_elf64_riscv_set_data_segment_info (struct bfd_link_info *, int *);
 
 /* { Andes  */
+extern unsigned int ict_model;
+extern unsigned int ict_table_entries;
+extern bool find_imported_ict_table;
 extern const unsigned int number_of_howto_table;
 
 #define EXECIT_INSN 0x8000u
@@ -345,6 +348,16 @@ typedef struct execit_context
   bfd_vma off;
   char buf[0x400];
 } execit_context_t;
+
+typedef struct ict_state
+{
+  unsigned int is_init:1;
+} ict_state_t;
+
+typedef struct andes_state
+{
+  unsigned int check_start_export_sym:1;
+} andes_state_t;
 
 struct riscv_elf_link_hash_table
 {
