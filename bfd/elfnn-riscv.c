@@ -9253,6 +9253,7 @@ riscv_elf_output_arch_syms (bfd *output_bfd ATTRIBUTE_UNUSED,
 static bool
 riscv_elf_final_write_processing (bfd *abfd ATTRIBUTE_UNUSED)
 {
+#ifdef OLD_ICT_OUTPUT
   ict_entry_t *head;
 
   /* Export the ICT table if needed.  */
@@ -9260,7 +9261,7 @@ riscv_elf_final_write_processing (bfd *abfd ATTRIBUTE_UNUSED)
      can define their own ict table name.  */
   if (exported_ict_table_head)
     {
-      ict_table_file = fopen ("nds_ict.s", FOPEN_WT);
+      FILE *ict_table_file = fopen ("nds_ict.s", FOPEN_WT);
       if(ict_table_file == NULL)
 	{
 	  (*_bfd_error_handler) (_("Error: Fail to genertare nds_ict.s."));
@@ -9309,6 +9310,7 @@ riscv_elf_final_write_processing (bfd *abfd ATTRIBUTE_UNUSED)
 	}
       fclose (ict_table_file);
     }
+#endif /* OLD_ICT_OUTPUT */
 
   return true;
 }
