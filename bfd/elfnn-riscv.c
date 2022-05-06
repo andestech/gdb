@@ -217,6 +217,8 @@ compar_reloc (const void *lhs, const void *rhs);
 static int
 andes_relax_gp_insn (uint32_t *insn, Elf_Internal_Rela *rel,
 		     bfd_signed_vma bias, int sym, asection *sym_sec);
+static bool
+riscv_init_global_pointer (bfd *output_bfd, struct bfd_link_info *info);
 
 /* Record the symbol info for relaxing gp in relax_lui.  */
 typedef struct relax_gp_sym_info
@@ -5799,6 +5801,16 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
       /* init page size if not yet  */
       if (andes->set_relax_page_size == 0)
 	andes->set_relax_page_size = ELF_MAXPAGESIZE;
+      /* init '__global_pointer$' if not given.  */
+      if (!bfd_link_pic (info))
+	{
+	  if (!riscv_init_global_pointer (sec->output_section->owner, info))
+	    {
+	      (*_bfd_error_handler)
+		(_("\nWarning: Init __global_pointer$ failed. "
+		   "Can not find __global_pointer$ and .sdata section.\n"));
+	    }
+	}
       /* For the gp relative insns, gp must be 4/8 bytes aligned (b14634).  */
       if (andes->gp_relative_insn)
 	{
@@ -9312,6 +9324,56 @@ riscv_elf_final_write_processing (bfd *abfd ATTRIBUTE_UNUSED)
     }
 #endif /* OLD_ICT_OUTPUT */
 
+  return true;
+}
+
+/* Find the symbol '__global_pointer$' in the output bfd.
+   If not found, set it's value to (sdata + 0x800) by default.
+   TODO: figure out the best SDA_BASE/GP value.
+*/
+
+static bool
+riscv_init_global_pointer (bfd *output_bfd, struct bfd_link_info *info)
+{
+  struct bfd_link_hash_entry *h;
+  asection *section = NULL;
+  bfd_vma gp_value = 0x800;
+
+  h = bfd_link_hash_lookup (info->hash, RISCV_GP_SYMBOL, false, false, true);
+  /* 1. no GP_SYMBOL found, disable gp relaxation  */
+  if (!h)
+    {
+      struct riscv_elf_link_hash_table *table;
+      table = riscv_elf_hash_table (info);
+      andes_ld_options_t *andes = &table->andes;
+      andes->gp_relative_insn = 0;
+    }
+  /* 2. GP_SYMBOL referenced but not defined, generate one  */
+  else if (h->type == bfd_link_hash_undefined)
+    {
+      /* find a suitable section to insert symbol.  */
+      const char *sections[] = {".sdata", ".sbss", ".data", ".bss", NULL};
+      int index = 0;
+      while (sections[index])
+	{
+	  section = bfd_get_section_by_name (output_bfd, sections[index]);
+	  if (section)
+	    break;
+	  index++;
+	}
+      /* if none, just insert it at COMMON (.bss) section blindly.  */
+      if (!section)
+	{
+	  section = bfd_abs_section_ptr;
+	  gp_value = 0;
+	}
+
+      if (!_bfd_generic_link_add_one_symbol
+	  (info, output_bfd, RISCV_GP_SYMBOL, BSF_GLOBAL, section,
+	   gp_value, (const char *) NULL, false,
+	   get_elf_backend_data (output_bfd)->collect, &h))
+	return false;
+    }
   return true;
 }
 
