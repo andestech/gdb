@@ -71,28 +71,10 @@ static void riscv_elf_ict_init (void);
 static void riscv_elf_relocate_ict_table (struct bfd_link_info *, bfd *);
 static void riscv_elf_ict_hash_to_exported_table (struct bfd_link_info *info);
 
-/* The entry of the ict hash table.  */
-struct elf_riscv_ict_hash_entry
-{
-  struct bfd_hash_entry root;
-  struct elf_link_hash_entry *h;
-  unsigned int order;
-};
-
-/* The entry of the exported ict table.  */
-typedef struct riscv_elf_ict_entry
-{
-  struct elf_link_hash_entry *h;
-  unsigned int order;
-  struct riscv_elf_ict_entry *next;
-} ict_entry_t;
-
-/* The exported indirect call table.  */
-static FILE *ict_table_file = NULL;
 /* Indirect call hash table.  */
 static struct bfd_hash_table indirect_call_table;
 /* The exported indirect call table.  */
-static ict_entry_t *exported_ict_table_head = NULL;
+static andes_ict_entry_t *exported_ict_table_head = NULL;
 
 #define ARCH_SIZE NN
 
@@ -734,15 +716,15 @@ riscv_elf_update_ict_hash_table (bfd *abfd, asection *sec,
 
   if (h)
     {
-      struct elf_riscv_ict_hash_entry *entry;
+      andes_ict_entry_t *entry;
       /* First, just check whether the ICT symbol is the hash table.  */
-      entry = (struct elf_riscv_ict_hash_entry *)
+      entry = (andes_ict_entry_t *)
 	bfd_hash_lookup (&indirect_call_table, h->root.root.string,
 			 false, false);
       if (entry == NULL)
 	{
 	  /* Create new hash entry.  */
-	  entry = (struct elf_riscv_ict_hash_entry *)
+	  entry = (andes_ict_entry_t *)
 	    bfd_hash_lookup (&indirect_call_table, h->root.root.string,
 			     true, true);
 	  if (entry == NULL)
@@ -754,9 +736,9 @@ riscv_elf_update_ict_hash_table (bfd *abfd, asection *sec,
 	    }
 
 	  riscv_elf_hash_entry (h)->indirect_call = true;
-	  ict_sym_list_t *it = andes_ict_sym_list_insert (h);
+	  andes_ict_entry_t *it = andes_ict_entry_list_insert (h);
 	  entry->h = h;
-	  entry->order = it->index;
+	  entry->index = it->index;
 	  ict_table_entries++;
 	}
     }
@@ -3104,11 +3086,11 @@ riscv_elf_relocate_section (bfd *output_bfd,
 	case R_RISCV_CALL_ICT:
 	case R_RISCV_ICT_64:
 	  {
-	    struct elf_riscv_ict_hash_entry *entry;
+	    andes_ict_entry_t *entry;
 	    struct bfd_link_hash_entry *ict_base;
 	    int ict_entry_size;
 
-	    entry = (struct elf_riscv_ict_hash_entry*)
+	    entry = (andes_ict_entry_t*)
 	      bfd_hash_lookup (&indirect_call_table, h->root.root.string,
 			       false, false);
 	    if (entry == NULL)
@@ -3136,7 +3118,7 @@ riscv_elf_relocate_section (bfd *output_bfd,
 	    relocation = ((ict_base->u.def.value
 			   + ict_base->u.def.section->output_section->vma
 			   + ict_base->u.def.section->output_offset)
-			  + (entry->order * ict_entry_size));
+			  + (entry->index * ict_entry_size));
 	    break;
 	  }
 	/* } Andes  */
@@ -8467,28 +8449,26 @@ riscv_elf_encode_relocation (bfd *abfd,
 static struct bfd_hash_entry *
 riscv_elf_ict_hash_newfunc (struct bfd_hash_entry *entry,
 			    struct bfd_hash_table *table,
-			    const char *string)
+			    const char *string ATTRIBUTE_UNUSED)
 {
-  struct elf_riscv_ict_hash_entry *ret;
+  const size_t sz_entry = sizeof (andes_ict_entry_t);
+  const size_t sz_head = sizeof (struct bfd_hash_entry);
+  const size_t sz_body = sz_entry - sz_head;
 
   /* Allocate the structure if it has not already been allocated by a
      subclass.  */
   if (entry == NULL)
     {
-      entry = (struct bfd_hash_entry *)
-	bfd_hash_allocate (table, sizeof (*ret));
+      entry = (void *)
+	bfd_hash_allocate (table, sz_entry);
+
       if (entry == NULL)
 	return entry;
     }
 
-  /* Call the allocation method of the superclass.  */
-  entry = bfd_hash_newfunc (entry, table, string);
-  if (entry == NULL)
-    return entry;
+  memset ((void *) entry + sz_head, 0, sz_body);
 
-  ret = (struct elf_riscv_ict_hash_entry*) entry;
-  ret->order = 0;
-  return &ret->root;
+  return entry;
 }
 
 /* Initialize indirect call hash table.  */
@@ -8497,7 +8477,7 @@ static void
 riscv_elf_ict_init (void)
 {
   if (!bfd_hash_table_init_n (&indirect_call_table, riscv_elf_ict_hash_newfunc,
-			      sizeof (struct elf_riscv_ict_hash_entry),
+			      sizeof (andes_ict_entry_t),
 			      1023))
     (*_bfd_error_handler)
       (_("Linker: cannot init indirect call hash table.\n"));
@@ -8505,9 +8485,9 @@ riscv_elf_ict_init (void)
 }
 
 static void
-riscv_elf_insert_exported_ict_table (struct elf_riscv_ict_hash_entry *entry)
+riscv_elf_insert_exported_ict_table (andes_ict_entry_t *entry)
 {
-  ict_entry_t *head, *new;
+  andes_ict_entry_t *head, *new;
 
   head = exported_ict_table_head;
   while (head
@@ -8521,14 +8501,14 @@ riscv_elf_insert_exported_ict_table (struct elf_riscv_ict_hash_entry *entry)
   else
     {
       /* We need to insert the symbol into the exported ict table.  */
-      new = (ict_entry_t *) bfd_malloc
-	(sizeof (ict_entry_t));
+      new = (andes_ict_entry_t *) bfd_malloc
+	(sizeof (andes_ict_entry_t));
       new->h = entry->h;
-      new->order = entry->order;
+      new->index = entry->index;
 
       head = exported_ict_table_head;
       if (head == NULL
-	  || head->order >= new->order)
+	  || head->index >= new->index)
 	{
 	  new->next = head;
 	  exported_ict_table_head = new;
@@ -8536,7 +8516,7 @@ riscv_elf_insert_exported_ict_table (struct elf_riscv_ict_hash_entry *entry)
       else
 	{
 	  while (head->next != NULL
-		 && head->next->order < new->order)
+		 && head->next->index < new->index)
 	    head = head->next;
 	  new->next = head->next;
 	  head->next = new;
@@ -8559,11 +8539,11 @@ riscv_elf_ict_hash_to_exported_table (struct bfd_link_info *info)
     return;
 
   /* try ICT_ENTRY first  */
-  ict_sym_list_t *s = get_ict_sym_list_head ();
+  andes_ict_entry_t *s = get_ict_entry_list_head ();
   while (s)
     {
-      struct elf_riscv_ict_hash_entry ent;
-      ent.order = s->index;
+      andes_ict_entry_t ent;
+      ent.index = s->index;
       ent.h = elf_link_hash_lookup (elf_hash_table (info),
 				    s->name, false, false, false);
       if (ent.h == NULL)
@@ -8589,9 +8569,9 @@ riscv_elf_ict_hash_to_exported_table (struct bfd_link_info *info)
 
       for (p = indirect_call_table.table[i]; p != NULL; p = p->next)
 	{
-	  struct elf_riscv_ict_hash_entry *entry;
+	  andes_ict_entry_t *entry;
 
-	  entry = (struct elf_riscv_ict_hash_entry *) p;
+	  entry = (andes_ict_entry_t *) p;
 	  riscv_elf_insert_exported_ict_table (entry);
 	}
     }
@@ -8610,7 +8590,7 @@ riscv_elf_relocate_ict_table (struct bfd_link_info *info, bfd *output_bfd)
   bfd_vma insn;
   unsigned int ict_entry_size;
   static bool done = false;
-  ict_entry_t *head;
+  andes_ict_entry_t *head;
 
   if (done)
     return;
@@ -8647,10 +8627,10 @@ riscv_elf_relocate_ict_table (struct bfd_link_info *info, bfd *output_bfd)
   head = exported_ict_table_head;
   while (head)
     {
-      int order, ict_table_reloc = R_RISCV_NONE;
+      int index, ict_table_reloc = R_RISCV_NONE;
 
       h = head->h;
-      order = head->order;
+      index = head->index;
       if (((h->root.type == bfd_link_hash_defined
 	    || h->root.type == bfd_link_hash_defweak)
 	   && h->root.u.def.section != NULL
@@ -8676,11 +8656,11 @@ riscv_elf_relocate_ict_table (struct bfd_link_info *info, bfd *output_bfd)
 	    {
 	      /* Tiny model: jal ra, 0x0.  */
 	      bfd_put_32 (output_bfd, RISCV_JTYPE (JAL, X_T1, 0x0),
-			  contents + (order * ict_entry_size));
+			  contents + (index * ict_entry_size));
 	      ict_table_reloc = R_RISCV_JAL;
 
 	      /* PC is the entry of ICT table.  */
-	      relocation -= ict_base + (order * ict_entry_size);
+	      relocation -= ict_base + (index * ict_entry_size);
 	      if (!VALID_JTYPE_IMM (relocation))
 		{
 		  (*_bfd_error_handler)
@@ -8693,13 +8673,13 @@ riscv_elf_relocate_ict_table (struct bfd_link_info *info, bfd *output_bfd)
 	    {
 	      /* Small model: tail t1, 0x0.  */
 	      bfd_put_32 (output_bfd, RISCV_UTYPE (AUIPC, X_T1, 0x0),
-			  contents + (order * ict_entry_size));
+			  contents + (index * ict_entry_size));
 	      bfd_put_32 (output_bfd, RISCV_ITYPE (JALR, X_T1, X_T1, 0),
-			  contents + (order * ict_entry_size) + 4);
+			  contents + (index * ict_entry_size) + 4);
 	      ict_table_reloc = R_RISCV_CALL;
 
 	      /* PC is the entry of ICT table.  */
-	      relocation -= ict_base + (order * ict_entry_size);
+	      relocation -= ict_base + (index * ict_entry_size);
 	      if (ARCH_SIZE > 32
 		  && !VALID_UTYPE_IMM (RISCV_CONST_HIGH_PART (relocation)))
 		{
@@ -8727,11 +8707,11 @@ riscv_elf_relocate_ict_table (struct bfd_link_info *info, bfd *output_bfd)
 	  reloc_howto_type *howto =
 	    riscv_elf_rtype_to_howto (input_bfd, ict_table_reloc);
 	  insn = bfd_get (howto->bitsize, output_bfd,
-			  contents + (order * ict_entry_size));
+			  contents + (index * ict_entry_size));
 	  insn = (insn & ~howto->dst_mask)
 	    | (relocation & howto->dst_mask);
 	  bfd_put (howto->bitsize, output_bfd, insn,
-		   contents + (order * ict_entry_size));
+		   contents + (index * ict_entry_size));
 	}
       else
 	{
@@ -9198,7 +9178,7 @@ riscv_elf_output_symbol_hook (struct bfd_link_info *info,
       fprintf (sym_ld_script, "SECTIONS\n{\n");
       nds.check_start_export_sym = 1;
       /* dump ICT table if necessary  */
-      ict_entry_t *p = exported_ict_table_head;
+      andes_ict_entry_t *p = exported_ict_table_head;
       if (p)
 	{
 	  int i = 0;

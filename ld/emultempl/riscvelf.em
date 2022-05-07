@@ -77,24 +77,6 @@ riscv_elf_set_target_option (struct bfd_link_info *info)
 static void
 riscv_elf_before_allocation (void)
 {
-  /* { Andes */
-  /* in case ICT output section (script) would be GC; set flag SEC_KEEP  */
-  int size = get_ict_table_size ();
-  if (size)
-    {
-      lang_output_section_statement_type *os;
-      for (os = (void *) lang_os_list.head; os != NULL; os = os->next)
-	{
-	  if (os->bfd_section && os->bfd_section->flags == 0
-	      && strcmp (os->name, ANDES_ICT_SECTION) == 0)
-	    {
-	      os->bfd_section->flags |= SEC_KEEP;
-	      break;
-	    }
-	}
-    }
-  /* } Andes */
-
   gld${EMULATION_NAME}_before_allocation ();
 
   if (link_info.discard == discard_sec_merge)
@@ -279,7 +261,7 @@ riscv_elf_after_check_relocs (void)
 
   /* We only create the ict table and _INDIRECT_CALL_TABLE_BASE_ symbol
      when we compiling the main project at the first link-time.  */
-  int size = get_ict_table_size ();
+  int size = get_ict_size ();
   if (!find_imported_ict_table
       && (ict_table_entries || size))
     {

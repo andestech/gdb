@@ -391,19 +391,19 @@ struct riscv_elf_link_hash_table
 /* ICT stuff  */
 #define ANDES_ICT_SECTION ".nds.ict"
 
-typedef struct ict_sym_list
+typedef struct andes_ict_entry
 {
-  struct ict_sym_list *next;
+  struct bfd_hash_entry root;
+  struct andes_ict_entry *next;
   struct elf_link_hash_entry *h;
   char *name;
   bfd_vma vma;
   int index;
-} ict_sym_list_t;
+} andes_ict_entry_t;
 
-extern ict_sym_list_t *get_ict_sym_list_head (void);
-extern int get_ict_table_size (void);
-extern ict_sym_list_t *andes_ict_sym_list_add (int index, const char *name,
-					       bfd_vma vma);
-ict_sym_list_t *andes_ict_sym_list_insert (struct elf_link_hash_entry *h);
-
+extern andes_ict_entry_t *get_ict_entry_list_head (void);
+extern int get_ict_size (void);
+extern
+andes_ict_entry_t *andes_ict_entry_list_add (int index, const char *name, bfd_vma vma);
+andes_ict_entry_t *andes_ict_entry_list_insert (struct elf_link_hash_entry *h);
 /* } Andes  */
