@@ -1491,6 +1491,11 @@ append_insn (struct riscv_cl_insn *ip, expressionS *address_expr,
 	}
       else
 	{
+	  /* { Andes */
+	  bool is_ict = (address_expr->X_op == O_ictrel);
+	  if (is_ict)
+	    address_expr->X_op = O_symbol;
+	  /* } Andes */
 	  howto = bfd_reloc_type_lookup (stdoutput, reloc_type);
 	  if (howto == NULL)
 	    as_bad (_("internal: unsupported RISC-V relocation number %d"),
@@ -1501,6 +1506,13 @@ append_insn (struct riscv_cl_insn *ip, expressionS *address_expr,
 				  address_expr, false, reloc_type);
 
 	  ip->fixp->fx_tcbit = riscv_opts.relax;
+	  /* { Andes */
+	  if (is_ict)
+	    {
+	      ip->fixp->tc_fix_data.ict = address_expr->X_md;
+	      address_expr->X_md = 0;
+	    }
+	  /* } Andes */
 	}
     }
 
@@ -2123,9 +2135,15 @@ my_getExpression (expressionS *ep, char *str)
 
   save_in = input_line_pointer;
   input_line_pointer = str;
+  ep->X_md = 0; /* Andes */
   expression (ep);
   expr_end = input_line_pointer;
   input_line_pointer = save_in;
+
+  /* { Andes */
+  if (ep->X_op == O_symbol && strcasestr (str, "@ICT"))
+    ep->X_op = O_ictrel;
+  /* } Andes */
 }
 
 /* Parse string STR as a 16-bit relocatable operand.  Store the
@@ -5453,10 +5471,12 @@ riscv_parse_name (char const *name, expressionS *exprP,
 	  && strncasecmp (input_line_pointer + 1, "ict", 3) != 0))
     return 0;
 
+  gas_assert (exprP->X_md == 0);
   exprP->X_op_symbol = NULL;
   exprP->X_md = BFD_RELOC_UNUSED;
 
   exprP->X_add_symbol = symbol_find_or_make (name);
+  /* patch O_ictrel later within my_getExpression for internal processing.  */
   exprP->X_op = O_symbol;
   exprP->X_add_number = 0;
 
@@ -5478,3 +5498,48 @@ riscv_parse_name (char const *name, expressionS *exprP,
 
   return 1;
 }
+
+/* { Andes */
+
+/* This fix_new is called by cons via TC_CONS_FIX_NEW.	*/
+
+void
+tc_cons_fix_new_riscv (fragS *frag, int where, int size, expressionS * exp,
+		       bfd_reloc_code_real_type reloc)
+{
+  const int pcrel = 0;
+  fixS *fix;
+  bool is_ict = (exp->X_md == BFD_RELOC_RISCV_ICT_HI20);
+
+  switch (size)
+    {
+    case 1:
+      reloc = BFD_RELOC_8;
+      break;
+    case 2:
+      reloc = BFD_RELOC_16;
+      break;
+    case 3:
+      reloc = BFD_RELOC_24;
+      break;
+    case 4:
+      reloc = BFD_RELOC_32;
+      break;
+    case 8:
+      reloc = BFD_RELOC_64;
+      break;
+    default:
+      as_bad (_("unsupported BFD relocation size %u"), size);
+      return;
+    }
+
+  fix = fix_new_exp (frag, where, size, exp, pcrel, reloc);
+
+  if (is_ict)
+    {
+      fix->tc_fix_data.ict = exp->X_md;
+      exp->X_md = 0;
+    }
+}
+
+/* } Andes */
