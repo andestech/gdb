@@ -1658,6 +1658,8 @@ append_insn (struct riscv_cl_insn *ip, expressionS *address_expr,
 	{
 	  /* { Andes */
 	  bool is_ict = (address_expr->X_op == O_ictrel);
+	  if ((is_ict) && (address_expr->user != (void*) 0xdededada))
+	    gas_assert (0);
 	  if (is_ict)
 	    address_expr->X_op = O_symbol;
 	  /* } Andes */
@@ -1676,6 +1678,7 @@ append_insn (struct riscv_cl_insn *ip, expressionS *address_expr,
 	    {
 	      ip->fixp->tc_fix_data.ict = address_expr->X_md;
 	      address_expr->X_md = 0;
+	      address_expr->user = NULL;
 	    }
 	  /* } Andes */
 	}
@@ -2466,6 +2469,7 @@ my_getExpression (expressionS *ep, char *str)
   save_in = input_line_pointer;
   input_line_pointer = str;
   ep->X_md = 0; /* Andes */
+  ep->user = (void*) 0xdeadeeef;
   expression (ep);
   expr_end = input_line_pointer;
   input_line_pointer = save_in;
@@ -6052,6 +6056,9 @@ riscv_parse_name (char const *name, expressionS *exprP,
 	  && strncasecmp (input_line_pointer + 1, "ict", 3) != 0))
     return 0;
 
+  if (!(exprP->user == (void*) 0xdeadeeef || exprP->user == (void*) 0xdeadbeef))
+    gas_assert (0);
+  exprP->user = (void*) 0xdededada;
   gas_assert (exprP->X_md == 0);
   exprP->X_op_symbol = NULL;
   exprP->X_md = BFD_RELOC_UNUSED;
@@ -6091,6 +6098,8 @@ tc_cons_fix_new_riscv (fragS *frag, int where, int size, expressionS * exp,
   const int pcrel = 0;
   fixS *fix;
   bool is_ict = (exp->X_md == BFD_RELOC_RISCV_ICT_HI20);
+  if ((is_ict) && (exp->user != (void*) 0xdededada))
+    gas_assert (0);
 
   switch (size)
     {
@@ -6120,6 +6129,7 @@ tc_cons_fix_new_riscv (fragS *frag, int where, int size, expressionS * exp,
     {
       fix->tc_fix_data.ict = exp->X_md;
       exp->X_md = 0;
+      exp->user = NULL;
     }
 }
 
