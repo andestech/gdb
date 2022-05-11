@@ -406,4 +406,33 @@ extern int get_ict_size (void);
 extern
 andes_ict_entry_t *andes_ict_entry_list_add (int index, const char *name, bfd_vma vma);
 andes_ict_entry_t *andes_ict_entry_list_insert (struct elf_link_hash_entry *h);
+
+/* ACE stuff  */
+enum hw_res_type
+{
+  HW_GPR,
+  HW_UINT,
+  HW_INT,
+  HW_ACR,
+  HW_FPR,
+  HW_VR
+};
+
+/* Data structures used by ACE */
+typedef struct ace_keyword
+{
+  const char *name;     /* register name */
+  int value;            /* register index */
+  uint64_t attr;        /* register attribute */
+} ace_keyword_t;
+
+typedef struct ace_operand
+{
+  const char *name;     /* operand name */
+  int bitpos;           /* operand start position */
+  int bitsize;          /* operand width */
+  int shift;            /* operand shift amount */
+  int hw_res;           /* hardware resource */
+  const char *hw_name;  /* hardware/register name */
+} ace_op_t;
 /* } Andes  */

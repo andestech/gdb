@@ -35,6 +35,10 @@
 
 #include <stdint.h>
 
+#ifndef __MINGW32__
+#include <dlfcn.h>
+#endif
+
 /* Information about an instruction, including its format, operands
    and fixups.  */
 struct riscv_cl_insn
@@ -180,6 +184,21 @@ static int optimize_for_space = 0;
 /* Save option -mict-model for ICT model setting.  */
 static const char *m_ict_model = NULL;
 /* } Andes  */
+
+/* { Andes ACE */
+/* Hash table for storing symbols from shared library */
+static htab_t ace_keyword_hash = NULL;
+static htab_t ace_op_hash = NULL;
+/* Pointers for storing symbols from ACE shared library */
+struct riscv_opcode *ace_opcs;
+ace_keyword_t *ace_keys;
+ace_op_t *ace_ops;
+/* Represent whether ACE shared library is loaded successfully */
+bool ace_lib_load_success = FALSE;
+
+static void
+ace_ip (char **args, char **str, struct riscv_cl_insn *ip);
+/* } Andes ACE */
 
 /* Set the default_isa_spec.  Return 0 if the spec isn't supported.
    Otherwise, return 1.  */
@@ -1589,6 +1608,64 @@ md_begin (void)
 
   /* Set the default alignment for the text section.  */
   record_alignment (text_section, riscv_opts.rvc ? 1 : 2);
+
+  /* { Andes ACE */
+  /* Load symbols from ACE shared library if exists */
+  if (ace_lib_load_success)
+    {
+      int i;
+
+      /* Insert instruction information in a hash table */
+      i = 0;
+      while (ace_opcs[i].name)
+	{
+	  const char *name = ace_opcs[i].name;
+	  struct riscv_opcode **hash_error = (struct riscv_opcode **)
+	    str_hash_insert (op_hash, name, (void *) &ace_opcs[i], 0);
+	  if (hash_error)
+	    {
+	      fprintf (stderr, _("internal error: can't hash `%s': %s\n"),
+		       name, (*hash_error)->name);
+	      as_fatal (_("Broken assembler.  No assembly attempted."));
+	    }
+	  i++;
+	}
+
+      /* Insert ACR index name in a hash table */
+      ace_keyword_hash = str_htab_create ();
+      i = 0;
+      while (ace_keys[i].name)
+	{
+	  const char *name = ace_keys[i].name;
+	  struct riscv_opcode **hash_error = (struct riscv_opcode **)
+	    str_hash_insert (ace_keyword_hash, name, (void *) &ace_keys[i], 0);
+	  if (hash_error)
+	    {
+	      fprintf (stderr, _("internal error: can't hash `%s': %s\n"),
+		       name, (*hash_error)->name);
+	      as_fatal (_("Broken assembler.  No assembly attempted."));
+	    }
+	  i++;
+	}
+
+      /* Insert operand field information in a hash table */
+      ace_op_hash = str_htab_create ();
+      i = 0;
+      while (ace_ops[i].name)
+	{
+	  const char *name = ace_ops[i].name;
+	  struct riscv_opcode **hash_error = (struct riscv_opcode **)
+	    str_hash_insert (ace_op_hash, name, (void *) &ace_ops[i], 0);
+	  if (hash_error)
+	    {
+	      fprintf (stderr, _("internal error: can't hash `%s': %s\n"),
+		       name, (*hash_error)->name);
+	      as_fatal (_("Broken assembler.  No assembly attempted."));
+	    }
+	  i++;
+	}
+    }
+  /* } Andes ACE */
 }
 
 static insn_t
@@ -3937,6 +4014,18 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 	      continue;
 	    /* } Andes  */
 
+	    /* { Andes ACE */
+	    /* Handle operand fields of ACE.  */
+	    case 'X':
+	      if (ace_lib_load_success)
+		{
+		  ace_ip ((char **) &oparg, &asarg, ip);
+		  continue;
+		}
+	      else
+		break;
+	    /* } Andes ACE */
+
 	    default:
 	    unknown_riscv_ip_operand:
 	      as_fatal (_("internal: unknown argument type `%s'"),
@@ -4074,6 +4163,7 @@ enum options
   OPTION_OPTIMIZE_SPACE,
   OPTION_MCMODEL,
   OPTION_MICT_MODEL,
+  OPTION_ACE,
   /* } Andes  */
   OPTION_END_OF_ENUM
 };
@@ -4101,6 +4191,7 @@ struct option md_longopts[] =
   {"Os", no_argument, NULL, OPTION_OPTIMIZE_SPACE},
   {"mcmodel", required_argument, NULL, OPTION_MCMODEL},
   {"mict-model", required_argument, NULL, OPTION_MICT_MODEL},
+  {"mace", required_argument, NULL, OPTION_ACE},
   /* } Andes  */
 
   {NULL, no_argument, NULL, 0}
@@ -4217,6 +4308,44 @@ md_parse_option (int c, const char *arg)
 	as_bad (_("invalid ICT model setting -mict-model=%s"), arg);
       break;
     /* } Andes  */
+
+    /* { Andes ACE */
+    /* Load ACE shared library if ACE option is enable */
+    case OPTION_ACE:
+      {
+#ifndef __MINGW32__
+	void *dlc = dlopen (arg, RTLD_NOW | RTLD_LOCAL);
+	char *err;
+
+	if (dlc == NULL)
+	  err = (char *) dlerror ();
+	else
+	  {
+	    ace_opcs = (struct riscv_opcode *) dlsym (dlc, "ace_opcodes_2");
+	    err = (char *) dlerror ();
+	    if (err == NULL)
+	      {
+		ace_ops = (ace_op_t *) dlsym (dlc, "ace_operands");
+		err = (char *) dlerror ();
+	    }
+	    if (err == NULL)
+	      {
+		ace_keys = (ace_keyword_t *) dlsym (dlc, "ace_keywords");
+		err = (char *) dlerror ();
+	      }
+	  }
+
+	if (err == NULL)
+	  {
+	    ace_lib_load_success = TRUE;
+	    return 1;
+	  }
+	else
+	  as_bad ("Fault to load ACE shared library: %s\n", err);
+#endif
+      }
+      break;
+    /* } Andes ACE */
 
     default:
       return 0;
@@ -6134,3 +6263,220 @@ tc_cons_fix_new_riscv (fragS *frag, int where, int size, expressionS * exp,
 }
 
 /* } Andes */
+
+/* { Andes ACE */
+static void
+ace_encode_insn (unsigned int v, ace_op_t * ace_op, struct riscv_cl_insn *ip)
+{
+  unsigned int bit_value = v;
+
+  /* Perform mask to truncate oversize value */
+  bit_value <<= 32 - ace_op->bitsize;
+  bit_value >>= 32 - ace_op->bitsize;
+
+  /* Shift value to specified position */
+  bit_value <<= ace_op->bitpos - ace_op->bitsize + 1;
+
+  ip->insn_opcode = (unsigned int) ip->insn_opcode | bit_value;
+}
+
+static void
+ace_encode_insn_discrete (unsigned int v, char *op_name_discrete, const char *op, struct riscv_cl_insn *ip)
+{
+  bfd_boolean found_or_token = TRUE;
+  unsigned bit_value = 0;
+  char *psep, *pval = op_name_discrete + strlen(op);
+  unsigned msb = 0, width = 0, width_acc = 0;
+
+  while (found_or_token) {
+	/* Extract msb from string */
+	psep = strchr (pval, '_');
+	*psep = '\0';
+	msb = strtoul (pval, (char **) NULL, 10);
+	/* Extract width from string */
+	pval = psep + 1;
+	psep = strchr (pval, '|');
+	if (psep)
+	  *psep = '\0';
+	else
+	  found_or_token = FALSE;
+	width = strtoul (pval, (char **) NULL, 10);
+
+	/* Perform mask to truncate oversize value */
+	bit_value = v >> width_acc;
+	bit_value <<= 32 - width;
+	bit_value >>= 32 - width;
+
+	/* Shift value to specified position */
+	bit_value <<= msb - width + 1;
+
+	ip->insn_opcode = (unsigned int) ip->insn_opcode | bit_value;
+	width_acc += width;
+
+	/* Prepare condition for next iteration */
+	pval = psep + 1;
+  }
+
+}
+
+/* Assemble ACE instruction string to binary */
+
+static void
+ace_ip (char **args, char **str, struct riscv_cl_insn *ip)
+{
+  /* Extract field attribute name from opcode description (ace_ops) and
+     store the extracted result to var of op_name for finding the
+     field attribute information from ace_op_hash */
+  bfd_boolean found_op_str_end = FALSE;
+  char *pch = strchr (*args, ',');
+  if (pch == NULL)
+    {
+      pch = strchr (*args, '\0');
+      found_op_str_end = TRUE;
+    }
+  if (pch == NULL)
+    as_fatal (_("Broken assembler.  No assembly attempted."));
+
+  unsigned int op_name_size = pch - (*args + 1);
+  char *op_name = malloc (op_name_size + 1);
+  memcpy (op_name, *args + 1, op_name_size);
+  /* Cat null character to the end of op_name to avoid gash */
+  memcpy (op_name + op_name_size, "\0", 1);
+
+  /* Check whether encounter the end of line in assembly code */
+  bfd_boolean found_asm_end = FALSE;
+  if (strchr (*str, ',') == NULL && strchr (*str, '\0') != NULL)
+    found_asm_end = TRUE;
+
+  /* With rGPR encoding format, operand bit-field may be discrete.
+     There is an "|" token in discrete format */
+  bfd_boolean is_discrete = FALSE;
+  char *por = strchr (op_name, '|');
+  char *op_name_discrete = NULL;
+  if (por != NULL)
+    {
+      is_discrete = TRUE;
+      op_name_discrete = malloc (op_name_size + 1);
+      strcpy (op_name_discrete, op_name);
+      *por = '\0';
+    }
+
+  /*  Find the field attribute from ace_op_hash and encode instruction */
+  ace_op_t *ace_op = (ace_op_t *) str_hash_find (ace_op_hash, op_name);
+  switch (ace_op->hw_res)
+    {
+    case HW_GPR:
+	{
+	  unsigned int regno;
+	  /* Extract the GPR index string from assembly code (*str) */
+	  if (reg_lookup (str, RCLASS_GPR, &regno))
+	    /* Encode instruction */
+	    ace_encode_insn (regno, ace_op, ip);
+
+	  /* Update the address of pointer of assembly code (*str) */
+	  if (!found_asm_end)
+	    *str += 1;
+	}
+      break;
+
+    case HW_FPR:
+	{
+	  unsigned int regno;
+	  /* Extract the FPR index string from assembly code (*str) */
+	  if (reg_lookup (str, RCLASS_FPR, &regno))
+	    /* Encode instruction */
+	    ace_encode_insn (regno, ace_op, ip);
+
+	  /* Update the address of pointer of assembly code (*str) */
+	  if (!found_asm_end)
+	    *str += 1;
+	}
+      break;
+
+    case HW_VR:
+	{
+	  unsigned int regno;
+	  /* Extract the VR index string from assembly code (*str) */
+	  if (reg_lookup (str, RCLASS_VECR, &regno))
+	    /* Encode instruction */
+	    ace_encode_insn (regno, ace_op, ip);
+
+	  /* Update the address of pointer of assembly code (*str) */
+	  if (!found_asm_end)
+	    *str += 1;
+	}
+      break;
+
+    case HW_UINT:
+	{
+	  /* Extract the IMM value string from assembly code (*str) */
+	  char *p = strchr (*str, ',');
+	  if (p == NULL)
+	    p = strchr (*str, '\0');
+	  if (p == NULL)
+	    as_fatal (_("Broken assembler.  No IMM value is given."));
+	  unsigned int imm_size = p - *str;
+	  char *imm = malloc (imm_size + 1);
+	  memcpy (imm, *str, imm_size);
+	  memcpy (imm + imm_size, "\0", 1);
+	  unsigned int imm_value = strtoul (imm, (char **) NULL, 0);
+
+	  /* Encode instruction */
+	  if (is_discrete)
+	    ace_encode_insn_discrete (imm_value, op_name_discrete, "imm",  ip);
+	  else
+	    ace_encode_insn (imm_value, ace_op, ip);
+
+	  /* Update the address of pointer of assembly code (*str) */
+	  if (found_asm_end)
+	    *str += imm_size;
+	  else
+	    *str += imm_size + 1;
+	}
+      break;
+
+    case HW_ACR:
+	{
+	  /* Extract the ACR register index string from assembly code (*str) */
+	  char *p = strchr (*str, ',');
+	  if (p == NULL)
+	    p = strchr (*str, '\0');
+	  if (p == NULL)
+	    as_fatal (_("No ACR register index is given."));
+	  unsigned int reg_idx_size = p - *str;
+	  char *reg_idx = malloc (reg_idx_size + 1);
+	  memcpy (reg_idx, *str, reg_idx_size);
+	  // always append EOL at ACR index string
+	  memcpy (reg_idx + reg_idx_size, "\0", 1);
+
+	  /* Find the digit number of ACR register index string */
+	  ace_keyword_t *ace_reg =
+	    (ace_keyword_t *) str_hash_find (ace_keyword_hash, reg_idx);
+	  if (ace_reg != NULL)
+	    /* Encode instruction */
+	    if (is_discrete)
+	      ace_encode_insn_discrete (ace_reg->value, op_name_discrete, ace_op->hw_name,  ip);
+	    else
+	      ace_encode_insn (ace_reg->value, ace_op, ip);
+	  else
+	    as_fatal (_("Wrong ACR register index (%s)) is given."), reg_idx);
+
+	  /* Update the address of pointer of assembly code (*str) */
+	  if (found_asm_end)
+	    *str += reg_idx_size;
+	  else
+	    *str += reg_idx_size + 1;
+	}
+      break;
+
+    default:
+      as_fatal (_("Broken assembler.  Cannot find field attribute."));
+    }
+
+  /* Update the address of pointer of the field attribute (*args) */
+  if (found_op_str_end == TRUE)
+    *args = pch - 1;
+  else
+    *args = pch;
+}
+/* } Andes ACE */

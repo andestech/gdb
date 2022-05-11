@@ -32,6 +32,10 @@
 #include <stdint.h>
 #include <ctype.h>
 
+#ifndef __MINGW32__
+#include <dlfcn.h>
+#endif
+
 static enum riscv_spec_class default_isa_spec = ISA_SPEC_CLASS_DRAFT - 1;
 static enum riscv_spec_class default_priv_spec = PRIV_SPEC_CLASS_NONE;
 
@@ -134,6 +138,24 @@ riscv_execit_info (bfd_vma pc ATTRIBUTE_UNUSED,
 }
 /* } Andes  */
 
+/* { Andes ACE */
+/* Pointers for storing symbols from ACE shared library */
+struct riscv_opcode *ace_opcs;
+ace_op_t *ace_ops;
+/* Represent whether ACE shared library is loaded successfully */
+bool ace_lib_load_success = false;
+
+/* Other options.  */
+static int no_aliases;	/* If set disassemble as most general inst.  */
+/* Debugging mode:
+ * Display ex9 table with ID.
+ * Show the ACE insn even if the ACE library is loaded fail.  */
+static int debugging;
+
+static void
+print_ace_args (const char **args, insn_t l, disassemble_info * info);
+/* } Andes ACE */
+
 static void
 set_default_riscv_dis_options (void)
 {
@@ -152,6 +174,10 @@ parse_riscv_dis_option_without_args (const char *option)
       riscv_gpr_names = riscv_gpr_names_numeric;
       riscv_fpr_names = riscv_fpr_names_numeric;
     }
+  /* { Andes ACE */
+  else if (strcmp (option, "debugging") == 0)
+    debugging = 1;
+  /* } Andes ACE */
   else
     return false;
   return true;
@@ -203,6 +229,37 @@ parse_riscv_dis_option (const char *option)
 				 option, value, name);
 	}
     }
+  /* { Andes ACE */
+  /* Load ACE shared library if ACE option is enable */
+  else if (strncmp (option, "ace=", 4) == 0)
+    {
+#ifndef __MINGW32__
+      char *ace_lib_path = malloc (strlen (option) - 4);
+      strcpy (ace_lib_path, option + 4);
+
+      void *dlc = dlopen (ace_lib_path, RTLD_NOW | RTLD_LOCAL);
+      char *err;
+
+      if (dlc == NULL)
+	err = (char *) dlerror ();
+      else
+	{
+	  ace_ops = (ace_op_t *) dlsym (dlc, "ace_operands");
+	  err = (char *) dlerror ();
+	  if (err == NULL)
+	    {
+	      ace_opcs = (struct riscv_opcode *) dlsym (dlc, "ace_opcodes_2");
+	      err = (char *) dlerror ();
+	    }
+	}
+
+      if (err == NULL)
+	ace_lib_load_success = true;
+      else
+	fprintf (stderr, _("Fault to load ACE shared library: %s\n"), err);
+#endif
+    }
+  /* } Andes ACE */
   else
     {
       /* xgettext:c-format */
@@ -703,6 +760,22 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 	    break;
 	  }
 
+	/* { Andes ACE */
+	/* Handle ACE operand field */
+	case 'X':
+	  if (ace_lib_load_success)
+	    {
+	      print_ace_args (&oparg, l, info);
+	      break;
+	    }
+	  else
+	    {
+	      print (info->stream,
+		     _("# ACE shared library is not loaded successfully"));
+	      return;
+	    }
+	/* } Andes ACE */
+
 	case 'Y':
 	  print (info->stream, "0x%x", (int)EXTRACT_OPERAND (RNUM, l));
 	  break;
@@ -742,6 +815,16 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
       for (op = riscv_opcodes; op->name; op++)
 	if (!riscv_hash[OP_HASH_IDX (op->match)])
 	  riscv_hash[OP_HASH_IDX (op->match)] = op;
+
+      /* { Andes ACE */
+      /* Insert ACE opcode attributes into hash table if exist */
+      if (ace_lib_load_success && ace_opcs != NULL && ace_ops != NULL)
+	{
+	  for (op = ace_opcs; op->name; op++)
+	    if (!riscv_hash[OP_HASH_IDX (op->match)])
+	      riscv_hash[OP_HASH_IDX (op->match)] = op;
+	}
+      /* } Andes ACE */
 
       init = 1;
     }
@@ -857,6 +940,16 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
 	  return insnlen;
 	}
     }
+
+  /* { Andes ACE */
+  /* It may be an ACE insn but the ACE shared library is not loaded.  */
+  if (debugging && !ace_lib_load_success && (word & 0x7f) == 0x7b)
+    {
+      info->insn_type = dis_noninsn;
+      (*info->fprintf_func) (info->stream, "ACE insn (0x%llx)",
+			     (unsigned long long) word);
+    }
+  /* } Andes ACE */
 
   /* We did not find a match, so just print the instruction bits.  */
   info->insn_type = dis_noninsn;
@@ -1335,3 +1428,143 @@ with the -M switch (multiple options should be separated by commas):\n"));
 
   fprintf (stream, _("\n"));
 }
+
+/* { Andes ACE */
+static unsigned int
+ace_get_discrete_bit_value(unsigned int bit_value, char *op_name_discrete, const char *op)
+{
+  bool found_or_token = true;
+  unsigned val, ret = 0;
+  char *psep, *pval = op_name_discrete + strlen(op);
+  unsigned msb = 0, width = 0, width_acc = 0;
+
+  while (found_or_token)
+    {
+      /* Extract msb from string */
+      psep = strchr (pval, '_');
+      *psep = '\0';
+      msb = strtoul (pval, (char **) NULL, 10);
+      /* Extract width from string */
+      pval = psep + 1;
+      psep = strchr (pval, '|');
+      if (psep)
+	*psep = '\0';
+      else
+	found_or_token = false;
+      width = strtoul (pval, (char **) NULL, 10);
+
+      /* Perform mask to truncate oversize value */
+      val = bit_value << (32 - msb - 1);
+      val >>= 32 - width;
+      val <<= width_acc;
+      ret |= val;
+      width_acc += width;
+
+      /* Prepare condition for next iteration */
+      pval = psep + 1;
+    }
+  return ret;
+}
+
+/* Print out ACE instruction assembly code */
+
+static void
+print_ace_args (const char **args, insn_t l, disassemble_info * info)
+{
+  fprintf_ftype print = info->fprintf_func;
+
+  /* Extract field attribute name from opcode description (ace_ops) and
+     store the extracted result to var of op_name for finding the
+     field attribute information from ace_field_hash */
+  bool found_op_str_end = false;
+  char *pch = strchr (*args, ',');
+  if (pch == NULL)
+    {
+      pch = strchr (*args, '\0');
+      found_op_str_end = true;
+    }
+  if (pch == NULL)
+    return;
+
+  unsigned int op_name_size = pch - (*args + 1);
+  char *op_name = malloc (op_name_size + 1);
+  memcpy (op_name, *args + 1, op_name_size);
+  /* Cat null character to the end of op_name to avoid gash */
+  memcpy (op_name + op_name_size, "\0", 1);
+
+  /* With rGPR encoding format, operand bit-field may be discrete.
+     There is an "|" token in discrete format */
+  bool is_discrete = false;
+  char *por = strchr(op_name, '|');
+  char *op_name_discrete;
+  if (por != NULL)
+    {
+      is_discrete = true;
+      op_name_discrete = malloc(op_name_size + 1);
+      strcpy(op_name_discrete, op_name);
+      *por = '\0';
+    }
+
+  /*  Find the field attribute from ace_field_hash and encode instruction */
+  ace_op_t *ace_op = NULL;
+  unsigned int i = 0;
+  while (ace_ops[i].name)
+    {
+      if (strcmp (ace_ops[i].name, op_name) == 0)
+	{
+	  ace_op = &ace_ops[i];
+	  break;
+	}
+      i++;
+    }
+
+  if (ace_op != NULL)
+    {
+      /* Extract the value from defined location */
+      unsigned int bit_value = l;
+      bit_value <<= 32 - (ace_op->bitpos + 1);
+      bit_value >>= 32 - ace_op->bitsize;
+
+      switch (ace_op->hw_res)
+	{
+	case HW_GPR:
+	  print (info->stream, "%s", riscv_gpr_names[bit_value]);
+	  break;
+
+	case HW_FPR:
+	  print (info->stream, "%s", riscv_fpr_names[bit_value]);
+	  break;
+
+	case HW_VR:
+	  print (info->stream, "%s", riscv_vecr_names_numeric[bit_value]);
+	  break;
+
+	case HW_UINT:
+	  if (is_discrete)
+	    bit_value = ace_get_discrete_bit_value(l, op_name_discrete, "imm");
+	  print (info->stream, "%d", bit_value);
+	  break;
+
+	case HW_ACR:
+	  if (is_discrete)
+	    bit_value = ace_get_discrete_bit_value(l, op_name_discrete, ace_op->hw_name);
+	  print (info->stream, "%s_%d", ace_op->hw_name, bit_value);
+	  break;
+	}
+    }
+  else
+    {
+      fprintf (stderr, _("ace_op is NULL\n"));
+      return;
+    }
+
+  /* Update the address of pointer of the field attribute (*args) */
+  if (found_op_str_end == true)
+    *args = pch - 1;
+  else
+    {
+      *args = pch;
+      print (info->stream, ",");
+    }
+}
+/* } Andes ACE */
