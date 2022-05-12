@@ -2870,6 +2870,8 @@ riscv_multi_subset_supports (riscv_parse_subset_t *rps,
       return riscv_subset_supports (rps, "p");
     case INSN_CLASS_XANDES:
       return riscv_subset_supports (rps, "xandes");
+    case INSN_CLASS_XEFHW:
+      return riscv_subset_supports (rps, "xefhw");
     /* } Andes  */
     case INSN_CLASS_ZBA:
       return riscv_subset_supports (rps, "zba");

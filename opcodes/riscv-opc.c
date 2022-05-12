@@ -1422,6 +1422,10 @@ const struct riscv_opcode riscv_opcodes[] =
 {"vfpmadb.vf", 0, INSN_CLASS_XANDES, "Vd,S,VtVm", MATCH_VFPMADB_VF, MASK_VFPMADB_VF, match_opcode, 0},
 {"vln8.v", 0, INSN_CLASS_XANDES, "Vd,0(s)Vm", MATCH_VLN8_V, MASK_VLN8_V, match_opcode, INSN_DREF},
 {"vlnu8.v", 0, INSN_CLASS_XANDES, "Vd,0(s)Vm", MATCH_VLNU8_V, MASK_VLNU8_V, match_opcode, INSN_DREF},
+
+/* rvxefhw.gas */
+{"flhw", 0, INSN_CLASS_XEFHW, "D,o(s)", MATCH_FLHW, MASK_FLHW, match_opcode, 0 },
+{"fshw", 0, INSN_CLASS_XEFHW, "T,q(s)", MATCH_FSHW, MASK_FSHW, match_opcode, 0 },
 /* } Andes  */
 
 /* RVV instructions.  */

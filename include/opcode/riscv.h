@@ -553,6 +553,7 @@ enum riscv_insn_class
   /* { Andes  */
   INSN_CLASS_P,
   INSN_CLASS_XANDES,
+  INSN_CLASS_XEFHW,
   /* } Andes  */
 };
 
