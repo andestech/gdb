@@ -282,6 +282,7 @@ struct riscv_set_options
   int atomic; /* RVA */
   int dsp; /* RVP */
   int vector; /* RVV */
+  int efhw; /* RVXefhw (flhw/fshw) */
   /* } Andes  */
 };
 
@@ -299,6 +300,7 @@ static struct riscv_set_options riscv_opts =
   0, /* atomic */
   0, /* dsp */
   0, /* vector */
+  0, /* efhw */
   /* } Andes  */
 };
 
@@ -4114,6 +4116,12 @@ md_assemble (char *str)
       riscv_set_abi_by_arch ();
       if (!riscv_set_default_priv_spec (NULL))
        return;
+
+      /* { Andes */
+      /* sync arch from source file; update riscv_opts.  */
+      if (riscv_opts.efhw == 0)
+	riscv_opts.efhw = riscv_subset_supports (&riscv_rps_as, "xefhw");
+      /* } Andes */
     }
 
   riscv_mapping_state (MAP_INSN, 0);
@@ -4174,6 +4182,7 @@ enum options
   OPTION_MATOMIC,
   OPTION_MEXT_DSP,
   OPTION_MEXT_VECTOR,
+  OPTION_MEXT_EFHW,
   /* } Andes  */
   OPTION_END_OF_ENUM
 };
@@ -4205,6 +4214,7 @@ struct option md_longopts[] =
   {"matomic", no_argument, NULL, OPTION_MATOMIC},
   {"mext-dsp", no_argument, NULL, OPTION_MEXT_DSP},
   {"mext-vector", no_argument, NULL, OPTION_MEXT_VECTOR},
+  {"mext-efhw", no_argument, NULL, OPTION_MEXT_EFHW},
   /* } Andes  */
 
   {NULL, no_argument, NULL, 0}
@@ -4332,6 +4342,10 @@ md_parse_option (int c, const char *arg)
     case OPTION_MEXT_VECTOR:
       riscv_opts.vector = true;
       break;
+
+    case OPTION_MEXT_EFHW:
+      riscv_opts.efhw = true;
+      break;
     /* } Andes  */
 
     /* { Andes ACE */
@@ -4423,6 +4437,10 @@ riscv_after_parse_args (void)
 
   if (riscv_opts.vector)
     riscv_parse_add_subset (&riscv_rps_as, "v", RISCV_UNKNOWN_VERSION,
+			    RISCV_UNKNOWN_VERSION, false);
+
+  if (riscv_opts.efhw)
+    riscv_parse_add_subset (&riscv_rps_as, "xefhw", RISCV_UNKNOWN_VERSION,
 			    RISCV_UNKNOWN_VERSION, false);
   /* } Andes */
 }
@@ -5553,6 +5571,7 @@ Andes options:\n\
   -matomic                    enable atomic extension\n\
   -mext-dsp                   enable RVP (DSP) extension\n\
   -mext-vector                enable RVV (vector) extension\n\
+  -mext-efhw                  enable efhw extension\n\
 "));
     }
 }
