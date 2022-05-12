@@ -9374,6 +9374,66 @@ execute_k (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op,
 }
 
 static sim_cia
+execute_cbo (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op,
+	     int ex9)
+{
+  SIM_DESC sd = CPU_STATE (cpu);
+  int rs1 = (iw >> OP_SH_RS1) & OP_MASK_RS1;
+  const char *rs1_name = riscv_gpr_names_abi[rs1];
+  unsigned_word s_imm = EXTRACT_STYPE_IMM (iw);
+  /* cache line size = 1 << (mdcm_cfg:dsz [8:6] + 2)
+     dcache and icache should have the same cache line size based on cmo spec
+     v1.0 */
+  unsigned cache_line_size = 1 << (2 + (cpu->csr.mdcm_cfg >> 6 & 0x3));
+  /* Align down the base address to match a cache block. */
+  address_word effective_addr = cpu->regs[rs1].u & ~(cache_line_size - 1);
+
+  sim_cia pc = cpu->pc + 4;
+  if (ex9)
+    pc -= 2;
+
+  switch (op->match)
+    {
+    /* Zicbom */
+    case (MATCH_CBO_INVAL):
+      TRACE_INSN (cpu, "cbo.inval %s", rs1_name);
+      break;
+    case (MATCH_CBO_CLEAN):
+      TRACE_INSN (cpu, "cbo.clean %s", rs1_name);
+      break;
+    case (MATCH_CBO_FLUSH):
+      TRACE_INSN (cpu, "cbo.flush %s", rs1_name);
+      break;
+    /* Zicboz */
+    case (MATCH_CBO_ZERO):
+      TRACE_INSN (cpu, "cbo.zero %s", rs1_name);
+      for (int i = 0; i < (cache_line_size / 8); ++i)
+	{
+	  unsigned_8 zero = {0};
+	  sim_core_write_aligned_8 (cpu, cpu->pc, write_map, effective_addr,
+				    zero);
+	  effective_addr += 8;
+	}
+      break;
+    /* Zicbop */
+    case (MATCH_PREFETCH_I):
+      TRACE_INSN (cpu, "prefetch.i %" PRIiTW "(%s)", s_imm, rs1_name);
+      break;
+    case (MATCH_PREFETCH_R):
+      TRACE_INSN (cpu, "prefetch.r %" PRIiTW "(%s)", s_imm, rs1_name);
+      break;
+    case (MATCH_PREFETCH_W):
+      TRACE_INSN (cpu, "prefetch.w %" PRIiTW "(%s)", s_imm, rs1_name);
+      break;
+    default:
+      TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
+      sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
+    }
+
+  return pc;
+}
+
+static sim_cia
 execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex9)
 {
   SIM_DESC sd = CPU_STATE (cpu);
@@ -9429,6 +9489,10 @@ execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int 
     case INSN_CLASS_ZKSH:
     case INSN_CLASS_ZKND_OR_ZKNE:
       return execute_k (cpu, iw, op, ex9);
+    case INSN_CLASS_ZICBOM:
+    case INSN_CLASS_ZICBOZ:
+    case INSN_CLASS_ZICBOP:
+      return execute_cbo (cpu, iw, op, ex9);
     default:
       TRACE_INSN (cpu, "UNHANDLED EXTENSION: %d", op->insn_class);
       sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
@@ -9736,6 +9800,9 @@ initialize_cpu (SIM_DESC sd, SIM_CPU *cpu, int mhartid)
   cpu->csr.cycle = 0;
   cpu->csr.mcycle = 0;
   cpu->csr.instret = 0;
+  /* dset = 256 set, dway = 4 way, dsz = 32 bytes, dc_ecc = ECC,
+   * dlmb = One ILMB exists, dlmsz = 512 KiB, dlm_ecc = No parity/ECC */
+  cpu->csr.mdcm_cfg = 0x518da;
 }
 
 /* Some utils don't like having a NULL environ.  */
