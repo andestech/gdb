@@ -1838,7 +1838,7 @@ riscv_insn::decode (struct gdbarch *gdbarch, CORE_ADDR pc)
 	  m_rd = m_rs1 = decode_register_index (ival, OP_SH_RD);
 	  m_imm.s = EXTRACT_CITYPE_ADDI16SP_IMM (ival);
 	}
-      else if (is_c_addi4spn_insn (ival))
+      else if ((is_c_addi4spn_insn (ival)) && (ival != 0x0))
 	{
 	  m_opcode = ADDI;
 	  m_rd = decode_register_index_short (ival, OP_SH_CRS2S);
