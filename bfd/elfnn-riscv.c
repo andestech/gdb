@@ -5252,6 +5252,14 @@ _bfd_riscv_relax_call (bfd *abfd, asection *sec, asection *sym_sec,
   bfd_vma auipc, jalr;
   int rd, r_type, len = 4, rvc = elf_elfheader (abfd)->e_flags & EF_RISCV_RVC;
 
+  /* If the call crosses section boundaries, fixed sections or alignment
+     directive could casue the PC-relative offset to later increase.  */
+  struct riscv_elf_link_hash_table *htab = riscv_elf_hash_table (link_info);
+  andes_ld_options_t *andes = &htab->andes;
+  if (!andes->set_relax_cross_section_call
+      && sym_sec->output_section != sec->output_section)
+    return true;
+
   /* If the call crosses section boundaries, an alignment directive could
      cause the PC-relative offset to later increase, so we need to add in the
      max alignment of any section inclusive from the call to the target.
@@ -5997,19 +6005,23 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
       relax_func = NULL;
       if (info->relax_pass == PASS_SHORTEN_ORG)
 	{
-	  if (type == R_RISCV_CALL
-	      || type == R_RISCV_CALL_PLT)
+	  if (andes->set_relax_call &&
+	      (type == R_RISCV_CALL
+	       || type == R_RISCV_CALL_PLT))
 	    relax_func = _bfd_riscv_relax_call;
-	  else if (type == R_RISCV_HI20
-		   || type == R_RISCV_LO12_I
-		   || type == R_RISCV_LO12_S)
+	  else if (andes->set_relax_lui &&
+		   (type == R_RISCV_HI20
+		    || type == R_RISCV_LO12_I
+		    || type == R_RISCV_LO12_S))
 	    relax_func = _bfd_riscv_relax_lui;
-	  else if (type == R_RISCV_TPREL_HI20
-		   || type == R_RISCV_TPREL_ADD
-		   || type == R_RISCV_TPREL_LO12_I
-		   || type == R_RISCV_TPREL_LO12_S)
+	  else if (andes->set_relax_tls_le &&
+		   (type == R_RISCV_TPREL_HI20
+		    || type == R_RISCV_TPREL_ADD
+		    || type == R_RISCV_TPREL_LO12_I
+		    || type == R_RISCV_TPREL_LO12_S))
 	    relax_func = _bfd_riscv_relax_tls_le;
 	  else if (!bfd_link_pic (info)
+		   && andes->set_relax_pc
 		   && (type == R_RISCV_PCREL_HI20
 		       || type == R_RISCV_PCREL_LO12_I
 		       || type == R_RISCV_PCREL_LO12_S))
@@ -6029,6 +6041,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
       else if (info->relax_pass == PASS_ANDES_GP_PCREL)
 	{
 	  if (!bfd_link_pic (info)
+	      && andes->set_relax_pc
 	      && (type == R_RISCV_PCREL_HI20
 		  || type == R_RISCV_PCREL_LO12_I
 		  || type == R_RISCV_PCREL_LO12_S))
@@ -6047,8 +6060,8 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	}
       else if (info->relax_pass == PASS_ANDES_GP_1)
 	{
-	  if (type == R_RISCV_LO12_I
-	      || type == R_RISCV_LO12_S)
+	  if (andes->set_relax_lui &&
+	      (type == R_RISCV_LO12_I || type == R_RISCV_LO12_S))
 	    relax_func = _bfd_riscv_relax_lui_gp_insn;
 	  else
 	    continue;
@@ -6064,7 +6077,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	}
       else if (info->relax_pass == PASS_ANDES_GP_2)
 	{
-	  if (type == R_RISCV_HI20)
+	  if (andes->set_relax_lui && (type == R_RISCV_HI20))
 	    relax_func = _bfd_riscv_relax_lui_gp_insn;
 	  else
 	    continue;
@@ -6081,6 +6094,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
       else if (info->relax_pass == PASS_DELETE_ORG && type == R_RISCV_DELETE)
 	relax_func = _bfd_riscv_relax_delete;
       else if (info->relax_pass == PASS_ALIGN_ORG
+	       && andes->set_relax_align
 	       && (type == R_RISCV_ALIGN
 		   || type == R_RISCV_ALIGN_BTB)) /* Andes */
 	relax_func = _bfd_riscv_relax_align;

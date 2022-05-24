@@ -343,8 +343,6 @@ PARSE_AND_LIST_PROLOGUE='
 
 PARSE_AND_LIST_LONGOPTS='
   { "mexport-symbols", required_argument, NULL, OPTION_EXPORT_SYMBOLS},
-  { "no-integrated-as", no_argument, NULL, OPTION_LLD_COMPATIBLE},
-  { "as-opt", required_argument, NULL, OPTION_LLD_COMPATIBLE},
 
 /* Generally, user does not need to set these options by themselves.  */
   { "mgp-insn-relax", no_argument, NULL, OPTION_GP_RELATIVE_INSN},
@@ -386,7 +384,9 @@ PARSE_AND_LIST_LONGOPTS='
   { "mex9-loop-aware", no_argument, NULL, OPTION_EXECIT_LOOP},
 #endif
 
-/* These are only for lld internal usage and not affected for bfd.  */
+/* These are only for lld compatibility, and take no affected for bfd.  */
+  { "no-integrated-as", no_argument, NULL, OPTION_LLD_COMPATIBLE},
+  { "as-opt", required_argument, NULL, OPTION_LLD_COMPATIBLE},
   { "mbest-gp", no_argument, NULL, OPTION_BEST_GP},
   { "mexecit_opt_data", no_argument, NULL, OPTION_EXECIT_OPT_DATA},
   { "mexecit_opt_rodata", no_argument, NULL, OPTION_EXECIT_OPT_RODATA},
@@ -430,7 +430,7 @@ PARSE_AND_LIST_ARGS_CASES='
       {
 	andes.sym_ld_script = fopen (optarg, FOPEN_WT);
 	if(andes.sym_ld_script == NULL)
-	einfo (_("%P%F: cannot open map file %s: %E.\n"), optarg);
+	  einfo (_("%P%F: cannot open map file %s: %E.\n"), optarg);
       }
     break;
 
