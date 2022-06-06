@@ -1,4 +1,4 @@
-#as: -march=rv64ia
+#as: -march=rv64ia -mno-workaround
 #source: a-ext-64.s
 #objdump: -d
 
