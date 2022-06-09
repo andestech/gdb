@@ -126,7 +126,8 @@ struct riscv_csr_extra
 
 /* Need to sync the version with RISC-V compiler.  */
 #ifndef DEFAULT_RISCV_ISA_SPEC
-#define DEFAULT_RISCV_ISA_SPEC "20191213"
+/* #define DEFAULT_RISCV_ISA_SPEC "20191213" */
+#define DEFAULT_RISCV_ISA_SPEC "2.2"
 #endif
 
 #ifndef DEFAULT_RISCV_PRIV_SPEC
