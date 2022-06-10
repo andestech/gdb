@@ -70,8 +70,31 @@ static const char * const *riscv_fpr_names;
 static int no_aliases;
 
 /* { Andes  */
+/* If set, disassemble as prefer ISA instruction.  */
+static int no_prefer;
+/* } Andes  */
+
+/* { Andes  */
+typedef bool (*has_subset_fun_t) (enum riscv_insn_class);
+static bool has_rvc(enum riscv_insn_class k)
+{
+  return ((k == INSN_CLASS_C)
+	  || (k == INSN_CLASS_F_AND_C)
+	  || (k == INSN_CLASS_D_AND_C));
+}
+static bool has_rvp(enum riscv_insn_class k)
+{
+  return (k == INSN_CLASS_P);
+}
+
 static int
 riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info);
+static bool
+andes_find_op_of_subset (has_subset_fun_t has_subset,
+			 int no_aliases_p,
+			 const struct riscv_opcode **hash,
+			 insn_t word,
+			 const struct riscv_opcode **pop);
 
 static void
 riscv_execit_info (bfd_vma pc ATTRIBUTE_UNUSED,
@@ -141,6 +164,7 @@ set_default_riscv_dis_options (void)
   riscv_gpr_names = riscv_gpr_names_abi;
   riscv_fpr_names = riscv_fpr_names_abi;
   no_aliases = 0;
+  no_prefer = 0;
 }
 
 static bool
@@ -153,6 +177,10 @@ parse_riscv_dis_option_without_args (const char *option)
       riscv_gpr_names = riscv_gpr_names_numeric;
       riscv_fpr_names = riscv_fpr_names_numeric;
     }
+  /* { Andes */
+  else if (strcmp (option, "no-prefer") == 0)
+    no_prefer = 1;
+  /* } Andes */
   /* { Andes ACE */
   else if (strcmp (option, "debugging") == 0)
     debugging = 1;
@@ -785,6 +813,7 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
   static const struct riscv_opcode *riscv_hash[OP_MASK_OP + 1];
   struct riscv_private_data *pd;
   int insnlen;
+  static bool has_c, has_p; /* Andes */
 
 #define OP_HASH_IDX(i) ((i) & (riscv_insn_length (i) == 2 ? 0x3 : OP_MASK_OP))
 
@@ -804,6 +833,11 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
 	      riscv_hash[OP_HASH_IDX (op->match)] = op;
 	}
       /* } Andes ACE */
+
+      /* { Andes */
+      has_c = riscv_subset_supports (&riscv_rps_dis, "c");
+      has_p = riscv_subset_supports (&riscv_rps_dis, "p");
+      /* } Andes */
 
       init = 1;
     }
@@ -858,6 +892,21 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
       /* If arch has ZFINX flags, use gpr for disassemble.  */
       if(riscv_subset_supports (&riscv_rps_dis, "zfinx"))
 	riscv_fpr_names = riscv_gpr_names_abi;
+
+      /* { Andes */
+      /* prefer RVC/RVP when supported.  */
+      const struct riscv_opcode *op2 = NULL;
+      while (!no_prefer)
+	{
+	  /* RVC has non-canonical aliases within riscv_opcodes[].  */
+	  if (has_c && andes_find_op_of_subset (has_rvc, 1, riscv_hash,
+				       word, &op2)) break;
+	  if (has_p && andes_find_op_of_subset (has_rvp, no_aliases, riscv_hash,
+				       word, &op2)) break;
+	  break; /* once */
+	}
+      op = op2 ? op2 : op;
+      /* } Andes */
 
       for (; op->name; op++)
 	{
@@ -1285,6 +1334,11 @@ static struct
   { "no-aliases",
     N_("Disassemble only into canonical instructions."),
     RISCV_OPTION_ARG_NONE },
+  /* { Andes */
+  { "no-prefer",
+    N_("Disassemble no prefer instructions."),
+    RISCV_OPTION_ARG_NONE },
+  /* } Andes */
   { "priv-spec=",
     N_("Print the CSR according to the chosen privilege spec."),
     RISCV_OPTION_ARG_PRIV_SPEC }
@@ -1547,3 +1601,34 @@ print_ace_args (const char **args, insn_t l, disassemble_info * info)
     }
 }
 /* } Andes ACE */
+
+/* { Andes */
+static bool
+andes_find_op_of_subset (has_subset_fun_t has_subset,
+			 int no_aliases_p,
+			 const struct riscv_opcode **hash,
+			 insn_t word,
+			 const struct riscv_opcode **pop)
+{
+  bool is_found = false;
+  const struct riscv_opcode *op;
+
+  op = hash[OP_HASH_IDX (word)];
+  for (; op->name; op++)
+    {
+      if (! has_subset (op->insn_class))
+	continue;
+      if (! (op->match_func) (op, word))
+	continue;
+      if (no_aliases_p && (op->pinfo & INSN_ALIAS))
+	continue;
+      if ((op->xlen_requirement != 0) && (op->xlen_requirement != xlen))
+	continue;
+      is_found = true;
+      *pop = op;
+      break;
+    }
+
+  return is_found;
+}
+/* } Andes */
