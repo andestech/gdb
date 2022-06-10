@@ -1,5 +1,5 @@
 #as: -march=rv32ic -mabi=ilp32
-#objdump: -d
+#objdump: -d -Mno-prefer
 
 .*:     file format elf32-(little|big)riscv
 

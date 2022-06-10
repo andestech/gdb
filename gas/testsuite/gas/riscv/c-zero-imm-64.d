@@ -1,5 +1,5 @@
 #as: -march=rv64gc
-#objdump: -d
+#objdump: -d -Mno-prefer
 
 .*:[ 	]+file format .*
 

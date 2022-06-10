@@ -1,6 +1,6 @@
 #as: -misa-spec=2.2
 #source: option-arch-01.s
-#objdump: -d
+#objdump: -d -Mno-prefer
 
 .*:[   ]+file format .*
 
