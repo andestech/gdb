@@ -127,11 +127,7 @@ struct riscv_opcode *ace_opcs;
 ace_op_t *ace_ops;
 /* Represent whether ACE shared library is loaded successfully */
 bool ace_lib_load_success = false;
-
-/* Other options.  */
-static int no_aliases;	/* If set disassemble as most general inst.  */
 /* Debugging mode:
- * Display ex9 table with ID.
  * Show the ACE insn even if the ACE library is loaded fail.  */
 static int debugging;
 
