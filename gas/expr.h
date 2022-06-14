@@ -145,8 +145,6 @@ typedef struct expressionS {
 
   /* Machine dependent field */
   unsigned short X_md;
-
-  void *user;
 } expressionS;
 
 enum expr_mode

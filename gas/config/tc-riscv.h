@@ -166,15 +166,14 @@ void riscv_elf_copy_symbol_attributes (symbolS *, symbolS *);
 
 /* { Andes */
 #define DEFAULT_ICT_VERSION 1
-#define O_ictrel O_md1
 
 /* expression  */
 extern int riscv_parse_name (char const *, expressionS *, enum expr_mode, char *);
-extern void tc_cons_fix_new_riscv (fragS *, int, int, expressionS *,
-				   bfd_reloc_code_real_type);
 #define md_parse_name(name, exprP, mode, nextcharP) \
   riscv_parse_name (name, exprP, mode, nextcharP)
-#define TC_CONS_FIX_NEW tc_cons_fix_new_riscv
+
+extern void tc_cons_fix_new_post_riscv (void *, expressionS *);
+#define TC_CONS_FIX_NEW_POST tc_cons_fix_new_post_riscv
 
 /* fixup  */
 struct riscv_fix_info

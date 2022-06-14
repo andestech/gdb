@@ -191,6 +191,8 @@ static const char *m_ict_model = NULL;
 static bool pre_insn_is_a_cond_br = false;
 static struct andes_as_states
 {
+  /* ICT */
+  expressionS *ict_exp;
   /* b22827 */
   struct riscv_cl_insn prev_insn;
   fragS *frag_b22827;
@@ -1804,13 +1806,6 @@ append_insn (struct riscv_cl_insn *ip, expressionS *address_expr,
 	}
       else if (ip->cmodel.method == METHOD_DEFAULT)
 	{
-	  /* { Andes */
-	  bool is_ict = (address_expr->X_op == O_ictrel);
-	  if ((is_ict) && (address_expr->user != (void*) 0xdededada))
-	    gas_assert (0);
-	  if (is_ict)
-	    address_expr->X_op = O_symbol;
-	  /* } Andes */
 	  howto = bfd_reloc_type_lookup (stdoutput, reloc_type);
 	  if (howto == NULL)
 	    as_bad (_("internal: unsupported RISC-V relocation number %d"),
@@ -1822,11 +1817,10 @@ append_insn (struct riscv_cl_insn *ip, expressionS *address_expr,
 
 	  ip->fixp->fx_tcbit = riscv_opts.relax;
 	  /* { Andes */
-	  if (is_ict)
+	  if (address_expr == nsta.ict_exp)
 	    {
+	      nsta.ict_exp = NULL;
 	      ip->fixp->tc_fix_data.ict = address_expr->X_md;
-	      address_expr->X_md = 0;
-	      address_expr->user = NULL;
 	    }
 	  /* } Andes */
 	}
@@ -2662,16 +2656,9 @@ my_getExpression (expressionS *ep, char *str)
 
   save_in = input_line_pointer;
   input_line_pointer = str;
-  ep->X_md = 0; /* Andes */
-  ep->user = (void*) 0xdeadeeef;
   expression (ep);
   expr_end = input_line_pointer;
   input_line_pointer = save_in;
-
-  /* { Andes */
-  if (ep->X_op == O_symbol && strcasestr (str, "@ICT"))
-    ep->X_op = O_ictrel;
-  /* } Andes */
 }
 
 /* Parse string STR as a 16-bit relocatable operand.  Store the
@@ -6505,15 +6492,10 @@ riscv_parse_name (char const *name, expressionS *exprP,
 	  && strncasecmp (input_line_pointer + 1, "ict", 3) != 0))
     return 0;
 
-  if (!(exprP->user == (void*) 0xdeadeeef || exprP->user == (void*) 0xdeadbeef))
-    gas_assert (0);
-  exprP->user = (void*) 0xdededada;
-  gas_assert (exprP->X_md == 0);
+  gas_assert (nsta.ict_exp == NULL);
   exprP->X_op_symbol = NULL;
   exprP->X_md = BFD_RELOC_UNUSED;
-
   exprP->X_add_symbol = symbol_find_or_make (name);
-  /* patch O_ictrel later within my_getExpression for internal processing.  */
   exprP->X_op = O_symbol;
   exprP->X_add_number = 0;
 
@@ -6527,6 +6509,7 @@ riscv_parse_name (char const *name, expressionS *exprP,
   if (!is_part_of_name (*next))
     {
       exprP->X_md = BFD_RELOC_RISCV_ICT_HI20;
+      nsta.ict_exp = exprP;
       *input_line_pointer = *nextcharP;
       input_line_pointer = next;
       *nextcharP = *input_line_pointer;
@@ -6538,47 +6521,16 @@ riscv_parse_name (char const *name, expressionS *exprP,
 
 /* { Andes */
 
-/* This fix_new is called by cons via TC_CONS_FIX_NEW.	*/
+/* This fix_new is called by cons via TC_CONS_FIX_NEW_POST.  */
 
 void
-tc_cons_fix_new_riscv (fragS *frag, int where, int size, expressionS * exp,
-		       bfd_reloc_code_real_type reloc)
+tc_cons_fix_new_post_riscv (void *ptr, expressionS *exp)
 {
-  const int pcrel = 0;
-  fixS *fix;
-  bool is_ict = (exp->X_md == BFD_RELOC_RISCV_ICT_HI20);
-  if ((is_ict) && (exp->user != (void*) 0xdededada))
-    gas_assert (0);
-
-  switch (size)
+  fixS *fix = ptr;
+  if (exp == nsta.ict_exp)
     {
-    case 1:
-      reloc = BFD_RELOC_8;
-      break;
-    case 2:
-      reloc = BFD_RELOC_16;
-      break;
-    case 3:
-      reloc = BFD_RELOC_24;
-      break;
-    case 4:
-      reloc = BFD_RELOC_32;
-      break;
-    case 8:
-      reloc = BFD_RELOC_64;
-      break;
-    default:
-      as_bad (_("unsupported BFD relocation size %u"), size);
-      return;
-    }
-
-  fix = fix_new_exp (frag, where, size, exp, pcrel, reloc);
-
-  if (is_ict)
-    {
+      nsta.ict_exp = NULL;
       fix->tc_fix_data.ict = exp->X_md;
-      exp->X_md = 0;
-      exp->user = NULL;
     }
 }
 

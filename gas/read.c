@@ -4180,8 +4180,6 @@ cons_worker (int nbytes,	/* 1=.byte, 2=.word, 4=.long.  */
   expressionS exp;
   char *stop = NULL;
   char stopc = 0;
-  exp.X_md = 0;
-  exp.user = (void*) 0xdeadbeef;
 
 #ifdef md_flush_pending_output
   md_flush_pending_output ();
@@ -4746,6 +4744,7 @@ void
 emit_expr_fix (expressionS *exp, unsigned int nbytes, fragS *frag, char *p,
 	       TC_PARSE_CONS_RETURN_TYPE r ATTRIBUTE_UNUSED)
 {
+  fixS *fix = NULL;
   int offset = 0;
   unsigned int size = nbytes;
 
@@ -4796,8 +4795,11 @@ emit_expr_fix (expressionS *exp, unsigned int nbytes, fragS *frag, char *p,
 	as_bad (_("unsupported BFD relocation size %u"), size);
 	return;
       }
-  fix_new_exp (frag, p - frag->fr_literal + offset, size,
-	       exp, 0, r);
+  fix = fix_new_exp (frag, p - frag->fr_literal + offset, size,
+		     exp, 0, r);
+#endif
+#ifdef TC_CONS_FIX_NEW_POST
+  TC_CONS_FIX_NEW_POST (fix, exp);
 #endif
 }
 
