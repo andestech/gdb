@@ -8356,10 +8356,14 @@ execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int 
     case INSN_CLASS_A:
       return execute_a (cpu, iw, op, ex9);
     case INSN_CLASS_C:
+	case INSN_CLASS_F_AND_C:
+	case INSN_CLASS_D_AND_C:
       return execute_c (cpu, iw, op);
     case INSN_CLASS_D:
+	case INSN_CLASS_D_OR_ZDINX:
       return execute_d (cpu, iw, op, ex9);
     case INSN_CLASS_F:
+	case INSN_CLASS_F_OR_ZFINX:
       return execute_f (cpu, iw, op, ex9);
     case INSN_CLASS_I:
       return execute_i (cpu, iw, op, ex9);
