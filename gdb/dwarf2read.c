@@ -580,7 +580,7 @@ public:
   bool processing_has_namespace_info : 1;
 
   struct partial_die_info *find_partial_die (sect_offset sect_off);
-
+#if 0
   /* If this CU was inherited by another CU (via specification,
      abstract_origin, etc), this is the ancestor CU.  */
   dwarf2_cu *ancestor;
@@ -598,6 +598,8 @@ public:
 
     return nullptr;
   }
+#endif
+  buildsym_compunit *get_builder ();
 };
 
 /* A struct that can be used as a hash key for tables based on DW_AT_stmt_list.
@@ -11576,6 +11578,10 @@ read_file_scope (struct die_info *die, struct dwarf2_cu *cu)
 
   cu->start_symtab (fnd.name, fnd.comp_dir, lowpc);
 
+	gdb_assert (dwarf2_per_objfile->sym_cu == nullptr);
+  scoped_restore restore_sym_cu
+    = make_scoped_restore (&dwarf2_per_objfile->sym_cu, cu);
+
   /* Decode line number information if present.  We do this before
      processing child DIEs, so that the line header table is available
      for DW_AT_decl_file.  */
@@ -11591,7 +11597,7 @@ read_file_scope (struct die_info *die, struct dwarf2_cu *cu)
 	  child_die = sibling_die (child_die);
 	}
     }
-
+  dwarf2_per_objfile->sym_cu = nullptr;
   /* Decode macro information, if present.  Dwarf 2 macro information
      refers to information in the line number info statement program
      header, so we can only read it if we've read the header
@@ -11617,6 +11623,20 @@ read_file_scope (struct die_info *die, struct dwarf2_cu *cu)
 	}
     }
 }
+
+buildsym_compunit *
+dwarf2_cu::get_builder ()
+{
+  /* If this CU has a builder associated with it, use that.  */
+  if (m_builder != nullptr)
+    return m_builder.get ();
+
+  if (per_cu->dwarf2_per_objfile->sym_cu != nullptr)
+    return per_cu->dwarf2_per_objfile->sym_cu->m_builder.get ();
+
+  gdb_assert_not_reached ("");
+}
+
 
 void
 dwarf2_cu::setup_type_unit_groups (struct die_info *die)
@@ -23080,9 +23100,6 @@ follow_die_offset (sect_offset sect_off, int offset_in_dwz,
   *ref_cu = target_cu;
   temp_die.sect_off = sect_off;
 
-  if (target_cu != cu)
-    target_cu->ancestor = cu;
-
   return (struct die_info *) htab_find_with_hash (target_cu->die_hash,
 						  &temp_die,
 						  to_underlying (sect_off));
@@ -23417,7 +23434,7 @@ follow_die_sig_1 (struct die_info *src_die, struct signatured_type *sig_type,
 		  struct dwarf2_cu **ref_cu)
 {
   struct die_info temp_die;
-  struct dwarf2_cu *sig_cu, *cu = *ref_cu;
+  struct dwarf2_cu *sig_cu;
   struct die_info *die;
 
   /* While it might be nice to assert sig_type->type == NULL here,
@@ -23451,8 +23468,6 @@ follow_die_sig_1 (struct die_info *src_die, struct signatured_type *sig_type,
 	}
 
       *ref_cu = sig_cu;
-      if (sig_cu != cu)
-	sig_cu->ancestor = cu;
 
       return die;
     }
