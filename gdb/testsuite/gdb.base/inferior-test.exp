@@ -1,0 +1,576 @@
+# Copyright 2021-2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# This test case checks that the 'inferior' command, when given no
+# argument, displays information about the inferior currently active.
+
+#set INFERIOR_TEST_HOST "10.0.12.135"
+set INFERIOR_TEST_HOST ""
+set INFERIOR_TEST_PORT0 "9979"
+set INFERIOR_TEST_PORT1 "9980"
+
+#========================================================================================
+# reference .\gdb\testsuite\config\sid.exp
+#========================================================================================
+proc gdb_target_sid_here { } {
+    global gdb_prompt
+    global exit_status
+    
+    send_target_sid
+    #send_gdb "target [target_info gdb_protocol] [target_info netport]\n"
+
+    global timeout
+    set prev_timeout $timeout
+    set timeout 60
+    verbose "Timeout is now $timeout seconds" 2
+    gdb_expect {
+	-re ".*\[Ee\]rror.*$gdb_prompt $" {
+	    perror "Couldn't set target for remote simulator."
+	    gdb_exit
+	}
+	-re "Remote debugging using.*$gdb_prompt"	{
+	    verbose "Set target to sid"
+	}
+	-re "\\((y or n|y or \\\[n\\\]|\\\[y\\\] or n)\\) " {
+	    send_gdb "y\n" answer
+	    gdb_expect -re "$gdb_prompt"
+	}
+	timeout { 
+	    perror "Couldn't set target for remote simulator."
+	    gdb_exit
+	}
+    }
+    set timeout $prev_timeout
+    verbose "Timeout is now $timeout seconds" 2
+}
+
+proc target_start_here {} {
+    sid_start
+    # or start iceman
+
+    send_user "target_start_here: netport [target_info netport] \n"
+}
+
+proc target_select { target_id } {
+    #global env
+    global INFERIOR_TEST_HOST
+    global INFERIOR_TEST_PORT0
+    global INFERIOR_TEST_PORT1
+    
+    unset_currtarget_info netport
+    if { $target_id == 1 } {
+        #set_currtarget_info netport $env(GDBTEST_HOST):$env(GDBTEST_PORT2)
+        set_currtarget_info netport $INFERIOR_TEST_HOST:$INFERIOR_TEST_PORT1
+    } else {
+        #set_currtarget_info netport $env(GDBTEST_HOST):$env(GDBTEST_PORT)
+        set_currtarget_info netport $INFERIOR_TEST_HOST:$INFERIOR_TEST_PORT0
+    }
+    #puts [format "target_select %s: netport %s " $target_id [target_info netport] ]
+    send_user "target_select $target_id: netport [target_info netport] \n"
+}
+
+proc gdb_exit_here {} {
+    set result [default_gdb_exit]
+    # sid_exit                => 會使剛剛打起來兩個sid close
+    return $result
+}
+
+#========================================================================================
+# reference .\gdb\testsuite\lib\gdb.exp
+#========================================================================================
+proc default_gdb_exit_here {} {
+    global GDB
+    global INTERNAL_GDBFLAGS GDBFLAGS
+    global gdb_spawn_id inferior_spawn_id
+    global inotify_log_file
+
+    if ![info exists gdb_spawn_id] {
+        return
+    }
+
+    verbose "Quitting $GDB $INTERNAL_GDBFLAGS $GDBFLAGS"
+    if {[info exists inotify_log_file] && [file exists $inotify_log_file]} {
+        set fd [open $inotify_log_file]
+        set data [read -nonewline $fd]
+        close $fd
+
+        if {[string compare $data ""] != 0} {
+            warning "parallel-unsafe file creations noticed"
+            # Clear the log.
+            set fd [open $inotify_log_file w]
+            close $fd
+         }
+     }
+    if { [is_remote host] && [board_info host exists fileid] } {
+        send_gdb "quit\n"
+        gdb_expect 10 {
+            -re "y or n" {
+                send_gdb "y\n" answer
+                exp_continue
+            }
+            -re "DOSEXIT code" { }
+                default { }
+            }
+    }
+
+    if ![is_remote host] {
+        remote_close host
+    }
+    unset gdb_spawn_id
+    unset ::gdb_tty_name
+    unset inferior_spawn_id
+}
+
+proc gdb_file_cmd_here { arg } {
+    global gdb_prompt
+    global GDB
+    global last_loaded_file
+
+    # GCC for Windows target may create foo.exe given "-o foo".
+    if { ![file exists $arg] && [file exists "$arg.exe"] } {
+	set arg "$arg.exe"
+    }
+
+    # Save this for the benefit of gdbserver-support.exp.
+    set last_loaded_file $arg
+
+    # Set whether debug info was found.
+    # Default to "fail".
+    global gdb_file_cmd_debug_info gdb_file_cmd_msg
+    set gdb_file_cmd_debug_info "fail"
+
+    if [is_remote host] {
+	set arg [remote_download host $arg]
+	if { $arg == "" } {
+	    perror "download failed"
+	    return -1
+	}
+    }
+
+    # The file command used to kill the remote target.  For the benefit
+    # of the testsuite, preserve this behavior.  Mark as optional so it doesn't
+    # get written to the stdin log.
+    send_gdb "kill\n" optional
+    gdb_expect 120 {
+	-re "Kill the program being debugged. .y or n. $" {
+	    send_gdb "y\n" answer
+	    verbose "\t\tKilling previous program being debugged"
+	    exp_continue
+	}
+	-re "$gdb_prompt $" {
+	    # OK.
+	}
+    }
+
+    send_gdb "file $arg\n"
+    set new_symbol_table 0
+    set basename [file tail $arg]
+    gdb_expect 120 {
+	-re "(Reading symbols from.*LZMA support was disabled.*$gdb_prompt $)" {
+	    verbose "\t\tLoaded $arg into $GDB; .gnu_debugdata found but no LZMA available"
+	    set gdb_file_cmd_msg $expect_out(1,string)
+	    set gdb_file_cmd_debug_info "lzma"
+	    return 0
+	}
+	-re "(Reading symbols from.*no debugging symbols found.*$gdb_prompt $)" {
+	    verbose "\t\tLoaded $arg into $GDB with no debugging symbols"
+	    set gdb_file_cmd_msg $expect_out(1,string)
+	    set gdb_file_cmd_debug_info "nodebug"
+	    return 0
+	}
+	-re "A program is being debugged already.*Are you sure you want to change the file.*y or n. $" {
+	    send_gdb "y\n" answer
+	    exp_continue
+	}
+        -re "(Reading symbols from.*)" {
+            verbose "\t\tLoaded $arg into $GDB"
+	    set gdb_file_cmd_msg $expect_out(1,string)
+	    set gdb_file_cmd_debug_info "debug"
+	    return 0
+        }
+        -re "Load new symbol table from \".*\".*y or n. $" {
+	    if { $new_symbol_table > 0 } {
+		perror [join [list "Couldn't load $basename,"
+			      "interactive prompt loop detected."]]
+		return -1
+	    }
+            send_gdb "y\n" answer
+	    incr new_symbol_table
+	    set suffix "-- with new symbol table"
+	    set arg "$arg $suffix"
+	    set basename "$basename $suffix"
+	    exp_continue
+	}
+        -re "No such file or directory.*$gdb_prompt $" {
+            perror "($basename) No such file or directory"
+	    return -1
+        }
+	-re "A problem internal to GDB has been detected" {
+	    perror "Couldn't load $basename into GDB (GDB internal error)."
+	    gdb_internal_error_resync
+	    return -1
+	}
+        -re "$gdb_prompt $" {
+            perror "Couldn't load $basename into GDB."
+	    return -1
+            }
+        timeout {
+            perror "Couldn't load $basename into GDB (timeout)."
+	    return -1
+        }
+        eof {
+            # This is an attempt to detect a core dump, but seems not to
+            # work.  Perhaps we need to match .* followed by eof, in which
+            # gdb_expect does not seem to have a way to do that.
+            perror "Couldn't load $basename into GDB (eof)."
+	    return -1
+        }
+    }
+}
+
+# Prepares for testing, by calling build_executable, and then clean_restart.
+# Please refer to build_executable for parameter description.
+proc prepare_for_testing_here { testname executable {sources ""} {options {debug}}} {
+
+    if {[build_executable $testname $executable $sources $options] == -1} {
+        return -1
+    }
+    #clean_restart $executable
+    set binfile [standard_output_file ${executable}]
+    #gdb_load ${binfile}
+    set result [gdb_file_cmd_here $binfile]
+
+    #send_gdb "\n"
+    sleep 2
+    return $result
+}
+
+#========================================================================================
+
+# starting two sids (targets) ...
+send_user "inferior_test: starting two sids (targets) ...\n"
+target_select 0
+target_start_here
+
+target_select 1
+target_start_here
+
+if {[host_info exists]} {
+    set host [host_info name]
+} else {
+    set host "testing"
+}
+
+# starting gdb ...
+send_user "inferior_test: starting gdb ...\n"
+gdb_exit_here
+default_gdb_start
+
+gdb_test "set debug remote 1"
+#send_gdb "set debug infrun 1\n"
+
+
+# starting add-inferior ...
+gdb_test "inferior" {\[Current inferior is 1 \[.*\] (.*)\]} "inferior running"
+#gdb_test "add-inferior" "Added inferior 2.*" "create new inferior"
+gdb_test "clone-inferior" "Added inferior 2.*" "create new inferior"
+
+gdb_test "inferior 1" "\[Switching to inferior 1 \[<null>\] (.*)]" "change to inferior1"   
+gdb_test "inferior" "\[Current inferior is 1 \[<null>\] (.*)\]" "show inferior1"
+gdb_test "maintenance show target-async"
+gdb_test "maintenance set target-async off"
+gdb_test "maintenance show target-async"
+
+
+gdb_test "inferior 2" "\[Switching to inferior 2 \[<null>\] (.*)]" "change to inferior2"   
+gdb_test "inferior" "\[Current inferior is 2 \[<null>\] (.*)\]" "show inferior2"
+
+
+gdb_test "maintenance show target-async"
+gdb_test "maintenance set target-async off"
+gdb_test "maintenance show target-async"
+
+# starting target_remote target_0 ...
+send_user "inferior_test: starting target_remote target_0 ...\n"
+target_select 0
+gdb_test "inferior 1" ".*" "change to inferior1"
+gdb_test "inferior" ".*" "show inferior1"
+
+standard_testfile inferior-test.c
+if { [prepare_for_testing_here "failed to prepare" ${testfile} ${srcfile}] } {
+    return
+}
+#send_user "inferior_test, testfile: ${testfile} srcfile: ${srcfile} \n"
+
+if { ![runto_main] } {
+    return
+}
+
+#gdb_test "info inferiors" ".*" "info inferiors"
+#gdb_test "inferior 1" ".*" "change to inferior1"
+#gdb_test "inferior" "\[Current inferior is 1 \[<null>\] (.*)\]" "show inferior1"
+
+# starting target_remote target_1 ...
+send_user "inferior_test: starting target_remote target_1 ...\n"
+target_select 1
+gdb_test "inferior 2" ".*" "change to inferior2"
+gdb_test "inferior" ".*" "show inferior2"
+
+standard_testfile inferior-test-2.c
+if { [prepare_for_testing_here "failed to prepare" ${testfile} ${srcfile}] } {
+    return
+}
+
+if { ![runto_main] } {
+    return
+}
+#send_user "inferior_test_316\n"
+gdb_test "info inferiors" ".*" "info inferiors"
+
+return
+
+
+
+
+
+
+
+
+send_user "inferior_test_303\n"
+send_gdb "load\n"
+send_user "inferior_test_305\n"
+sleep 4
+send_gdb "b main\n"
+sleep 4
+send_gdb "info breakpoints\n"
+send_gdb "c\n"
+sleep 4
+
+
+return
+
+if { ![runto_main] } {
+    return
+}
+
+
+return
+
+standard_testfile inferior-test-2.c
+if { [prepare_for_testing_here "failed to prepare" ${testfile} ${srcfile}] } {
+    return
+}
+
+send_gdb "load\n"
+sleep 4
+send_gdb "b main\n"
+ sleep 4
+send_gdb "c\n"
+ sleep 4
+#if { ![runto_main] } {
+#    return
+#}
+
+
+gdb_test "info inferiors"
+gdb_test "inferior 1" "\[Switching to inferior 1 \[<null>\] (.*)]" "change inferior1"
+
+return
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#========================================================================================
+# for reference  gdb source code
+#========================================================================================
+
+#runto_main   => gdb.exp
+#gdb_run_cmd
+
+#standard_testfile riscv64-unwind-prologue-with-ld-lw.c \
+#		  riscv64-unwind-prologue-with-ld-lw-foo.s
+#if {[prepare_for_testing "failed to prepare" $testfile \
+#			 "$srcfile $srcfile2"  nodebug]} {
+#    return -1
+#}
+#gdb_breakpoint "bar"
+#gdb_continue_to_breakpoint "bar"
+
+# .\build-system-3\simulation\dejagnu\baseboards\riscv-sid.exp
+#set_board_info netport localhost:[expr {9900 + [clock clicks] % 100}]
+
+# .\build-system-3\simulation\dejagnu\config\nds-sid.exp
+#(gdb) target remote localhost:9991  =>   gdb_load()   gdb_target_sid
+#.\gdb\testsuite\config\sid.exp
+# proc gdb_target_sid { }
+#       proc send_target_sid { } {
+#             send_gdb "target [target_info gdb_protocol] [target_info netport]\n"
+#                      target_info gdb_protocol:     remote
+#                      target_info netport:          localhost:9959
+#=============================
+# start a sid
+#=============================
+# proc gdb_start {} {
+#    sid_start
+#    return [default_gdb_start]
+#}
+# proc sid_start {} {
+#    set port [lindex [split [target_info netport] ":"] 1]
+#    ...
+
+
+# gdb.exp
+#proc gdb_test_multiple()
+#  ...
+#  gdb_start
+
+
+#proc gdb_load { arg } {
+#...
+#    gdb_target_sid
+    
+    
+#unset_currtarget_info netport
+#set_currtarget_info netport $env(GDBTEST_HOST):$env(GDBTEST_PORT)
+
+#=============
+# gdb.exp
+#==============
+# prepare_for_testing ()
+#    clean_restart () {
+#        gdb_exit
+#        gdb_start
+#
+
+
+# from .\gdb\testsuite\config\sid.exp
+#proc gdb_exit {} {
+#    set result [default_gdb_exit]
+#    sid_exit                           => 會使剛剛打起來兩個sid close
+#    return $result
+#}
+
+
+
+gdb/remote.c
+void
+remote_target::resume () {
+   ...
+/* We've just told the target to resume.  The remote server will
+     wait for the inferior to stop, and then send a stop reply.  In
+     the mean time, we can't start another command/query ourselves
+     because the stub wouldn't be ready to process it.  This applies
+     only to the base all-stop protocol, however.  In non-stop (which
+     only supports vCont), the stub replies with an "OK", and is
+     immediate able to process further serial input.  */
+  if (!target_is_non_stop_p ())
+    rs->waiting_for_stop_reply = 1;
+    
+
+bool
+target_is_non_stop_p ()
+{
+  return ((non_stop
+	   || target_non_stop_enabled == AUTO_BOOLEAN_TRUE
+	   || (target_non_stop_enabled == AUTO_BOOLEAN_AUTO
+	       && target_always_non_stop_p ()))
+	  && target_can_async_p ());
+}
+
+
+
+inferior_event_handler () =>  fetch_inferior_event () => handle_inferior_event (ecs);
+      remote_async_serial_handler() {  
+         inferior_event_handler (INF_REG_EVENT);
+         
+         
+      inferior_event_handler (enum inferior_event_type event_type)
+      {   ...
+          case INF_REG_EVENT:
+             fetch_inferior_event ();
+             
+             
+      fetch_inferior_event ()
+      {   ... 
+          handle_inferior_event (ecs);
+          
+ add_setshow_boolean_cmd ("target-async", no_class,
+			   &target_async_permitted_1, _("\
+Set whether gdb controls the inferior in asynchronous mode."), _("\
+Show whether gdb controls the inferior in asynchronous mode."), _("\
+Tells gdb whether to control the inferior in asynchronous mode."),
+
+list-target-features          
+
+set target-async on/off
+show target-async
+bool target_async_permitted = false;   //true;
+
+
+#**** remote.c ***********************
+/* See FIXME above.  */
+  if (!target_async_permitted)
+    rs->wait_forever_enabled_p = 1;
+    
+if (target_async_permitted)
+    {
+      /* FIXME: cagney/1999-09-23: During the initial connection it is
+	 assumed that the target is already ready and able to respond to
+	 requests.  Unfortunately remote_start_remote() eventually calls
+	 wait_for_inferior() with no timeout.  wait_forever_enabled_p gets
+	 around this.  Eventually a mechanism that allows
+	 wait_for_inferior() to expect/get timeouts will be
+	 implemented.  */
+      rs->wait_forever_enabled_p = 0;
+    }
+    
+========================
+Breakpoint 1, _initialize_mi_main () at /NOBACKUP/atcsqa06/penny/binutils/ast-v5_2_0-branch-gdb/src/gdb/mi/mi-main.c:2716
+2716    {
+(gdb) bt
+#0  _initialize_mi_main () at /NOBACKUP/atcsqa06/penny/binutils/ast-v5_2_0-branch-gdb/src/gdb/mi/mi-main.c:2716
+#1  0x0000000000820992 in initialize_all_files () at init.c:454
+#2  0x000000000079da97 in gdb_init () at /NOBACKUP/atcsqa06/penny/binutils/ast-v5_2_0-branch-gdb/src/gdb/top.c:2395
+#3  0x0000000000634be9 in captured_main_1 (context=context@entry=0x7fffffffe1f0)
+    at /NOBACKUP/atcsqa06/penny/binutils/ast-v5_2_0-branch-gdb/src/gdb/main.c:1037
+#4  0x0000000000635f3b in captured_main (data=data@entry=0x7fffffffe1f0)
+    at /NOBACKUP/atcsqa06/penny/binutils/ast-v5_2_0-branch-gdb/src/gdb/main.c:1338
+#5  gdb_main (args=args@entry=0x7fffffffe210) at /NOBACKUP/atcsqa06/penny/binutils/ast-v5_2_0-branch-gdb/src/gdb/main.c:1363
+#6  0x000000000041a125 in main (argc=<optimized out>, argv=<optimized out>)
+    at /NOBACKUP/atcsqa06/penny/binutils/ast-v5_2_0-branch-gdb/src/gdb/gdb.c:32
+    
+    
+send_gdb "maintenance show target-async\n"
+send_gdb "maintenance set target-async off\n"
+send_gdb "maintenance show target-async\n"
+
