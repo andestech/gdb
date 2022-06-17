@@ -120,12 +120,14 @@ const char * const riscv_vma[2] =
 #define MASK_AQ (OP_MASK_AQ << OP_SH_AQ)
 #define MASK_RL (OP_MASK_RL << OP_SH_RL)
 #define MASK_AQRL (MASK_AQ | MASK_RL)
+/* the followings are moved to riscv-opc.h
 #define MASK_SHAMT (OP_MASK_SHAMT << OP_SH_SHAMT)
 #define MATCH_SHAMT_REV8_32 (0b11000 << OP_SH_SHAMT)
 #define MATCH_SHAMT_REV8_64 (0b111000 << OP_SH_SHAMT)
 #define MATCH_SHAMT_BREV8 (0b00111 << OP_SH_SHAMT)
 #define MATCH_SHAMT_ZIP_32 (0b1111 << OP_SH_SHAMT)
 #define MATCH_SHAMT_ORC_B (0b00111 << OP_SH_SHAMT)
+*/
 #define MASK_VD (OP_MASK_VD << OP_SH_VD)
 #define MASK_VS1 (OP_MASK_VS1 << OP_SH_VS1)
 #define MASK_VS2 (OP_MASK_VS2 << OP_SH_VS2)

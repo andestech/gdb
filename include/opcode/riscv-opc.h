@@ -21,6 +21,14 @@
 #ifndef RISCV_ENCODING_H
 #define RISCV_ENCODING_H
 /* Instruction opcode macros.  */
+/* { copied from riscv-opc.c */
+#define MASK_SHAMT (OP_MASK_SHAMT << OP_SH_SHAMT)
+#define MATCH_SHAMT_REV8_32 (0b11000 << OP_SH_SHAMT)
+#define MATCH_SHAMT_REV8_64 (0b111000 << OP_SH_SHAMT)
+#define MATCH_SHAMT_BREV8 (0b00111 << OP_SH_SHAMT)
+#define MATCH_SHAMT_ZIP_32 (0b1111 << OP_SH_SHAMT)
+#define MATCH_SHAMT_ORC_B (0b00111 << OP_SH_SHAMT)
+/* } copied from riscv-opc.c */
 #define MATCH_SLLI_RV32 0x1013
 #define MASK_SLLI_RV32  0xfe00707f
 #define MATCH_SRLI_RV32 0x5013
