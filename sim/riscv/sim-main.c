@@ -7894,13 +7894,16 @@ execute_i (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 }
 
 static sim_cia
-execute_zicsr (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
+execute_zicsr (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex9)
 {
   SIM_DESC sd = CPU_STATE (cpu);
   int rd = (iw >> OP_SH_RD) & OP_MASK_RD;
   int rs1 = (iw >> OP_SH_RS1) & OP_MASK_RS1;
   unsigned int csr = (iw >> OP_SH_CSR) & OP_MASK_CSR;
   sim_cia pc = cpu->pc + 4;
+
+  if (ex9)
+    pc -= 2;
 
   switch (op->match)
     {
@@ -7994,10 +7997,13 @@ execute_zicsr (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 }
 
 static sim_cia
-execute_zifencei (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
+execute_zifencei (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex9)
 {
   SIM_DESC sd = CPU_STATE (cpu);
   sim_cia pc = cpu->pc + 4;
+
+  if (ex9)
+    pc -= 2;
 
   switch (op->match)
     {
@@ -8356,21 +8362,21 @@ execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int 
     case INSN_CLASS_A:
       return execute_a (cpu, iw, op, ex9);
     case INSN_CLASS_C:
-	case INSN_CLASS_F_AND_C:
-	case INSN_CLASS_D_AND_C:
+    case INSN_CLASS_F_AND_C:
+    case INSN_CLASS_D_AND_C:
       return execute_c (cpu, iw, op);
     case INSN_CLASS_D:
-	case INSN_CLASS_D_OR_ZDINX:
+    case INSN_CLASS_D_OR_ZDINX:
       return execute_d (cpu, iw, op, ex9);
     case INSN_CLASS_F:
-	case INSN_CLASS_F_OR_ZFINX:
+    case INSN_CLASS_F_OR_ZFINX:
       return execute_f (cpu, iw, op, ex9);
     case INSN_CLASS_I:
       return execute_i (cpu, iw, op, ex9);
     case INSN_CLASS_ZICSR:
-      return execute_zicsr (cpu, iw, op);
+      return execute_zicsr (cpu, iw, op, ex9);
     case INSN_CLASS_ZIFENCEI:
-      return execute_zifencei (cpu, iw, op);
+      return execute_zifencei (cpu, iw, op, ex9);
     case INSN_CLASS_M:
       return execute_m (cpu, iw, op, ex9);
     case INSN_CLASS_P:
