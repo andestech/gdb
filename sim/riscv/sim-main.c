@@ -8047,17 +8047,25 @@ mulhu (uint64_t a, uint64_t b)
 static uint64_t
 mulh (int64_t a, int64_t b)
 {
+#ifdef HAVE___INT128
+  return ((__int128)a * b) >> 64;
+#else
   int negate = (a < 0) != (b < 0);
   uint64_t res = mulhu (a < 0 ? -a : a, b < 0 ? -b : b);
   return negate ? ~res + (a * b == 0) : res;
+#endif
 }
 
 static uint64_t
 mulhsu (int64_t a, uint64_t b)
 {
+#ifdef HAVE___INT128
+  return ((__int128)a * b) >> 64;
+#else
   int negate = a < 0;
   uint64_t res = mulhu (a < 0 ? -a : a, b);
   return negate ? ~res + (a * b == 0) : res;
+#endif
 }
 
 static sim_cia
