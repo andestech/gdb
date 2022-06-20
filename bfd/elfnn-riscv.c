@@ -947,15 +947,15 @@ riscv_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	    riscv_elf_record_tls_type (abfd, h, r_symndx, GOT_TLS_LE);
 	  goto static_reloc;
 
-	case R_RISCV_64:
-	  if (update_ict_hash_second
-	      && !riscv_elf_update_ict_hash_table (abfd, sec, h, rel))
-	    return false;
-	  /* Fall through.  */
-
 	case R_RISCV_HI20:
 	  if (bfd_link_pic (info))
 	    return bad_static_reloc (abfd, r_type, h);
+	  /* Fall through.  */
+
+	case R_RISCV_64:
+	  if (r_type == R_RISCV_64 && update_ict_hash_second
+	      && !riscv_elf_update_ict_hash_table (abfd, sec, h, rel))
+	    return false;
 	  /* Fall through.  */
 
 	case R_RISCV_COPY:
