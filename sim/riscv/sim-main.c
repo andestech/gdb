@@ -9458,6 +9458,9 @@ execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int 
     case INSN_CLASS_F_OR_ZFINX:
       return execute_f (cpu, iw, op, ex9);
     case INSN_CLASS_I:
+      /* cbo.prefetch[i,r,w] are ori with rd = x0. */
+      if (op->match == MATCH_ORI && !((iw >> OP_SH_RD) & OP_MASK_RD))
+        return execute_cbo (cpu, iw, op, ex9);
       return execute_i (cpu, iw, op, ex9);
     case INSN_CLASS_ZICSR:
       return execute_zicsr (cpu, iw, op, ex9);
