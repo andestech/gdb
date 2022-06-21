@@ -1362,6 +1362,20 @@ disassembler_options_riscv (void)
       disasm_options_t *opts;
       size_t i, priv_spec_count;
 
+      /* { Andes */
+      /* hide andes options if env not set.  */
+      if (getenv ("ANDES_HELP") == NULL)
+	{
+	  int underscore = 0;
+	  for (i = 0; i < num_options; i++)
+	    {
+	      if (riscv_options[i].name[0] == '_')
+		underscore++;
+	    }
+	  num_options -= underscore;
+	}
+      /* } Andes */
+
       args = XNEWVEC (disasm_option_arg_t, num_args + 1);
 
       args[RISCV_OPTION_ARG_PRIV_SPEC].name = "SPEC";
