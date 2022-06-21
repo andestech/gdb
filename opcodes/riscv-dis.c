@@ -178,7 +178,7 @@ parse_riscv_dis_option_without_args (const char *option)
       riscv_fpr_names = riscv_fpr_names_numeric;
     }
   /* { Andes */
-  else if (strcmp (option, "no-prefer") == 0)
+  else if (strcmp (option, "_no-prefer") == 0)
     no_prefer = 1;
   /* } Andes */
   /* { Andes ACE */
@@ -1334,14 +1334,15 @@ static struct
   { "no-aliases",
     N_("Disassemble only into canonical instructions."),
     RISCV_OPTION_ARG_NONE },
-  /* { Andes */
-  { "no-prefer",
-    N_("Disassemble no prefer instructions."),
-    RISCV_OPTION_ARG_NONE },
-  /* } Andes */
   { "priv-spec=",
     N_("Print the CSR according to the chosen privilege spec."),
     RISCV_OPTION_ARG_PRIV_SPEC }
+  /* { Andes */
+  ,
+  { "_no-prefer",
+    N_("Disassemble no prefer instructions."),
+    RISCV_OPTION_ARG_NONE },
+  /* } Andes */
 };
 
 /* Build the structure representing valid RISCV disassembler options.
