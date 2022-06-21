@@ -267,6 +267,20 @@ parse_riscv_dis_option (const char *option)
 #endif
     }
   /* } Andes ACE */
+  /* { Andes */
+  else if (strcmp (option, "_patch-arch") == 0)
+    {
+      while (value)
+	{
+	  char *p = strstr (value, "_");
+	  if (p)
+	    *p = 0;
+	  riscv_parse_add_subset (&riscv_rps_dis, value,
+		RISCV_UNKNOWN_VERSION, RISCV_UNKNOWN_VERSION, false);
+	  value = p ? p + 1 : p;
+	}
+    }
+  /* } Andes */
   else
     {
       /* xgettext:c-format */
@@ -1341,6 +1355,9 @@ static struct
   ,
   { "_no-prefer",
     N_("Disassemble no prefer instructions."),
+    RISCV_OPTION_ARG_NONE },
+  { "_arch-patch",
+    N_("Patch arch attributes."),
     RISCV_OPTION_ARG_NONE },
   /* } Andes */
 };
