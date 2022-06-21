@@ -1,6 +1,6 @@
 #as: -march=rv32i
 #source: ext.s
-#objdump: -d -Mno-prefer
+#objdump: -d -M_no-prefer
 
 .*:[ 	]+file format .*
 

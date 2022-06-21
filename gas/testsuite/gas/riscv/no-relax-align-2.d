@@ -1,5 +1,5 @@
 #as:
-#objdump: -d -Mno-prefer
+#objdump: -d -M_no-prefer
 
 .*:[ 	]+file format .*
 
