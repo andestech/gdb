@@ -2295,6 +2295,7 @@ riscv_elf_relocate_section (bfd *output_bfd,
       if (howto == NULL
 	  /* { Andes */
 	  || r_type == R_RISCV_RELAX_ENTRY
+	  || r_type == R_RISCV_DATA
 	  || r_type == R_RISCV_ANDES_TAG
 	  || r_type == R_RISCV_RELAX_REGION_BEGIN
 	  || r_type == R_RISCV_RELAX_REGION_END

@@ -236,6 +236,8 @@ is_insn_of_std_type (const struct riscv_opcode *insn, const char *type);
 static bool
 is_insn_of_fp_types (const struct riscv_opcode *insn);
 static void
+riscv_aligned_cons (int idx);
+static void
 macro_build (expressionS *ep, const char *name, const char *fmt, ...);
 /* } Andes */
 
@@ -4926,6 +4928,7 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
       break;
 
     case BFD_RELOC_RISCV_RELAX_ENTRY:
+    case BFD_RELOC_RISCV_DATA:
     case BFD_RELOC_RISCV_ICT_64:
     case BFD_RELOC_RISCV_RELAX_REGION_BEGIN:
     case BFD_RELOC_RISCV_RELAX_REGION_END:
@@ -5344,6 +5347,20 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
 		    _("cannot represent %s relocation in object file"),
 		    bfd_get_reloc_code_name (fixp->fx_r_type));
       return NULL;
+    }
+
+  switch (fixp->fx_r_type)
+    {
+    case BFD_RELOC_RISCV_DATA:
+      /* Prevent linker from optimizing data in text sections.
+	 For example, jump table.  */
+      reloc->addend = fixp->fx_size;
+      break;
+
+    default:
+      /* In general, addend of a relocation is the offset to the
+	 associated symbol.  */
+      break;
     }
 
   return reloc;
@@ -6444,9 +6461,11 @@ riscv_elf_copy_symbol_attributes (symbolS *dest, symbolS *src)
 static const pseudo_typeS riscv_pseudo_table[] =
 {
   {"option", s_riscv_option, 0},
+#if 0
   {"half", cons, 2},
   {"word", cons, 4},
   {"dword", cons, 8},
+#endif
   {"dtprelword", s_dtprel, 4},
   {"dtpreldword", s_dtprel, 8},
   {"bss", s_bss, 0},
@@ -6457,6 +6476,11 @@ static const pseudo_typeS riscv_pseudo_table[] =
   {"float16", float_cons, 'h'},
 
   /* { Andes */
+  {"byte", riscv_aligned_cons, 0},
+  {"half", riscv_aligned_cons, 1},
+  {"word", riscv_aligned_cons, 2},
+  {"dword", riscv_aligned_cons, 3},
+  {"qword", riscv_aligned_cons, 4},
   {"no_ex9_begin", riscv_no_execit, 1},
   {"no_ex9_end", riscv_no_execit, 0},
   {"no_execit_begin", riscv_no_execit, 1},
@@ -6819,6 +6843,24 @@ is_insn_of_fp_types (const struct riscv_opcode *insn)
 	rz = is_insn_of_std_type (insn, "FDQ");
     }
   return rz;
+}
+
+static void
+riscv_aligned_cons (int idx)
+{
+  /* Call default handler.  */
+  cons (1 << idx);
+  if (now_seg->flags & SEC_CODE
+      && now_seg->flags & SEC_ALLOC && now_seg->flags & SEC_RELOC)
+    {
+      /* Use BFD_RELOC_RISCV_DATA to avoid EXECIT optimization replacing data.  */
+      expressionS exp;
+
+      exp.X_add_number = 0;
+      exp.X_op = O_constant;
+      fix_new_exp (frag_now, frag_now_fix () - (1 << idx), 1 << idx,
+		   &exp, 0, BFD_RELOC_RISCV_DATA);
+    }
 }
 /* } Andes */
 
