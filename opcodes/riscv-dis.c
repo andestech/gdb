@@ -238,11 +238,11 @@ parse_riscv_dis_option (const char *option)
     }
   /* { Andes ACE */
   /* Load ACE shared library if ACE option is enable */
-  else if (strncmp (option, "ace=", 4) == 0)
+  else if (strcmp (option, "ace") == 0)
     {
 #ifndef __MINGW32__
-      char *ace_lib_path = malloc (strlen (option) - 4);
-      strcpy (ace_lib_path, option + 4);
+      char *ace_lib_path = malloc (strlen (value));
+      strcpy (ace_lib_path, value);
 
       void *dlc = dlopen (ace_lib_path, RTLD_NOW | RTLD_LOCAL);
       char *err;
