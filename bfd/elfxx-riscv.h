@@ -309,39 +309,6 @@ typedef struct execit_blank_abfd
   execit_blank_section_t *sec;
 } execit_blank_abfd_t;
 
-typedef struct execit_irelx
-{
-  struct execit_irelx *next;
-  Elf_Internal_Rela saved_irel;
-  bfd_vma annotation;
-} execit_irelx_t;
-
-typedef struct execit_state
-{
-  /* EXECIT hash table, used to store all patterns of code.  */
-  asection *final_sec;
-  asection *itable_section;
-  execit_rank_t *rank_list;
-  execit_blank_abfd_t *blank_list;
-  execit_irelx_t *irelx_list;
-  execit_hash_t **itable_array;
-  struct riscv_elf_link_hash_table *htab;
-  struct bfd_hash_table code_hash;
-  bfd_vma jal_window_end;
-  int raw_itable_entries;
-  int next_itable_index;
-  int import_number;
-  unsigned int is_init:1;
-  unsigned int is_built:1;
-  unsigned int is_replaced:1;
-  unsigned int relocate_itable_done:1;
-  unsigned int is_itable_finalized:1;
-  unsigned int is_determining_lui:1;
-  unsigned int is_itb_base_set:1;
-  unsigned int is_replace_again:1;
-  unsigned int is_import_ranked:1;
-} execit_state_t;
-
 /* execit processing context  */
 typedef struct execit_context
 {
@@ -441,11 +408,50 @@ typedef struct ace_operand
   const char *hw_name;  /* hardware/register name */
 } ace_op_t;
 
-/* linker states */
+/* GP relative insn relaxation */
+#define GPR_ABI_GP 3
+#define TAG_NONE 0
+#define TAG_GPREL_SUBTYPE_FLX 1
+#define TAG_GPREL_SUBTYPE_FSX 2
+#define TAG_EXECIT_ITE R_RISCV_EXECIT_ITE
+
+typedef struct andes_irelx
+{
+  void *next;
+  Elf_Internal_Rela saved_irel;
+  bfd_vma annotation;
+} andes_irelx_t;
+
+typedef struct execit_state
+{
+  /* EXECIT hash table, used to store all patterns of code.  */
+  asection *final_sec;
+  asection *itable_section;
+  execit_rank_t *rank_list;
+  execit_blank_abfd_t *blank_list;
+  andes_irelx_t *irelx_list;
+  execit_hash_t **itable_array;
+  struct riscv_elf_link_hash_table *htab;
+  struct bfd_hash_table code_hash;
+  bfd_vma jal_window_end;
+  int raw_itable_entries;
+  int next_itable_index;
+  int import_number;
+  unsigned int is_init:1;
+  unsigned int is_built:1;
+  unsigned int is_replaced:1;
+  unsigned int relocate_itable_done:1;
+  unsigned int is_itable_finalized:1;
+  unsigned int is_determining_lui:1;
+  unsigned int is_itb_base_set:1;
+  unsigned int is_replace_again:1;
+  unsigned int is_import_ranked:1;
+} execit_state_t;
+
 typedef struct andes_linker_state
 {
+  andes_irelx_t *ext_irel_list;
   bfd_vma prev_aligned_offset;
   int check_start_export_sym : 1;
 } andes_linker_state_t;
-
 /* } Andes  */

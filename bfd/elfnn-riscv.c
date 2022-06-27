@@ -4389,8 +4389,21 @@ typedef struct
 } riscv_pcgp_relocs;
 
 /* { Andes  */
+static bool
+andes_relax_fls_gp (
+  bfd *abfd,
+  asection *sec,
+  asection *sym_sec,
+  struct bfd_link_info *info,
+  Elf_Internal_Rela *rel,
+  bfd_vma symval,
+  bfd_vma max_alignment,
+  bfd_vma reserve_size,
+  bool *again,
+  riscv_pcgp_relocs *pcgp_relocs,
+  bool undefined_weak);
+
 #define IS_RVC_INSN(x) (((x) & 0x3) != 0x3)
-#define IS_RVC_JMP_OR_BRANCH(x) (x == 0)
 static int
 andes_try_target_align (bfd *abfd, asection *sec,
 			asection *sym_sec ATTRIBUTE_UNUSED,
@@ -4518,9 +4531,9 @@ static bool
 execit_push_blank (execit_context_t *ctx, bfd_vma delta, bfd_vma size);
 static bool
 andes_execit_mark_irel (Elf_Internal_Rela *irel, int index);
-static execit_irelx_t*
+static andes_irelx_t*
 andes_extend_irel (Elf_Internal_Rela *irel, int subtype,
-		   execit_irelx_t **list);
+		   andes_irelx_t **list);
 static execit_blank_abfd_t*
 execit_lookup_blank_abfd (execit_context_t *ctx);
 static execit_blank_section_t*
@@ -5804,15 +5817,18 @@ bfd_elfNN_riscv_set_data_segment_info (struct bfd_link_info *info,
 /* Extended relax passes
 
    Lazy initializations: option handling (relax/exec.it), internal stuff.
-   Pass   0: Shortens code sequences for LUI/CALL/TPREL/PCREL relocs.
+   * denotes mandatory.
+
+  *Pass ini: init stuff
    Pass gp0: GP instruction relaxation: pcrel
    Pass gp1:                          : low part
    Pass gp2:                          : high part
-   Pass   1: Deletes the bytes that PCREL relaxation in pass 0 made obsolete.
+   Pass   0: Shortens code sequences for LUI/CALL/TPREL/PCREL relocs.
+  *Pass   1: Deletes the bytes that PCREL relaxation in pass 0 made obsolete.
    Pass ex1: Exec.it #1 collection
    Pass ex2:         #2 replacement
-   Pass   2: Which cannot be disabled, handles code alignment directives.
-   Pass res: Reslove special relocations (exec.it)
+  *Pass   2: Which cannot be disabled, handles code alignment directives.
+  *Pass res: Reslove special relocations (exec.it, gp-relaxation)
    Pass red: Reduce .exec.itable section iff secure
 */
 
@@ -5893,7 +5909,9 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
       || (sec->flags & SEC_RELOC) == 0
       || sec->reloc_count == 0
       || (info->disable_target_specific_optimizations
-	  && info->relax_pass < PASS_EXECIT_1)
+	  && info->relax_pass != PASS_ANDES_INIT
+	  && info->relax_pass != PASS_DELETE_ORG
+	  && info->relax_pass < PASS_ALIGN_ORG)
       /* The exp_seg_relro_adjust is enum phase_enum (0x4),
 	 and defined in ld/ldexp.h.  */
       || *(htab->data_segment_phase) == 4)
@@ -5913,7 +5931,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
     return true;
 
   /* exec.it initializatoin if enabled.  */
-  if (info->relax_pass == PASS_EXECIT_1 && !execit.is_init)
+  if (!execit.is_init && info->relax_pass == PASS_EXECIT_1)
     {
       bfd *output_bfd = info->output_bfd;
       if ((andes->target_optimization & RISCV_RELAX_EXECIT_ON) &&
@@ -6152,17 +6170,30 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 		   || type == R_RISCV_ALIGN_BTB)) /* Andes */
 	relax_func = (type == R_RISCV_ALIGN_BTB) ?
 	  _bfd_riscv_relax_align_btb : _bfd_riscv_relax_align;
-      else if (info->relax_pass == PASS_RESLOVE && type == R_RISCV_ANDES_TAG
-	       && (ELFNN_R_SYM (rel->r_info) == R_RISCV_EXECIT_ITE))
-	{ /* convert relocation to execit_ite from andes_misc  */
-	  execit_irelx_t *irel_ext = (execit_irelx_t *) rel->r_addend;
-	  max_alignment = irel_ext->annotation; /* execit_index  */
-	  /* rel->r_offset might be changed!  */
-	  rel->r_info = irel_ext->saved_irel.r_info;
-	  /* TODO: assert addend unchanged?  */
-	  rel->r_addend = irel_ext->saved_irel.r_addend;
-/*	  rel->r_info = ELFNN_R_INFO (ELFNN_R_SYM (rel->r_info), R_RISCV_EXECIT_ITE); */
-	  relax_func = andes_relax_execit_ite;
+      else if (info->relax_pass == PASS_RESLOVE && type == R_RISCV_ANDES_TAG)
+	{
+	  int tag = ELFNN_R_SYM (rel->r_info);
+	  if (tag == R_RISCV_EXECIT_ITE)
+	    { /* convert relocation for execit_ite.  */
+	      andes_irelx_t *irel_ext = (andes_irelx_t *) rel->r_addend;
+	      max_alignment = irel_ext->annotation; /* execit_index  */
+	      /* rel->r_offset might be changed!  */
+	      rel->r_info = irel_ext->saved_irel.r_info;
+	      /* TODO: assert addend unchanged?  */
+	      rel->r_addend = irel_ext->saved_irel.r_addend;
+	      relax_func = andes_relax_execit_ite;
+	    }
+	  else if (ELFNN_R_SYM (rel->r_info) == TAG_GPREL_SUBTYPE_FLX
+		   || ELFNN_R_SYM (rel->r_info) == TAG_GPREL_SUBTYPE_FSX)
+	    { /* F[LS]X rd, *sym(gp) */
+	      andes_irelx_t *irel_ext =
+	        (andes_irelx_t *) rel->r_addend;
+	      rel->r_info = irel_ext->saved_irel.r_info;
+	      rel->r_addend = irel_ext->saved_irel.r_addend;
+	      relax_func = andes_relax_fls_gp;
+	    }
+	  else
+	    BFD_ASSERT (0);
 	}
       else
 	continue;
@@ -8084,7 +8115,7 @@ andes_execit_mark_irel (Elf_Internal_Rela *irel, int index)
   if ((ELFNN_R_TYPE (irel->r_info) == R_RISCV_HI20)
       || (ELFNN_R_TYPE (irel->r_info) == R_RISCV_JAL))
     {
-      execit_irelx_t *irel_ext =
+      andes_irelx_t *irel_ext =
 	andes_extend_irel(irel, R_RISCV_EXECIT_ITE, &execit.irelx_list);
       irel_ext->annotation = index;
     }
@@ -8096,21 +8127,19 @@ andes_execit_mark_irel (Elf_Internal_Rela *irel, int index)
 }
 
 /* TODO: free allocated memory at a proper timing  */
-static execit_irelx_t*
+static andes_irelx_t*
 andes_extend_irel (Elf_Internal_Rela *irel, int subtype,
-		   execit_irelx_t **list)
+		   andes_irelx_t **list)
 {  /* new one  */
-  execit_irelx_t *one = bfd_zmalloc (sizeof (execit_irelx_t));
+  andes_irelx_t *one = bfd_zmalloc (sizeof (andes_irelx_t));
   BFD_ASSERT (one);
   /* init  */
   one->saved_irel = *irel;
   irel->r_addend = (bfd_vma) one;
   irel->r_info = ELFNN_R_INFO (subtype, R_RISCV_ANDES_TAG);
-  /* link  */
-  if (*list)
-    (*list)->next = one;
-  else
-    (*list) = one;
+  /* link reversely  */
+  one->next = *list;
+  (*list) = one;
   return one;
 }
 
@@ -9111,7 +9140,13 @@ andes_relax_pc_gp_insn (
 
       if (do_replace)
 	{
-	  rel->r_addend += hi_reloc.hi_addend;
+	  if (ELFNN_R_TYPE (rel->r_info) == R_RISCV_ANDES_TAG)
+	    {
+	      andes_irelx_t *irel_ext = (andes_irelx_t *) rel->r_addend;
+	      irel_ext->saved_irel.r_addend += hi_reloc.hi_addend;
+	    }
+	  else
+	    rel->r_addend += hi_reloc.hi_addend;
 	  bfd_put_32 (abfd, insn, contents + rel->r_offset);
 	  return riscv_delete_pcgp_lo_reloc (pcgp_relocs, rel->r_offset, 4);
 	}
@@ -9131,6 +9166,8 @@ andes_relax_gp_insn (uint32_t *insn, Elf_Internal_Rela *rel,
 		     bfd_signed_vma bias, int sym, asection *sym_sec)
 {
   int is_code = 0;
+  int type = ELFNN_R_TYPE (rel->r_info);
+
 
   /* symbols within code sections are not necessary aligned to data lenght.
      byte-align presumed  */
@@ -9207,6 +9244,30 @@ andes_relax_gp_insn (uint32_t *insn, Elf_Internal_Rela *rel,
     {
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_SGP17S3);
       *insn = (*insn & (OP_MASK_RS2 << OP_SH_RS2)) | MATCH_SDGP;
+    }
+  else if (type == R_RISCV_LO12_I || type == R_RISCV_LO12_S
+	   || type == R_RISCV_PCREL_LO12_I || type == R_RISCV_PCREL_LO12_S)
+    {
+      if (((*insn & MASK_FLH) == MATCH_FLH || (*insn & MASK_FLW) == MATCH_FLW
+	   || (*insn & MASK_FLD) == MATCH_FLD) && VALID_ITYPE_IMM (bias)
+	   && !is_code)
+	{
+	  if (type == R_RISCV_PCREL_LO12_I)
+	    rel->r_info = ELFNN_R_INFO (sym, type);
+	  andes_extend_irel(rel, TAG_GPREL_SUBTYPE_FLX, &nsta.ext_irel_list);
+	  *insn = (*insn & ~(OP_MASK_RS1 << OP_SH_RS1)) | (GPR_ABI_GP << OP_SH_RS1);
+	}
+      else if (((*insn & MASK_FSH) == MATCH_FSH || (*insn & MASK_FSW) == MATCH_FSW
+		|| (*insn & MASK_FSD) == MATCH_FSD) && VALID_STYPE_IMM (bias)
+	       && !is_code)
+	{
+	  if (type == R_RISCV_PCREL_LO12_S)
+	    rel->r_info = ELFNN_R_INFO (sym, type);
+	  andes_extend_irel(rel, TAG_GPREL_SUBTYPE_FSX, &nsta.ext_irel_list);
+	  *insn = (*insn & ~(OP_MASK_RS1 << OP_SH_RS1)) | (GPR_ABI_GP << OP_SH_RS1);
+	}
+      else
+	return false;
     }
   else
     return false;
@@ -10211,6 +10272,48 @@ andes_try_target_align (bfd *abfd, asection *sec, asection *sym_sec,
   }
 
   return 2; /* bytes shifted */
+}
+
+static bool
+andes_relax_fls_gp (
+  bfd *abfd,
+  asection *sec,
+  asection *sym_sec ATTRIBUTE_UNUSED,
+  struct bfd_link_info *info ATTRIBUTE_UNUSED,
+  Elf_Internal_Rela *rel,
+  bfd_vma symval,
+  bfd_vma max_alignment ATTRIBUTE_UNUSED,
+  bfd_vma reserve_size ATTRIBUTE_UNUSED,
+  bool *again ATTRIBUTE_UNUSED,
+  riscv_pcgp_relocs *pcgp_relocs ATTRIBUTE_UNUSED,
+  bool undefined_weak ATTRIBUTE_UNUSED)
+{
+  bfd_vma gp = riscv_global_pointer_value (info);
+  bfd_vma relocation = symval - gp;
+  int type = ELFNN_R_TYPE (rel->r_info);
+  if (type == R_RISCV_LO12_I || type == R_RISCV_PCREL_LO12_I)
+    {
+      BFD_ASSERT (VALID_ITYPE_IMM (relocation));
+      bfd_byte *contents = elf_section_data (sec)->this_hdr.contents
+			   + rel->r_offset;
+      uint32_t insn32 = bfd_get_32 (abfd, contents);
+      insn32 = (insn32 & ~ENCODE_ITYPE_IMM (-1)) | ENCODE_ITYPE_IMM(relocation);
+      bfd_put_32 (abfd, insn32, contents);
+    }
+  else if (type == R_RISCV_LO12_S || type == R_RISCV_PCREL_LO12_S)
+    {
+      BFD_ASSERT (VALID_STYPE_IMM (relocation));
+      bfd_byte *contents = elf_section_data (sec)->this_hdr.contents
+			   + rel->r_offset;
+      uint32_t insn32 = bfd_get_32 (abfd, contents);
+      insn32 = (insn32 & ~ENCODE_STYPE_IMM (-1)) | ENCODE_STYPE_IMM(relocation);
+      bfd_put_32 (abfd, insn32, contents);
+    }
+  else
+    BFD_ASSERT (0);
+
+  rel->r_info = ELFNN_R_INFO (0, R_RISCV_NONE);
+  return true;
 }
 /* } Andes  */
 
