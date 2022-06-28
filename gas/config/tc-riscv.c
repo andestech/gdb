@@ -238,9 +238,14 @@ is_insn_of_std_type (const struct riscv_opcode *insn, const char *type);
 static bool
 is_insn_of_fp_types (const struct riscv_opcode *insn);
 static void
+andes_insert_btb_reloc (struct riscv_cl_insn *ip);
+
+static void
 riscv_aligned_cons (int idx);
 static void
 macro_build (expressionS *ep, const char *name, const char *fmt, ...);
+static void
+riscv_make_nops (char *buf, bfd_vma bytes);
 /* } Andes */
 
 /* Set the default_isa_spec.  Return 0 if the spec isn't supported.
@@ -1806,6 +1811,8 @@ append_insn (struct riscv_cl_insn *ip, expressionS *address_expr,
 						    worst_case, range),
 			    address_expr->X_add_symbol,
 			    address_expr->X_add_number);
+	  if (reloc_type == BFD_RELOC_RISCV_JMP)
+	    andes_insert_btb_reloc (ip);
 	  return;
 	}
       else if (ip->cmodel.method == METHOD_DEFAULT)
@@ -1882,11 +1889,14 @@ append_insn (struct riscv_cl_insn *ip, expressionS *address_expr,
 			      RELAX_CMODEL_ENCODE (ip->cmodel.type, length,
 						   ip->cmodel.index),
 			      symbol, offset);
+	  andes_insert_btb_reloc (ip);
 	}
       return;
     }
   else
     as_fatal (_("internal error: invalid append_insn method!"));
+
+  andes_insert_btb_reloc (ip);
 
   /* We need to start a new frag after any instruction that can be
      optimized away or compressed by the linker during relaxation, to prevent
@@ -4929,6 +4939,7 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 	}
       break;
 
+    case BFD_RELOC_RISCV_ALIGN_BTB:
     case BFD_RELOC_RISCV_RELAX_ENTRY:
     case BFD_RELOC_RISCV_DATA:
     case BFD_RELOC_RISCV_ICT_64:
@@ -6875,6 +6886,34 @@ riscv_aligned_cons (int idx)
       size *= nsta.cons_count;
       fix_new_exp (frag_now, frag_now_fix () - size, size,
 		   &exp, 0, BFD_RELOC_RISCV_DATA);
+    }
+}
+
+/* Andes BTB alignmemt implementation:
+* insert a 4-byte NOP tagged with ALIGN_BTB for liner relaxation.
+* Do this only when RVC is enabled and NOT (Os and .option norelax.)
+* sample:
+*   call test / jr a0
+*   => jalr  ra / jalr a0
+*   << nop @ R_RISCV_ALIGN_BTB >> insertion
+*/
+
+static void
+andes_insert_btb_reloc (struct riscv_cl_insn *ip)
+{
+  insn_t opc = ip->insn_opcode;
+  if (optimize && riscv_opts.verbatim
+      && (((opc & MASK_JALR) == MATCH_JALR && RV_X (opc, 7, 5))
+          || ((opc & MASK_JAL) == MATCH_JAL && RV_X (opc, 7, 5)))
+      && riscv_opts.relax && riscv_opts.rvc)
+    { /* append NOP @ ALIGN_BTB  */
+      char *nops = frag_more (4);
+      expressionS ex;
+      ex.X_op = O_constant;
+      ex.X_add_number = 4;
+      riscv_make_nops (nops, 4);
+      fix_new_exp (frag_now, nops - frag_now->fr_literal, 4,
+		   &ex, false, BFD_RELOC_RISCV_ALIGN_BTB);
     }
 }
 /* } Andes */

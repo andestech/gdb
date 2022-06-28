@@ -121,6 +121,8 @@ extern void
 bfd_elf64_riscv_set_data_segment_info (struct bfd_link_info *, int *);
 
 /* { Andes  */
+#define ANDES_ALIGN_DONE (1u << 31)
+
 extern unsigned int ict_model;
 extern unsigned int ict_table_entries;
 extern bool find_imported_ict_table;
@@ -360,11 +362,6 @@ typedef struct ict_state
   unsigned int is_init:1;
 } ict_state_t;
 
-typedef struct andes_state
-{
-  unsigned int check_start_export_sym:1;
-} andes_state_t;
-
 struct riscv_elf_link_hash_table
 {
   struct elf_link_hash_table elf;
@@ -393,6 +390,8 @@ struct riscv_elf_link_hash_table
   andes_ld_options_t andes;
   /* } Andes  */
 };
+
+typedef struct riscv_elf_link_hash_table link_hash_table_t;
 
 /* ICT stuff  */
 #define ANDES_ICT_SECTION ".nds.ict"
@@ -441,4 +440,12 @@ typedef struct ace_operand
   int hw_res;           /* hardware resource */
   const char *hw_name;  /* hardware/register name */
 } ace_op_t;
+
+/* linker states */
+typedef struct andes_linker_state
+{
+  bfd_vma prev_aligned_offset;
+  int check_start_export_sym : 1;
+} andes_linker_state_t;
+
 /* } Andes  */
