@@ -191,6 +191,8 @@ static const char *m_ict_model = NULL;
 static bool pre_insn_is_a_cond_br = false;
 static struct andes_as_states
 {
+  /* CONS (RISCV_DATA) */
+  int cons_count;
   /* ICT */
   expressionS *ict_exp;
   /* b22827 */
@@ -6477,10 +6479,15 @@ static const pseudo_typeS riscv_pseudo_table[] =
 
   /* { Andes */
   {"byte", riscv_aligned_cons, 0},
+  {"2byte", riscv_aligned_cons, 1},
   {"half", riscv_aligned_cons, 1},
+  {"short", riscv_aligned_cons, 1},
+  {"4byte", riscv_aligned_cons, 2},
   {"word", riscv_aligned_cons, 2},
+  {"long", riscv_aligned_cons, 2},
+  {"8byte", riscv_aligned_cons, 3},
   {"dword", riscv_aligned_cons, 3},
-  {"qword", riscv_aligned_cons, 4},
+  {"quad", riscv_aligned_cons, 3},
   {"no_ex9_begin", riscv_no_execit, 1},
   {"no_ex9_end", riscv_no_execit, 0},
   {"no_execit_begin", riscv_no_execit, 1},
@@ -6556,6 +6563,12 @@ tc_cons_fix_new_post_riscv (void *ptr, expressionS *exp)
       nsta.ict_exp = NULL;
       fix->tc_fix_data.ict = exp->X_md;
     }
+}
+
+void
+tc_cons_count_check (int count)
+{ /* how many items of the current pseudo instruction.  */
+  nsta.cons_count = count;
 }
 
 static void
@@ -6848,8 +6861,9 @@ is_insn_of_fp_types (const struct riscv_opcode *insn)
 static void
 riscv_aligned_cons (int idx)
 {
+  unsigned long size = 1 << idx;
   /* Call default handler.  */
-  cons (1 << idx);
+  cons (size);
   if (now_seg->flags & SEC_CODE
       && now_seg->flags & SEC_ALLOC && now_seg->flags & SEC_RELOC)
     {
@@ -6858,7 +6872,8 @@ riscv_aligned_cons (int idx)
 
       exp.X_add_number = 0;
       exp.X_op = O_constant;
-      fix_new_exp (frag_now, frag_now_fix () - (1 << idx), 1 << idx,
+      size *= nsta.cons_count;
+      fix_new_exp (frag_now, frag_now_fix () - size, size,
 		   &exp, 0, BFD_RELOC_RISCV_DATA);
     }
 }

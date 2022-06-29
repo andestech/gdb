@@ -4246,6 +4246,10 @@ cons_worker (int nbytes,	/* 1=.byte, 2=.word, 4=.long.  */
     }
   while (*input_line_pointer++ == ',');
 
+#ifdef TC_CONS_COUNT_CHECK
+      TC_CONS_COUNT_CHECK (c);
+#endif
+
   /* In MRI mode, after an odd number of bytes, we must align to an
      even word boundary, unless the next instruction is a dc.b, ds.b
      or dcb.b.  */

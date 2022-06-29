@@ -174,6 +174,8 @@ extern int riscv_parse_name (char const *, expressionS *, enum expr_mode, char *
 
 extern void tc_cons_fix_new_post_riscv (void *, expressionS *);
 #define TC_CONS_FIX_NEW_POST tc_cons_fix_new_post_riscv
+extern void tc_cons_count_check (int);
+#define TC_CONS_COUNT_CHECK tc_cons_count_check
 
 /* fixup  */
 struct riscv_fix_info
