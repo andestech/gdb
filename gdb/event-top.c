@@ -890,7 +890,9 @@ handle_fatal_signal (int sig)
     {
       sig_write ("\n\n");
       sig_write (_("Fatal signal: "));
+#if (!defined (__CYGWIN__))
       sig_write (strsignal (sig));
+#endif
       sig_write ("\n");
 
       gdb_internal_backtrace ();
