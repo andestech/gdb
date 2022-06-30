@@ -82,13 +82,13 @@ define reset-and-hold
   # Clear $ra and $sp when reset-and-hold in order to avoid backtrace. (bug8032)
   set $ra = 0
   set $sp = 0
-  flushregs
+  maintenance flush register-cache
 end
 
 # reset and run
 define reset-and-run
   monitor reset run
-  flushregs
+  maintenance flush register-cache
 end
 
 define hook-load
