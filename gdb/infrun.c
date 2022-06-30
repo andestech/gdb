@@ -3705,9 +3705,9 @@ do_target_wait (execution_control_state *ecs, target_wait_flags options)
   };
 
   if (!target_async_permitted) {
-    fprintf_unfiltered (gdb_stdlog, "\n do_target_wait, random_selector inferior=0x%x ", selected);
+    //fprintf_unfiltered (gdb_stdlog, "\n do_target_wait, random_selector inferior=0x%x ", selected);
     selected = current_inferior ();
-    fprintf_unfiltered (gdb_stdlog, "\n do_target_wait, new_random_selector inferior=0x%x ", selected);
+    //fprintf_unfiltered (gdb_stdlog, "\n do_target_wait, new_random_selector inferior=0x%x ", selected);
   }
   /* Needed in 'all-stop + target-non-stop' mode, because we end up
      here spuriously after the target is all stopped and we've already
