@@ -572,6 +572,7 @@ enum cmodel_type
   TYPE_LA,
   TYPE_LD,
   TYPE_ST,
+  TYPE_ALIGN,
   TYPE_IS, /* indirect symbol  */
   /* workaround borrow variable frag used by cmodel.  */
   TYPE_B22827,
@@ -944,6 +945,12 @@ relaxed_cmodel_length (fragS *fragp, asection *sec)
 	{
 	case TYPE_JX ... TYPE_ST:
 	  length = 0;
+	  break;
+	case TYPE_ALIGN:
+	  if (is_same_sec)
+	    length = 0;
+	  else
+	    gas_assert (length == 6);
 	  break;
 	case TYPE_IS:
 	  if (is_same_sec)
@@ -2114,7 +2121,9 @@ void make_indirect_symbol (expressionS *ep, expressionS *ep_ind)
   if (isym == NULL)
     {
       /* create indirect symbol:
+       *   # NOTE! these data might eventually drop, don't put fix here!!
        *   # .pushsection subsection
+       *   # make nops for align
        *   # make indirect symbol
        *   # new variable fragment (grow frag, pend reloc till md_convert)
        *   # .popsection
@@ -2128,10 +2137,20 @@ void make_indirect_symbol (expressionS *ep, expressionS *ep_ind)
       obj_elf_section (1); /* .pushsection  */
       input_line_pointer = save_in;
       /* #  */
+      #define ALIGN_LEN (6)
+      /* ALIGN */
+      frag_grow (ALIGN_LEN);
+      char *nops = frag_more (0);
+      riscv_make_nops (nops, ALIGN_LEN);
+      frag_var (rs_machine_dependent, ALIGN_LEN, 0,
+		RELAX_CMODEL_ENCODE (TYPE_ALIGN, ALIGN_LEN, 0),
+		ep->X_add_symbol, ep->X_add_number, NULL);
+      /* SYMBOL */
       isym = colon (isym_name);
-      /* #  */
-      frag_var (rs_machine_dependent, CMODEL_SECTION_ENTRY_SIZE, 0,
-		RELAX_CMODEL_ENCODE (TYPE_IS, CMODEL_SECTION_ENTRY_SIZE, 0),
+      #define DATA_LEN (8)
+      frag_grow (DATA_LEN);
+      frag_var (rs_machine_dependent, DATA_LEN, 0,
+		RELAX_CMODEL_ENCODE (TYPE_IS, DATA_LEN, 0),
 		ep->X_add_symbol, ep->X_add_number, NULL);
       /* #  */
       obj_elf_popsection (0); /* .popsection  */
@@ -2172,9 +2191,6 @@ pcrel_access (int destreg, int tempreg, expressionS *ep,
       strcpy (lo_pattern_ex, lo_pattern);
       strcat (lo_pattern_ex, ",C");
 
-      /* ensure following instructions continuous within the same frag.  */
-      frag_grow(4 * 5);
-
       /* index 0: argument, C: state, type, index, offset.  */
       index = CSI_INDIRECT_SYMBOL;
       macro_build (&ep_ind, "nop", "j,C", hi_reloc, 0, type, index, 0);
@@ -2185,6 +2201,7 @@ pcrel_access (int destreg, int tempreg, expressionS *ep,
 
       /* index 2: generic form, C: state, type, index, offset.  */
       index++; /* CSI_LARGE_CODE  */
+      frag_grow(4 * 3); /* ensure folloiwng instructions without frag bump.  */
       macro_build (&ep_ind, "auipc", "d,u,C", tempreg, hi_reloc, 1, type, index, 0);
       macro_build (&ep_ref, "ld", "d,s,j,C", tempreg, tempreg, hi_reloc, 1, type, index, 4);
       macro_build (ep, lo_insn, lo_pattern_ex, destreg, tempreg, lo_reloc, 0, type, index, 8);
@@ -2240,9 +2257,6 @@ static void
       ep_ref.X_add_number = 0;
       ep_ref.X_md = 0; /* for ICT logic within fix_new_exp */
 
-      /* ensure following instructions continuous within the same frag.  */
-      frag_grow(4 * 7);
-
       /* index 0: argument, C: state, type, index, offset.  */
       index = CSI_INDIRECT_SYMBOL;
       macro_build (&ep_ind, "nop", "j,C", reloc, 0, TYPE_JX, index, 0);
@@ -2253,12 +2267,14 @@ static void
 
       /* index 2: generic form, C: state, type, index, offset.  */
       index++; /* CSI_LARGE_CODE  */
+      frag_grow(4 * 3); /* ensure folloiwng instructions without frag bump.  */
       macro_build (&ep_ind, "auipc", "d,u,C", tempreg, reloc, 1, TYPE_JX, index, 0);
       macro_build (&ep_ref, "ld", "d,s,j,C", tempreg, tempreg, reloc, 1, TYPE_JX, index, 4);
       macro_build (ep, "jalr", "d,s,j,C", destreg, tempreg, reloc, 0, TYPE_JX, index, 8);
 
       /* index 3: relaxed form  */
       index++; /* CSI_DEFAULT_CODE  */
+      frag_grow(4 * 2); /* ensure folloiwng instructions without frag bump.  */
       macro_build (ep, "auipc", "d,u,C", tempreg, reloc, 1, TYPE_JX, index, 0);
       macro_build (ep, "jalr", "d,s,j,C", destreg, tempreg, reloc, 0, TYPE_JX, index, 4);
     }
@@ -5576,15 +5592,35 @@ md_convert_frag_cmodel (fragS *fragp, segT sec)
     {
     case TYPE_JX ... TYPE_ST:
       break;
+    case TYPE_ALIGN:
+      if (is_same_sec)
+	gas_assert (length == 0);
+      else
+	{ /* add relocation here now!  */
+	  gas_assert (length == 6);
+	  expressionS ex;
+	  ex.X_op = O_constant;
+	  ex.X_add_number = ALIGN_LEN;
+	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+		       0, &ex, FALSE, BFD_RELOC_RISCV_ALIGN);
+	}
+      break;
     case TYPE_IS:
       if (is_same_sec)
 	gas_assert (length == 0);
       else
-	{
-	  gas_assert (length == 8);
+	{  /* add relocation here now!  */
+	  gas_assert (length == CMODEL_SECTION_ENTRY_SIZE);
+	  /* SYM rela */
 	  reloc = BFD_RELOC_64;
 	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
 		       CMODEL_SECTION_ENTRY_SIZE, &exp, FALSE, reloc);
+	  /* _DATA */
+	  expressionS ex;
+	  ex.X_op = O_constant;
+	  ex.X_add_number = 0;
+	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal, 8,
+		       &ex, 0, BFD_RELOC_RISCV_DATA);
 	}
       break;
     default:
