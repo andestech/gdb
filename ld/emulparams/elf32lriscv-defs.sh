@@ -51,5 +51,6 @@ INITIAL_READONLY_SECTIONS="${RELOCATING+${CREATE_SHLIB-${INITIAL_READONLY_SECTIO
 # the address of variables in rodata may change during relaxation, so we start
 # from data in that case.
 OTHER_END_SYMBOLS="${CREATE_SHLIB-__BSS_END__ = .;
+    PROVIDE (_stack = 0x3000000);
     __global_pointer$ = MIN(__SDATA_BEGIN__ + 0x800,
 		            MAX(__DATA_BEGIN__ + 0x800, __BSS_END__ - 0x800));}"
