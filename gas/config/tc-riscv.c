@@ -5330,6 +5330,15 @@ riscv_init_frag (fragS * fragP, int max_chars)
     case rs_align_code:
       riscv_mapping_state (MAP_INSN, max_chars);
       break;
+    case rs_machine_dependent:
+      {
+	int type = RELAX_CMODEL_TYPE (fragP->fr_subtype);
+	int length = RELAX_CMODEL_LENGTH (fragP->fr_subtype);
+	if (type == TYPE_IS)
+	  riscv_mapping_state (MAP_DATA, length);
+	else if (type == TYPE_ALIGN)
+	  riscv_mapping_state (MAP_INSN, length);
+      }
     default:
       break;
     }
