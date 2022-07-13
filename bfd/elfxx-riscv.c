@@ -32,6 +32,18 @@
 
 #define MINUS_ONE ((bfd_vma)0 - 1)
 
+/* { Andes */
+static struct
+{
+  bool is_full_arch;
+  enum riscv_spec_class isa_spec;
+} nsta =
+{
+  .is_full_arch = false,
+  .isa_spec = ISA_SPEC_CLASS_NONE,
+};
+/* } Andes */
+
 /* Special handler for ADD/SUB relocations that allows them to be filled out
    both in the pre-linked and post-linked file.  This is necessary to make
    pre-linked debug info work, as due to linker relaxations we need to emit
@@ -1964,10 +1976,11 @@ riscv_add_subset (riscv_subset_list_t *subset_list,
 {
   riscv_subset_t *current, *new;
 
+  subset_list->last = NULL;
   if (riscv_lookup_subset (subset_list, subset, &current))
     return;
 
-  new = xmalloc (sizeof *new);
+  new = xcalloc (sizeof *new, 1);
   new->name = xstrdup (subset);
   new->major_version = major;
   new->minor_version = minor;
@@ -1986,6 +1999,8 @@ riscv_add_subset (riscv_subset_list_t *subset_list,
 
   if (new->next == NULL)
     subset_list->tail = new;
+
+  subset_list->last = new;
 }
 
 /* Get the default versions from the riscv_supported_*ext tables.  */
@@ -2069,6 +2084,8 @@ riscv_parse_add_subset (riscv_parse_subset_t *rps,
 
   riscv_add_subset (rps->subset_list, subset,
 		    major_version, minor_version);
+  if (implicit && rps->subset_list->last)
+    rps->subset_list->last->is_implicit = implicit;
 }
 
 /* Release subset list.  */
@@ -2583,6 +2600,28 @@ riscv_estimate_arch_strlen (const riscv_subset_list_t *subset_list)
   return riscv_estimate_arch_strlen1 (subset_list->head);
 }
 
+/* Andes implict ISA subset filter.  */
+
+static bool
+andes_is_hidden_implicit_subset (riscv_subset_t *sub)
+{
+  static const char *list[] = {"zv", "zfh", NULL};
+
+  if (!sub->is_implicit || nsta.is_full_arch
+      || nsta.isa_spec != ISA_SPEC_CLASS_2P2)
+    return false;
+
+  const char **pre = list;
+  while (*pre)
+    {
+      if (strncmp (sub->name, *pre, strlen (*pre)) == 0)
+        return true;
+      pre++;
+    }
+
+  return false;
+}
+
 /* Auxiliary function to convert subset info to string.  */
 
 static void
@@ -2613,6 +2652,7 @@ riscv_arch_str1 (riscv_subset_t *subset,
   while (subset_t->next
 	 && ((strcmp (subset_t->name, "e") == 0
 	      && strcmp (subset_t->next->name, "i") == 0)
+	     || andes_is_hidden_implicit_subset (subset_t->next)
 	     || subset_t->next->major_version == RISCV_UNKNOWN_VERSION
 	     || subset_t->next->minor_version == RISCV_UNKNOWN_VERSION))
     subset_t = subset_t->next;
@@ -2635,6 +2675,21 @@ riscv_arch_str (unsigned xlen, const riscv_subset_list_t *subset)
   free (buf);
 
   return attr_str;
+}
+
+char *
+riscv_arch_str_ext (unsigned xlen, const riscv_subset_list_t *subset,
+		    bool is_full_arch, enum riscv_spec_class spec)
+{
+  char *rz;
+  bool keep_arch = nsta.is_full_arch;
+  enum riscv_spec_class keep_spec = spec;
+  nsta.is_full_arch = is_full_arch;
+  nsta.isa_spec = spec;
+  rz = riscv_arch_str (xlen, subset);
+  nsta.is_full_arch = keep_arch;
+  nsta.isa_spec = keep_spec;
+  return rz;
 }
 
 /* Copy the subset in the subset list.  */

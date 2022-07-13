@@ -42,6 +42,7 @@ struct riscv_subset_t
   const char *name;
   int major_version;
   int minor_version;
+  bool is_implicit;
   struct riscv_subset_t *next;
 };
 
@@ -51,6 +52,7 @@ typedef struct
 {
   riscv_subset_t *head;
   riscv_subset_t *tail;
+  riscv_subset_t *last;
 } riscv_subset_list_t;
 
 extern void
@@ -91,6 +93,9 @@ riscv_release_subset_list (riscv_subset_list_t *);
 
 extern char *
 riscv_arch_str (unsigned, const riscv_subset_list_t *);
+extern char *
+riscv_arch_str_ext (unsigned, const riscv_subset_list_t *, bool,
+		    enum riscv_spec_class );
 
 extern size_t
 riscv_estimate_digit (unsigned);

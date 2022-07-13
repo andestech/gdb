@@ -338,6 +338,7 @@ struct riscv_set_options
   int b22827;
   int b22827_1;
   /* } workaround */
+  int full_arch;
   /* } Andes  */
 };
 
@@ -362,6 +363,7 @@ static struct riscv_set_options riscv_opts =
   0, /* b20282 */
   0, /* b22827 */
   0, /* b22827_1 */
+  0, /* full arch */
   /* } Andes  */
 };
 
@@ -423,6 +425,7 @@ riscv_set_arch (const char *s)
       riscv_subsets = XNEW (riscv_subset_list_t);
       riscv_subsets->head = NULL;
       riscv_subsets->tail = NULL;
+      riscv_subsets->last = NULL;
       riscv_rps_as.subset_list = riscv_subsets;
     }
   riscv_release_subset_list (riscv_subsets);
@@ -4380,6 +4383,7 @@ enum options
   OPTION_MB20282,
   OPTION_MB22827,
   OPTION_MB22827_1,
+  OPTION_FULL_ARCH,
   /* } Andes  */
   OPTION_END_OF_ENUM
 };
@@ -4418,6 +4422,7 @@ struct option md_longopts[] =
   {"mb20282", no_argument, NULL, OPTION_MB20282},
   {"mb22827", no_argument, NULL, OPTION_MB22827},
   {"mb22827.1", no_argument, NULL, OPTION_MB22827_1},
+  {"mfull-arch", no_argument, NULL, OPTION_FULL_ARCH},
   /* } Andes  */
 
   {NULL, no_argument, NULL, 0}
@@ -4610,6 +4615,10 @@ md_parse_option (int c, const char *arg)
       break;
     case OPTION_MB22827_1:
 	riscv_opts.b22827_1 = 1;
+      break;
+
+    case OPTION_FULL_ARCH:
+	riscv_opts.full_arch = 1;
       break;
 
     default:
@@ -6001,7 +6010,8 @@ riscv_write_out_attrs (void)
   unsigned int i;
 
   /* Re-write architecture elf attribute.  */
-  arch_str = riscv_arch_str (xlen, riscv_subsets);
+  arch_str = riscv_arch_str_ext (xlen, riscv_subsets,
+				 riscv_opts.full_arch, default_isa_spec);
   bfd_elf_add_proc_attr_string (stdoutput, Tag_RISCV_arch, arch_str);
   xfree ((void *) arch_str);
 
