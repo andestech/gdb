@@ -1290,7 +1290,11 @@ print_insn_riscv (bfd_vma memaddr, struct disassemble_info *info)
   /* Set the size to dump.  */
   if ((mstate == MAP_DATA
        && (info->flags & DISASSEMBLE_DATA) == 0)
-      || (info->stop_offset - memaddr) < 2)
+       /* odd byte as data.
+        * info->stop_offset=0 if invoked by gdb x/i
+	*/
+      || (info->stop_offset > memaddr
+	  && (info->stop_offset - memaddr) == 1))
     {
       dump_size = riscv_data_length (memaddr, info);
       info->bytes_per_chunk = dump_size;
