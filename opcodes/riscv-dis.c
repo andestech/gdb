@@ -1239,8 +1239,9 @@ print_insn_riscv (bfd_vma memaddr, struct disassemble_info *info)
   last_map_state = mstate;
 
   /* Set the size to dump.  */
-  if (mstate == MAP_DATA
-      && (info->flags & DISASSEMBLE_DATA) == 0)
+  if ((mstate == MAP_DATA
+       && (info->flags & DISASSEMBLE_DATA) == 0)
+      || (info->stop_offset - memaddr) < 2)
     {
       dump_size = riscv_data_length (memaddr, info);
       info->bytes_per_chunk = dump_size;
