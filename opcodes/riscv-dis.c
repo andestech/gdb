@@ -56,7 +56,14 @@ struct riscv_private_data
   bfd_vma gp;
   bfd_vma print_addr;
   bfd_vma hi_addr[OP_MASK_RD + 1];
+  /* { Andes */
+#define FLAG_EXECIT      (1u << 0)
+#define FLAG_EXECIT_TAB  (1u << 1)
+  bfd_vma flags;
+  /* } Andes */
 };
+
+typedef struct riscv_private_data private_data_t;
 
 /* Used for mapping symbols.  */
 static int last_map_symbol = -1;
@@ -112,6 +119,8 @@ riscv_execit_info (bfd_vma pc ATTRIBUTE_UNUSED,
   static asection *section = NULL;
   bfd_byte buffer[4];
   int insnlen;
+  private_data_t *pd = info->private_data;
+  bfd_vma keep;
 
   /* If no section info can be related to this exec.it insn, this may be just
      a uninitiated memory content, so not to decode it.  */
@@ -139,12 +148,15 @@ riscv_execit_info (bfd_vma pc ATTRIBUTE_UNUSED,
   insn = bfd_get_32 (section->owner, buffer);
   insnlen = riscv_insn_length (insn);
 
+  keep = pd->flags;
+  pd->flags |= FLAG_EXECIT;
   /* 16-bit instructions in .exec.itable.  */
   if (insnlen == 2)
     riscv_disassemble_insn (pc, (insn & 0x0000FFFF), info);
   /* 32-bit instructions in .exec.itable.  */
   else
     riscv_disassemble_insn (pc, insn, info);
+  pd->flags = keep;
 
   /* bytes_per_chunk is referred to dump insn binary after v2.32
      fix it here for exec.it.  */
@@ -701,8 +713,22 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 	  break;
 
 	case 'a':
-	  info->target = EXTRACT_JTYPE_IMM (l) + pc;
-	  (*info->print_address_func) (info->target, info);
+	  if (pd->flags & FLAG_EXECIT)
+	    { /* Check instruction in .exec.itable.  */
+	      info->target = EXTRACT_UJTYPE_IMM_EXECIT_TAB (l);
+	      info->target |= (pc & 0xffe00000);
+	      (*info->print_address_func) (info->target, info);
+	    }
+	  else if (pd->flags & FLAG_EXECIT_TAB)
+	    { /* Check if decode .exec.itable.  */
+	      info->target = EXTRACT_UJTYPE_IMM_EXECIT_TAB (l);
+	      print (info->stream, "PC(31,21)|#0x%lx", (long) info->target);
+	    }
+	  else
+	    {
+	      info->target = EXTRACT_JTYPE_IMM (l) + pc;
+	      (*info->print_address_func) (info->target, info);
+	    }
 	  break;
 
 	case 'p':
@@ -880,6 +906,14 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
     }
   else
     pd = info->private_data;
+
+  /* { Andes */
+  if (info->section
+      && strstr (info->section->name, ".exec.itable") != NULL)
+    pd->flags |= FLAG_EXECIT_TAB;
+  else
+    pd->flags &= ~FLAG_EXECIT_TAB;
+  /* } Andes */
 
   insnlen = riscv_insn_length (word);
 
