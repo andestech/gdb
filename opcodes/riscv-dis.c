@@ -76,12 +76,16 @@ static int no_prefer;
 
 /* { Andes  */
 typedef bool (*has_subset_fun_t) (enum riscv_insn_class);
+
+#if 0
 static bool has_rvc(enum riscv_insn_class k)
 {
   return ((k == INSN_CLASS_C)
 	  || (k == INSN_CLASS_F_AND_C)
 	  || (k == INSN_CLASS_D_AND_C));
 }
+#endif
+
 static bool has_rvp(enum riscv_insn_class k)
 {
   return (k == INSN_CLASS_P);
@@ -95,7 +99,11 @@ andes_find_op_of_subset (has_subset_fun_t has_subset,
 			 const struct riscv_opcode **hash,
 			 insn_t word,
 			 const struct riscv_opcode **pop);
-
+static bool
+andes_find_op_name_match (const char *mne,
+			  insn_t match,
+			  const riscv_opcode_t **hash,
+			  const riscv_opcode_t **pop);
 static void
 riscv_execit_info (bfd_vma pc ATTRIBUTE_UNUSED,
 		   disassemble_info *info, uint32_t execit_index)
@@ -913,10 +921,17 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
       while (!no_prefer)
 	{
 	  /* RVC has non-canonical aliases within riscv_opcodes[].  */
-	  if (has_c && andes_find_op_of_subset (has_rvc, 1, riscv_hash,
-				       word, &op2)) break;
-	  if (has_p && andes_find_op_of_subset (has_rvp, no_aliases, riscv_hash,
-				       word, &op2)) break;
+	  if (insnlen == 2 && has_c
+	      && andes_find_op_name_match ("c.unimp", 0, riscv_hash, &op2))
+	    break;
+	#if 0
+	  if (insnlen == 2 && has_c
+	      && andes_find_op_of_subset (has_rvc, 1, riscv_hash,
+					  word, &op2)) break;
+	#endif
+	  if (insnlen == 4 && has_p
+	      && andes_find_op_of_subset (has_rvp, no_aliases, riscv_hash,
+					  word, &op2)) break;
 	  break; /* once */
 	}
       op = op2 ? op2 : op;
@@ -1657,6 +1672,33 @@ andes_find_op_of_subset (has_subset_fun_t has_subset,
 	continue;
       if ((op->xlen_requirement != 0) && (op->xlen_requirement != xlen))
 	continue;
+      is_found = true;
+      *pop = op;
+      break;
+    }
+
+  return is_found;
+}
+
+static bool
+andes_find_op_name_match (const char *mne,
+			  insn_t match,
+			  const riscv_opcode_t **hash,
+			  const riscv_opcode_t **pop)
+{
+  bool is_found = false;
+  const riscv_opcode_t *op;
+
+  op = hash[OP_HASH_IDX (match)];
+  for (; op->name; op++)
+    {
+      if ((op->xlen_requirement != 0) && (op->xlen_requirement != xlen))
+	continue;
+      if (op->match != match)
+	continue;
+      if (strcmp (op->name, mne) != 0)
+	continue;
+
       is_found = true;
       *pop = op;
       break;

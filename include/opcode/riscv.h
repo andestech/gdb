@@ -597,6 +597,8 @@ struct riscv_opcode
   unsigned long pinfo;
 };
 
+typedef struct riscv_opcode riscv_opcode_t;
+
 /* Instruction is a simple alias (e.g. "mv" for "addi").  */
 #define	INSN_ALIAS		0x00000001
 
