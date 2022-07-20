@@ -9473,7 +9473,9 @@ execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int 
     case INSN_CLASS_XANDES:
       return execute_andes(cpu, iw, op, ex9);
     case INSN_CLASS_F_AND_ZFH:
+    case INSN_CLASS_F_AND_ZFHMIN:
     case INSN_CLASS_D_AND_ZFH:
+    case INSN_CLASS_D_AND_ZFHMIN:
       return execute_zfh (cpu, iw, op, ex9);
     case INSN_CLASS_ZBA:
     case INSN_CLASS_ZBB:
