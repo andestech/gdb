@@ -135,7 +135,17 @@ proc test_float_accepted {} {
 	0x00.1p1 0.125
 	0x00.1p-1 0.03125
     } {
-	gdb_test "p $num" " = [string_to_regexp $result]"
+#	gdb_test "p $num" " = [string_to_regexp $result]"
+
+	gdb_test_multiple "p $num" "p $num" {
+	-re " = [string_to_regexp $result]\r\n$gdb_prompt $" {
+	    pass "p $num"
+	}
+	-re "Invalid number.*$gdb_prompt $" {
+	    # Older glibc does not support hex float, newer does.
+	    xfail "p $num"
+	}
+	}
     }
 }
 
