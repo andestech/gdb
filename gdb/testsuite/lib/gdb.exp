@@ -2143,6 +2143,9 @@ proc default_gdb_start { } {
 	-re "\[\r\n\]$gdb_prompt $" {
 	    verbose "GDB initialized."
 	}
+	-re "\[\r\n\].*m$gdb_prompt $" {
+	    verbose "GDB initialized."
+	}
 	-re "$gdb_prompt $"	{
 	    perror "GDB never initialized."
 	    unset gdb_spawn_id
