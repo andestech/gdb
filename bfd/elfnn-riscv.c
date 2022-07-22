@@ -6801,40 +6801,57 @@ record_and_find_relax_gp_syms (asection *sec,
 
 static bool
 _bfd_riscv_relax_lui_gp_insn (bfd *abfd, asection *sec, asection *sym_sec,
-			      struct bfd_link_info *link_info,
+			      struct bfd_link_info *info,
 			      Elf_Internal_Rela *rel,
 			      bfd_vma symval,
 			      bfd_vma max_alignment,
 			      bfd_vma reserve_size,
 			      bool *again ATTRIBUTE_UNUSED,
 			      riscv_pcgp_relocs *pcgp_relocs ATTRIBUTE_UNUSED,
-			      bool undefined_weak ATTRIBUTE_UNUSED)
+			      bool undefined_weak)
 {
   bfd_byte *contents = elf_section_data (sec)->this_hdr.contents;
-  bfd_vma gp = riscv_global_pointer_value (link_info);
-  bfd_vma data_start = riscv_data_start_value (link_info);
+  bfd_vma gp = riscv_global_pointer_value (info);
+  bfd_vma data_start = riscv_data_start_value (info);
   Elf_Internal_Shdr *symtab_hdr = &elf_symtab_hdr (abfd);
   Elf_Internal_Sym *isym = NULL;
   struct elf_link_hash_entry *h = NULL;
+  struct riscv_elf_link_hash_table *htab = riscv_elf_hash_table (info);
+  andes_ld_options_t *andes = &htab->andes;
+  bfd_vma guard_size = 0;
+  bfd_signed_vma effect_range;
 
+#if 0
+  bfd_vma data_start = riscv_data_start_value (info);
   /* Mergeable symbols and code might later move out of range.  */
   /* For bug-14274, symbols defined in the .rodata (the sections
      before .data, may also later move out of range.  */
   if (sym_sec->flags & (SEC_MERGE | SEC_CODE)
       || (data_start && sec_addr (sym_sec) < data_start))
     return true;
+#endif
 
   BFD_ASSERT (rel->r_offset + 4 <= sec->size);
 
+  if (undefined_weak)
+    return true; /* bypass to original handling  */
+
+  /* For bug-14274, symbols defined in the .rodata (the sections
+     before .data, may also later move out of range.  */
+  /* reserved one page size in worst case
+     or two (refer to riscv_relax_lui_to_rvc)  */
+  if ((data_start == 0) || (sec_addr (sym_sec) < data_start))
+    guard_size += info->relro ? andes->set_relax_page_size * 2
+				   : andes->set_relax_page_size;
   if (gp)
     {
-      /* If gp and the symbol are in the same output section, then
-	 consider only that section's alignment.  */
+      /* If gp and the symbol are in the same output section, which is not the
+	 abs section, then consider only that output section's alignment.  */
       struct bfd_link_hash_entry *hh =
-	bfd_link_hash_lookup (link_info->hash, RISCV_GP_SYMBOL, false, false,
-			      true);
-      if (hh->u.def.section->output_section == sym_sec->output_section)
-	max_alignment = 1u << sym_sec->output_section->alignment_power;
+	bfd_link_hash_lookup (info->hash, RISCV_GP_SYMBOL, false, false, true);
+      if (hh->u.def.section->output_section == sym_sec->output_section
+	  && sym_sec->output_section != bfd_abs_section_ptr)
+	max_alignment = (bfd_vma) 1 << sym_sec->output_section->alignment_power;
     }
 
   /* FIXME: Since we do not have grouping mechanism like v3, we may
@@ -6872,10 +6889,13 @@ _bfd_riscv_relax_lui_gp_insn (bfd *abfd, asection *sec, asection *sym_sec,
   int do_replace = 0;
   uint32_t insn = bfd_get_32 (abfd, contents + rel->r_offset);
   /* For Bug-16488, check if gp-relative offset is in range.  */
-  if ((symval >= gp
-       && (symval - gp + max_alignment + reserve_size) < 0x20000)
-      || (symval < gp
-	  && (gp - symval + max_alignment + reserve_size) <= 0x20000))
+  const int max_range = 0x20000;
+  guard_size += max_alignment + reserve_size;
+  effect_range = max_range - guard_size;
+  if (effect_range < 0)
+    return true; /* out of range */
+  if (((symval >= gp) && ((symval - gp) < (bfd_vma) effect_range)) ||
+      ((symval < gp) && ((gp - symval) <= (bfd_vma) effect_range)))
     {
       do_replace = 1;
       unsigned sym = ELFNN_R_SYM (rel->r_info);
@@ -6888,85 +6908,8 @@ _bfd_riscv_relax_lui_gp_insn (bfd *abfd, asection *sec, asection *sym_sec,
 	  return true;
 	}
       else
-	{
-	  /* For Bug-16488, we don not need to consider max_alignment and
-	     reserve_size here, since they may cause the alignment checking
-	     fail.  */
-	  if ((insn & MASK_ADDI) == MATCH_ADDI
-	      && VALID_GPTYPE_LB_IMM (symval - gp))
-	    {
-	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP18S0);
-	      insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_ADDIGP;
-	    }
-	  else if ((insn & MASK_LB) == MATCH_LB
-		   && VALID_GPTYPE_LB_IMM (symval - gp))
-	    {
-	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP18S0);
-	      insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LBGP;
-	    }
-	  else if ((insn & MASK_LBU) == MATCH_LBU
-		   && VALID_GPTYPE_LB_IMM (symval - gp))
-	    {
-	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP18S0);
-	      insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LBUGP;
-	    }
-	  else if ((insn & MASK_LH) == MATCH_LH
-		   && VALID_GPTYPE_LH_IMM (symval - gp))
-	    {
-	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S1);
-	      insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LHGP;
-	    }
-	  else if ((insn & MASK_LHU) == MATCH_LHU
-		   && VALID_GPTYPE_LH_IMM (symval - gp))
-	    {
-	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S1);
-	      insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LHUGP;
-	    }
-	  else if ((insn & MASK_LW) == MATCH_LW
-		   && VALID_GPTYPE_LW_IMM (symval - gp))
-	    {
-	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S2);
-	      insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LWGP;
-	    }
-	  else if ((insn & MASK_LWU) == MATCH_LWU
-		   && VALID_GPTYPE_LW_IMM (symval - gp))
-	    {
-	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S2);
-	      insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LWUGP;
-	    }
-	  else if ((insn & MASK_LD) == MATCH_LD
-		   && VALID_GPTYPE_LD_IMM (symval - gp))
-	    {
-	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S3);
-	      insn = (insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LDGP;
-	    }
-	  else if ((insn & MASK_SB) == MATCH_SB
-		   && VALID_GPTYPE_SB_IMM (symval - gp))
-	    {
-	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_SGP18S0);
-	      insn = (insn & (OP_MASK_RS2 << OP_SH_RS2)) | MATCH_SBGP;
-	    }
-	  else if ((insn & MASK_SH) == MATCH_SH
-		   && VALID_GPTYPE_SH_IMM (symval - gp))
-	    {
-	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_SGP17S1);
-	      insn = (insn & (OP_MASK_RS2 << OP_SH_RS2)) | MATCH_SHGP;
-	    }
-	  else if ((insn & MASK_SW) == MATCH_SW
-		   && VALID_GPTYPE_SW_IMM (symval - gp))
-	    {
-	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_SGP17S2);
-	      insn = (insn & (OP_MASK_RS2 << OP_SH_RS2)) | MATCH_SWGP;
-	    }
-	  else if ((insn & MASK_SD) == MATCH_SD
-		   && VALID_GPTYPE_SD_IMM (symval - gp))
-	    {
-	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_SGP17S3);
-	      insn = (insn & (OP_MASK_RS2 << OP_SH_RS2)) | MATCH_SDGP;
-	    }
-	  else
-	    do_replace = 0;
-	}
+	do_replace = andes_relax_gp_insn (&insn, rel, symval - gp,
+					  sym, sym_sec);
 
       if (do_replace)
 	bfd_put_32 (abfd, insn, contents + rel->r_offset);
