@@ -6318,6 +6318,42 @@ riscv_insert_relax_entry (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
   fixp->fx_no_overflow = 1;
 }
 
+static void
+andes_trim_seg_end_padding (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
+			    void *xxx ATTRIBUTE_UNUSED)
+{
+  segment_info_type *seginfo;
+  frchainS *frch;
+  struct frag *fragP;
+  bfd_signed_vma size;
+
+  seginfo = seg_info (sec);
+  if (!seginfo || !symbol_rootP || !subseg_text_p (sec) || sec->size == 0)
+    return;
+
+  subseg_change (sec, 0);
+
+  /* tag segment pading zeros.  */
+  frch = seginfo->frchainP;
+  for (fragP = frch->frch_root; fragP; fragP = fragP->fr_next)
+    {
+      struct frag *next = fragP->fr_next;
+      if (!next || next->fr_next)
+	continue;
+
+      gas_assert (fragP->fr_type == rs_fill
+		  && next->fr_type == rs_fill && next->fr_fix == 0);
+
+      size = fragP->fr_var * fragP->fr_offset;
+      sec->size -= size;
+      fragP->fr_offset = 0;
+      /* mapping symbol check needs next frag there.  */
+      fragP->fr_next->fr_address -= size;
+      fragP->fr_next->last_fr_address -= size;
+      break;
+    }
+}
+
 void
 riscv_post_relax_hook (void)
 {
@@ -6326,6 +6362,7 @@ riscv_post_relax_hook (void)
   bfd_map_over_sections (stdoutput, riscv_final_no_rvc_region, NULL);
   bfd_map_over_sections (stdoutput, riscv_final_no_execit_region, NULL);
   bfd_map_over_sections (stdoutput, riscv_insert_relax_entry, NULL);
+  bfd_map_over_sections (stdoutput, andes_trim_seg_end_padding, NULL);
 }
 
 /* Insert relocations to mark the region that can not do EXECIT relaxation.  */
