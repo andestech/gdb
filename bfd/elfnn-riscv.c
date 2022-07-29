@@ -8523,10 +8523,12 @@ riscv_elf_encode_relocation (bfd *abfd,
   switch (ELFNN_R_TYPE (irel->r_info))
     {
     case R_RISCV_HI20:
-    case R_RISCV_PCREL_HI20:
     case R_RISCV_CALL:
       if (ARCH_SIZE > 32 && !VALID_UTYPE_IMM (RISCV_CONST_HIGH_PART (relocation)))
 	return 0;
+      relocation = ENCODE_UTYPE_IMM (RISCV_CONST_HIGH_PART (relocation));
+      break;
+    case R_RISCV_PCREL_HI20:
       relocation = ENCODE_UTYPE_IMM (RISCV_CONST_HIGH_PART (relocation));
       break;
     case R_RISCV_LO12_I:
