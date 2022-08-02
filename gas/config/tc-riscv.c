@@ -4408,15 +4408,16 @@ struct option md_longopts[] =
 
   /* { Andes  */
   {"mno-16-bit", no_argument, NULL, OPTION_NO_16_BIT},
+  {"matomic", no_argument, NULL, OPTION_MATOMIC},
+  {"mace", required_argument, NULL, OPTION_ACE},
   {"O1", no_argument, NULL, OPTION_OPTIMIZE},
   {"Os", no_argument, NULL, OPTION_OPTIMIZE_SPACE},
+  {"mext-dsp", no_argument, NULL, OPTION_MEXT_DSP},
+  /* hidden options */
+  {"mext-efhw", no_argument, NULL, OPTION_MEXT_EFHW},
+  {"mext-vector", no_argument, NULL, OPTION_MEXT_VECTOR},
   {"mcmodel", required_argument, NULL, OPTION_MCMODEL},
   {"mict-model", required_argument, NULL, OPTION_MICT_MODEL},
-  {"mace", required_argument, NULL, OPTION_ACE},
-  {"matomic", no_argument, NULL, OPTION_MATOMIC},
-  {"mext-dsp", no_argument, NULL, OPTION_MEXT_DSP},
-  {"mext-vector", no_argument, NULL, OPTION_MEXT_VECTOR},
-  {"mext-efhw", no_argument, NULL, OPTION_MEXT_EFHW},
   {"mno-workaround", no_argument, NULL, OPTION_MNO_WORKAROUND},
   {"mno-b19758", no_argument, NULL, OPTION_MNO_B19758},
   {"mb20282", no_argument, NULL, OPTION_MB20282},
@@ -5873,29 +5874,32 @@ RISC-V options:\n\
   -mlittle-endian             assemble for little-endian\n\
 "));
 
-  char *var = getenv("ANDES_HELP");
-  if (var)
-    {
-      fprintf (stream, _("\
-Andes options:\n\
+  /* Andes explicit options */
+  fprintf (stream, _("\n\
+NDS specific command line options:\n\
   -mno-16-bit                 don't generate rvc instructions\n\
   -matomic                    enable atomic extension\n\
   -mace                       support user defined instruction extension\n\
   -O1                         optimize for performance\n\
   -Os                         optimize for space\n\
   -mext-dsp                   enable dsp extension\n\
+"));
+
+  /* Andes hidden options */
+  char *var = getenv("ANDES_HELP");
+  if (var)
+    {
+      fprintf (stream, _("\
   -mext-efhw                  enable efhw extension\n\
   -mext-vector                enable vector extension\n\
-  -mexecit-noji               disable execit relaxation for jump instructions\n\
-  -mexecit-nols               disable execit relaxation for load/store instructions\n\
-  -mexecit-norel              disable execit relaxation for instructions with reloaction\n\
   -mcmodel=TYPE               set cmodel type\n\
-  -mace                       support user defined instruction extension\n\
-  -matomic                    enable atomic extension\n\
-  -mext-dsp                   enable RVP (DSP) extension\n\
-  -mext-vector                enable RVV (vector) extension\n\
-  -mext-efhw                  enable efhw extension\n\
+  -mict-model=TYPE            set ICT model type\n\
   -mno-workaround             disable all workarounds\n\
+  -mno-b19758                 disable workaround b19758\n\
+  -mb20282                    enable workaround b20282\n\
+  -mb22827                    enable workaround b22827\n\
+  -mb22827.1                  enable workaround b22827.1\n\
+  -mfull-arch                 disable arch attribute suppression\n\
 "));
     }
 }
