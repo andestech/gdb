@@ -150,7 +150,7 @@ proc test_watchpoint_all {mi_mode type} {
     } else {
 	set start_ops ""
     }
-    gdb_exit
+
     if [mi_gdb_start $start_ops] {
 	return
     }

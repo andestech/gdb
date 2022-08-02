@@ -61,6 +61,16 @@ proc mi_uncatched_gdb_exit {} {
     global mi_gdb_prompt
     global MIFLAGS
 
+    # Switch back to the main spawn id, so that remote_close below
+    # closes it, and not a secondary channel.  Closing a secondary
+    # channel does not make GDB exit.
+
+    # do it switch_gdb_spawn_id() before sid_exit()
+    # because remote_close host in sid_exit()
+    if {$gdb_spawn_id != $gdb_main_spawn_id} {
+        switch_gdb_spawn_id $gdb_main_spawn_id
+    }
+
     if { [info procs sid_exit] != "" } {
 	sid_exit
     }
@@ -85,13 +95,6 @@ proc mi_uncatched_gdb_exit {} {
 	    -re "DOSEXIT code" { }
 	    default { }
 	}
-    }
-
-    # Switch back to the main spawn id, so that remote_close below
-    # closes it, and not a secondary channel.  Closing a secondary
-    # channel does not make GDB exit.
-    if {$gdb_spawn_id != $gdb_main_spawn_id} {
-	switch_gdb_spawn_id $gdb_main_spawn_id
     }
 
     # Close secondary MI channel, if there's one.
