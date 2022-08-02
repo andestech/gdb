@@ -305,8 +305,8 @@ PARSE_AND_LIST_PROLOGUE='
 #define OPTION_NO_RELAX_PC		(OPTION_INTERNAL_BASELINE + 8)
 #define OPTION_NO_RELAX_CALL		(OPTION_INTERNAL_BASELINE + 9)
 #define OPTION_NO_RELAX_TLS_LE		(OPTION_INTERNAL_BASELINE + 10)
-#define OPTION_RELAX_CROSS_SECTION_CALL		(OPTION_INTERNAL_BASELINE + 11)
-#define OPTION_NO_RELAX_CROSS_SECTION_CALL		(OPTION_INTERNAL_BASELINE + 12)
+#define OPTION_RELAX_CROSS_SECTION_CALL	(OPTION_INTERNAL_BASELINE + 11)
+#define OPTION_NO_RELAX_CROSS_SECTION_CALL	(OPTION_INTERNAL_BASELINE + 12)
 #define OPTION_NO_WORKAROUND		(OPTION_INTERNAL_BASELINE + 13)
 
 /* These are only available to EXECIT.  */
@@ -341,12 +341,10 @@ PARSE_AND_LIST_PROLOGUE='
 #define OPTION_EXECIT_OPT_RODATA	(OPTION_LLD_COMPATIBLE_BASELINE + 3)
 #define OPTION_EXECIT_SEPERATE_CALL	(OPTION_LLD_COMPATIBLE_BASELINE + 4)
 #define OPTION_RELAX_GP_TO_RODATA	(OPTION_LLD_COMPATIBLE_BASELINE + 5)
-/*#define OPTION_RELAX_CROSS_SECTION_CALL	(OPTION_LLD_COMPATIBLE_BASELINE + 6) implemented */
-#define OPTION_DEBUG_EXECIT_LIMIT	(OPTION_LLD_COMPATIBLE_BASELINE + 7)
-#define OPTION_NO_EXECIT_AUIPC		(OPTION_LLD_COMPATIBLE_BASELINE + 8)
-#define OPTION_NO_EXECIT_LUI		(OPTION_LLD_COMPATIBLE_BASELINE + 9)
-#define OPTION_ALLOW_INCOMPATIBLE_ATTR	(OPTION_LLD_COMPATIBLE_BASELINE + 10)
-#define OPTION_FULL_SHUTDOWN		(OPTION_LLD_COMPATIBLE_BASELINE + 11)
+#define OPTION_DEBUG_EXECIT_LIMIT	(OPTION_LLD_COMPATIBLE_BASELINE + 6)
+#define OPTION_NO_EXECIT_LUI		(OPTION_LLD_COMPATIBLE_BASELINE + 7)
+#define OPTION_ALLOW_INCOMPATIBLE_ATTR	(OPTION_LLD_COMPATIBLE_BASELINE + 8)
+#define OPTION_FULL_SHUTDOWN		(OPTION_LLD_COMPATIBLE_BASELINE + 9)
 '
 
 PARSE_AND_LIST_LONGOPTS='
@@ -381,7 +379,7 @@ PARSE_AND_LIST_LONGOPTS='
   { "mexecit-nols", no_argument, NULL, OPTION_EXECIT_NO_LS},
   { "mexecit-norel", no_argument, NULL, OPTION_EXECIT_NO_REL},
   { "mno-execit-jal", no_argument, NULL, OPTION_EXECIT_NO_JI},
-  { "mexecit-no-auipc", no_argument, NULL, OPTION_EXECIT_NO_AUIPC},
+  { "mno-execit-auipc", no_argument, NULL, OPTION_EXECIT_NO_AUIPC},
   { "mexecit-jal-over-2mib", no_argument, NULL, OPTION_EXECIT_JAL_OVER_2M},
   { "mno-execit-jal-over-2mib", no_argument, NULL, OPTION_NO_EXECIT_JAL_OVER_2M},
   { "mexecit-rvv", no_argument, NULL, OPTION_EXECIT_RVV},
@@ -408,7 +406,6 @@ PARSE_AND_LIST_LONGOPTS='
   { "mexecit_opt_seperate_call", no_argument, NULL, OPTION_EXECIT_SEPERATE_CALL},
   { "mrelax-gp-to-rodata", no_argument, NULL, OPTION_RELAX_GP_TO_RODATA},
   { "mdebug-execit-limit", required_argument, NULL, OPTION_DEBUG_EXECIT_LIMIT},
-  { "mno-execit-auipc", no_argument, NULL, OPTION_NO_EXECIT_AUIPC},
   { "mno-execit-lui", no_argument, NULL, OPTION_NO_EXECIT_LUI},
   { "mallow-incompatible-attributes", no_argument, NULL, OPTION_ALLOW_INCOMPATIBLE_ATTR},
   {"full-shutdown", no_argument, NULL, OPTION_FULL_SHUTDOWN},
@@ -430,11 +427,18 @@ fprintf (file, _("\
     --mupdate-execit            Update existing .exec.itable\n\
     --mexecit-limit=NUM         Set maximum number of entries in .exec.itable for this times\n\
     --mexecit-loop-aware        Avoid generate exec.it instruction inside loop\n\
+"));
+
+  char *var = getenv("ANDES_HELP");
+  if (var)
+    {
+      fprintf (file, _("\
     --mexecit-rvv               Enable exec.it of RVV\n\
     --mexecit-fls               Enable exec.it of floating load/store\n\
     --mexecit-rvp               Enable exec.it of RVP\n\
     --mexecit-xdsp              Enable exec.it of XDSP\n\
 "));
+    }
 #endif
 '
 
@@ -592,7 +596,6 @@ PARSE_AND_LIST_ARGS_CASES='
   case OPTION_EXECIT_OPT_RODATA:
   case OPTION_EXECIT_SEPERATE_CALL:
   case OPTION_RELAX_GP_TO_RODATA:
-  case OPTION_NO_EXECIT_AUIPC:
   case OPTION_NO_EXECIT_LUI:
   case OPTION_ALLOW_INCOMPATIBLE_ATTR:
   case OPTION_FULL_SHUTDOWN:
@@ -603,7 +606,7 @@ PARSE_AND_LIST_ARGS_CASES='
 LDEMUL_BEFORE_ALLOCATION=riscv_elf_before_allocation
 LDEMUL_AFTER_ALLOCATION=gld${EMULATION_NAME}_after_allocation
 LDEMUL_CREATE_OUTPUT_SECTION_STATEMENTS=riscv_create_output_section_statements
-/* { Andes */
+# /* { Andes */
 LDEMUL_AFTER_OPEN=riscv_elf_after_open
 LDEMUL_AFTER_CHECK_RELOCS=riscv_elf_after_check_relocs
-/* } Andes */
+# /* } Andes */
