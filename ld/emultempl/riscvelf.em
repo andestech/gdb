@@ -21,7 +21,8 @@
 # default value for set_relax_cross_section_call: 0/elf, 1/linux
 # hack: by referring GENERATE_SHLIB_SCRIPT within
 #       ld/emulparams/elf32lriscv-defs.sh
-D4_RCSC=$(test -n "$GENERATE_SHLIB_SCRIPT" && echo 1 || echo 0)
+# D4_RCSC=$(test -n "$GENERATE_SHLIB_SCRIPT" && echo 1 || echo 0)
+D4_RCSC=0 # default off for both elf/linux tool-chain
 
 fragment <<EOF
 
