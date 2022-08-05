@@ -8361,11 +8361,31 @@ andes_execit_relocate_itable (struct bfd_link_info *link_info)
 		| riscv_elf_encode_relocation (abfd, &rel_backup, relocation);
 	      bfd_put_32 (abfd, insn, contents + (he->ie.itable_index) * 4);
 	    }
-	  else if (rtype == R_RISCV_GPREL_I || rtype == R_RISCV_GPREL_S)
+	  else if (rtype == R_RISCV_GPREL_I)
 	    {
-	      relocation = riscv_elf_execit_reloc_insn (&he->ie, link_info) - gp;
 	      insn = insn_with_reg & ~(OP_MASK_RS1 << OP_SH_RS1);
-	      insn |= X_GP << OP_SH_RS1;
+	      relocation = riscv_elf_execit_reloc_insn (&he->ie, link_info);
+	      if (!VALID_ITYPE_IMM (relocation)
+		  && VALID_ITYPE_IMM (relocation - gp))
+		{
+		  relocation -= gp;
+		  insn |= X_GP << OP_SH_RS1;
+		}
+	      else BFD_ASSERT (0);
+	      insn |= riscv_elf_encode_relocation (abfd, &rel_backup, relocation);
+	      bfd_put_32 (abfd, insn, contents + (he->ie.itable_index) * 4);
+	    }
+	  else if (rtype == R_RISCV_GPREL_S)
+	    {
+	      insn = insn_with_reg & ~(OP_MASK_RS1 << OP_SH_RS1);
+	      relocation = riscv_elf_execit_reloc_insn (&he->ie, link_info);
+	      if (!VALID_STYPE_IMM (relocation)
+		  && VALID_STYPE_IMM (relocation - gp))
+		{
+		  relocation -= gp;
+		  insn |= X_GP << OP_SH_RS1;
+		}
+	      else BFD_ASSERT (0);
 	      insn |= riscv_elf_encode_relocation (abfd, &rel_backup, relocation);
 	      bfd_put_32 (abfd, insn, contents + (he->ie.itable_index) * 4);
 	    }
