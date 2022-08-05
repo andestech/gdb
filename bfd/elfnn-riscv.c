@@ -9242,18 +9242,34 @@ andes_relax_pc_gp_insn (
   return true;
 }
 
+#define MIN(a, b) (a) < (b) ? (a) : (b)
+static int
+andes_min_p2align (Elf_Internal_Rela *rel, asection *sec)
+{
+  int limit = MIN (3, sec->alignment_power);
+  int i;
+  for (i = 0; i < limit; ++i)
+    {
+      uint m = 1u << i;
+      if (rel && rel->r_addend & m) break;
+      if (sec)
+	{
+	  if (sec->output_section->vma & m) break;
+	  if (sec->output_section->output_offset & m) break;
+	}
+    }
+
+  return i;
+}
+
 static int
 andes_relax_gp_insn (uint32_t *insn, Elf_Internal_Rela *rel,
 		     bfd_signed_vma bias, int sym, asection *sym_sec)
 {
-  int is_code = 0;
+  /* symbols are not necessary aligned to data lenght.
+     worst alignment is picked.  */
+  int worst_p2alig = andes_min_p2align (rel, sym_sec);
   int type = ELFNN_R_TYPE (rel->r_info);
-
-
-  /* symbols within code sections are not necessary aligned to data lenght.
-     byte-align presumed  */
-  if (sym_sec->flags & SEC_CODE)
-    is_code = 1;
 
   /* For Bug-16488, we don not need to consider max_alignment and
   reserve_size here, since they may cause the alignment checking
@@ -9274,31 +9290,31 @@ andes_relax_gp_insn (uint32_t *insn, Elf_Internal_Rela *rel,
       *insn = (*insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LBUGP;
     }
   else if ((*insn & MASK_LH) == MATCH_LH && VALID_GPTYPE_LH_IMM (bias)
-	   && !is_code)
+	   && worst_p2alig > 0)
     {
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S1);
       *insn = (*insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LHGP;
     }
   else if ((*insn & MASK_LHU) == MATCH_LHU && VALID_GPTYPE_LH_IMM (bias)
-	   && !is_code)
+	   && worst_p2alig > 0)
     {
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S1);
       *insn = (*insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LHUGP;
     }
   else if ((*insn & MASK_LW) == MATCH_LW && VALID_GPTYPE_LW_IMM (bias)
-	   && !is_code)
+	   && worst_p2alig > 1)
     {
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S2);
       *insn = (*insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LWGP;
     }
   else if ((*insn & MASK_LWU) == MATCH_LWU && VALID_GPTYPE_LW_IMM (bias)
-	   && !is_code)
+	   && worst_p2alig > 1)
     {
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S2);
       *insn = (*insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LWUGP;
     }
   else if ((*insn & MASK_LD) == MATCH_LD && VALID_GPTYPE_LD_IMM (bias)
-	   && !is_code)
+	   && worst_p2alig > 2)
     {
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S3);
       *insn = (*insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LDGP;
@@ -9309,19 +9325,19 @@ andes_relax_gp_insn (uint32_t *insn, Elf_Internal_Rela *rel,
       *insn = (*insn & (OP_MASK_RS2 << OP_SH_RS2)) | MATCH_SBGP;
     }
   else if ((*insn & MASK_SH) == MATCH_SH && VALID_GPTYPE_SH_IMM (bias)
-	   && !is_code)
+	   && worst_p2alig > 0)
     {
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_SGP17S1);
       *insn = (*insn & (OP_MASK_RS2 << OP_SH_RS2)) | MATCH_SHGP;
     }
   else if ((*insn & MASK_SW) == MATCH_SW && VALID_GPTYPE_SW_IMM (bias)
-	   && !is_code)
+	   && worst_p2alig > 1)
     {
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_SGP17S2);
       *insn = (*insn & (OP_MASK_RS2 << OP_SH_RS2)) | MATCH_SWGP;
     }
   else if ((*insn & MASK_SD) == MATCH_SD && VALID_GPTYPE_SD_IMM (bias)
-	   && !is_code)
+	   && worst_p2alig > 2)
     {
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_SGP17S3);
       *insn = (*insn & (OP_MASK_RS2 << OP_SH_RS2)) | MATCH_SDGP;
@@ -9331,7 +9347,7 @@ andes_relax_gp_insn (uint32_t *insn, Elf_Internal_Rela *rel,
     {
       if (((*insn & MASK_FLH) == MATCH_FLH || (*insn & MASK_FLW) == MATCH_FLW
 	   || (*insn & MASK_FLD) == MATCH_FLD) && VALID_ITYPE_IMM (bias)
-	   && !is_code)
+	   && worst_p2alig > 1)
 	{
 	  if (type == R_RISCV_PCREL_LO12_I)
 	    rel->r_info = ELFNN_R_INFO (sym, type);
@@ -9340,7 +9356,7 @@ andes_relax_gp_insn (uint32_t *insn, Elf_Internal_Rela *rel,
 	}
       else if (((*insn & MASK_FSH) == MATCH_FSH || (*insn & MASK_FSW) == MATCH_FSW
 		|| (*insn & MASK_FSD) == MATCH_FSD) && VALID_STYPE_IMM (bias)
-	       && !is_code)
+	       && worst_p2alig > 1)
 	{
 	  if (type == R_RISCV_PCREL_LO12_S)
 	    rel->r_info = ELFNN_R_INFO (sym, type);
