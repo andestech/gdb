@@ -2911,7 +2911,7 @@ riscv_regcache_cooked_write (int regnum, const gdb_byte *data, int len,
   gdb_byte tmp [sizeof (ULONGEST)];
 
   /* FP values in FP registers must be NaN-boxed.  */
-  if (riscv_is_fp_regno_p (regnum) && len < flen)
+  if (riscv_is_fp_regno_p (regnum) && len == 4)
     memset (tmp, -1, sizeof (tmp));
   else
     memset (tmp, 0, sizeof (tmp));
