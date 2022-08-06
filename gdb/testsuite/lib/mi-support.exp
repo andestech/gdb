@@ -1319,6 +1319,14 @@ proc mi_expect_stop { reason func args file line extra test } {
 	    # No debug info available but $file does match.
 	    return 0
 	}
+	-re "\\*stopped,${ebn}${r}${a}${bn}frame=\{addr=\"$hex\",func=\"$func\",args=$args,arch=\"$any\"\}$after_stopped,thread-id=\"$decimal\",stopped-threads=$any\r\n($thread_selected_re|$breakpoint_re)*$prompt_re" {
+	    pass "$test"
+	    if {[array names expect_out "2,string"] != ""} {
+		return $expect_out(2,string)
+	    }
+	    # No debug info available but $file does match.
+	    return 0
+	}
 	-re "\\*stopped,${ebn}${r}${a}${bn}frame=\{addr=\"$hex\",func=\"$any\",args=\[\\\[\{\]$any\[\\\]\}\],file=\"$any\",fullname=\"${fullname_syntax}$any\",line=\"\[0-9\]*\",arch=\"$any\"\}$after_stopped,thread-id=\"$decimal\",stopped-threads=$any\r\n($thread_selected_re|$breakpoint_re)*$prompt_re" {
 	    verbose -log "got $expect_out(buffer)"
 	    fail "$test (stopped at wrong place)"
