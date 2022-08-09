@@ -4680,6 +4680,15 @@ riscv_after_parse_args (void)
   if (riscv_opts.efhw)
     riscv_parse_add_subset (&riscv_rps_as, "xefhw", RISCV_UNKNOWN_VERSION,
 			    RISCV_UNKNOWN_VERSION, false);
+
+
+
+  if (riscv_opts.atomic || riscv_opts.dsp || riscv_opts.vector
+      || riscv_opts.efhw)
+    {
+      riscv_parse_add_implicit_subsets (&riscv_rps_as);
+      riscv_parse_check_conflicts (&riscv_rps_as);
+    }
   /* } Andes */
 }
 

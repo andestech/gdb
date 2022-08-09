@@ -125,6 +125,11 @@ bfd_elf32_riscv_set_data_segment_info (struct bfd_link_info *, int *);
 extern void
 bfd_elf64_riscv_set_data_segment_info (struct bfd_link_info *, int *);
 
+void
+riscv_parse_add_implicit_subsets (riscv_parse_subset_t *rps);
+bool
+riscv_parse_check_conflicts (riscv_parse_subset_t *rps);
+
 /* { Andes  */
 #define ANDES_ALIGN_DONE (1u << 31)
 

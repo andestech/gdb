@@ -1607,6 +1607,9 @@ static struct riscv_implicit_subset riscv_implicit_subsets[] =
   {"zks", "zbkx",	check_implicit_always},
   {"zks", "zksed",	check_implicit_always},
   {"zks", "zksh",	check_implicit_always},
+  {"xv", "xandes",	check_implicit_always},
+  {"xv", "xefhw",	check_implicit_always},
+  {"xv", "c",		check_implicit_always},
   {NULL, NULL, NULL}
 };
 
@@ -1744,7 +1747,9 @@ static struct riscv_supported_ext riscv_supported_std_zxm_ext[] =
 
 static struct riscv_supported_ext riscv_supported_non_std_x_ext[] =
 {
-  {"xandes",		ISA_SPEC_CLASS_DRAFT,		5, 0,  0 },
+  {"xandes",    ISA_SPEC_CLASS_DRAFT,   5, 0,  0 },
+  {"xv",        ISA_SPEC_CLASS_DRAFT,   5, 0,  0 },
+  {"xefhw",     ISA_SPEC_CLASS_DRAFT,   1, 0,  0 },
   {NULL, 0, 0, 0, 0}
 };
 
@@ -2373,7 +2378,7 @@ riscv_parse_prefixed_ext (riscv_parse_subset_t *rps,
 
 /* Add the implicit extensions.  */
 
-static void
+void
 riscv_parse_add_implicit_subsets (riscv_parse_subset_t *rps)
 {
   struct riscv_implicit_subset *t = riscv_implicit_subsets;
@@ -2390,7 +2395,7 @@ riscv_parse_add_implicit_subsets (riscv_parse_subset_t *rps)
 
 /* Check extensions conflicts.  */
 
-static bool
+bool
 riscv_parse_check_conflicts (riscv_parse_subset_t *rps)
 {
   riscv_subset_t *subset = NULL;
@@ -2446,6 +2451,16 @@ riscv_parse_check_conflicts (riscv_parse_subset_t *rps)
 	(_("zvl*b extensions need to enable either `v' or `zve' extension"));
       no_conflict = false;
     }
+
+  /* { Andes */
+  if (riscv_lookup_subset (rps->subset_list, "v", &subset)
+      && riscv_lookup_subset (rps->subset_list, "xefhw", &subset))
+    {
+      rps->error_handler
+	(_("`v' is conflict with `xefhw' extension"));
+      no_conflict = false;
+    }
+  /* } Andes */
 
   return no_conflict;
 }
@@ -2605,15 +2620,28 @@ riscv_estimate_arch_strlen (const riscv_subset_list_t *subset_list)
 static bool
 andes_is_hidden_implicit_subset (riscv_subset_t *sub)
 {
-  static const char *list[] = {"zv", "zfh", NULL};
+  static const char *obsoleted[] = {"xv", NULL};
+  static const char *suppressed[] = {"zv", "zfh", NULL};
+  const char **pre;
 
+  /* obsoleted are always implicit.  */
+  pre = obsoleted;
+  while (*pre)
+    {
+      if (strcmp (sub->name, *pre) == 0)
+        return true;
+      pre++;
+    }
+
+  /* hidden only 2p2 implicit subsets.  */
   if (!sub->is_implicit || nsta.is_full_arch
       || nsta.isa_spec != ISA_SPEC_CLASS_2P2)
     return false;
 
-  const char **pre = list;
+  /* explictly suppressed subsets.  */
+  pre = suppressed;
   while (*pre)
-    {
+    { /* check prefix only.  */
       if (strncmp (sub->name, *pre, strlen (*pre)) == 0)
         return true;
       pre++;
