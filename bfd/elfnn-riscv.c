@@ -5443,23 +5443,6 @@ _bfd_riscv_relax_lui (bfd *abfd,
 	max_alignment = (bfd_vma) 1 << sym_sec->output_section->alignment_power;
     }
 
-  /* check if cross-section-boundary local symbol.
-   *   cross-section-local symbols might "confuse" gp-relative logic
-   *   when estimating gp-offsets, and later overflow the relocation
-   *   slots.
-   */
-  if (true)
-    {
-      Elf_Internal_Shdr *symtab_hdr = &elf_symtab_hdr (abfd);
-      unsigned hi_sym = ELFNN_R_SYM (rel->r_info);
-      if (hi_sym < symtab_hdr->sh_info)
-	{  /* local symbols  */
-	  bfd_vma boundary = sym_sec->output_section->vma + sym_sec->output_offset + sym_sec->size;
-	  if (symval > boundary)
-	  return true;
-	}
-    }
-
   /* Is the reference in range of x0 or gp?
      Valid gp range conservatively because of alignment issue.  */
   if (undefined_weak
@@ -5687,7 +5670,6 @@ _bfd_riscv_relax_pc (bfd *abfd ATTRIBUTE_UNUSED,
 
   /* Chain the _LO relocs to their cooresponding _HI reloc to compute the
      actual target address.  */
-  riscv_pcgp_hi_reloc *hi = NULL;
   riscv_pcgp_hi_reloc hi_reloc;
   memset (&hi_reloc, 0, sizeof (hi_reloc));
   switch (ELFNN_R_TYPE (rel->r_info))
@@ -5700,7 +5682,8 @@ _bfd_riscv_relax_pc (bfd *abfd ATTRIBUTE_UNUSED,
 	   hi part instruction.  So we must subtract it here for the lookup.
 	   It is still used below in the final symbol address.  */
 	bfd_vma hi_sec_off = symval - sec_addr (sym_sec) - rel->r_addend;
-	hi = riscv_find_pcgp_hi_reloc (pcgp_relocs, hi_sec_off);
+	riscv_pcgp_hi_reloc *hi = riscv_find_pcgp_hi_reloc (pcgp_relocs,
+							    hi_sec_off);
 	if (hi == NULL)
 	  {
 	    riscv_record_pcgp_lo_reloc (pcgp_relocs, hi_sec_off);
@@ -5746,23 +5729,6 @@ _bfd_riscv_relax_pc (bfd *abfd ATTRIBUTE_UNUSED,
       if (h->u.def.section->output_section == sym_sec->output_section
 	  && sym_sec->output_section != bfd_abs_section_ptr)
 	max_alignment = (bfd_vma) 1 << sym_sec->output_section->alignment_power;
-    }
-
-  /* check if cross-section-boundary local symbol.
-   *   cross-section-local symbols might "confuse" gp-relative logic
-   *   when estimating gp-offsets, and later overflow the relocation
-   *   slots.
-   */
-  if (true)
-    {
-      Elf_Internal_Shdr *symtab_hdr = &elf_symtab_hdr (abfd);
-      unsigned hi_sym = hi ? hi->hi_sym : ELFNN_R_SYM (rel->r_info);
-      if (hi_sym < symtab_hdr->sh_info)
-	{  /* local symbols  */
-	  bfd_vma boundary = sym_sec->output_section->vma + sym_sec->output_offset + sym_sec->size;
-	  if (symval > boundary)
-	  return true;
-	}
     }
 
   /* Is the reference in range of x0 or gp?
