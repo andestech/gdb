@@ -10209,6 +10209,10 @@ riscv_relax_check_BTB_miss (bfd *abfd, asection *sec, Elf_Internal_Rela *rel)
   return_address = sec_addr (sec) + rel->r_offset;
   check_offset = rel->r_offset + rel->r_addend;
 
+  /* The checking will overflow.  */
+  if (check_offset + 4 >= sec->size)
+    return false;
+
   /* The case ALIGN_BTB + ALIGN is hard to check BTB miss, skip it.  */
   /* nop  @ ALIGN_BTB  <-- return_address
    * next @ ALIGN      <-- check_offset
@@ -10237,6 +10241,10 @@ riscv_relax_check_BTB_miss (bfd *abfd, asection *sec, Elf_Internal_Rela *rel)
 	}
       else
 	{ /* 32-bit insn.  */
+
+	  /* The checking will overflow.  */
+	  if (check_offset + 6 >= sec->size)
+	    return false;
 	  uint32_t insn = bfd_get_32 (abfd, contents + check_offset + 2);
 	  if (((insn & MASK_JAL) == MATCH_JAL
 	       || (insn & MASK_JALR) == MATCH_JALR
