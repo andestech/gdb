@@ -8331,9 +8331,11 @@ andes_execit_relocate_itable (struct bfd_link_info *link_info)
 	    {
 	      insn = insn_with_reg & ~(OP_MASK_RS1 << OP_SH_RS1);
 	      relocation = riscv_elf_execit_reloc_insn (&he->ie, link_info);
-	      if (!VALID_ITYPE_IMM (relocation)
-		  && VALID_ITYPE_IMM (relocation - gp))
-		{
+	      if (VALID_ITYPE_IMM (relocation))
+		{ /* x0 REL */
+		}
+	      else if (VALID_ITYPE_IMM (relocation - gp))
+		{ /* gp REL */
 		  relocation -= gp;
 		  insn |= X_GP << OP_SH_RS1;
 		}
@@ -8345,9 +8347,11 @@ andes_execit_relocate_itable (struct bfd_link_info *link_info)
 	    {
 	      insn = insn_with_reg & ~(OP_MASK_RS1 << OP_SH_RS1);
 	      relocation = riscv_elf_execit_reloc_insn (&he->ie, link_info);
-	      if (!VALID_STYPE_IMM (relocation)
-		  && VALID_STYPE_IMM (relocation - gp))
-		{
+	      if (VALID_STYPE_IMM (relocation))
+		{ /* x0 REL */
+		}
+	      else if (VALID_STYPE_IMM (relocation - gp))
+		{ /* gp REL */
 		  relocation -= gp;
 		  insn |= X_GP << OP_SH_RS1;
 		}
