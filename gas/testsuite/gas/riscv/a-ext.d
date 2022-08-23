@@ -1,4 +1,4 @@
-#as: -march=rv32ia -mno-b19758
+#as: -march=rv32ia -mno-workaround
 #source: a-ext.s
 #objdump: -d
 

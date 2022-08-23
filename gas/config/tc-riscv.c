@@ -333,7 +333,9 @@ struct riscv_set_options
   int efhw; /* RVXefhw (flhw/fshw) */
   int workaround; /* Enable Andes workarounds.  */
   /* { workaround */
+  int b19758_effect;
   int b19758;
+  int b25057; /* alias of b19758 */
   int b20282;
   int b22827;
   int b22827_1;
@@ -359,7 +361,9 @@ static struct riscv_set_options riscv_opts =
   0, /* vector */
   0, /* efhw */
   1, /* workaround */
-  1, /* b19758 */
+  1, /* b19758_effect */
+  0, /* b19758 */
+  0, /* b25057 */
   0, /* b20282 */
   0, /* b22827 */
   0, /* b22827_1 */
@@ -4181,7 +4185,7 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 
   if (error == NULL && riscv_opts.workaround)
     {
-      if (riscv_opts.b19758)
+      if (riscv_opts.b19758_effect)
 	{
 	  if (is_b19758_associated_insn (insn))
 	    {
@@ -4379,7 +4383,10 @@ enum options
   OPTION_MEXT_VECTOR,
   OPTION_MEXT_EFHW,
   OPTION_MNO_WORKAROUND,
+  OPTION_MB19758,
   OPTION_MNO_B19758,
+  OPTION_MB25057,
+  OPTION_MNO_B25057,
   OPTION_MB20282,
   OPTION_MB22827,
   OPTION_MB22827_1,
@@ -4419,7 +4426,10 @@ struct option md_longopts[] =
   {"mcmodel", required_argument, NULL, OPTION_MCMODEL},
   {"mict-model", required_argument, NULL, OPTION_MICT_MODEL},
   {"mno-workaround", no_argument, NULL, OPTION_MNO_WORKAROUND},
+  {"mb19758", no_argument, NULL, OPTION_MB19758},
   {"mno-b19758", no_argument, NULL, OPTION_MNO_B19758},
+  {"mb25057", no_argument, NULL, OPTION_MB25057},
+  {"mno-b25057", no_argument, NULL, OPTION_MNO_B25057},
   {"mb20282", no_argument, NULL, OPTION_MB20282},
   {"mb22827", no_argument, NULL, OPTION_MB22827},
   {"mb22827.1", no_argument, NULL, OPTION_MB22827_1},
@@ -4603,8 +4613,21 @@ md_parse_option (int c, const char *arg)
 	riscv_opts.workaround = 0;
       break;
 
+    case OPTION_MB19758:
+	riscv_opts.b19758 = 1;
+	riscv_opts.b19758_effect = 1;
+      break;
     case OPTION_MNO_B19758:
 	riscv_opts.b19758 = 0;
+	riscv_opts.b19758_effect = riscv_opts.b25057;
+      break;
+    case OPTION_MB25057:
+	riscv_opts.b25057 = 1;
+	riscv_opts.b19758_effect = 1;
+      break;
+    case OPTION_MNO_B25057:
+	riscv_opts.b25057 = 0;
+	riscv_opts.b19758_effect = riscv_opts.b19758;
       break;
 
     case OPTION_MB20282:
@@ -5904,7 +5927,8 @@ NDS specific command line options:\n\
   -mcmodel=TYPE               set cmodel type\n\
   -mict-model=TYPE            set ICT model type\n\
   -mno-workaround             disable all workarounds\n\
-  -mno-b19758                 disable workaround b19758\n\
+  -mb19758                    enable workaround b19758\n\
+  -mb25057                    enable workaround b25057\n\
   -mb20282                    enable workaround b20282\n\
   -mb22827                    enable workaround b22827\n\
   -mb22827.1                  enable workaround b22827.1\n\
