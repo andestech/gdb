@@ -58,7 +58,7 @@ static andes_ld_options_t andes =
   .update_execit_table = 0,
   .keep_import_execit = 0,
   .execit_loop_aware = 0,
-  .execit_jal_over_2m = 1,
+  .execit_jal_over_2m = 0,
 };
 /* } Andes  */
 
