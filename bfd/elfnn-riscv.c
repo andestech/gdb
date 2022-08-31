@@ -8031,8 +8031,8 @@ andes_execit_itable_lookup (execit_context_t *ctx,
 	  int rta = ELFNN_R_TYPE (a->irel_copy.r_info);
 	  int rtb = ELFNN_R_TYPE (b->irel_copy.r_info);
 	  if ((rta == R_RISCV_HI20 && rtb == R_RISCV_HI20)
-	      || (rta == R_RISCV_CALL && rtb == R_RISCV_CALL)
-	      || (rta == R_RISCV_PCREL_HI20 && rtb == R_RISCV_PCREL_HI20))
+	      || ((rta == R_RISCV_CALL || rta == R_RISCV_PCREL_HI20)
+		  && (rtb == R_RISCV_CALL || rtb == R_RISCV_PCREL_HI20)))
 	    return b;
 	  if ((ELFNN_R_SYM (a->irel_copy.r_info)
 	       != ELFNN_R_SYM (b->irel_copy.r_info))
@@ -8922,6 +8922,10 @@ andes_relax_execit_ite (
   execit_itable_t *ie = &he->ie;
   Elf_Internal_Rela reduction = *rel;
   int rtype = ELFNN_R_TYPE (ie->irel_copy.r_info);
+  if (rtype == R_RISCV_CALL || rtype == R_RISCV_PCREL_HI20)
+    rtype = ELFNN_R_TYPE (rel->r_info);
+  else
+    BFD_ASSERT (rtype == (int) ELFNN_R_TYPE (rel->r_info));
   if (rtype == R_RISCV_HI20 || rtype == R_RISCV_CALL
       || rtype == R_RISCV_PCREL_HI20)
     { /* handle multiple reloction LUI/AUIPCs  */
