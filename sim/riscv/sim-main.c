@@ -9196,6 +9196,11 @@ void initialize_cpu (SIM_DESC sd, SIM_CPU *cpu, int mhartid)
   cpu->csr.cycle = 0;
   cpu->csr.mcycle = 0;
   cpu->csr.instret = 0;
+  /* dset = 256 set, dway = 4 way, dsz = 32 bytes, dc_ecc = ECC,
+   * dlmb = One ILMB exists, dlmsz = 512 KiB, dlm_ecc = No parity/ECC */
+  cpu->csr.mdcm_cfg = 0x518da;
+  /* Enable execit */
+  cpu->csr.mmsc_cfg = 0x8;
 }
 
 /* Some utils don't like having a NULL environ.  */
