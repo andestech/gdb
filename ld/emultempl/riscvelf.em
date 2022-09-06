@@ -428,6 +428,7 @@ fprintf (file, _("\
     --mupdate-execit            Update existing .exec.itable\n\
     --mexecit-limit=NUM         Set maximum number of entries in .exec.itable for this times\n\
     --mexecit-loop-aware        Avoid generate exec.it instruction inside loop\n\
+    --m[no-]execit-jal-over-2mib Disable/enable exec.it conversion for jal instruction over the first 2MiB page of text section\n\
 "));
 
   char *var = getenv("ANDES_HELP");
