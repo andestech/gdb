@@ -191,4 +191,5 @@ foreach_with_prefix mi-mode $modes {
     foreach_with_prefix wp-type {"sw" "hw"} {
 	test_watchpoint_all ${mi-mode} ${wp-type}
     }
+mi_gdb_exit
 }
