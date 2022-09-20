@@ -5673,11 +5673,11 @@ _bfd_riscv_table_jump_mark (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
 {
   bfd_byte *contents = elf_section_data (sec)->this_hdr.contents;
   bfd_vma location = ELFNN_R_TYPE (rel->r_info) == R_RISCV_JAL ?
-				    contents + rel->r_offset
-				  : contents + rel->r_offset + 4;
-  bfd_vma target = bfd_getl32 (location);
+				    (bfd_vma) (contents + rel->r_offset)
+				  : (bfd_vma) (contents + rel->r_offset + 4);
+  bfd_vma target = bfd_getl32 ((void*) location);
   int rd = (target >> OP_SH_RD) & OP_MASK_RD;
-  const char *name = riscv_get_symbol_name (abfd, rel);
+  //const char *name = riscv_get_symbol_name (abfd, rel);
   htab_t tbljal_htab = riscv_get_table_jump_htab (link_info, rd);
 
   /* Check if it uses a valid link register. */
@@ -6236,8 +6236,8 @@ _bfd_riscv_record_jal (bfd *abfd,
   unsigned int rd = (jal >> OP_SH_RD) & OP_MASK_RD;
   htab_t tbljal_htab = riscv_get_table_jump_htab (link_info, rd);
   const char *name = riscv_get_symbol_name (abfd, rel);
-  struct riscv_elf_link_hash_table *htab = riscv_elf_hash_table (link_info);
-  riscv_table_jump_htab_t *tbj_htab = htab->table_jump_htab;
+  //struct riscv_elf_link_hash_table *htab = riscv_elf_hash_table (link_info);
+  //riscv_table_jump_htab_t *tbj_htab = htab->table_jump_htab;
 
   if (link_info->relax_pass == PASS_SHORTEN_ORG
       && ((jal ^ MATCH_TABLE_JUMP) & MASK_CM_JALT) == 0)
@@ -6686,7 +6686,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	{
 	  /* Check if table jump can save size. Skip generating table
 	    jump instruction if not.  */
-	  if (table_jump_htab->total_saving <=
+	  if ((signed) table_jump_htab->total_saving <=
 			  table_jump_htab->end_idx * RISCV_ELF_WORD_BYTES
 	      && table_jump_htab->tablejump_sec->size > 0)
 	    {
