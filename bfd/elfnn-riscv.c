@@ -6622,6 +6622,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	    }
 	}
       return true;
+    case PASS_ZCE_TABLE_JUMP:
     case PASS_ANDES_GP_PCREL ... PASS_ANDES_GP_2:
     case PASS_SHORTEN_ORG ... PASS_DELETE_ORG:
     case PASS_ALIGN_ORG ... PASS_RESLOVE:
