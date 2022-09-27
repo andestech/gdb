@@ -2499,9 +2499,16 @@ riscv_parse_check_conflicts (riscv_parse_subset_t *rps)
 	  || riscv_lookup_subset (rps->subset_list, "zcmpe", &subset)
 	  || riscv_lookup_subset (rps->subset_list, "zcmt", &subset)))
     {
-      rps->error_handler
-	(_("zcm* is not incompatible with `c' extension."));
+      static bool warned = false;
+      if (! warned)
+	{
+	  rps->error_handler
+	    (_("zcm* is not compatible with `c' extension."));
+	warned = true;
+	}
+      #if 0 /* disable confliction of zcX and rvc.  */
       no_conflict = false;
+      #endif
     }
 
   if (riscv_lookup_subset (rps->subset_list, "zcf", &subset)

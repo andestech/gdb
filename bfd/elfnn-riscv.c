@@ -468,6 +468,8 @@ riscv_update_table_jump_entry (htab_t htab,
   riscv_table_jump_htab_entry search = {addr, 0, NULL, 0};
   riscv_table_jump_htab_entry *entry = htab_find (htab, &search);
 
+printf("%s: name=%s, addr=%lx, benefit=%d\n", __func__, name, addr, benefit);
+
   if (entry == NULL)
     {
       riscv_table_jump_htab_entry **slot =
@@ -485,10 +487,12 @@ riscv_update_table_jump_entry (htab_t htab,
       (*slot)->address = addr;
       (*slot)->benefit = benefit;
       (*slot)->name = name;
+entry=*slot;
     }
   else
     entry->benefit += benefit;
 
+printf("\tentry->benefit=%d\n", entry->benefit);
   return true;
 }
 
@@ -5680,6 +5684,9 @@ _bfd_riscv_table_jump_mark (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
   //const char *name = riscv_get_symbol_name (abfd, rel);
   htab_t tbljal_htab = riscv_get_table_jump_htab (link_info, rd);
 
+const char *name = riscv_get_symbol_name (abfd, rel);
+printf("%s: name=%s, addr=%lx\n", __func__, name, symval);
+
   /* Check if it uses a valid link register. */
   if (tbljal_htab == NULL)
     return true;
@@ -5692,6 +5699,7 @@ _bfd_riscv_table_jump_mark (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
     {
       target = MATCH_TABLE_JUMP | ENCODE_ZCMP_TABLE_JUMP_INDEX (entry->index-1);
       bfd_putl32 (target, contents + rel->r_offset);
+printf("\tmark\n");
     }
   return true;
 }
@@ -5774,7 +5782,7 @@ _bfd_riscv_relax_call (bfd *abfd, asection *sec, asection *sym_sec,
       r_type = R_RISCV_JAL;
       auipc = MATCH_JAL | (rd << OP_SH_RD);
     }
-  else
+  else if (VALID_ITYPE_IMM (foff))
     {
       /* Near zero, relax to JALR rd, x0, addr.  */
       r_type = R_RISCV_LO12_I;
@@ -6286,6 +6294,7 @@ riscv_ranking_table_jump (void **entry_ptr, void *_arg)
   unsigned int left = arg->start;
   unsigned int right = arg->end + 1;
 
+printf("%s: entry={name=%s, addr=%lx, benefit=%d, index=%d}\n", __func__, entry->name, entry->address, entry->benefit, entry->index);
   while (left < right)
     {
       unsigned int mid = (left + right) / 2;
@@ -6301,6 +6310,7 @@ riscv_ranking_table_jump (void **entry_ptr, void *_arg)
         left = mid + 1;
     }
 
+printf("\tleft=%d, right=%d\n", left, right);
   for (unsigned int idx = arg->end; idx > left; idx--)
     {
       tbj_indexes[idx] = tbj_indexes[idx-1];
@@ -6313,6 +6323,7 @@ riscv_ranking_table_jump (void **entry_ptr, void *_arg)
       tbj_indexes[left] = (uintNN_t) entry->address;
       savings[left] = entry->benefit;
       names[left] = entry->name;
+printf("\tnames=%s, indexes=%lx, savings=%d\n", names[left], (bfd_vma)tbj_indexes[left], savings[left]);
     }
 
   return true;
@@ -6348,6 +6359,7 @@ static bool
 riscv_table_jump_profiling (riscv_table_jump_htab_t *table_jump_htab,
     riscv_table_jump_args *args)
 {
+printf("%s: traverse tbljt\n", __func__);
   args->start = 0, args->end = 63;
   /* Do a ranking. */
   htab_traverse (table_jump_htab->tbljt_htab,
@@ -6357,6 +6369,7 @@ riscv_table_jump_profiling (riscv_table_jump_htab_t *table_jump_htab,
 	  table_jump_htab->tbljt_htab,
 	  args);
 
+printf("%s: traverse tbljalt\n", __func__);
   args->start = 64, args->end = 255;
   htab_traverse (table_jump_htab->tbljalt_htab,
 	riscv_ranking_table_jump,
@@ -6412,7 +6425,7 @@ bfd_elfNN_riscv_set_data_segment_info (struct bfd_link_info *info,
    * denotes mandatory.
 
   *Pass ini: init stuff
-   Pass tjm: Table jump collection
+   Pass tbj: Table jump collection
    Pass gp0: GP instruction relaxation: pcrel
    Pass gp1:                          : low part
    Pass gp2:                          : high part
