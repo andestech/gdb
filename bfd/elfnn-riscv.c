@@ -435,7 +435,7 @@ riscv_init_table_jump_htab (riscv_table_jump_htab_t *htab)
 {
   htab->names = bfd_zmalloc (sizeof (const char *) * 256);
   htab->savings = bfd_zmalloc (sizeof (unsigned int) * 256);
-  htab->tbj_indexes = bfd_zmalloc (RISCV_ELF_WORD_BYTES * 256);
+  htab->tbj_indexes = bfd_zmalloc (sizeof (bfd_vma) * 256);
   htab->end_idx = 0;
   htab->total_saving = 0;
 
@@ -6280,7 +6280,7 @@ riscv_ranking_table_jump (void **entry_ptr, void *_arg)
   riscv_table_jump_htab_t *htab;
   unsigned int *savings;
   const char **names;
-  uintNN_t *tbj_indexes;
+  bfd_vma *tbj_indexes;
 
   entry = (const riscv_table_jump_htab_entry *) *entry_ptr;
   arg = (riscv_table_jump_args*) _arg;
@@ -6288,7 +6288,7 @@ riscv_ranking_table_jump (void **entry_ptr, void *_arg)
 
   savings = htab->savings;
   names = htab->names;
-  tbj_indexes = (uintNN_t*) htab->tbj_indexes;
+  tbj_indexes = htab->tbj_indexes;
 
   /* search insert position and rank. */
   unsigned int left = arg->start;
@@ -6320,10 +6320,10 @@ printf("\tleft=%d, right=%d\n", left, right);
 
   if (left <= arg->end)
     {
-      tbj_indexes[left] = (uintNN_t) entry->address;
+      tbj_indexes[left] = entry->address;
       savings[left] = entry->benefit;
       names[left] = entry->name;
-printf("\tnames=%s, indexes=%lx, savings=%d\n", names[left], (bfd_vma)tbj_indexes[left], savings[left]);
+printf("\tnames=%s, indexes=%lx, savings=%d\n", names[left], tbj_indexes[left], savings[left]);
     }
 
   return true;
