@@ -2972,6 +2972,24 @@ riscv_subset_supports (riscv_parse_subset_t *rps,
   return riscv_lookup_subset (rps->subset_list, feature, &subset);
 }
 
+bool
+riscv_subset_supports_fuzzy (riscv_parse_subset_t *rps,
+		       const char *feature)
+{
+  riscv_subset_list_t *lst = rps->subset_list;
+  riscv_subset_t *s = lst->head;
+  size_t len = strlen (feature);
+
+  while (s)
+    {
+      if (strncmp (s->name, feature, len) == 0)
+	return true;
+      s = s->next;
+    }
+
+  return false;
+}
+
 /* Each instuction is belonged to an instruction class INSN_CLASS_*.
    Call riscv_subset_supports to make sure if the instuction is valid.  */
 

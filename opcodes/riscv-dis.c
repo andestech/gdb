@@ -115,6 +115,27 @@ andes_find_op_name_match (const char *mne,
 			  insn_t match,
 			  const riscv_opcode_t **hash,
 			  const riscv_opcode_t **pop);
+
+/* Test if the op is favorite one.  */
+
+typedef struct
+  {
+    bool has_c;
+    bool has_p;
+    bool has_zcm;
+  } args_t;
+
+static bool
+is_preferred_subset (const struct riscv_opcode *op, args_t *args)
+{
+  if (args->has_zcm && op->insn_class == INSN_CLASS_F_AND_C)
+    {
+      return false;
+    }
+
+  return true;
+}
+
 static void
 riscv_execit_info (bfd_vma pc ATTRIBUTE_UNUSED,
 		   disassemble_info *info, uint32_t execit_index)
@@ -1024,7 +1045,7 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
   static const struct riscv_opcode *riscv_hash[OP_MASK_OP + 1];
   struct riscv_private_data *pd;
   int insnlen;
-  static bool has_c, has_p; /* Andes */
+  static args_t args; /* Andes */
 
 #define OP_HASH_IDX(i) ((i) & (riscv_insn_length (i) == 2 ? 0x3 : OP_MASK_OP))
 
@@ -1046,8 +1067,9 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
       /* } Andes ACE */
 
       /* { Andes */
-      has_c = riscv_subset_supports (&riscv_rps_dis, "c");
-      has_p = riscv_subset_supports (&riscv_rps_dis, "p");
+      args.has_c = riscv_subset_supports (&riscv_rps_dis, "c");
+      args.has_p = riscv_subset_supports (&riscv_rps_dis, "p");
+      args.has_zcm = riscv_subset_supports_fuzzy (&riscv_rps_dis, "zcm");
       /* } Andes */
 
       init = 1;
@@ -1156,7 +1178,7 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
       while (!no_prefer)
 	{
 	  /* RVC has non-canonical aliases within riscv_opcodes[].  */
-	  if (insnlen == 2 && has_c
+	  if (insnlen == 2 && args.has_c
 	      && andes_find_op_name_match ("c.unimp", 0, riscv_hash, &op2))
 	    break;
 	#if 0
@@ -1164,7 +1186,7 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
 	      && andes_find_op_of_subset (has_rvc, 1, riscv_hash,
 					  word, &op2)) break;
 	#endif
-	  if (insnlen == 4 && has_p
+	  if (insnlen == 4 && args.has_p
 	      && andes_find_op_of_subset (has_rvp, no_aliases, riscv_hash,
 					  word, &op2)) break;
 	  break; /* once */
@@ -1188,6 +1210,9 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
 	    continue;
 
 	  if (!riscv_disassemble_subset_tweak (&riscv_rps_dis, op, word))
+	    continue;
+
+	  if (!is_preferred_subset (op, &args))
 	    continue;
 
 	  /* It's a match.  */

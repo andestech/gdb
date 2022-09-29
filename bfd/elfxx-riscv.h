@@ -112,6 +112,8 @@ riscv_update_subset (riscv_parse_subset_t *, const char *);
 
 extern bool
 riscv_subset_supports (riscv_parse_subset_t *, const char *);
+extern bool
+riscv_subset_supports_fuzzy (riscv_parse_subset_t *, const char *);
 
 extern bool
 riscv_multi_subset_supports (riscv_parse_subset_t *, enum riscv_insn_class);
