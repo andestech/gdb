@@ -468,8 +468,6 @@ riscv_update_table_jump_entry (htab_t htab,
   riscv_table_jump_htab_entry search = {addr, 0, NULL, 0};
   riscv_table_jump_htab_entry *entry = htab_find (htab, &search);
 
-printf("%s: name=%s, addr=%lx, benefit=%d\n", __func__, name, addr, benefit);
-
   if (entry == NULL)
     {
       riscv_table_jump_htab_entry **slot =
@@ -487,12 +485,10 @@ printf("%s: name=%s, addr=%lx, benefit=%d\n", __func__, name, addr, benefit);
       (*slot)->address = addr;
       (*slot)->benefit = benefit;
       (*slot)->name = name;
-entry=*slot;
     }
   else
     entry->benefit += benefit;
 
-printf("\tentry->benefit=%d\n", entry->benefit);
   return true;
 }
 
@@ -5684,8 +5680,8 @@ _bfd_riscv_table_jump_mark (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
   //const char *name = riscv_get_symbol_name (abfd, rel);
   htab_t tbljal_htab = riscv_get_table_jump_htab (link_info, rd);
 
-const char *name = riscv_get_symbol_name (abfd, rel);
-printf("%s: name=%s, addr=%lx\n", __func__, name, symval);
+  int type = ELFNN_R_TYPE (rel->r_info);
+  BFD_ASSERT (type == R_RISCV_JAL || type == R_RISCV_CALL || type == R_RISCV_CALL_PLT);
 
   /* Check if it uses a valid link register. */
   if (tbljal_htab == NULL)
@@ -5699,7 +5695,6 @@ printf("%s: name=%s, addr=%lx\n", __func__, name, symval);
     {
       target = MATCH_TABLE_JUMP | ENCODE_ZCMP_TABLE_JUMP_INDEX (entry->index-1);
       bfd_putl32 (target, contents + rel->r_offset);
-printf("\tmark\n");
     }
   return true;
 }
@@ -5745,7 +5740,8 @@ _bfd_riscv_relax_call (bfd *abfd, asection *sec, asection *sym_sec,
 
   /* See if this function call can be shortened.  */
   if (!VALID_JTYPE_IMM (foff) && !(!bfd_link_pic (link_info) && near_zero)
-      && link_info->relax_pass != PASS_ZCE_TABLE_JUMP)
+      && link_info->relax_pass != PASS_ZCE_TABLE_JUMP_COLLECT
+      && link_info->relax_pass != PASS_ZCE_TABLE_JUMP_APPLY)
     return true;
 
   /* Shorten the function call.  */
@@ -5754,17 +5750,39 @@ _bfd_riscv_relax_call (bfd *abfd, asection *sec, asection *sym_sec,
   auipc = bfd_getl32 (contents + rel->r_offset);
   jalr = bfd_getl32 (contents + rel->r_offset + 4);
 
-  /* Relax a table jump instruction that is marked. */
-  if (link_info->relax_pass == PASS_SHORTEN_ORG
-	&& ((auipc ^ MATCH_TABLE_JUMP) & MASK_CM_JALT) == 0)
-    {
-      rel->r_info = ELFNN_R_INFO (ELFNN_R_SYM (rel->r_info), R_RISCV_TABLE_JUMP);
-      *again = true;
-      return riscv_relax_delete_bytes (abfd, sec, rel->r_offset + 2, 6, link_info, pcgp_relocs);
-    }
-
   rd = (jalr >> OP_SH_RD) & OP_MASK_RD;
   rvc = rvc && VALID_CJTYPE_IMM (foff);
+
+  /* Table jump profiling stage. It will be moved out of the relax_call function. */
+  if (link_info->relax_pass == PASS_ZCE_TABLE_JUMP_COLLECT)
+    {
+      /* Early stop to prevent _bfd_riscv_relax_call to delete bytes in pass 0.  */
+      if (link_info->relax_trip != 0)
+	return true;
+
+      htab_t tbljal_htab = riscv_get_table_jump_htab (link_info, rd);
+      const char *name = riscv_get_symbol_name (abfd, rel);
+      unsigned int benefit = len - 2;
+
+      if (tbljal_htab == NULL
+	  || name == NULL
+	  || benefit == 0)
+	return true;
+
+      return riscv_update_table_jump_entry (tbljal_htab, symval, benefit, name);
+    }
+
+  /* Relax a table jump instruction that is marked. */
+  if (link_info->relax_pass == PASS_ZCE_TABLE_JUMP_APPLY)
+    {
+      if (((auipc ^ MATCH_TABLE_JUMP) & MASK_CM_JALT) == 0)
+	{
+	  rel->r_info = ELFNN_R_INFO (ELFNN_R_SYM (rel->r_info), R_RISCV_TABLE_JUMP);
+	  *again = true;
+	  return riscv_relax_delete_bytes (abfd, sec, rel->r_offset + 2, 6, link_info, pcgp_relocs);
+	}
+      return true;
+    }
 
   /* C.J exists on RV32 and RV64, but C.JAL is RV32-only.  */
   rvc = rvc && (rd == 0 || (rd == X_RA && ARCH_SIZE == 32));
@@ -5788,25 +5806,8 @@ _bfd_riscv_relax_call (bfd *abfd, asection *sec, asection *sym_sec,
       r_type = R_RISCV_LO12_I;
       auipc = MATCH_JALR | (rd << OP_SH_RD);
     }
-
-  /* Table jump profiling stage. It will be moved out of the relax_call function. */
-  if (link_info->relax_pass == PASS_ZCE_TABLE_JUMP)
-    {
-      /* Early stop to prevent _bfd_riscv_relax_call to delete bytes in pass 0.  */
-      if (link_info->relax_trip != 0)
-	return true;
-
-      htab_t tbljal_htab = riscv_get_table_jump_htab (link_info, rd);
-      const char *name = riscv_get_symbol_name (abfd, rel);
-      unsigned int benefit = len - 2;
-
-      if (tbljal_htab == NULL
-	  || name == NULL
-	  || benefit == 0)
-	return true;
-
-      return riscv_update_table_jump_entry (tbljal_htab, symval, benefit, name);
-    }
+  else
+    BFD_ASSERT (0);
 
   /* Replace the R_RISCV_CALL reloc.  */
   rel->r_info = ELFNN_R_INFO (ELFNN_R_SYM (rel->r_info), r_type);
@@ -6247,19 +6248,24 @@ _bfd_riscv_record_jal (bfd *abfd,
   //struct riscv_elf_link_hash_table *htab = riscv_elf_hash_table (link_info);
   //riscv_table_jump_htab_t *tbj_htab = htab->table_jump_htab;
 
-  if (link_info->relax_pass == PASS_SHORTEN_ORG
-      && ((jal ^ MATCH_TABLE_JUMP) & MASK_CM_JALT) == 0)
+  if (link_info->relax_pass == PASS_ZCE_TABLE_JUMP_APPLY)
     {
-      rel->r_info = ELFNN_R_INFO (ELFNN_R_SYM (rel->r_info), R_RISCV_TABLE_JUMP);
-      *again = true;
-      return riscv_relax_delete_bytes (abfd, sec,
+      if (((jal ^ MATCH_TABLE_JUMP) & MASK_CM_JALT) == 0)
+	{
+	  rel->r_info = ELFNN_R_INFO (ELFNN_R_SYM (rel->r_info), R_RISCV_TABLE_JUMP);
+	  *again = true;
+	  return riscv_relax_delete_bytes (abfd, sec,
 		  rel->r_offset + 2, 2, link_info, pcgp_relocs);
+	}
+      return true;
     }
+
+  BFD_ASSERT (link_info->relax_pass == PASS_ZCE_TABLE_JUMP_COLLECT);
 
   if (tbljal_htab == NULL
       || name == NULL
-      || (link_info->relax_pass == PASS_ZCE_TABLE_JUMP && link_info->relax_trip > 0)
-      || link_info->relax_pass > PASS_ZCE_TABLE_JUMP)
+      || (link_info->relax_pass == PASS_ZCE_TABLE_JUMP_COLLECT && link_info->relax_trip > 0)
+      || link_info->relax_pass > PASS_ZCE_TABLE_JUMP_COLLECT)
     return true;
 
   return riscv_update_table_jump_entry (tbljal_htab, symval, 2, name);
@@ -6294,7 +6300,6 @@ riscv_ranking_table_jump (void **entry_ptr, void *_arg)
   unsigned int left = arg->start;
   unsigned int right = arg->end + 1;
 
-printf("%s: entry={name=%s, addr=%lx, benefit=%d, index=%d}\n", __func__, entry->name, entry->address, entry->benefit, entry->index);
   while (left < right)
     {
       unsigned int mid = (left + right) / 2;
@@ -6310,7 +6315,6 @@ printf("%s: entry={name=%s, addr=%lx, benefit=%d, index=%d}\n", __func__, entry-
         left = mid + 1;
     }
 
-printf("\tleft=%d, right=%d\n", left, right);
   for (unsigned int idx = arg->end; idx > left; idx--)
     {
       tbj_indexes[idx] = tbj_indexes[idx-1];
@@ -6323,7 +6327,6 @@ printf("\tleft=%d, right=%d\n", left, right);
       tbj_indexes[left] = entry->address;
       savings[left] = entry->benefit;
       names[left] = entry->name;
-printf("\tnames=%s, indexes=%lx, savings=%d\n", names[left], tbj_indexes[left], savings[left]);
     }
 
   return true;
@@ -6359,7 +6362,6 @@ static bool
 riscv_table_jump_profiling (riscv_table_jump_htab_t *table_jump_htab,
     riscv_table_jump_args *args)
 {
-printf("%s: traverse tbljt\n", __func__);
   args->start = 0, args->end = 63;
   /* Do a ranking. */
   htab_traverse (table_jump_htab->tbljt_htab,
@@ -6369,7 +6371,6 @@ printf("%s: traverse tbljt\n", __func__);
 	  table_jump_htab->tbljt_htab,
 	  args);
 
-printf("%s: traverse tbljalt\n", __func__);
   args->start = 64, args->end = 255;
   htab_traverse (table_jump_htab->tbljalt_htab,
 	riscv_ranking_table_jump,
@@ -6425,7 +6426,8 @@ bfd_elfNN_riscv_set_data_segment_info (struct bfd_link_info *info,
    * denotes mandatory.
 
   *Pass ini: init stuff
-   Pass tbj: Table jump collection
+   Pass tj0: Table jump collect
+   Pass tj1:            apply
    Pass gp0: GP instruction relaxation: pcrel
    Pass gp1:                          : low part
    Pass gp2:                          : high part
@@ -6635,7 +6637,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	    }
 	}
       return true;
-    case PASS_ZCE_TABLE_JUMP:
+    case PASS_ZCE_TABLE_JUMP_COLLECT ... PASS_ZCE_TABLE_JUMP_APPLY:
     case PASS_ANDES_GP_PCREL ... PASS_ANDES_GP_2:
     case PASS_SHORTEN_ORG ... PASS_DELETE_ORG:
     case PASS_ALIGN_ORG ... PASS_RESLOVE:
@@ -6676,7 +6678,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 
      relax_trip 3: Trim unused slots in the table jump section.  */
 
-  if (info->relax_pass == PASS_ZCE_TABLE_JUMP
+  if (info->relax_pass == PASS_ZCE_TABLE_JUMP_COLLECT
       && riscv_use_table_jump (info))
     {
       /* Avoid size savings of relocations to be recoreded multiple times.  */
@@ -6757,8 +6759,6 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	      (type == R_RISCV_CALL
 	       || type == R_RISCV_CALL_PLT))
 	    relax_func = _bfd_riscv_relax_call;
-	  else if (type == R_RISCV_JAL)
-	    relax_func = _bfd_riscv_record_jal;
 	  else if (andes->set_relax_lui &&
 		   (type == R_RISCV_HI20
 		    || type == R_RISCV_LO12_I
@@ -6789,12 +6789,12 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	  if (type != R_RISCV_JAL)
 	    i++;
 	}
-      else if (info->relax_pass == PASS_ZCE_TABLE_JUMP)
+      else if (info->relax_pass == PASS_ZCE_TABLE_JUMP_COLLECT)
 	{
 	  if (!riscv_use_table_jump (info))
 	    return true;
 
-	  if (info->relax_trip == 0)
+	  if (info->relax_trip == 0 || info->relax_trip == 2)
 	    {
 	      if (type == R_RISCV_CALL
 		  || type == R_RISCV_CALL_PLT)
@@ -6803,10 +6803,46 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 		relax_func = _bfd_riscv_record_jal;
 	      else
 		continue;
+
+	      /* Only relax this reloc if it is paired with R_RISCV_RELAX.  */
+	      if (type != R_RISCV_JAL && (i == sec->reloc_count - 1
+		    || ELFNN_R_TYPE ((rel + 1)->r_info) != R_RISCV_RELAX
+		    || rel->r_offset != (rel + 1)->r_offset))
+		continue;
+
+	      /* Skip over the R_RISCV_RELAX.  */
+	      if (type != R_RISCV_JAL)
+		i++;
+
 	      *again = true;
+
+	      if (info->relax_trip == 2)
+		relax_func = _bfd_riscv_table_jump_mark;
 	    }
-	  else if (info->relax_trip == 2)
-	    relax_func = _bfd_riscv_table_jump_mark;
+	}
+      else if (info->relax_pass == PASS_ZCE_TABLE_JUMP_APPLY)
+	{
+	  if (!riscv_use_table_jump (info))
+	    return true;
+
+	  if (andes->set_relax_call &&
+	      (type == R_RISCV_CALL
+	       || type == R_RISCV_CALL_PLT))
+	    relax_func = _bfd_riscv_relax_call;
+	  else if (type == R_RISCV_JAL)
+	    relax_func = _bfd_riscv_record_jal;
+	  else
+	    continue;
+
+	  /* Only relax this reloc if it is paired with R_RISCV_RELAX.  */
+	  if (type != R_RISCV_JAL && (i == sec->reloc_count - 1
+		|| ELFNN_R_TYPE ((rel + 1)->r_info) != R_RISCV_RELAX
+		|| rel->r_offset != (rel + 1)->r_offset))
+	    continue;
+
+	  /* Skip over the R_RISCV_RELAX.  */
+	  if (type != R_RISCV_JAL)
+	    i++;
 	}
       else if (info->relax_pass == PASS_ANDES_GP_PCREL)
 	{
@@ -7295,10 +7331,21 @@ riscv_final_link (bfd * abfd, struct bfd_link_info * info)
     {
       asection *sec = htab->table_jump_htab->tablejump_sec;
       asection *out_sec = sec->output_section;
+      uintNN_t buf[256];
+      uintNN_t *data;
+
+      if (ARCH_SIZE == 32)
+	{
+	  data = buf;
+	  for (int i=0; i < 256; ++i)
+	    data[i] = (uintNN_t) htab->table_jump_htab->tbj_indexes[i];
+	}
+      else
+	data = (uintNN_t*) htab->table_jump_htab->tbj_indexes;
 
       if (!bfd_set_section_contents (abfd,
 		out_sec,
-		htab->table_jump_htab->tbj_indexes,
+		data,
 		(file_ptr) sec->output_offset,
 		sec->size))
 	return false;
