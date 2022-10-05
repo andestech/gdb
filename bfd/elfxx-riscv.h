@@ -322,14 +322,16 @@ typedef struct execit_itable_entry
   asection *isec;               /* section of local symbol  */
   bfd_vma pc;                   /* insn vma  */
   bfd_vma relocation;           /* might keep host-addr of irel instead  */
+  bfd_signed_vma bias;          /* hi20 offset  */
   bfd_vma addend;               /* relocation addend  */
   Elf_Internal_Rela irel_copy;
   Elf_Internal_Sym isym_copy;
+  int group_id;
   int est_count;        /* when hashing  */
   int ref_count;        /* when replacing  */
   int rank_order;       /* when building itable  */
   int itable_index;	/* when replacing/relocating  */
-  int entries;          /* 0 as default 1  */
+  int entries;          /* itable slots  */
   uint32_t insn;        /* raw insn  */
   uint32_t fixed;       /* fixed parts of insn  */
 } execit_itable_t;
@@ -338,6 +340,7 @@ typedef struct execit_irel_entry
 {
   struct execit_irel_entry *next;
   execit_itable_t ie;
+  uint is_chosen:1;
 } execit_irel_t;
 
 typedef struct execit_vma_entry
@@ -352,19 +355,40 @@ typedef struct execit_hash_entry
   execit_itable_t ie;
   execit_irel_t *irels;
   execit_vma_t *vmas;
-  int next; /* next itable index associated  */
-  int id; /* for determined itable entries  */
+  int id;   /* for determined itable entries  */
+  int type; /* INSN/AUIPC/LUI/...  */
   uint is_worthy:1;
   uint is_chosen:1;
-  uint is_final:1;
-  uint is_relocated:1;
   uint is_imported:1;
 } execit_hash_t;
+
+typedef struct execit_itable_item
+{
+  execit_hash_t *he;
+  execit_irel_t *grp_hd;
+  execit_itable_t *inf_ie;
+  bfd_vma relocation;
+  int next; /* next itable index associated  */
+  int type; /* INSN/AUIPC/LUI/...  */
+  uint is_worthy:1;
+  uint is_final:1;
+  uint is_relocated:1;
+} execit_item_t;
+
+enum execit_rank_type
+{
+  ET_RK_TYPE_INSN = 0,
+  ET_RK_TYPE_HI20,
+};
 
 typedef struct execit_rank_entry
 {
   struct execit_rank_entry *next;
   execit_hash_t *he;
+  void *data;
+  int grade;
+  int type;
+  uint is_chosen:1;
 } execit_rank_t;
 
 /* It used to record the blank information for EXECIT replacement.  */
@@ -537,7 +561,7 @@ typedef struct execit_state
   execit_rank_t *rank_list;
   execit_blank_abfd_t *blank_list;
   andes_irelx_t *irelx_list;
-  execit_hash_t **itable_array;
+  execit_item_t *itable_array;
   struct riscv_elf_link_hash_table *htab;
   struct bfd_hash_table code_hash;
   bfd_vma jal_window_end;
@@ -552,6 +576,7 @@ typedef struct execit_state
   uint is_itable_finalized:1;
   uint is_determining_auipc:1;
   uint is_itb_base_set:1;
+  uint is_itable_relocated:1;
   uint is_replace_again:1;
   uint is_import_ranked:1;
 } execit_state_t;

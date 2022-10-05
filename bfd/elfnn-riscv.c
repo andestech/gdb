@@ -197,7 +197,10 @@ struct riscv_elf_link_hash_table
    ? (struct riscv_elf_link_hash_table *) (p)->hash : NULL)
 
 /* { Andes */
+#define SZ_4K (0x1000)
+
 typedef struct riscv_pcgp_hi_reloc riscv_pcgp_hi_reloc_t;
+
 static bool
 execit_set_itb_base (struct bfd_link_info *link_info);
 static void
@@ -2534,6 +2537,14 @@ riscv_elf_relocate_section (bfd *output_bfd,
 				 output_bfd);
 	  bfd_set_error (bfd_error_bad_value);
 	}
+
+    }
+
+  if (execit.is_itable_relocated == 0)
+    { /* init itable before relocating ITE.  */
+      if (andes->target_optimization & RISCV_RELAX_EXECIT_ON)
+	andes_execit_relocate_itable (info);
+      execit.is_itable_relocated = 1;
     }
 
   /* if ict table existed, then assuming all jobs have done.  */
@@ -3464,7 +3475,7 @@ riscv_elf_relocate_section (bfd *output_bfd,
 		  &relx->saved_irel, relocation, index, 0, NULL, NULL, false);
 
 		/* record R_RISCV_PCREL_HI20 for pals.  */
-		execit_hash_t *he = execit.itable_array[index];
+		execit_hash_t *he = execit.itable_array[index].he;
 		int rtype = ELFNN_R_TYPE (he->ie.irel_copy.r_info);
 		if (rtype == R_RISCV_CALL || rtype == R_RISCV_PCREL_HI20)
 		  rtype = ELFNN_R_TYPE (rel->r_info);
@@ -3597,7 +3608,7 @@ riscv_elf_relocate_section (bfd *output_bfd,
   riscv_free_pcrel_relocs (&pcrel_relocs);
 
   /* { Andes */
-  /* Relocate .exec.itable. entries.  */
+  /* again here to deal with newly allocated entries.  */
   if (andes->target_optimization & RISCV_RELAX_EXECIT_ON)
     andes_execit_relocate_itable (info);
   /* } Andes */
@@ -4961,16 +4972,21 @@ list_iterate (list_entry_t **lst, void *obj,
 static int
 append_final_cb (list_entry_t **lst, list_entry_t *j,
 		 list_entry_t *p, list_entry_t *q);
+#if 0 //KILLME
 static int 
 free_each_cb (void *l ATTRIBUTE_UNUSED, void *j ATTRIBUTE_UNUSED,
 	      void *p ATTRIBUTE_UNUSED, execit_vma_t *q);
 static void
 andes_execit_estimate_lui (execit_hash_t *he, execit_vma_t **lst_pp);
+#endif
+static void
+andes_execit_estimate_hi20 (execit_hash_t *he);
 static int
 rank_each_cb (void *l ATTRIBUTE_UNUSED, execit_rank_t *j, execit_rank_t *p,
 	      void *q ATTRIBUTE_UNUSED);
 static bool
 andes_execit_push_insn (execit_context_t *ctx, execit_hash_t* h);
+#if 0 //KILLME
 static int 
 andes_execit_estimate_lui_each_cb (void *l ATTRIBUTE_UNUSED,
 				   void *j ATTRIBUTE_UNUSED,
@@ -4984,6 +5000,7 @@ insert_vma_each_cb (void *l ATTRIBUTE_UNUSED, execit_vma_t *j,
 		    execit_vma_t *p, void *q ATTRIBUTE_UNUSED);
 static int 
 insert_vma_final_cb (void *l, execit_vma_t *j, execit_vma_t *p, void *q);
+#endif
 static execit_itable_t *
 andes_execit_itable_lookup (execit_context_t *ctx,
 			    execit_hash_t* h);
@@ -5360,10 +5377,12 @@ andes_execit_render_hash (execit_context_t *ctx)
 	      relocation_offset = ((ctx->ie.relocation - irel->r_addend)
 				   >= data_start) ? 1 : 0;
 	      if (rtype == R_RISCV_CALL || rtype == R_RISCV_PCREL_HI20)
-		ctx->ie.relocation -= ctx->ie.pc;
+		ctx->ie.bias = ctx->ie.relocation - ctx->ie.pc;
+	      else if (rtype == R_RISCV_HI20)
+		ctx->ie.bias = ctx->ie.relocation;
 
 	      if (ARCH_SIZE > 32 &&
-		  !VALID_UTYPE_IMM (RISCV_CONST_HIGH_PART (ctx->ie.relocation)))
+		  !VALID_UTYPE_IMM (RISCV_CONST_HIGH_PART (ctx->ie.bias)))
 		return rz;
 	    }
 
@@ -6739,6 +6758,14 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
   riscv_insertion_sort (relocs, sec->reloc_count,
 			sizeof (Elf_Internal_Rela), compar_reloc);
 
+  /*  exec.it processes:
+   *    * pass 1 (now)
+   *      ** hash insn
+   *      ** rank hash (last)
+   *      ** mark rank (last)
+   *    * pass 2
+   *      ** replace insn
+   */
   switch (info->relax_pass)
     {
     case PASS_ANDES_INIT:
@@ -7950,16 +7977,13 @@ andes_execit_hash_insn (bfd *abfd, asection *sec,
 	{
 	  execit_irel_t *e = bfd_zmalloc (sizeof (execit_irel_t));
 	  e->ie = ctx.ie;
-	  LIST_APPEND(&he->irels, e);
+	  LIST_APPEND (&he->irels, e);
 	}
 
       if (he->ie.est_count == 0)
-	{
-	  he->ie = ctx.ie;
-	}
+	he->ie = ctx.ie;
 
       he->ie.est_count++;
-
       off += 4;
     }
   return true;
@@ -7991,6 +8015,8 @@ out:
    NOTE: always return true to continue traversing
    TODO: This function doesn't assign so much info since it is fake.  */
 
+#define EXECIT_GRADE(c,e) (int) (200.0 * (c - 2) / e)
+
 static int
 andes_execit_rank_insn (execit_hash_t *he)
 {
@@ -7998,17 +8024,30 @@ andes_execit_rank_insn (execit_hash_t *he)
   Elf_Internal_Rela *irel = ie->irel;
   int rtype = irel ? ELFNN_R_TYPE (irel->r_info) : 0;
 
-  if (irel && (rtype == R_RISCV_HI20
-	       || rtype == R_RISCV_CALL
-	       || rtype == R_RISCV_PCREL_HI20))
-    {
-      execit_vma_t *lst = NULL;
-      execit.is_determining_auipc = (rtype == R_RISCV_HI20) ? 0 : 1;
-      andes_execit_estimate_lui (he, &lst);
-      he->ie.entries = LIST_LEN(&lst);
-      LIST_EACH(&lst, free_each_cb);
-      if (ie->est_count <= ie->entries * 2)
-	return true;
+  if ((rtype == R_RISCV_HI20)
+      || (rtype == R_RISCV_CALL || rtype == R_RISCV_PCREL_HI20))
+    { /* HI20: LUI or AUIPC */
+      andes_execit_estimate_hi20 (he);
+      execit_irel_t *p = he->irels;
+      int i, j;
+      while (p)
+	{
+	  if (p->ie.est_count > (p->ie.entries * 2))
+	    {
+	      execit_rank_t *re = bfd_zmalloc (sizeof (execit_rank_t));
+	      re->grade =  EXECIT_GRADE (p->ie.est_count, p->ie.entries);
+	      re->type = ET_RK_TYPE_HI20;
+	      re->data = (void*) p; /* group representative.  */
+	      re->he = he;
+	      he->is_worthy = true;
+	      LIST_ITER (&execit.rank_list, re, rank_each_cb, append_final_cb);
+	      /* skip the same ID.  */
+	      for (i = 1, j = p->ie.est_count; i < j; ++i)
+		p = p->next;
+	    }
+	  p = p->next;
+	}
+      return true;
     }
   else if (ie->est_count > 2)
     ie->entries = 1;
@@ -8016,9 +8055,10 @@ andes_execit_rank_insn (execit_hash_t *he)
     return true;
 
   execit_rank_t *re = bfd_zmalloc (sizeof (execit_rank_t));
+  re->grade =  EXECIT_GRADE (ie->est_count, ie->entries);
   re->he = he;
   he->is_worthy = true;
-  LIST_ITER(&execit.rank_list, re, rank_each_cb, append_final_cb);
+  LIST_ITER (&execit.rank_list, re, rank_each_cb, append_final_cb);
 
   return true;
 }
@@ -8150,19 +8190,40 @@ andes_execit_build_itable (struct bfd_link_info *info)
     {
       execit_hash_t *he = p->he;
       execit_itable_t *ie = &he->ie;
+      execit_irel_t *irel = p->data;
+
+      if (p->type == ET_RK_TYPE_HI20)
+	{
+	  BFD_ASSERT (irel);
+	  ie = &irel->ie;
+	}
 
       if ((total + ie->entries) > limit)
 	continue;
 
       bfd_put_32 (abfd, (bfd_vma) ie->fixed, (char *) contents + (index << 2));
 
+      p->is_chosen = true;
+      if (p->type == ET_RK_TYPE_HI20)
+	{
+	  for (int i = 0; i < ie->est_count; ++i)
+	    {
+	      BFD_ASSERT (irel);
+	      irel->is_chosen = true;
+	      irel->ie.rank_order = order;
+	      irel->ie.itable_index = index;
+	      irel = irel->next;
+	    }
+	}
       he->is_chosen = true;
+      he->type = p->type;
       ie->rank_order = order++;
       ie->itable_index = index++;
       /* reserve one here, to allocate others on demand (R_RISCV_EXECIT_ITE)  */
       total += ie->entries;
       count += ie->est_count;
 
+#if 0 //KILLME
       /* patch R_RISCV_PCREL_HI20 reloaction for later comparison.  */
       if (ie->irel)
 	{
@@ -8173,22 +8234,26 @@ andes_execit_build_itable (struct bfd_link_info *info)
 	      ie->relocation = hi20;
 	    }
 	}
+#endif
     }
 
   table_sec->size = total << 2;
 
-  /* build itable[0..size] = [*hash, ...]  */
-  execit.itable_array = bfd_zmalloc (sizeof (execit_hash_t *) * total);
+  /* build itable[0..size] = [item, ...]  */
+  execit.itable_array = bfd_zmalloc (sizeof (execit_item_t) * total);
   index = 0;
   for (p = execit.rank_list;
        p && index < limit;
        p = p->next)
     {
       execit_hash_t *he = p->he;
-      if (!he->is_chosen)
+      if (!p->is_chosen)
 	continue;
 
-      execit.itable_array[index] = he;
+      execit_item_t *item = &execit.itable_array[index];
+      item->he = he;
+      if (p->data) /* group representative.  */
+	item->grp_hd = p->data;
       index++;
     }
 
@@ -8213,6 +8278,7 @@ andes_execit_replace_insn (struct bfd_link_info *link_info,
   int data_flag;
   int is_on_relocation;
   execit_context_t ctx;
+  bool is_replace;
   
   memset (&ctx.ie, 0, sizeof (ctx.ie));
   ctx.abfd = abfd;
@@ -8298,7 +8364,22 @@ andes_execit_replace_insn (struct bfd_link_info *link_info,
       /* lookup hash table.  */
       entry = (execit_hash_t*)
 	bfd_hash_lookup (&execit.code_hash, hash, false, false);
-      if (!(entry && entry->is_chosen))
+
+      /* HI20 type might be choosen partially for exec.it.  */
+      is_replace = entry && entry->is_chosen;
+      if (is_replace && entry->type == ET_RK_TYPE_HI20)
+	{
+	  execit_irel_t *p = entry->irels;
+	  while (p)
+	    {
+	      if (p->ie.irel == irel)
+		break;
+	      p = p->next;
+	    }
+	  if (p)
+	    is_replace = p->is_chosen;
+	}
+      if (!is_replace)
 	{
 	  off += 4;
 	  continue;
@@ -8307,9 +8388,7 @@ andes_execit_replace_insn (struct bfd_link_info *link_info,
       /* replace insn now.  */
       ctx.contents = contents;
       if (!andes_execit_push_insn (&ctx, entry))
-	{
-	  BFD_ASSERT (0);
-	}
+	BFD_ASSERT (0);
 
       off += 4;
     } /* while off  */
@@ -8833,6 +8912,7 @@ append_final_cb (list_entry_t **lst, list_entry_t *j,
   return 0;
 }
 
+#if 0 //KILLME
 static int 
 free_each_cb (void *l ATTRIBUTE_UNUSED, void *j ATTRIBUTE_UNUSED,
 	      void *p ATTRIBUTE_UNUSED, execit_vma_t *q)
@@ -8841,14 +8921,249 @@ free_each_cb (void *l ATTRIBUTE_UNUSED, void *j ATTRIBUTE_UNUSED,
     free (q);
   return false; /* to the end  */
 }
+#endif
 
+/* exec.it hi20 (lui/auipc) helpers  */
+typedef struct hi20_context
+{
+  execit_irel_t *p, *q;
+  int id;
+
+} hi20_context_t;
+
+#if 0 //KILLME
 static void
 andes_execit_estimate_lui (execit_hash_t *he, execit_vma_t **lst_pp)
 {
-  LIST_EACH(&he->irels, andes_execit_estimate_lui_each_cb);
+  LIST_EACH (&he->irels, andes_execit_estimate_lui_each_cb);
   /* count itable entries are required  */
-  collect_lui_vma_each_cb(NULL, NULL, NULL, NULL); /* reset cache  */
-  LIST_EACH1(&he->irels, collect_lui_vma_each_cb, lst_pp);
+  collect_lui_vma_each_cb (NULL, NULL, NULL, NULL); /* reset cache  */
+  LIST_EACH1 (&he->irels, collect_lui_vma_each_cb, lst_pp);
+}
+#endif
+
+static int andes_execit_hi20_collect_one (hi20_context_t *ctx)
+{
+  BFD_ASSERT (ctx->p);
+  const int entries = 1;
+  execit_irel_t *p = ctx->p;
+  execit_irel_t *q;
+  int groups = 0;
+  while (p) /* iter all items.  */
+    { /* find each group.  */
+      execit_itable_t *a = &p->ie;
+      int count = 1; /* 1 for *p self.  */
+      bool found;
+      for (q = p->next; q; q = q->next)
+	{
+	  execit_itable_t *b = &q->ie;
+	  found = false;
+	  if (a->addend == b->addend)
+	    {
+	      if (a->h) /* global symbol */
+		{
+		  if (a->h == b->h)
+		    found = true;
+		}
+	      else if (a->isym) /* local symbol */
+		{
+		  if (a->isym == b->isym)
+		    found = true;
+		}
+	      else
+		BFD_ASSERT (0);
+	    }
+
+	  if (found)
+	    count++;
+	  else
+	    break;
+	}
+
+      /* record grade.  */
+      if (count > (entries * 2))
+	{ /* fill group info.  */
+	  execit_irel_t *r = p;
+	  int id = ctx->id++;
+	  groups++;
+	  while(r != q)
+	    {
+	      BFD_ASSERT (r->ie.est_count == 0 && r->ie.entries == 0);
+	      r->ie.est_count = count;
+	      r->ie.entries = entries;
+	      r->ie.group_id = id;
+	      r = r->next;
+	    }
+	}
+
+      p = q;
+    }
+
+  return groups;
+}
+
+/* score:   count/entry
+ * compare: countB/entryB > countA/entryA
+ *          => countB*entryA - countA*entryB > 0
+ */
+#define AUIPC_COMPARE(cb,eb,ca,ea) ((cb*ea - ca*eb) > 0)
+
+static int andes_execit_hi20_collect_multiple (hi20_context_t *ctx)
+{
+  BFD_ASSERT (ctx->p);
+  bfd_signed_vma window = SZ_4K;
+  execit_itable_t *a = &ctx->p->ie; /* data of node A. */
+  execit_irel_t *p; /* node B. */
+  execit_irel_t *pp; /* backword ref.  */
+  ctx->q = ctx->p->next; /* if no new group found.  */
+  int count = 1; /* 1 for *p self.  */
+  int group_count = 0;
+  bool found;
+  for (p = ctx->p->next; p; pp = p, p = p->next)
+    {
+      execit_irel_t *q;
+      execit_itable_t *b;
+      int entries;
+      /* count nodes within the window.  */
+      b = &p->ie;
+      found = (b->bias - a->bias) < window;
+      if (found)
+	{
+	  count++;
+	  if (p->next)
+	    continue;
+	  else
+	    { /* for fall through.  */
+	      found = false;
+	      p = p->next;
+	    }
+	}
+
+      /* reached a mismatched or the end.  */
+      BFD_ASSERT (found == false);
+
+      /* transaction: all new group members will have better score?  */
+      entries = 1 + (window >> 12);
+      if (count > (entries * 2))
+	{
+	  found = true;
+	  q = ctx->p;
+	  while(q != p) /* iter all nodes of the new gorup.  */
+	    {
+	      b = &q->ie;
+	      if (q->ie.entries
+		  && !AUIPC_COMPARE (count, entries, b->est_count, b->entries))
+		{ /* no, stop.  */
+		  found = false;
+		  break;
+		}
+	      q = q->next;
+	    }
+	}
+
+      /* update new group info.  */
+      if (found)
+	{
+	  int id = ctx->id++;
+	  q = ctx->p;
+	  while(q != p)
+	    {
+	      q->ie.est_count = count;
+	      q->ie.entries = entries;
+	      q->ie.group_id = id;
+	      q = q->next;
+	    }
+	  ctx->q = q;
+	  group_count = count;
+	}
+
+      /* try larger window.  */
+      if (found && p)
+	{
+	  p = pp; /* continue from p.  */
+	  window += SZ_4K;
+	  continue;
+	}
+
+      break; /* try next node by the caller.  */
+    }
+
+  return group_count;
+}
+
+static void
+andes_execit_sort_irel_list (execit_irel_t **list)
+{
+  execit_irel_t *p, *q, *r, *s, *t;
+  p = *list;
+  if (p == NULL)
+    return;
+  q = p;
+  p = p->next;
+  q->next = NULL;
+  while (p)
+    { /* find the node, t, to insert.  */
+      s = p->next;
+      r = q;
+      t = NULL;
+      while (r)
+	{
+	  if (r->ie.bias > p->ie.bias)
+	    break;
+	  t = r;
+	  r = r->next;
+	}
+      if (t == NULL)
+	{
+	  p->next = q;
+	  q = p;
+	}
+      else
+	{
+	  p->next = t->next;
+	  t->next = p;
+	}
+      p = s;
+    }
+
+  *list = q;
+}
+
+static void
+andes_execit_estimate_hi20 (execit_hash_t *he)
+{
+  static int group_id = 1; /* 0 for non-grouped.  */
+  hi20_context_t ctx = {.id = group_id};
+  int type;
+
+  BFD_ASSERT (he);
+  if (he == NULL)
+    return;
+
+  type = ELFNN_R_TYPE (he->ie.irel_copy.r_info);
+  BFD_ASSERT (type == R_RISCV_HI20
+	      || type == R_RISCV_CALL || type == R_RISCV_PCREL_HI20);
+
+  /* grade each element of the list.  */
+  andes_execit_sort_irel_list (&he->irels);
+  ctx.p = he->irels;
+
+  /* LUIs with the same target can be treated as the same instructions.
+   * but AUIPCs cannot, as the relative offset are not the same.
+   */
+  if (type == R_RISCV_HI20)
+    {
+      andes_execit_hi20_collect_one (&ctx);
+      BFD_ASSERT (ctx.p == he->irels);
+    }
+
+  while (ctx.p)
+    {
+      andes_execit_hi20_collect_multiple (&ctx);
+      ctx.p = ctx.q;
+    }
+
+  group_id = ctx.id;
 }
 
 /*  EXECIT rank list helpers  */
@@ -8857,18 +9172,13 @@ static int
 rank_each_cb (void *l ATTRIBUTE_UNUSED, execit_rank_t *j, execit_rank_t *p,
 	      void *q ATTRIBUTE_UNUSED)
 {
-  int a, b;
-
   if (!p)
     return -1;
 
-  a = j->he->ie.est_count / j->he->ie.entries;
-  b = p->he->ie.est_count / p->he->ie.entries;
-
-  if (a != b)
-    return (a > b);
+  if (j->grade != p->grade)
+    return j->grade > p->grade;
   else if (j->he->ie.fixed != p->he->ie.fixed)
-    return (j->he->ie.fixed < p->he->ie.fixed); /* smaller op/reg first */
+    return j->he->ie.fixed < p->he->ie.fixed; /* smaller op/reg first */
 
   /* earliy id first  */
   return (j->he->id < p->he->id);
@@ -8882,7 +9192,7 @@ andes_execit_push_insn (execit_context_t *ctx, execit_hash_t* h)
   uint16_t insn16;
   execit_itable_t *e = andes_execit_itable_lookup (ctx, h);
   if (e == NULL)
-    return false;
+    return (h->type == ET_RK_TYPE_HI20) ? true : false;
 
   /* replace code.  */
   insn16 = execit.execit_op | ((execit.execit_op == EXECIT_INSN)
@@ -8894,12 +9204,13 @@ andes_execit_push_insn (execit_context_t *ctx, execit_hash_t* h)
     return false;
 
   /* NOT necessary the one in hash  */
-  if (ctx->irel && !andes_execit_mark_irel (ctx->irel, h->ie.itable_index))
+  if (ctx->irel && !andes_execit_mark_irel (ctx->irel, e->itable_index))
     return false;
 
   return true;
 }
 
+#if 0 //KILLME!
 static int 
 andes_execit_estimate_lui_each_cb(void *l ATTRIBUTE_UNUSED,
 				  void *j ATTRIBUTE_UNUSED,
@@ -8967,26 +9278,37 @@ insert_vma_final_cb(void *l, execit_vma_t *j, execit_vma_t *p, void *q)
   e->vma = j->vma;
   return append_final_cb(l, (void*) e, (void*) p, q);
 }
+#endif
 
 /*  Lookup EXECIT times entry.  */
 static execit_itable_t *
 andes_execit_itable_lookup (execit_context_t *ctx,
 			    execit_hash_t* h)
 {
-  /* TODO: remove this function if sanity chcek is not a necessary.  */
   execit_itable_t *a = &ctx->ie;
   execit_itable_t *b = &h->ie;
 
+  /* skip relocation check, as it might have been changed.  */
+
   while (true)
     {
+      if (h->type == ET_RK_TYPE_HI20)
+	{
+	  execit_irel_t *p = h->irels;
+	  while (p)
+	    {
+	      if (p->ie.irel == a->irel)
+		return p->is_chosen ? &p->ie : NULL;
+	      p = p->next;
+	    }
+	  break;
+	}
+
       if (a->fixed != b->fixed)
 	break;
-      /* relocation might be changed  *//*
-      if (a->relocation != b->relocation)
-	break;  */
-      if ((a->irel == NULL) ^ (b->irel == NULL))
+      if ((a->irel == NULL) ^ (b->irel == NULL)) /* both NULL or SOME */
         break;
-      if (a->irel) /* skip b->irel (checked above)  */
+      if (a->irel)
 	{ /* skip future check for some relocs  */
 	  int rta = ELFNN_R_TYPE (a->irel_copy.r_info);
 	  int rtb = ELFNN_R_TYPE (b->irel_copy.r_info);
@@ -9002,19 +9324,7 @@ andes_execit_itable_lookup (execit_context_t *ctx,
       return b; /* Pass  */
     }
 
-  /* NG  */
-  printf("ctx  = %s, off = %08lx, abfd = %s\n", ctx->buf, a->pc - sec_addr(a->sec), a->sec->owner->filename);
-  printf("hash = %s, off = %08lx, abfd = %s\n", h->root.string, b->pc, b->sec->owner->filename);
-  printf("fixed = %08x:%08x\n", a->fixed, b->fixed);
-  printf("reloc = %08lx:%08lx\n", a->relocation, b->relocation);
-  printf("adden = %08lx:%08lx\n", a->addend, b->addend);
-  printf("r_info   = %08lx:%08lx\n", a->irel_copy.r_info, b->irel_copy.r_info);
-  printf("r_addend = %08lx:%08lx\n", a->irel_copy.r_addend, b->irel_copy.r_addend);
-  printf("r_offset = %08lx:%08lx\n", a->irel_copy.r_offset, b->irel_copy.r_offset);
-  printf("h = %08lx:%08lx\n", (intptr_t)a->h, (intptr_t)b->h);
-  printf("isym = %08lx:%08lx\n", (intptr_t)a->isym, (intptr_t)b->isym);
   BFD_ASSERT (0);
-
   return NULL;
 }
 
@@ -9089,6 +9399,7 @@ andes_extend_irel (Elf_Internal_Rela *irel, int subtype,
   BFD_ASSERT (one);
   /* init  */
   one->saved_irel = *irel;
+  one->saved_irel.r_user = (bfd_vma) irel; /* keep origin reference.  */
   one->flags = subtype;
   irel->r_user = (bfd_vma) one;
   irel->r_info = ELFNN_R_INFO (ELFNN_R_SYM (irel->r_info), R_RISCV_ANDES_TAG);
@@ -9201,7 +9512,7 @@ andes_execit_relocate_itable (struct bfd_link_info *info)
 {
   bfd *abfd;
   asection *itable_sec = NULL;
-  execit_hash_t **itable = execit.itable_array;
+  execit_item_t *itable = execit.itable_array;
   uint32_t insn, insn_with_reg;
   bfd_byte *contents = NULL;
   int size = 0;
@@ -9258,13 +9569,14 @@ andes_execit_relocate_itable (struct bfd_link_info *info)
   /* TODO: mark relocated entries to avoid redundancy calculations  */
   for (int index = 0; index < execit.next_itable_index; ++index)
     {
-      execit_hash_t *he = itable[index];
+      execit_item_t *item = &itable[index];
+      execit_hash_t *he = item->he;
       bfd_vma relocation;
       int rtype = ELFNN_R_TYPE (he->ie.irel_copy.r_info);
 
       BFD_ASSERT (he->is_chosen);
 
-      if (he->is_relocated
+      if (item->is_relocated
 	  && !(rtype == R_RISCV_HI20
 	       || rtype == R_RISCV_PCREL_HI20
 	       || rtype == R_RISCV_CALL))
@@ -9334,22 +9646,26 @@ andes_execit_relocate_itable (struct bfd_link_info *info)
 		| riscv_elf_encode_relocation (abfd, &rel_backup, relocation);
 	      bfd_put_32 (abfd, insn, contents + (he->ie.itable_index) * 4);
 	    }
-	  else if (rtype == R_RISCV_HI20 || rtype == R_RISCV_CALL
-		   || rtype == R_RISCV_PCREL_HI20)
-	    { /* estimate lui relocation again (final).  */
-	      for (int i = 0; i < he->ie.entries; ++i)
+	  else if ((rtype == R_RISCV_HI20)
+		   || (rtype == R_RISCV_CALL || rtype == R_RISCV_PCREL_HI20))
+	    { /* estimate HI20 (auipc/lui) relocation again (final).  */
+	      BFD_ASSERT (he->type == ET_RK_TYPE_HI20 && item->grp_hd);
+	      execit_itable_t *ie = item->inf_ie ? item->inf_ie : &item->grp_hd->ie;
+	      int entries = ie->entries;
+	      for (int i = 0; i < entries; ++i)
 		{
-		  if (he->is_final == false)
+		  if (item->is_final == false)
 		    break;
-		  relocation = riscv_elf_execit_reloc_insn (&he->ie, info);
-		  relocation = he->ie.relocation;
+		  relocation = item->relocation;
 		  insn = insn_with_reg
 		    | riscv_elf_encode_relocation (abfd, &rel_backup, relocation);
-		  bfd_put_32 (abfd, insn, contents + (he->ie.itable_index << 2));
-		  he->is_relocated = true;
-		  if (he->next == 0)
+		  bfd_put_32 (abfd, insn, contents + (ie->itable_index << 2));
+		  item->is_relocated = true;
+		  if (item->next == 0)
 		    break;
-		  he = itable[he->next];
+		  item = &itable[item->next];
+		  he = item->he;
+		  ie = item->inf_ie;
 		}
 	    }
 	  else if (rtype == R_RISCV_ANDES_TAG)
@@ -9373,7 +9689,7 @@ andes_execit_relocate_itable (struct bfd_link_info *info)
 	  if (!(rtype == R_RISCV_HI20
 		|| rtype == R_RISCV_CALL
 		|| rtype == R_RISCV_PCREL_HI20))
-	    he->is_final = he->is_relocated = true;
+	    item->is_final = item->is_relocated = true;
 	}
       else
 	{
@@ -9859,14 +10175,39 @@ andes_relax_execit_ite (
   int execit_index = (int) max_alignment;
   bfd_vma relocation = symval;
   bfd_vma pc = sec_addr (sec) + rel->r_offset;
-  execit_hash_t *he = execit.itable_array[execit_index];
+  execit_item_t *item = &execit.itable_array[execit_index];
+  execit_hash_t *he = item->he;
   execit_itable_t *ie = &he->ie;
   Elf_Internal_Rela reduction = *rel;
-  int rtype = ELFNN_R_TYPE (ie->irel_copy.r_info);
-  if (rtype == R_RISCV_CALL || rtype == R_RISCV_PCREL_HI20)
-    rtype = ELFNN_R_TYPE (rel->r_info);
-  else
-    BFD_ASSERT (rtype == (int) ELFNN_R_TYPE (rel->r_info));
+  int rtype = 0;
+
+  if (he->type == ET_RK_TYPE_HI20)
+    {
+      execit_irel_t *p = item->grp_hd;
+      bool found = false;
+      while (p)
+	{
+	  if (p->ie.irel == (void*) rel->r_user)
+	    {
+	      found = true;
+	      ie = &p->ie;
+	      break;
+	    }
+	  p = p->next;
+	}
+      BFD_ASSERT (found);
+      BFD_ASSERT (p->is_chosen);
+    }
+
+  if (ie->irel)
+    {
+      rtype = ELFNN_R_TYPE (ie->irel_copy.r_info);
+      if (rtype == R_RISCV_CALL || rtype == R_RISCV_PCREL_HI20)
+	rtype = ELFNN_R_TYPE (rel->r_info);
+      else
+	BFD_ASSERT (rtype == (int) ELFNN_R_TYPE (rel->r_info));
+    }
+
   if (rtype == R_RISCV_HI20 || rtype == R_RISCV_CALL
       || rtype == R_RISCV_PCREL_HI20)
     { /* handle multiple reloction LUI/AUIPCs  */
@@ -9875,26 +10216,32 @@ andes_relax_execit_ite (
 	relocation -= pc;
       reduction.r_info = ELFNN_R_INFO (ELFNN_R_SYM (rel->r_info), rtype);
       bfd_vma hi20 = riscv_elf_encode_relocation (abfd, &reduction, relocation);
-      if (he->is_final == false)
+      if (item->is_final == false)
         {
-	  ie->relocation = hi20;
-	  he->is_final = true;
+	  item->is_final = true;
+	  item->inf_ie = ie;
+	  item->relocation = hi20;
 	  execit.relocate_itable_done = false;
         }
       else
         {
 	  int is_found = false;
-	  for (i = 0; i < ie->entries; ++i)
+	  BFD_ASSERT (item->grp_hd->ie.group_id == ie->group_id);
+	  int entries = ie->entries;
+	  for (i = 0; i < entries; ++i)
 	    {
-	      if (he->is_final)
+	      if (item->is_final)
 		{
-		  is_found = (ie->relocation == hi20);
+		  is_found = (item->relocation == hi20);
 		  if (is_found)
-		    break;
-		  else if (he->next)
+		    {
+		      ie = item->inf_ie;
+		      break;
+		    }
+		  else if (item->next)
 		    { /* try next  */
-		      he = execit.itable_array[he->next];
-		      ie = &he->ie;
+		      item = &execit.itable_array[item->next];
+		      BFD_ASSERT (item->he == he);
 		      continue;
 		    }
 		}
@@ -9903,7 +10250,7 @@ andes_relax_execit_ite (
 
 	  if (!is_found)
 	    { /* try allocate one  */
-	      if ((i + 1) >= ie->entries)
+	      if ((i + 1) >= entries)
 		{
 		  BFD_ASSERT (0);
 		  /* TODO: fatal handling
@@ -9915,18 +10262,15 @@ andes_relax_execit_ite (
 		{
 		  /* allocate index  */
 		  int index = execit.next_itable_index++;
-		  /* new a hash and init it (copy raw hash)  */
-		  execit_hash_t *t = bfd_malloc (sizeof (execit_hash_t));
-		  *t = *execit.itable_array[execit_index];
+		  execit_item_t *t = &execit.itable_array[index];
+		  *t = execit.itable_array[execit_index];
 		  t->next = 0;
-		  t->ie.itable_index = index;
-		  t->ie.relocation = hi20;
-		  /* bind to table  */
-		  execit.itable_array[index] = t;
+		  t->relocation = hi20;
+		  t->inf_ie = ie;
+		  ie->itable_index = index;
 
-		  he->next = index;
-		  he = t;
-		  ie = &he->ie;
+		  item->next = index;
+		  item = t;
 
 		  execit.relocate_itable_done = false;
 		}
