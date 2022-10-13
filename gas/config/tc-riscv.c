@@ -362,8 +362,8 @@ static struct riscv_set_options riscv_opts =
   0, /* efhw */
   1, /* workaround */
   1, /* b19758_effect */
-  0, /* b19758 */
-  0, /* b25057 */
+  1, /* b19758 */
+  1, /* b25057 */
   0, /* b20282 */
   0, /* b22827 */
   0, /* b22827_1 */
