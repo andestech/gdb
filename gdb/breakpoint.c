@@ -147,7 +147,7 @@ static int watchpoint_locations_match (struct bp_location *loc1,
 
 static int breakpoint_locations_match (struct bp_location *loc1,
 				       struct bp_location *loc2,
-				       bool sw_hw_bps_match = false);
+				       bool sw_hw_bps_match = true);
 
 static int breakpoint_location_address_match (struct bp_location *bl,
 					      const struct address_space *aspace,
