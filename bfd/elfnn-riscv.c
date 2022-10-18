@@ -7523,9 +7523,13 @@ riscv_relocation_check (struct bfd_link_info *info,
   andes = &table->andes;
   execit_loop_aware = andes->execit_loop_aware;
 
-  /* if last insn is tagged with R_RISCV_CALL, skip the jarl  */
-  if (last_rel && ELFNN_R_TYPE (last_rel->r_info) == R_RISCV_CALL)
+  /* if last insn is tagged with R_RISCV_CALL(_PLT), skip the jarl  */
+  while (last_rel)
     {
+      int rtype = ELFNN_R_TYPE (last_rel->r_info);
+      if (!(rtype == R_RISCV_CALL || rtype == R_RISCV_CALL_PLT))
+	break;
+
       BFD_ASSERT (sec == last_sec);
       BFD_ASSERT (*off == (last_rel->r_offset + 4));
       BFD_ASSERT ((*irel == NULL) || (*irel == irelend)
@@ -7534,6 +7538,8 @@ riscv_relocation_check (struct bfd_link_info *info,
       last_sec = NULL;
       result |= (4 << 24);
       result |= DATA_EXIST;
+
+      break; /* once */
     }
 
   while ((*irel) != NULL && (*irel) < irelend && (*off) == (*irel)->r_offset)
@@ -7687,6 +7693,7 @@ riscv_relocation_check (struct bfd_link_info *info,
 	  result |= DATA_EXIST;
 	  break;
 	case R_RISCV_CALL:
+	case R_RISCV_CALL_PLT:
 	  if (optimize)
 	    {
 	      irel_save = *irel;
