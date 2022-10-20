@@ -14,16 +14,18 @@
 
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
-
+#include<stdio.h>
 int
 bar2 (void)
 {
+  puts("bar2");/* set bar2 breakpoint here */
   return 0;
 }
 
 int
 foo2 (void)
 {
+	puts("foo2");/* set foo2 breakpoint here */
 	bar2 ();
   return 0;
 }
@@ -31,6 +33,7 @@ foo2 (void)
 int
 main (void)
 {
+	puts("inferior-test2 main");/* set inferior-test2 main breakpoint here */
 	foo2 ();
   return 0;
 }
