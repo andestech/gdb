@@ -4583,7 +4583,7 @@ md_parse_option (int c, const char *arg)
 	  err = (char *) dlerror ();
 	else
 	  {
-	    ace_opcs = (struct riscv_opcode *) dlsym (dlc, "ace_opcodes_2");
+	    ace_opcs = (struct riscv_opcode *) dlsym (dlc, "ace_opcodes_3");
 	    err = (char *) dlerror ();
 	    if (err == NULL)
 	      {
