@@ -107,7 +107,7 @@ foreach test_data {{SEGV "Segmentation fault"} \
 		set saw_bt_start true
 		exp_continue
 	    }
-	    -early -re ".+\r\n---------------------\r\n" {
+	    -early -re "---------------------\r\n" {
 		set saw_bt_end true
 		exp_continue
 	    }
