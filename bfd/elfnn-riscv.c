@@ -3132,6 +3132,15 @@ riscv_elf_relocate_section (bfd *output_bfd,
 			   + ict_base->u.def.section->output_section->vma
 			   + ict_base->u.def.section->output_offset)
 			  + (entry->index * ict_entry_size));
+
+	    if (r_type == R_RISCV_PCREL_ICT_HI20)
+	      {
+		if (!riscv_record_pcrel_hi_reloc (&pcrel_relocs, pc,
+						  relocation + rel->r_addend,
+						  r_type, false))
+		  r = bfd_reloc_overflow;
+	      }
+
 	    break;
 	  }
 	/* } Andes  */
@@ -7705,6 +7714,11 @@ riscv_relocation_check (struct bfd_link_info *info,
 	      result |= (8 << 24);
 	      result |= DATA_EXIST;
 	    }
+	  break;
+	case R_RISCV_CALL_ICT:
+	  /* exclude ICT call by now.  */
+	  result |= (8 << 24);
+	  result |= DATA_EXIST;
 	  break;
 	case R_RISCV_RELATIVE:
 	case R_RISCV_COPY:

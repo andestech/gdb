@@ -2975,6 +2975,8 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
       if (!riscv_multi_subset_supports (&riscv_rps_as, insn->insn_class))
 	continue;
 
+      nsta.ict_exp = NULL;
+
       /* Reset error message of the previous round.  */
       error = _("illegal operands");
       create_insn (ip, insn);
