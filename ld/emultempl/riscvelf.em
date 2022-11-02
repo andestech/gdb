@@ -429,16 +429,18 @@ fprintf (file, _("\
     --mexecit-limit=NUM         Set maximum number of entries in .exec.itable for this times\n\
     --mexecit-loop-aware        Avoid generate exec.it instruction inside loop\n\
     --m[no-]execit-jal-over-2mib Disable/enable exec.it conversion for jal instruction over the first 2MiB page of text section\n\
+    --mexecit-rvv               Enable exec.it of RVV\n\
+    --mexecit-xdsp              Enable exec.it of XDSP\n\
+    --mexecit-fls               Enable exec.it of floating load/store\n\
+    --mno-execit-jal            Disable exec.it conversion for jal\n\
+    --mno-execit-auipc          Disable exec.it conversion for auipc\n\
 "));
 
   char *var = getenv("ANDES_HELP");
   if (var)
     {
       fprintf (file, _("\
-    --mexecit-rvv               Enable exec.it of RVV\n\
-    --mexecit-fls               Enable exec.it of floating load/store\n\
     --mexecit-rvp               Enable exec.it of RVP\n\
-    --mexecit-xdsp              Enable exec.it of XDSP\n\
 "));
     }
 #endif
