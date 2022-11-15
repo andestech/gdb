@@ -492,14 +492,6 @@ cpu_support_std_ext (reg_t misa, reg_t mmsc_cfg, char ext)
       is_ext_en = is_ext_en || ((misa & (1 << ('I' - 'A'))) != 0);
   }
 
-  if (ext == 'B')
-  {
-      is_ext_en = is_ext_en || ((misa & (1 << ('B' - 'A'))) != 0);
-  }
-  if (ext == 'K')
-  {
-      is_ext_en = is_ext_en || ((misa & (1 << ('K' - 'A'))) != 0);
-  }
   if (ext == 'P')
   {
       is_ext_en = is_ext_en || ((mmsc_cfg & (1 << 29)) != 0);
@@ -508,7 +500,7 @@ cpu_support_std_ext (reg_t misa, reg_t mmsc_cfg, char ext)
   return is_ext_en;
 }
 
-static bool cpu_support_arch_config (reg_t misa, reg_t mrvarch_cfg, const char *ext, bool is_mrvarch_cfg_exist)
+static bool cpu_support_arch_config (reg_t mrvarch_cfg, const char *ext, bool is_mrvarch_cfg_exist)
 {
 
   if (!is_mrvarch_cfg_exist)
@@ -520,19 +512,19 @@ static bool cpu_support_arch_config (reg_t misa, reg_t mrvarch_cfg, const char *
 
   if (strncmp(ext, "Zba", 3) == 0)
   {
-    is_ext_en = ((misa & (1 << ('B' - 'A'))) != 0) && ((mrvarch_cfg & 0x1) != 0);
+    is_ext_en = ((mrvarch_cfg & 0x1) != 0);
   }
   else if (strncmp(ext, "Zbb", 3) == 0)
   {
-    is_ext_en = ((misa & (1 << ('B' - 'A'))) != 0) && ((mrvarch_cfg & 0x2) != 0);
+    is_ext_en = ((mrvarch_cfg & 0x2) != 0);
   }
   else if (strncmp(ext, "Zbc", 3) == 0)
   {
-    is_ext_en = ((misa & (1 << ('B' - 'A'))) != 0) && ((mrvarch_cfg & 0x4) != 0);
+    is_ext_en = ((mrvarch_cfg & 0x4) != 0);
   }
   else if (strncmp(ext, "Zbs", 3) == 0)
   {
-    is_ext_en = ((misa & (1 << ('B' - 'A'))) != 0) && ((mrvarch_cfg & 0x8) != 0);
+    is_ext_en = ((mrvarch_cfg & 0x8) != 0);
   }
   else if (strncmp(ext, "Zicbom", 6) == 0)
   {
@@ -552,23 +544,23 @@ static bool cpu_support_arch_config (reg_t misa, reg_t mrvarch_cfg, const char *
   }
   else if (strncmp(ext, "Zkn", 3) == 0)
   {
-    is_ext_en = ((misa & (1 << ('K' - 'A'))) != 0) && ((mrvarch_cfg & 0x2000) != 0);
+    is_ext_en = ((mrvarch_cfg & 0x2000) != 0);
   }
   else if (strncmp(ext, "Zks", 3) == 0)
   {
-    is_ext_en = ((misa & (1 << ('K' - 'A'))) != 0) && ((mrvarch_cfg & 0x4000) != 0);
+    is_ext_en = ((mrvarch_cfg & 0x4000) != 0);
   }
   else if (strncmp(ext, "Zkt", 3) == 0)
   {
-    is_ext_en = ((misa & (1 << ('K' - 'A'))) != 0) && ((mrvarch_cfg & 0x8000) != 0);
+    is_ext_en = ((mrvarch_cfg & 0x8000) != 0);
   }
   else if (strncmp(ext, "Zkr", 3) == 0)
   {
-    is_ext_en = ((misa & (1 << ('K' - 'A'))) != 0) && ((mrvarch_cfg & 0x10000) != 0);
+    is_ext_en = ((mrvarch_cfg & 0x10000) != 0);
   }
   else if (strncmp(ext, "Zk", 2) == 0)
   {
-    is_ext_en = ((misa & (1 << ('K' - 'A'))) != 0) && ((mrvarch_cfg & 0x2000) != 0) &&
+    is_ext_en = ((mrvarch_cfg & 0x2000) != 0) &&
         ((mrvarch_cfg & 0x4000) != 0) && ((mrvarch_cfg & 0x8000) != 0) && ((mrvarch_cfg & 0x10000) != 0);
   }
 
@@ -1349,7 +1341,7 @@ elf_check (void *file_data, unsigned int file_size,
 
   reg_t CSR_misa;
   reg_t CSR_mmsc_cfg, CSR_mmsc_cfg2;
-  reg_t CSR_mrvarch_cfg = 0;
+  reg_t CSR_mrvarch_cfg;
   CSR_misa = reg_read_callback (0x301);
   CSR_mmsc_cfg = reg_read_callback (0xFC2);
   mxl = (CSR_misa >> 30) & 0x3;
@@ -1423,7 +1415,7 @@ elf_check (void *file_data, unsigned int file_size,
     {
       NEC_snprintf (temp, sizeof (temp), "'%s' extension", riscv_b_extensions[i]);
       if (NEC_check_bool (EFT_ERROR, temp,
-                  cpu_support_arch_config(CSR_misa, CSR_mrvarch_cfg, riscv_b_extensions[i], is_mrvarch_exist), nds_info.b_ext_use[i]))
+                  cpu_support_arch_config(CSR_mrvarch_cfg, riscv_b_extensions[i], is_mrvarch_exist), nds_info.b_ext_use[i]))
           n_error++;
     }
   }
@@ -1435,7 +1427,7 @@ elf_check (void *file_data, unsigned int file_size,
     {
       NEC_snprintf (temp, sizeof (temp), "'%s' extension", riscv_k_extensions[i]);
       if (NEC_check_bool (EFT_ERROR, temp,
-                  cpu_support_arch_config(CSR_misa, CSR_mrvarch_cfg, riscv_k_extensions[i], is_mrvarch_exist), nds_info.k_ext_use[i]))
+                  cpu_support_arch_config(CSR_mrvarch_cfg, riscv_k_extensions[i], is_mrvarch_exist), nds_info.k_ext_use[i]))
           n_error++;
     }
   }
