@@ -170,10 +170,14 @@ run_tests ()
 } /* namespace string_view */
 } /* namespace selftests */
 
+#endif /* __cplusplus < 201703L */
+
+void _initialize_string_view_selftests ();
 void
 _initialize_string_view_selftests ()
 {
+#if defined(GDB_STRING_VIEW)
   selftests::register_test ("string_view", selftests::string_view::run_tests);
+#endif
 }
 
-#endif /* __cplusplus < 201703L */
