@@ -117,6 +117,7 @@ riscv_execit_info (bfd_vma pc ATTRIBUTE_UNUSED,
 {
   uint32_t insn;
   static asection *section = NULL;
+  static bfd_vma bias = 0;
   bfd_byte buffer[4];
   int insnlen;
   private_data_t *pd = info->private_data;
@@ -131,6 +132,20 @@ riscv_execit_info (bfd_vma pc ATTRIBUTE_UNUSED,
   if (!section)
     {
       section = bfd_get_section_by_name (info->section->owner, ".exec.itable");
+      /* if not found, try symbol "_ITB_BASE_".  */
+      if (section == NULL)
+	{ /* TODO: find the existed API to do this.  */
+	  int i;
+	  for (i=0; i<info->symtab_size; i++)
+	    {
+	      if (0 == strcmp ("_ITB_BASE_", info->symtab[i]->name))
+		{
+		  section = info->symtab[i]->section;
+		  bias = info->symtab[i]->value;
+		  break;
+		}
+	    }
+	}
 
       /* Lookup it only once, in case .exec.itable doesn't exist at all.  */
       if (section == NULL)
@@ -144,7 +159,7 @@ riscv_execit_info (bfd_vma pc ATTRIBUTE_UNUSED,
     return;
 
   bfd_get_section_contents (section->owner, section, buffer,
-			    execit_index * 4, 4);
+			    execit_index * 4 + bias, 4);
   insn = bfd_get_32 (section->owner, buffer);
   insnlen = riscv_insn_length (insn);
 
