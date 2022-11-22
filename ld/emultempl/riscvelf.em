@@ -325,18 +325,25 @@ PARSE_AND_LIST_PROLOGUE='
 #define OPTION_EXECIT_NO_JI		(OPTION_EXECIT_BASELINE + 10)
 #define OPTION_EXECIT_NO_LS		(OPTION_EXECIT_BASELINE + 11)
 #define OPTION_EXECIT_NO_REL		(OPTION_EXECIT_BASELINE + 12)
-#define OPTION_EXECIT_NO_AUIPC		(OPTION_EXECIT_BASELINE + 13)
-#define OPTION_EXECIT_JAL_OVER_2M	(OPTION_EXECIT_BASELINE + 14)
-#define OPTION_NO_EXECIT_JAL_OVER_2M	(OPTION_EXECIT_BASELINE + 15)
-#define OPTION_EXECIT_RVV		(OPTION_EXECIT_BASELINE + 16)
-#define OPTION_EXECIT_FLS		(OPTION_EXECIT_BASELINE + 17)
-#define OPTION_EXECIT_RVP		(OPTION_EXECIT_BASELINE + 18)
-#define OPTION_EXECIT_XDSP		(OPTION_EXECIT_BASELINE + 19)
+#define OPTION_EXECIT_AUIPC		(OPTION_EXECIT_BASELINE + 13)
+#define OPTION_NO_EXECIT_AUIPC		(OPTION_EXECIT_BASELINE + 14)
+#define OPTION_EXECIT_JAL		(OPTION_EXECIT_BASELINE + 15)
+#define OPTION_NO_EXECIT_JAL		(OPTION_EXECIT_BASELINE + 16)
+#define OPTION_EXECIT_JAL_OVER_2M	(OPTION_EXECIT_BASELINE + 17)
+#define OPTION_NO_EXECIT_JAL_OVER_2M	(OPTION_EXECIT_BASELINE + 18)
+#define OPTION_EXECIT_FLS		(OPTION_EXECIT_BASELINE + 19)
+#define OPTION_NO_EXECIT_FLS		(OPTION_EXECIT_BASELINE + 20)
+#define OPTION_EXECIT_RVV		(OPTION_EXECIT_BASELINE + 21)
+#define OPTION_NO_EXECIT_RVV		(OPTION_EXECIT_BASELINE + 22)
+#define OPTION_EXECIT_XDSP		(OPTION_EXECIT_BASELINE + 23)
+#define OPTION_NO_EXECIT_XDSP		(OPTION_EXECIT_BASELINE + 24)
+#define OPTION_EXECIT_RVP		(OPTION_EXECIT_BASELINE + 25)
+#define OPTION_NO_EXECIT_RVP		(OPTION_EXECIT_BASELINE + 26)
 #endif
 
 /* These are only for lld internal usage and not affected for bfd.  */
-#define OPTION_LLD_COMPATIBLE_BASELINE	360
-#define OPTION_LLD_COMPATIBLE		360
+#define OPTION_LLD_COMPATIBLE_BASELINE	370
+#define OPTION_LLD_COMPATIBLE		370
 #define OPTION_BEST_GP			(OPTION_LLD_COMPATIBLE_BASELINE + 1)
 #define OPTION_EXECIT_OPT_DATA		(OPTION_LLD_COMPATIBLE_BASELINE + 2)
 #define OPTION_EXECIT_OPT_RODATA	(OPTION_LLD_COMPATIBLE_BASELINE + 3)
@@ -379,14 +386,20 @@ PARSE_AND_LIST_LONGOPTS='
   { "mexecit-noji", no_argument, NULL, OPTION_EXECIT_NO_JI},
   { "mexecit-nols", no_argument, NULL, OPTION_EXECIT_NO_LS},
   { "mexecit-norel", no_argument, NULL, OPTION_EXECIT_NO_REL},
+  { "mexecit-jal", no_argument, NULL, OPTION_EXECIT_JAL},
   { "mno-execit-jal", no_argument, NULL, OPTION_EXECIT_NO_JI},
-  { "mno-execit-auipc", no_argument, NULL, OPTION_EXECIT_NO_AUIPC},
+  { "mexecit-auipc", no_argument, NULL, OPTION_EXECIT_AUIPC},
+  { "mno-execit-auipc", no_argument, NULL, OPTION_NO_EXECIT_AUIPC},
   { "mexecit-jal-over-2mib", no_argument, NULL, OPTION_EXECIT_JAL_OVER_2M},
   { "mno-execit-jal-over-2mib", no_argument, NULL, OPTION_NO_EXECIT_JAL_OVER_2M},
   { "mexecit-rvv", no_argument, NULL, OPTION_EXECIT_RVV},
+  { "mno-execit-rvv", no_argument, NULL, OPTION_NO_EXECIT_RVV},
   { "mexecit-fls", no_argument, NULL, OPTION_EXECIT_FLS},
+  { "mno-execit-fls", no_argument, NULL, OPTION_NO_EXECIT_FLS},
   { "mexecit-rvp", no_argument, NULL, OPTION_EXECIT_RVP},
+  { "mno-execit-rvp", no_argument, NULL, OPTION_NO_EXECIT_RVP},
   { "mexecit-xdsp", no_argument, NULL, OPTION_EXECIT_XDSP},
+  { "mno-execit-xdsp", no_argument, NULL, OPTION_NO_EXECIT_XDSP},
   /* Obsolete options for EXECIT.  */
   { "mex9", no_argument, NULL, OPTION_EX9_TABLE},
   { "mno-ex9", no_argument, NULL, OPTION_NO_EXECIT_TABLE},
@@ -427,13 +440,13 @@ fprintf (file, _("\
     --mkeep-import-execit       Keep imported .exec.itable\n\
     --mupdate-execit            Update existing .exec.itable\n\
     --mexecit-limit=NUM         Set maximum number of entries in .exec.itable for this times\n\
-    --mexecit-loop-aware        Avoid generate exec.it instruction inside loop\n\
-    --m[no-]execit-jal-over-2mib Disable/enable exec.it conversion for jal instruction over the first 2MiB page of text section\n\
-    --mexecit-rvv               Enable exec.it of RVV\n\
-    --mexecit-xdsp              Enable exec.it of XDSP\n\
-    --mexecit-fls               Enable exec.it of floating load/store\n\
-    --mno-execit-jal            Disable exec.it conversion for jal\n\
-    --mno-execit-auipc          Disable exec.it conversion for auipc\n\
+    --mexecit-loop-aware        Avoid generate EXEC.IT instruction inside loop\n\
+    --m[no-]execit-fls          Enable/Disable EXEC.IT for floating load/store instructions\n\
+    --m[no-]execit-rvv          Enable/Disable EXEC.IT of RVV instructions\n\
+    --m[no-]execit-xdsp         Enable/Disable EXEC.IT of XDSP instructions\n\
+    --m[no-]execit-auipc        Enable/Disable EXEC.IT conversion for auipc instructions\n\
+    --m[no-]execit-jal          Enable/Disable EXEC.IT conversion for jal instructions\n\
+    --m[no-]execit-jal-over-2mib Disable/enable EXEC.IT conversion for jal instruction over the first 2MiB page of text section\n\
 "));
 
   char *var = getenv("ANDES_HELP");
@@ -556,6 +569,10 @@ PARSE_AND_LIST_ARGS_CASES='
   case OPTION_EXECIT_LOOP:
     andes.execit_loop_aware = 1;
     break;
+  case OPTION_EXECIT_JAL:
+    andes.execit_flags.noji = 0;
+    break;
+  case OPTION_NO_EXECIT_JAL:
   case OPTION_EXECIT_NO_JI:
     andes.execit_flags.noji = 1;
     break;
@@ -566,7 +583,10 @@ PARSE_AND_LIST_ARGS_CASES='
     andes.execit_flags.noji = 1;
     andes.execit_flags.nols = 1;
     break;
-  case OPTION_EXECIT_NO_AUIPC:
+  case OPTION_EXECIT_AUIPC:
+    andes.execit_flags.no_auipc = 0;
+    break;
+  case OPTION_NO_EXECIT_AUIPC:
     andes.execit_flags.no_auipc = 1;
     break;
   case OPTION_EXECIT_JAL_OVER_2M:
@@ -586,6 +606,18 @@ PARSE_AND_LIST_ARGS_CASES='
     break;
   case OPTION_EXECIT_XDSP:
     andes.execit_flags.xdsp = 1;
+    break;
+  case OPTION_NO_EXECIT_RVV:
+    andes.execit_flags.rvv = 0;
+    break;
+  case OPTION_NO_EXECIT_RVP:
+    andes.execit_flags.rvp = 0;
+    break;
+  case OPTION_NO_EXECIT_FLS:
+    andes.execit_flags.fls = 0;
+    break;
+  case OPTION_NO_EXECIT_XDSP:
+    andes.execit_flags.xdsp = 0;
     break;
 #endif
   case OPTION_DEBUG_EXECIT_LIMIT:
