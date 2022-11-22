@@ -1033,11 +1033,15 @@ const struct riscv_opcode riscv_opcodes[] =
 {"sm3p0",    0, INSN_CLASS_ZKSH,    "d,s",    MATCH_SM3P0, MASK_SM3P0, match_opcode, 0 },
 {"sm3p1",    0, INSN_CLASS_ZKSH,    "d,s",    MATCH_SM3P1, MASK_SM3P1, match_opcode, 0 },
 
-/* { Zicbo */
-{"cbo.inval",  0, INSN_CLASS_ZICBOM, "s", MATCH_CBO_INVAL, MASK_CBO_INVAL, match_opcode, 0 },
-{"cbo.clean",  0, INSN_CLASS_ZICBOM, "s", MATCH_CBO_CLEAN, MASK_CBO_CLEAN, match_opcode, 0 },
-{"cbo.flush",  0, INSN_CLASS_ZICBOM, "s", MATCH_CBO_FLUSH, MASK_CBO_FLUSH, match_opcode, 0 },
-{"cbo.zero",   0, INSN_CLASS_ZICBOZ, "s", MATCH_CBO_ZERO, MASK_CBO_ZERO, match_opcode, 0 },
+/* { Zicbo v1.0.1  */
+{"cbo.inval",  0, INSN_CLASS_ZICBOM, "s", MATCH_CBO_INVAL, MASK_CBO_INVAL, match_opcode, INSN_ALIAS },
+{"cbo.inval",  0, INSN_CLASS_ZICBOM, "f(s)", MATCH_CBO_INVAL, MASK_CBO_INVAL, match_opcode, 0 },
+{"cbo.clean",  0, INSN_CLASS_ZICBOM, "s", MATCH_CBO_CLEAN, MASK_CBO_CLEAN, match_opcode, INSN_ALIAS },
+{"cbo.clean",  0, INSN_CLASS_ZICBOM, "f(s)", MATCH_CBO_CLEAN, MASK_CBO_CLEAN, match_opcode, 0 },
+{"cbo.flush",  0, INSN_CLASS_ZICBOM, "s", MATCH_CBO_FLUSH, MASK_CBO_FLUSH, match_opcode, INSN_ALIAS },
+{"cbo.flush",  0, INSN_CLASS_ZICBOM, "f(s)", MATCH_CBO_FLUSH, MASK_CBO_FLUSH, match_opcode, 0 },
+{"cbo.zero",   0, INSN_CLASS_ZICBOZ, "s", MATCH_CBO_ZERO, MASK_CBO_ZERO, match_opcode, INSN_ALIAS },
+{"cbo.zero",   0, INSN_CLASS_ZICBOZ, "f(s)", MATCH_CBO_ZERO, MASK_CBO_ZERO, match_opcode, 0 },
 /* prefetch.i is a HINT of ori  */
 {"prefetch.i", 0, INSN_CLASS_ZICBOP, "f(s)", MATCH_PREFETCH_I, MASK_PREFETCH_I, match_opcode, 0 },
 {"prefetch.r", 0, INSN_CLASS_ZICBOP, "f(s)", MATCH_PREFETCH_R, MASK_PREFETCH_R, match_opcode, 0 },
