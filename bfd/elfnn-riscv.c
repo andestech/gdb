@@ -5946,7 +5946,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
       || (info->disable_target_specific_optimizations
 	  && info->relax_pass != PASS_ANDES_INIT
 	  && info->relax_pass != PASS_DELETE_ORG
-	  && info->relax_pass < PASS_ALIGN_ORG)
+	  && info->relax_pass <= PASS_DELETE_ORG)
       /* The exp_seg_relro_adjust is enum phase_enum (0x4),
 	 and defined in ld/ldexp.h.  */
       || *(htab->data_segment_phase) == 4)
