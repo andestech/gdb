@@ -432,7 +432,8 @@ typedef struct andes_irelx
 {
   void *next;
   Elf_Internal_Rela saved_irel;
-  bfd_vma annotation;
+  bfd_vma tag;
+  bfd_vma flags;
 } andes_irelx_t;
 
 typedef struct execit_state
