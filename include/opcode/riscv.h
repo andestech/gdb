@@ -553,6 +553,7 @@ enum riscv_insn_class
   INSN_CLASS_ZICBOZ,
   INSN_CLASS_ZICBOP,
   /* { Andes  */
+  INSN_CLASS_ACE = 999,
   INSN_CLASS_P,
   INSN_CLASS_XANDES,
   INSN_CLASS_XEFHW,
