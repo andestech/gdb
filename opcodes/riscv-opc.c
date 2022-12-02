@@ -1477,6 +1477,9 @@ const struct riscv_opcode riscv_opcodes[] =
 {"vln8.v", 0, INSN_CLASS_XANDES, "Vd,0(s)Vm", MATCH_VLN8_V, MASK_VLN8_V, match_opcode, INSN_DREF},
 {"vlnu8.v", 0, INSN_CLASS_XANDES, "Vd,0(s)Vm", MATCH_VLNU8_V, MASK_VLNU8_V, match_opcode, INSN_DREF},
 
+/* rvxexecit */
+{"nexec.it", 0, INSN_CLASS_XEXECIT, "CeT", MATCH_NEXEC_IT, MASK_NEXEC_IT, match_opcode, 0},
+
 /* rvxefhw.gas */
 {"flhw", 0, INSN_CLASS_XEFHW, "D,o(s)", MATCH_FLHW, MASK_FLHW, match_opcode, 0 },
 {"fshw", 0, INSN_CLASS_XEFHW, "T,q(s)", MATCH_FSHW, MASK_FSHW, match_opcode, 0 },

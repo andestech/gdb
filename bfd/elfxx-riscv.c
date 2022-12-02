@@ -1778,6 +1778,7 @@ static struct riscv_supported_ext riscv_supported_non_std_x_ext[] =
   {"xandes",    ISA_SPEC_CLASS_DRAFT,   5, 0,  0 },
   {"xv",        ISA_SPEC_CLASS_DRAFT,   5, 0,  0 },
   {"xefhw",     ISA_SPEC_CLASS_DRAFT,   1, 0,  0 },
+  {"xexecit",   ISA_SPEC_CLASS_DRAFT,   2, 0,  0 },
   {NULL, 0, 0, 0, 0}
 };
 
@@ -3057,6 +3058,8 @@ riscv_multi_subset_supports (riscv_parse_subset_t *rps,
       return riscv_subset_supports (rps, "xandes");
     case INSN_CLASS_XEFHW:
       return riscv_subset_supports (rps, "xefhw");
+    case INSN_CLASS_XEXECIT:
+      return riscv_subset_supports (rps, "xexecit");
     /* } Andes  */
     case INSN_CLASS_ZBA:
       return riscv_subset_supports (rps, "zba");

@@ -8103,14 +8103,8 @@ andes_execit_replace_insn (struct bfd_link_info *link_info,
       ctx.off = off;
       memset (&ctx.ie, 0, sizeof (ctx.ie));
       ctx.ie.insn = insn;
-#ifdef DEBUG_EXECIT
-	  execit.repplace_insn_count++;
-#endif /* DEBUG_EXECIT */
       if (andes_execit_render_hash (&ctx) != EXECIT_HASH_OK)
 	{
-#ifdef DEBUG_EXECIT
-	  execit.repplace_insn_ng_count++;
-#endif /* DEBUG_EXECIT */
 	  off += 4;
 	  continue;
 	}
@@ -8120,9 +8114,6 @@ andes_execit_replace_insn (struct bfd_link_info *link_info,
 	bfd_hash_lookup (&execit.code_hash, hash, false, false);
       if (!(entry && entry->is_chosen))
 	{
-#ifdef DEBUG_EXECIT
-	  execit.repplace_insn_ng_count++;
-#endif /* DEBUG_EXECIT */
 	  off += 4;
 	  continue;
 	}
@@ -8131,9 +8122,7 @@ andes_execit_replace_insn (struct bfd_link_info *link_info,
       ctx.contents = contents;
       if (!andes_execit_push_insn (&ctx, entry))
 	{
-#ifdef DEBUG_EXECIT
-	  execit.repplace_insn_ng_count++;
-#endif /* DEBUG_EXECIT */
+	  BFD_ASSERT (0);
 	}
 
       off += 4;

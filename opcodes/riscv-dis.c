@@ -123,6 +123,7 @@ typedef struct
     bool has_c;
     bool has_p;
     bool has_zcm;
+    bool has_xexecit;
   } args_t;
 
 static bool
@@ -612,6 +613,10 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 		  print (info->stream, "#%d     !", (int)EXTRACT_RVC_EXECIT_IMM (l) >> 2);
 		  riscv_execit_info (pc, info, (int)EXTRACT_RVC_EXECIT_IMM (l) >> 2);
 		  break;
+		case 'T':
+		  print (info->stream, "#%d     !", (int)EXTRACT_RVC_NEXECIT_IMM (l) >> 2);
+		  riscv_execit_info (pc, info, (int)EXTRACT_RVC_NEXECIT_IMM (l) >> 2);
+		  break;
 		}
 	      break;
 	    /* } Andes  */
@@ -1070,6 +1075,7 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
       args.has_c = riscv_subset_supports (&riscv_rps_dis, "c");
       args.has_p = riscv_subset_supports (&riscv_rps_dis, "p");
       args.has_zcm = riscv_subset_supports_fuzzy (&riscv_rps_dis, "zcm");
+      args.has_xexecit = riscv_subset_supports (&riscv_rps_dis, "xexecit");
       /* } Andes */
 
       init = 1;
@@ -1213,6 +1219,9 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
 	    continue;
 
 	  if (!is_preferred_subset (op, &args))
+	    continue;
+
+	  if (args.has_xexecit && 0 == strncmp (op->name, "ex", 2))
 	    continue;
 
 	  /* It's a match.  */

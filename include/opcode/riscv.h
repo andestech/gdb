@@ -253,6 +253,8 @@ static const char * const riscv_pred_succ[16] =
   ((RV_X(x, 4, 1) << 2) | (RV_X(x, 10, 2) << 3) | (RV_X(x, 2, 1) << 5) | (RV_X(x, 5, 2) << 6) | (RV_X(x, 9, 1) << 8) | (RV_X(x, 3, 1) << 9) | (RV_X(x, 12, 1) << 10))
 #define EXTRACT_RVC_EXECIT_IMM(x) \
   ((RV_X(x, 4, 1) << 2) | (RV_X(x, 10, 2) << 3) | (RV_X(x, 2, 1) << 5) | (RV_X(x, 5, 2) << 6) | (RV_X(x, 9, 1) << 8) | (RV_X(x, 3, 1) << 9) | (RV_X(x, 12, 1) << 10) | (RV_X(x, 8, 1) << 11))
+#define EXTRACT_RVC_NEXECIT_IMM(x) \
+  ((RV_X(x, 4, 1) << 2) | (RV_X(x, 10, 2) << 3) | (RV_X(x, 2, 1) << 5) | (RV_X(x, 5, 2) << 6) | (RV_X(x, 9, 1) << 8) | (RV_X(x, 3, 1) << 9) | (RV_X(x, 7, 1) << 10) | (RV_X(x, 8, 1) << 11))
 #define EXTRACT_ITYPE_IMM6H(x) \
   (RV_X(x, 26, 6))
 #define EXTRACT_ITYPE_IMM6L(x) \
@@ -320,6 +322,8 @@ static const char * const riscv_pred_succ[16] =
   ((RV_X(x, 2, 1) << 4) | (RV_X(x, 3, 2) << 10) | (RV_X(x, 5, 1) << 2) | (RV_X(x, 6, 2) << 5) | (RV_X(x, 8, 1) << 9) | (RV_X(x, 9, 1) << 3) | (RV_X(x, 10, 1) << 12))
 #define ENCODE_RVC_EXECIT_IMM(x) \
   ((RV_X(x, 2, 1) << 4) | (RV_X(x, 3, 2) << 10) | (RV_X(x, 5, 1) << 2) | (RV_X(x, 6, 2) << 5) | (RV_X(x, 8, 1) << 9) | (RV_X(x, 9, 1) << 3) | (RV_X(x, 10, 1) << 12) | (RV_X(x, 11, 1) << 8))
+#define ENCODE_RVC_NEXECIT_IMM(x) \
+  ((RV_X(x, 2, 1) << 4) | (RV_X(x, 3, 2) << 10) | (RV_X(x, 5, 1) << 2) | (RV_X(x, 6, 2) << 5) | (RV_X(x, 8, 1) << 9) | (RV_X(x, 9, 1) << 3) | (RV_X(x, 10, 1) << 7) | (RV_X(x, 11, 1) << 8))
 #define ENCODE_SBTYPE_IMM(x) \
   ((RV_X(x, 1, 4) << 8) | (RV_X(x, 5, 6) << 25) | (RV_X(x, 11, 1) << 7) | (RV_X(x, 12, 1) << 31))
 
@@ -335,6 +339,7 @@ static const char * const riscv_pred_succ[16] =
 #define VALID_GPTYPE_SD_IMM(x) (EXTRACT_GPTYPE_SD_IMM(ENCODE_GPTYPE_SD_IMM(x)) == (x))
 #define VALID_RVC_EX9IT_IMM(x) (EXTRACT_RVC_EX9IT_IMM(ENCODE_RVC_EX9IT_IMM(x)) == (x))
 #define VALID_RVC_EXECIT_IMM(x) (EXTRACT_RVC_EXECIT_IMM(ENCODE_RVC_EXECIT_IMM(x)) == (x))
+#define VALID_RVC_NEXECIT_IMM(x) (EXTRACT_RVC_NEXECIT_IMM(ENCODE_RVC_NEXECIT_IMM(x)) == (x))
 #define VALID_SBTYPE_IMM(x) (EXTRACT_SBTYPE_IMM(ENCODE_SBTYPE_IMM(x)) == (x))
 
 #define RISCV_IMM10_BITS 10
@@ -612,6 +617,7 @@ enum riscv_insn_class
   INSN_CLASS_P,
   INSN_CLASS_XANDES,
   INSN_CLASS_XEFHW,
+  INSN_CLASS_XEXECIT,
   /* } Andes  */
   INSN_CLASS_ZCB,
   INSN_CLASS_ZCB_AND_ZBA,

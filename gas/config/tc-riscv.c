@@ -1652,6 +1652,8 @@ validate_riscv_insn (const struct riscv_opcode *opc, int length)
 		  used_bits |= ENCODE_RVC_EX9IT_IMM (-1U); break;
 		case 't':
 		  used_bits |= ENCODE_RVC_EXECIT_IMM (-1U); break;
+		case 'T':
+		  used_bits |= ENCODE_RVC_NEXECIT_IMM (-1U); break;
 		default:
 		  goto unknown_validate_operand;
 		}
@@ -3773,6 +3775,13 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 			  || !VALID_RVC_EXECIT_IMM (imm_expr->X_add_number << 2))
 			break;
 		      ip->insn_opcode |= ENCODE_RVC_EXECIT_IMM (imm_expr->X_add_number << 2);
+		      goto rvc_imm_done;
+		    case 'T':
+		      if (my_getSmallExpression (imm_expr, imm_reloc, asarg, p)
+			  || imm_expr->X_op != O_constant
+			  || !VALID_RVC_NEXECIT_IMM (imm_expr->X_add_number << 2))
+			break;
+		      ip->insn_opcode |= ENCODE_RVC_NEXECIT_IMM (imm_expr->X_add_number << 2);
 		      goto rvc_imm_done;
 		    default:
 		      goto unknown_riscv_ip_operand;
