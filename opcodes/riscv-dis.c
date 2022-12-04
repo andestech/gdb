@@ -46,6 +46,7 @@ static riscv_parse_subset_t riscv_rps_dis =
 {
   &riscv_subsets,	/* subset_list.  */
   opcodes_error_handler,/* error_handler.  */
+  opcodes_error_handler,/* TODO: warning_handler.  */
   &xlen,		/* xlen.  */
   &default_isa_spec,	/* isa_spec.  */
   false,		/* check_unknown_prefixed_ext.  */

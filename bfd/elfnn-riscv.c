@@ -902,6 +902,39 @@ riscv_elf_update_ict_hash_table (bfd *abfd, asection *sec,
 }
 
 static bool
+riscv_has_subset (struct bfd_link_info *info, const char *subset)
+{
+  unsigned xlen = ARCH_SIZE;
+  riscv_subset_list_t subsets;
+  bool ret;
+
+  /* If relax is disabled by user, table jump insn
+    will not be generated.  */
+  if (info->disable_target_specific_optimizations >= 1)
+    return false;
+
+  if (!bfd_link_executable (info))
+    return false;
+
+  bfd *obfd = info->output_bfd;
+  obj_attribute *out_attr = elf_known_obj_attributes_proc (obfd);
+
+  subsets.head = NULL;
+  subsets.tail = NULL;
+
+  riscv_parse_subset_t riscv_rps_ld_out =
+	{&subsets, _bfd_error_handler, _bfd_error_handler, &xlen, NULL, false};
+
+  if (!riscv_parse_subset (&riscv_rps_ld_out, out_attr[Tag_RISCV_arch].s))
+    return false;
+
+  ret = riscv_subset_supports (&riscv_rps_ld_out, subset);
+  riscv_release_subset_list (&subsets);
+
+  return ret;
+}
+
+static bool
 riscv_use_table_jump (struct bfd_link_info *info)
 {
   unsigned xlen = ARCH_SIZE;
@@ -923,7 +956,7 @@ riscv_use_table_jump (struct bfd_link_info *info)
   subsets.tail = NULL;
 
   riscv_parse_subset_t riscv_rps_ld_out =
-	{&subsets, _bfd_error_handler, &xlen, NULL, false};
+	{&subsets, _bfd_error_handler, _bfd_error_handler, &xlen, NULL, false};
 
   if (!riscv_parse_subset (&riscv_rps_ld_out, out_attr[Tag_RISCV_arch].s))
     return false;
@@ -4244,6 +4277,34 @@ riscv_merge_multi_letter_ext (riscv_subset_t **pin,
   return true;
 }
 
+/* add a subset to Tag_RISCV_arch attribute.  */
+
+static char *
+riscv_add_arch_attr_subset (char *arch, char *subset)
+{
+  char *merged_arch;
+  unsigned xlen;
+
+  riscv_parse_subset_t riscv_rps =
+    {&out_subsets, _bfd_error_handler, _bfd_error_handler, &xlen, NULL, false};
+
+  if (arch == NULL || subset == NULL)
+    return NULL;
+
+  /* Parse arch string.  */
+  if (!riscv_parse_subset (&riscv_rps, arch))
+    return NULL;
+
+  riscv_parse_add_subset (&riscv_rps, "xexecit", 2, 0, false);
+
+  merged_arch = riscv_arch_str (xlen, &out_subsets);
+
+  /* Release the subset lists.  */
+  riscv_release_subset_list (&out_subsets);
+
+  return merged_arch;
+}
+
 /* Merge Tag_RISCV_arch attribute.  */
 
 static char *
@@ -4257,9 +4318,9 @@ riscv_merge_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
   merged_subsets.tail = NULL;
 
   riscv_parse_subset_t riscv_rps_ld_in =
-    {&in_subsets, _bfd_error_handler, &xlen_in, NULL, false};
+    {&in_subsets, _bfd_error_handler, _bfd_error_handler, &xlen_in, NULL, false};
   riscv_parse_subset_t riscv_rps_ld_out =
-    {&out_subsets, _bfd_error_handler, &xlen_out, NULL, false};
+    {&out_subsets, _bfd_error_handler, _bfd_error_handler, &xlen_out, NULL, false};
 
   if (in_arch == NULL && out_arch == NULL)
     return NULL;
@@ -4374,6 +4435,31 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
 	      else if (strcmp (out_attr_list->attr.s, "large") == 0)
 		ict_model = 2;
 	    }
+	}
+
+      /* insert xexecit if enabled.  */
+      while (true)
+	{
+	  char *arch = NULL;
+	  struct riscv_elf_link_hash_table *htab = riscv_elf_hash_table (info);
+	  andes_ld_options_t *andes = &htab->andes;
+	  if (andes->execit_flags.nexecit_op == 0)
+	    break;
+	  in_attr = elf_known_obj_attributes_proc (ibfd);
+	  out_attr = elf_known_obj_attributes_proc (obfd);
+	  if (out_attr[Tag_RISCV_arch].s)
+	    arch = out_attr[Tag_RISCV_arch].s;
+	  else if (in_attr[Tag_RISCV_arch].s)
+	    arch = in_attr[Tag_RISCV_arch].s;
+	  else
+	    BFD_ASSERT (0);
+	  if (arch)
+	    {
+	      /* TODO: free old arch string?  */
+	      out_attr[Tag_RISCV_arch].s =
+		riscv_add_arch_attr_subset (arch, "xexecit");
+	    }
+	  break; /* once */
 	}
 
       return true;
@@ -6468,6 +6554,12 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
       /* init execit state here  */
       memset (&execit, 0, sizeof (execit));
       execit.htab = riscv_elf_hash_table (info);
+      /* exec.it or nexec.it  */
+      if (nsta.opt->execit_flags.nexecit_op != 0 ||
+	  riscv_has_subset (info, "xexecit"))
+	execit.execit_op = NEXECIT_INSN;
+      else
+	execit.execit_op = EXECIT_INSN;
       is_init = 1;
       /* init page size if not yet  */
       if (andes->set_relax_page_size == 0)
@@ -6512,6 +6604,12 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
       /* The exp_seg_relro_adjust is enum phase_enum (0x4),
 	 and defined in ld/ldexp.h.  */
       || *(htab->data_segment_phase) == 4)
+    return true;
+
+  /* TODO: if zcmt is not enabled.  */
+  if (true
+      && info->relax_pass >= PASS_ZCE_TABLE_JUMP_COLLECT
+      && info->relax_pass <= PASS_ZCE_TABLE_JUMP_APPLY)
     return true;
 
   /* { Andes  */
@@ -8691,7 +8789,9 @@ andes_execit_push_insn (execit_context_t *ctx, execit_hash_t* h)
     return false;
 
   /* replace code.  */
-  insn16 = (uint16_t)EXECIT_INSN | ENCODE_RVC_EXECIT_IMM (e->itable_index << 2);
+  insn16 = execit.execit_op | ((execit.execit_op == EXECIT_INSN)
+	     ? ENCODE_RVC_EXECIT_IMM (e->itable_index << 2)
+	     : ENCODE_RVC_NEXECIT_IMM (e->itable_index << 2));
   bfd_put_16 (ctx->abfd, insn16, ctx->contents + ctx->off);
 
   if (!execit_push_blank (ctx, 2, 2))
@@ -9764,7 +9864,9 @@ andes_relax_execit_ite (
 	}
       /* apply relocation  */
       bfd_byte *contents = elf_section_data (sec)->this_hdr.contents;
-      uint16_t insn16 = (uint16_t)EXECIT_INSN | ENCODE_RVC_EXECIT_IMM (ie->itable_index << 2);
+      uint16_t insn16 = execit.execit_op | ((execit.execit_op == EXECIT_INSN)
+			  ? ENCODE_RVC_EXECIT_IMM (ie->itable_index << 2)
+			  : ENCODE_RVC_NEXECIT_IMM (ie->itable_index << 2));
       bfd_put_16 (abfd, insn16, contents + rel->r_offset);
       if (rtype == R_RISCV_CALL)
 	{ /* relocate the following JALR  */

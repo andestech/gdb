@@ -74,6 +74,8 @@ typedef struct
   riscv_subset_list_t *subset_list;
   void (*error_handler) (const char *,
 			 ...) ATTRIBUTE_PRINTF_1;
+  void (*warning_handler) (const char *,
+			   ...) ATTRIBUTE_PRINTF_1;
   unsigned *xlen;
   enum riscv_spec_class *isa_spec;
   bool check_unknown_prefixed_ext;
@@ -186,6 +188,7 @@ extern bool find_imported_ict_table;
 extern const unsigned int number_of_howto_table;
 
 #define EXECIT_INSN 0x8000u
+#define NEXECIT_INSN 0x9000u
 #define EXECIT_SECTION ".exec.itable"
 #define EXECIT_HASH_OK (0)
 #define EXECIT_HASH_NG (1)
@@ -284,6 +287,7 @@ typedef struct andes_ld_options
     uint rvp:1;
     uint fls:1;
     uint xdsp:1;
+    uint nexecit_op:1;
   } execit_flags;
   uint update_execit_table:1;
   uint keep_import_execit:1;
@@ -499,6 +503,7 @@ typedef struct execit_state
   int raw_itable_entries;
   int next_itable_index;
   int import_number;
+  uint16_t execit_op;
   uint is_init:1;
   uint is_built:1;
   uint is_replaced:1;

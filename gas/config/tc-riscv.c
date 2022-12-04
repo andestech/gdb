@@ -369,6 +369,7 @@ struct riscv_set_options
   int cmodel; /* cmodel type.  */
   int atomic; /* RVA */
   int dsp; /* RVP */
+  int nexecit_op; /* Enable nexec.it opcode. */
   int vector; /* RVV */
   int efhw; /* RVXefhw (flhw/fshw) */
   int workaround; /* Enable Andes workarounds.  */
@@ -398,6 +399,7 @@ static struct riscv_set_options riscv_opts =
   CMODEL_DEFAULT, /* cmodel */
   0, /* atomic */
   0, /* dsp */
+  0, /* nexec.it opcode */
   0, /* vector */
   0, /* efhw */
   1, /* workaround */
@@ -437,6 +439,7 @@ static riscv_parse_subset_t riscv_rps_as =
   NULL,			/* subset_list, we will set it later once
 			   riscv_opts_stack is created or updated.  */
   as_bad,		/* error_handler.  */
+  as_warn,		/* warning_handler.  */
   &xlen,		/* xlen.  */
   &default_isa_spec,	/* isa_spec.  */
   true,			/* check_unknown_prefixed_ext.  */
@@ -4950,6 +4953,12 @@ md_assemble (char *str)
       /* sync arch from source file; update riscv_opts.  */
       if (riscv_opts.efhw == 0)
 	riscv_opts.efhw = riscv_subset_supports (&riscv_rps_as, "xefhw");
+      /* determine exec.it opcode.  */
+      if (riscv_subset_supports (&riscv_rps_as, "xexecit"))
+	riscv_opts.nexecit_op = 1;
+      else if (riscv_opts.nexecit_op != 0)
+	riscv_parse_add_subset (&riscv_rps_as, "xexecit", RISCV_UNKNOWN_VERSION,
+				RISCV_UNKNOWN_VERSION, false);
       /* } Andes */
     }
 
@@ -5019,6 +5028,7 @@ enum options
   OPTION_MB22827,
   OPTION_MB22827_1,
   OPTION_FULL_ARCH,
+  OPTION_MNEXECIT_OP,
   /* } Andes  */
   OPTION_END_OF_ENUM
 };
@@ -5048,6 +5058,7 @@ struct option md_longopts[] =
   {"O1", no_argument, NULL, OPTION_OPTIMIZE},
   {"Os", no_argument, NULL, OPTION_OPTIMIZE_SPACE},
   {"mext-dsp", no_argument, NULL, OPTION_MEXT_DSP},
+  {"mnexecitop", no_argument, NULL, OPTION_MNEXECIT_OP},
   /* hidden options */
   {"mext-efhw", no_argument, NULL, OPTION_MEXT_EFHW},
   {"mext-vector", no_argument, NULL, OPTION_MEXT_VECTOR},
@@ -5190,6 +5201,10 @@ md_parse_option (int c, const char *arg)
       riscv_opts.dsp = true;
       break;
 
+    case OPTION_MNEXECIT_OP:
+      riscv_opts.nexecit_op = true;
+      break;
+
     case OPTION_MEXT_VECTOR:
       riscv_opts.vector = true;
       break;
@@ -5323,6 +5338,12 @@ riscv_after_parse_args (void)
   if (riscv_opts.dsp)
     riscv_parse_add_subset (&riscv_rps_as, "p", RISCV_UNKNOWN_VERSION,
 			    RISCV_UNKNOWN_VERSION, false);
+
+#if 0 /* defer to md_assemble. */
+  if (riscv_opts.nexecit_op)
+    riscv_parse_add_subset (&riscv_rps_as, "xexecit", RISCV_UNKNOWN_VERSION,
+			    RISCV_UNKNOWN_VERSION, false);
+#endif
 
   if (riscv_opts.vector)
     riscv_parse_add_subset (&riscv_rps_as, "v", RISCV_UNKNOWN_VERSION,

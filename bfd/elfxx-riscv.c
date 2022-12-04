@@ -2503,9 +2503,9 @@ riscv_parse_check_conflicts (riscv_parse_subset_t *rps)
       static bool warned = false;
       if (! warned)
 	{
-	  rps->error_handler
+	  rps->warning_handler
 	    (_("zcm* is not compatible with `c' extension."));
-	warned = true;
+	  warned = true;
 	}
       #if 0 /* disable confliction of zcX and rvc.  */
       no_conflict = false;
@@ -2534,6 +2534,26 @@ riscv_parse_check_conflicts (riscv_parse_subset_t *rps)
       rps->error_handler
 	(_("Zcmp is not is not compatible with `e' extension."));
       no_conflict = false;
+    }
+
+  /* ZC* must accompanied with nexec.it.  */
+  if ((riscv_lookup_subset (rps->subset_list, "zca", &subset)
+       || riscv_lookup_subset (rps->subset_list, "zcb", &subset)
+       || riscv_lookup_subset (rps->subset_list, "zcd", &subset)
+       || riscv_lookup_subset (rps->subset_list, "zcf", &subset)
+       || riscv_lookup_subset (rps->subset_list, "zcmp", &subset)
+       || riscv_lookup_subset (rps->subset_list, "zcmt", &subset))
+      && !riscv_lookup_subset (rps->subset_list, "xexecit", &subset))
+    {
+      static bool warned = false;
+      if (! warned)
+	{
+	  rps->warning_handler
+	    (_("enable nexec.it opcode for zc subsets."));
+	  warned = true;
+	}
+      riscv_parse_add_subset (rps, "xexecit", RISCV_UNKNOWN_VERSION,
+			      RISCV_UNKNOWN_VERSION, false);
     }
 
   return no_conflict;
@@ -3059,7 +3079,8 @@ riscv_multi_subset_supports (riscv_parse_subset_t *rps,
     case INSN_CLASS_XEFHW:
       return riscv_subset_supports (rps, "xefhw");
     case INSN_CLASS_XEXECIT:
-      return riscv_subset_supports (rps, "xexecit");
+      return (riscv_subset_supports (rps, "xexecit")
+	      && riscv_subset_supports (rps, "xandes"));
     /* } Andes  */
     case INSN_CLASS_ZBA:
       return riscv_subset_supports (rps, "zba");

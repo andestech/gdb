@@ -339,6 +339,7 @@ PARSE_AND_LIST_PROLOGUE='
 #define OPTION_NO_EXECIT_XDSP		(OPTION_EXECIT_BASELINE + 24)
 #define OPTION_EXECIT_RVP		(OPTION_EXECIT_BASELINE + 25)
 #define OPTION_NO_EXECIT_RVP		(OPTION_EXECIT_BASELINE + 26)
+#define OPTION_NEXECIT_OP		(OPTION_EXECIT_BASELINE + 27)
 #endif
 
 /* These are only for lld internal usage and not affected for bfd.  */
@@ -400,6 +401,7 @@ PARSE_AND_LIST_LONGOPTS='
   { "mno-execit-rvp", no_argument, NULL, OPTION_NO_EXECIT_RVP},
   { "mexecit-xdsp", no_argument, NULL, OPTION_EXECIT_XDSP},
   { "mno-execit-xdsp", no_argument, NULL, OPTION_NO_EXECIT_XDSP},
+  { "mnexecitop", no_argument, NULL, OPTION_NEXECIT_OP},
   /* Obsolete options for EXECIT.  */
   { "mex9", no_argument, NULL, OPTION_EX9_TABLE},
   { "mno-ex9", no_argument, NULL, OPTION_NO_EXECIT_TABLE},
@@ -618,6 +620,9 @@ PARSE_AND_LIST_ARGS_CASES='
     break;
   case OPTION_NO_EXECIT_XDSP:
     andes.execit_flags.xdsp = 0;
+    break;
+  case OPTION_NEXECIT_OP:
+    andes.execit_flags.nexecit_op = 1;
     break;
 #endif
   case OPTION_DEBUG_EXECIT_LIMIT:
