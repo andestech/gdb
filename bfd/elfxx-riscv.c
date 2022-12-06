@@ -1778,7 +1778,7 @@ static struct riscv_supported_ext riscv_supported_non_std_x_ext[] =
   {"xandes",    ISA_SPEC_CLASS_DRAFT,   5, 0,  0 },
   {"xv",        ISA_SPEC_CLASS_DRAFT,   5, 0,  0 },
   {"xefhw",     ISA_SPEC_CLASS_DRAFT,   1, 0,  0 },
-  {"xexecit",   ISA_SPEC_CLASS_DRAFT,   2, 0,  0 },
+  {"xexecit",   ISA_SPEC_CLASS_DRAFT,   1, 0,  0 },
   {NULL, 0, 0, 0, 0}
 };
 

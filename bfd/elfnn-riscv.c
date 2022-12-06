@@ -4295,7 +4295,7 @@ riscv_add_arch_attr_subset (char *arch, char *subset)
   if (!riscv_parse_subset (&riscv_rps, arch))
     return NULL;
 
-  riscv_parse_add_subset (&riscv_rps, "xexecit", 2, 0, false);
+  riscv_parse_add_subset (&riscv_rps, "xexecit", 1, 0, false);
 
   merged_arch = riscv_arch_str (xlen, &out_subsets);
 
