@@ -3276,10 +3276,10 @@ riscv_setup_register_aliases (struct gdbarch *gdbarch,
 static int
 riscv_dwarf_reg_to_regnum (struct gdbarch *gdbarch, int reg)
 {
-  if (reg < RISCV_DWARF_REGNUM_X31)
+  if (reg <= RISCV_DWARF_REGNUM_X31)
     return RISCV_ZERO_REGNUM + (reg - RISCV_DWARF_REGNUM_X0);
 
-  else if (reg < RISCV_DWARF_REGNUM_F31)
+  else if (reg <= RISCV_DWARF_REGNUM_F31)
     return RISCV_FIRST_FP_REGNUM + (reg - RISCV_DWARF_REGNUM_F0);
 
   else if ( (reg >= 4096) && (reg < 8192) )
