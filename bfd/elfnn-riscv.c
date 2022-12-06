@@ -6607,7 +6607,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
     return true;
 
   /* TODO: if zcmt is not enabled.  */
-  if (true
+  if (!andes->set_table_jump
       && info->relax_pass >= PASS_ZCE_TABLE_JUMP_COLLECT
       && info->relax_pass <= PASS_ZCE_TABLE_JUMP_APPLY)
     return true;

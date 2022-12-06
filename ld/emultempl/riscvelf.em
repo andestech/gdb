@@ -35,6 +35,7 @@ fragment <<EOF
 /* } Andes */
 
 /* { Andes  */
+#define RISCV_ANDES_INTERNAL_OPTIONS
 #define RISCV_EXECIT_EXT
 static andes_ld_options_t andes =
 {
@@ -59,6 +60,8 @@ static andes_ld_options_t andes =
   .keep_import_execit = 0,
   .execit_loop_aware = 0,
   .execit_jal_over_2m = 0,
+  /* andes internal options.  */
+  .set_table_jump = 0,
 };
 /* } Andes  */
 
@@ -310,6 +313,12 @@ PARSE_AND_LIST_PROLOGUE='
 #define OPTION_NO_RELAX_CROSS_SECTION_CALL	(OPTION_INTERNAL_BASELINE + 12)
 #define OPTION_NO_WORKAROUND		(OPTION_INTERNAL_BASELINE + 13)
 
+/* These are only available for Andes internal options.  */
+#if defined RISCV_ANDES_INTERNAL_OPTIONS
+#define OPTION_NO_OPT_TABLE_JUMP	(OPTION_INTERNAL_BASELINE + 28)
+#define OPTION_OPT_TABLE_JUMP		(OPTION_INTERNAL_BASELINE + 29)
+#endif
+
 /* These are only available to EXECIT.  */
 #if defined RISCV_EXECIT_EXT
 #define OPTION_EXECIT_BASELINE		340
@@ -373,6 +382,12 @@ PARSE_AND_LIST_LONGOPTS='
   { "mrelax-cross-section-call", no_argument, NULL, OPTION_RELAX_CROSS_SECTION_CALL},
   { "mno-relax-cross-section-call", no_argument, NULL, OPTION_NO_RELAX_CROSS_SECTION_CALL},
   { "mno-workaround", no_argument, NULL, OPTION_NO_WORKAROUND},
+
+/* These are specific options for EXECIT support.  */
+#if defined RISCV_ANDES_INTERNAL_OPTIONS
+  { "mopt-table-jump", no_argument, NULL, OPTION_OPT_TABLE_JUMP},
+  { "mno-opt-table-jump", no_argument, NULL, OPTION_NO_OPT_TABLE_JUMP},
+#endif
 
 /* These are specific options for EXECIT support.  */
 #if defined RISCV_EXECIT_EXT
@@ -515,6 +530,15 @@ PARSE_AND_LIST_ARGS_CASES='
   case OPTION_NO_WORKAROUND:
     andes.set_workaround = 0;
     break;
+
+#if defined RISCV_ANDES_INTERNAL_OPTIONS
+  case OPTION_OPT_TABLE_JUMP:
+    andes.set_table_jump = 1;
+    break;
+  case OPTION_NO_OPT_TABLE_JUMP:
+    andes.set_table_jump = 0;
+    break;
+#endif
 
 #if defined RISCV_EXECIT_EXT
   case OPTION_EX9_TABLE:

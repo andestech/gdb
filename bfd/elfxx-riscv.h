@@ -293,6 +293,8 @@ typedef struct andes_ld_options
   uint keep_import_execit:1;
   uint execit_loop_aware:1;
   uint execit_jal_over_2m:1; /* enable JAL over first 2M window.  */
+  /* andes internal options.  */
+  uint set_table_jump:1;
 } andes_ld_options_t;
 
 /* exec.it */
