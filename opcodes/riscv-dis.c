@@ -1222,7 +1222,12 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
 	  if (!is_preferred_subset (op, &args))
 	    continue;
 
+	  /* pick nexec.it if support xexecit.  */
 	  if (args.has_xexecit && 0 == strncmp (op->name, "ex", 2))
+	    continue;
+
+	  /* prefer cm.* if support zcm*.  */
+	  if (args.has_zcm && 0 == strncmp (op->name, "c.f", 3))
 	    continue;
 
 	  /* It's a match.  */

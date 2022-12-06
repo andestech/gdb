@@ -281,7 +281,7 @@ static int
 match_cm_jt (const struct riscv_opcode *op, insn_t insn)
 {
   return match_opcode (op, insn)
-    && EXTRACT_ZCMP_TABLE_JUMP_INDEX (insn) < 64;
+    && EXTRACT_ZCMP_TABLE_JUMP_INDEX (insn) < 32;
 }
 
 /* This is used for cm.jalt. This requires index operand to be in 64 to 255.  */
@@ -290,7 +290,7 @@ static int
 match_cm_jalt (const struct riscv_opcode *op, insn_t insn)
 {
   return match_opcode (op, insn)
-    && EXTRACT_ZCMP_TABLE_JUMP_INDEX (insn) >= 64
+    && EXTRACT_ZCMP_TABLE_JUMP_INDEX (insn) >= 32
     && EXTRACT_ZCMP_TABLE_JUMP_INDEX (insn) < 256;
 }
 

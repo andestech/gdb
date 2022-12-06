@@ -6448,7 +6448,7 @@ static bool
 riscv_table_jump_profiling (riscv_table_jump_htab_t *table_jump_htab,
     riscv_table_jump_args *args)
 {
-  args->start = 0, args->end = 63;
+  args->start = 0, args->end = 31; /* zc v1.0.0 rc5.7  */
   /* Do a ranking. */
   htab_traverse (table_jump_htab->tbljt_htab,
 	riscv_ranking_table_jump,
@@ -6457,7 +6457,7 @@ riscv_table_jump_profiling (riscv_table_jump_htab_t *table_jump_htab,
 	  table_jump_htab->tbljt_htab,
 	  args);
 
-  args->start = 64, args->end = 255;
+  args->start = 32, args->end = 255;
   htab_traverse (table_jump_htab->tbljalt_htab,
 	riscv_ranking_table_jump,
 	args);
