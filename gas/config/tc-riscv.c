@@ -443,6 +443,8 @@ static riscv_parse_subset_t riscv_rps_as =
   &xlen,		/* xlen.  */
   &default_isa_spec,	/* isa_spec.  */
   true,			/* check_unknown_prefixed_ext.  */
+  STATE_ASSEMBLE,	/* state.  */
+  false,		/* exec.it enabled? */
 };
 
 /* This structure is used to hold a stack of .option values.  */
@@ -4954,10 +4956,10 @@ md_assemble (char *str)
       if (riscv_opts.efhw == 0)
 	riscv_opts.efhw = riscv_subset_supports (&riscv_rps_as, "xefhw");
       /* determine exec.it opcode.  */
-      if (riscv_subset_supports (&riscv_rps_as, "xexecit"))
+      if (riscv_subset_supports (&riscv_rps_as, "xnexecit"))
 	riscv_opts.nexecit_op = 1;
       else if (riscv_opts.nexecit_op != 0)
-	riscv_parse_add_subset (&riscv_rps_as, "xexecit", RISCV_UNKNOWN_VERSION,
+	riscv_parse_add_subset (&riscv_rps_as, "xnexecit", RISCV_UNKNOWN_VERSION,
 				RISCV_UNKNOWN_VERSION, false);
       /* } Andes */
     }
@@ -5341,7 +5343,7 @@ riscv_after_parse_args (void)
 
 #if 0 /* defer to md_assemble. */
   if (riscv_opts.nexecit_op)
-    riscv_parse_add_subset (&riscv_rps_as, "xexecit", RISCV_UNKNOWN_VERSION,
+    riscv_parse_add_subset (&riscv_rps_as, "xnexecit", RISCV_UNKNOWN_VERSION,
 			    RISCV_UNKNOWN_VERSION, false);
 #endif
 
@@ -5772,7 +5774,8 @@ s_riscv_option (int x ATTRIBUTE_UNUSED)
       riscv_update_subset (&riscv_rps_as, name);
 
       riscv_set_rvc (false);
-      if (riscv_subset_supports (&riscv_rps_as, "c"))
+      if (riscv_subset_supports (&riscv_rps_as, "c")
+	  || riscv_subset_supports (&riscv_rps_as, "zca"))
 	riscv_set_rvc (true);
     }
   else if (strcmp (name, "push") == 0)

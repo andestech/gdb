@@ -79,6 +79,13 @@ typedef struct
   unsigned *xlen;
   enum riscv_spec_class *isa_spec;
   bool check_unknown_prefixed_ext;
+  /* flags */
+  uint state;
+  #define STATE_DEFAULT  (0)
+  #define STATE_ASSEMBLE (1)
+  #define STATE_LINK     (2)
+  #define STATE_OBJDUMP  (3)
+  bool enabled_execit;
 } riscv_parse_subset_t;
 
 extern bool

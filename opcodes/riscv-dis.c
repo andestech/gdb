@@ -50,6 +50,8 @@ static riscv_parse_subset_t riscv_rps_dis =
   &xlen,		/* xlen.  */
   &default_isa_spec,	/* isa_spec.  */
   false,		/* check_unknown_prefixed_ext.  */
+  STATE_DEFAULT,	/* state  */
+  false,		/* exec.it enabled?  */
 };
 
 struct riscv_private_data
@@ -124,7 +126,7 @@ typedef struct
     bool has_c;
     bool has_p;
     bool has_zcm;
-    bool has_xexecit;
+    bool has_xnexecit;
   } args_t;
 
 static bool
@@ -1073,10 +1075,10 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
       /* } Andes ACE */
 
       /* { Andes */
-      args.has_c = riscv_subset_supports (&riscv_rps_dis, "c");
+      args.has_c = riscv_multi_subset_supports (&riscv_rps_dis, INSN_CLASS_C);
       args.has_p = riscv_subset_supports (&riscv_rps_dis, "p");
       args.has_zcm = riscv_subset_supports_fuzzy (&riscv_rps_dis, "zcm");
-      args.has_xexecit = riscv_subset_supports (&riscv_rps_dis, "xexecit");
+      args.has_xnexecit = riscv_subset_supports (&riscv_rps_dis, "xnexecit");
       /* } Andes */
 
       init = 1;
@@ -1222,8 +1224,8 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
 	  if (!is_preferred_subset (op, &args))
 	    continue;
 
-	  /* pick nexec.it if support xexecit.  */
-	  if (args.has_xexecit && 0 == strncmp (op->name, "ex", 2))
+	  /* pick nexec.it if support xnexecit.  */
+	  if (args.has_xnexecit && 0 == strcmp (op->name, "exec.it"))
 	    continue;
 
 	  /* prefer cm.* if support zcm*.  */

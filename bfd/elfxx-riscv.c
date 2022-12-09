@@ -1626,6 +1626,7 @@ static struct riscv_implicit_subset riscv_implicit_subsets[] =
   {"zcmp", "zca",	check_implicit_always},
   {"zcmt", "zca",	check_implicit_always},
   {"zcmpe", "zca",	check_implicit_always},
+  {"zcd", "zca",	check_implicit_always},
   {"zcf", "zca",	check_implicit_always},
   {"zcb", "zca",	check_implicit_always},
   {"xv", "xandes",	check_implicit_always},
@@ -1738,13 +1739,14 @@ static struct riscv_supported_ext riscv_supported_std_z_ext[] =
   {"zvl16384b",		ISA_SPEC_CLASS_DRAFT,		1, 0,  0 },
   {"zvl32768b",		ISA_SPEC_CLASS_DRAFT,		1, 0,  0 },
   {"zvl65536b",		ISA_SPEC_CLASS_DRAFT,		1, 0,  0 },
-  {"zca",		ISA_SPEC_CLASS_DRAFT,		0, 7,  0 },
-  {"zcb",		ISA_SPEC_CLASS_DRAFT,		0, 7,  0 },
-  {"zcf",		ISA_SPEC_CLASS_DRAFT,		0, 7,  0 },
+  {"zca",		ISA_SPEC_CLASS_DRAFT,		1, 0,  0 },
+  {"zcb",		ISA_SPEC_CLASS_DRAFT,		1, 0,  0 },
+  {"zcf",		ISA_SPEC_CLASS_DRAFT,		1, 0,  0 },
+  {"zcd",		ISA_SPEC_CLASS_DRAFT,		1, 0,  0 },
   {"zcmb",		ISA_SPEC_CLASS_DRAFT,		0, 7,  0 },
-  {"zcmp",		ISA_SPEC_CLASS_DRAFT,		0, 7,  0 },
+  {"zcmp",		ISA_SPEC_CLASS_DRAFT,		1, 0,  0 },
   {"zcmpe",		ISA_SPEC_CLASS_DRAFT,		0, 7,  0 },
-  {"zcmt",		ISA_SPEC_CLASS_DRAFT,		0, 7,  0 },
+  {"zcmt",		ISA_SPEC_CLASS_DRAFT,		1, 0,  0 },
   /* { Zfh */
   {"zfh",		ISA_SPEC_CLASS_DRAFT,		1, 0,  0 },
   {"zfhmin",		ISA_SPEC_CLASS_DRAFT,		1, 0,  0 },
@@ -1778,7 +1780,7 @@ static struct riscv_supported_ext riscv_supported_non_std_x_ext[] =
   {"xandes",    ISA_SPEC_CLASS_DRAFT,   5, 0,  0 },
   {"xv",        ISA_SPEC_CLASS_DRAFT,   5, 0,  0 },
   {"xefhw",     ISA_SPEC_CLASS_DRAFT,   1, 0,  0 },
-  {"xexecit",   ISA_SPEC_CLASS_DRAFT,   1, 0,  0 },
+  {"xnexecit",  ISA_SPEC_CLASS_DRAFT,   1, 0,  0 },
   {NULL, 0, 0, 0, 0}
 };
 
@@ -2500,16 +2502,9 @@ riscv_parse_check_conflicts (riscv_parse_subset_t *rps)
 	  || riscv_lookup_subset (rps->subset_list, "zcmpe", &subset)
 	  || riscv_lookup_subset (rps->subset_list, "zcmt", &subset)))
     {
-      static bool warned = false;
-      if (! warned)
-	{
-	  rps->warning_handler
-	    (_("zcm* is not compatible with `c' extension."));
-	  warned = true;
-	}
-      #if 0 /* disable confliction of zcX and rvc.  */
+      rps->error_handler
+	(_("zcm* is not compatible with `c' extension."));
       no_conflict = false;
-      #endif
     }
 
   if (riscv_lookup_subset (rps->subset_list, "zcf", &subset)
@@ -2532,28 +2527,26 @@ riscv_parse_check_conflicts (riscv_parse_subset_t *rps)
       && riscv_lookup_subset (rps->subset_list, "e", &subset))
     {
       rps->error_handler
-	(_("Zcmp is not is not compatible with `e' extension."));
+	(_("Zcmp is not compatible with `e' extension."));
       no_conflict = false;
     }
 
-  /* ZC* must accompanied with nexec.it.  */
-  if ((riscv_lookup_subset (rps->subset_list, "zca", &subset)
-       || riscv_lookup_subset (rps->subset_list, "zcb", &subset)
-       || riscv_lookup_subset (rps->subset_list, "zcd", &subset)
-       || riscv_lookup_subset (rps->subset_list, "zcf", &subset)
-       || riscv_lookup_subset (rps->subset_list, "zcmp", &subset)
-       || riscv_lookup_subset (rps->subset_list, "zcmt", &subset))
-      && !riscv_lookup_subset (rps->subset_list, "xexecit", &subset))
+  /* zcb conflicts with xandes exec.it.
+   * instead of reporting conflict, switch to xnexecit automaticaly!
+   */
+  if (rps->state == STATE_LINK && rps->enabled_execit
+      && riscv_lookup_subset (rps->subset_list, "zcb", &subset)
+      && riscv_lookup_subset (rps->subset_list, "xandes", &subset)
+      && !riscv_lookup_subset (rps->subset_list, "xnexecit", &subset))
     {
-      static bool warned = false;
-      if (! warned)
-	{
-	  rps->warning_handler
-	    (_("enable nexec.it opcode for zc subsets."));
-	  warned = true;
-	}
-      riscv_parse_add_subset (rps, "xexecit", RISCV_UNKNOWN_VERSION,
-			      RISCV_UNKNOWN_VERSION, false);
+      #if 0
+      rps->error_handler
+	(_("Zcb is not compatible with `xandes' extension (exec.it)."
+	   " Use xnexecit extension instead (--mnexecitop)."));
+      no_conflict = false;
+      #else
+      riscv_parse_add_subset (rps, "xnexecit", 1, 0, false);
+      #endif
     }
 
   return no_conflict;
@@ -3047,7 +3040,8 @@ riscv_multi_subset_supports (riscv_parse_subset_t *rps,
 		  || riscv_subset_supports (rps, "zcf")));
     case INSN_CLASS_D_AND_C:
       return (riscv_subset_supports (rps, "d")
-	      && riscv_subset_supports (rps, "c"));
+	      && (riscv_subset_supports (rps, "c")
+		  || riscv_subset_supports (rps, "zcd")));
     case INSN_CLASS_F_AND_ZFH:
       return riscv_subset_supports (rps, "f") && riscv_subset_supports (rps, "zfh");
     case INSN_CLASS_D_AND_ZFH:
@@ -3078,8 +3072,8 @@ riscv_multi_subset_supports (riscv_parse_subset_t *rps,
       return riscv_subset_supports (rps, "xandes");
     case INSN_CLASS_XEFHW:
       return riscv_subset_supports (rps, "xefhw");
-    case INSN_CLASS_XEXECIT:
-      return (riscv_subset_supports (rps, "xexecit")
+    case INSN_CLASS_XNEXECIT:
+      return (riscv_subset_supports (rps, "xnexecit")
 	      && riscv_subset_supports (rps, "xandes"));
     /* } Andes  */
     case INSN_CLASS_ZBA:

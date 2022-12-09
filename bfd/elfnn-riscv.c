@@ -265,7 +265,7 @@ typedef struct relax_gp_sym_info
 static relax_gp_sym_info_t *relax_gp_sym_info_head = NULL;
 static execit_state_t execit;
 static ict_state_t ict;
-static andes_linker_state_t nsta;
+static andes_linker_state_t nsta = {.opt = NULL};
 /* } Andes */
 
 static bool
@@ -923,7 +923,8 @@ riscv_has_subset (struct bfd_link_info *info, const char *subset)
   subsets.tail = NULL;
 
   riscv_parse_subset_t riscv_rps_ld_out =
-	{&subsets, _bfd_error_handler, _bfd_error_handler, &xlen, NULL, false};
+	{&subsets, _bfd_error_handler, _bfd_error_handler, &xlen, NULL, false,
+	 STATE_DEFAULT, false};
 
   if (!riscv_parse_subset (&riscv_rps_ld_out, out_attr[Tag_RISCV_arch].s))
     return false;
@@ -956,7 +957,8 @@ riscv_use_table_jump (struct bfd_link_info *info)
   subsets.tail = NULL;
 
   riscv_parse_subset_t riscv_rps_ld_out =
-	{&subsets, _bfd_error_handler, _bfd_error_handler, &xlen, NULL, false};
+	{&subsets, _bfd_error_handler, _bfd_error_handler, &xlen, NULL, false,
+	 STATE_DEFAULT, false};
 
   if (!riscv_parse_subset (&riscv_rps_ld_out, out_attr[Tag_RISCV_arch].s))
     return false;
@@ -4280,13 +4282,14 @@ riscv_merge_multi_letter_ext (riscv_subset_t **pin,
 /* add a subset to Tag_RISCV_arch attribute.  */
 
 static char *
-riscv_add_arch_attr_subset (char *arch, char *subset)
+riscv_add_arch_attr_subset (char *arch, char *subset, int major, int minor)
 {
   char *merged_arch;
   unsigned xlen;
 
   riscv_parse_subset_t riscv_rps =
-    {&out_subsets, _bfd_error_handler, _bfd_error_handler, &xlen, NULL, false};
+    {&out_subsets, _bfd_error_handler, _bfd_error_handler, &xlen, NULL, false,
+     STATE_DEFAULT, false};
 
   if (arch == NULL || subset == NULL)
     return NULL;
@@ -4295,7 +4298,7 @@ riscv_add_arch_attr_subset (char *arch, char *subset)
   if (!riscv_parse_subset (&riscv_rps, arch))
     return NULL;
 
-  riscv_parse_add_subset (&riscv_rps, "xexecit", 1, 0, false);
+  riscv_parse_add_subset (&riscv_rps, subset, major, minor, false);
 
   merged_arch = riscv_arch_str (xlen, &out_subsets);
 
@@ -4317,10 +4320,14 @@ riscv_merge_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
   merged_subsets.head = NULL;
   merged_subsets.tail = NULL;
 
+  BFD_ASSERT (nsta.opt);
+  bool enabled_execit = nsta.opt->target_optimization & RISCV_RELAX_EXECIT_ON;
   riscv_parse_subset_t riscv_rps_ld_in =
-    {&in_subsets, _bfd_error_handler, _bfd_error_handler, &xlen_in, NULL, false};
+    {&in_subsets, _bfd_error_handler, _bfd_error_handler, &xlen_in, NULL, false,
+     STATE_LINK, enabled_execit};
   riscv_parse_subset_t riscv_rps_ld_out =
-    {&out_subsets, _bfd_error_handler, _bfd_error_handler, &xlen_out, NULL, false};
+    {&out_subsets, _bfd_error_handler, _bfd_error_handler, &xlen_out, NULL, false,
+     STATE_LINK, enabled_execit};
 
   if (in_arch == NULL && out_arch == NULL)
     return NULL;
@@ -4437,13 +4444,11 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
 	    }
 	}
 
-      /* insert xexecit if enabled.  */
+      /* insert xnexecit if enabled.  */
       while (true)
 	{
 	  char *arch = NULL;
-	  struct riscv_elf_link_hash_table *htab = riscv_elf_hash_table (info);
-	  andes_ld_options_t *andes = &htab->andes;
-	  if (andes->execit_flags.nexecit_op == 0)
+	  if (nsta.opt->execit_flags.nexecit_op == 0)
 	    break;
 	  in_attr = elf_known_obj_attributes_proc (ibfd);
 	  out_attr = elf_known_obj_attributes_proc (obfd);
@@ -4457,7 +4462,7 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
 	    {
 	      /* TODO: free old arch string?  */
 	      out_attr[Tag_RISCV_arch].s =
-		riscv_add_arch_attr_subset (arch, "xexecit");
+		riscv_add_arch_attr_subset (arch, "xnexecit", 1, 0);
 	    }
 	  break; /* once */
 	}
@@ -4692,6 +4697,16 @@ _bfd_riscv_elf_merge_private_bfd_data (bfd *ibfd, struct bfd_link_info *info)
 {
   bfd *obfd = info->output_bfd;
   flagword new_flags, old_flags;
+
+  /* { Andes  */
+  /* TODO: init `andes' ASAP in better timing. */
+  if (nsta.opt == NULL)
+    {
+      struct riscv_elf_link_hash_table *htab = riscv_elf_hash_table (info);
+      memset (&nsta, 0, sizeof (nsta));
+      nsta.opt = &htab->andes;
+    }
+  /* } Andes  */
 
   if (!is_riscv_elf (ibfd) || !is_riscv_elf (obfd))
     return true;
@@ -6548,15 +6563,18 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
   static int is_init = 0;
   if (is_init == 0)
     { /* init states  */
-      memset (&nsta, 0, sizeof (nsta));
-      nsta.opt = &htab->andes;
+      if (nsta.opt == NULL)
+	{
+	  memset (&nsta, 0, sizeof (nsta));
+	  nsta.opt = andes;
+	}
       memset (&ict, 0, sizeof (ict));
       /* init execit state here  */
       memset (&execit, 0, sizeof (execit));
       execit.htab = riscv_elf_hash_table (info);
       /* exec.it or nexec.it  */
       if (nsta.opt->execit_flags.nexecit_op != 0 ||
-	  riscv_has_subset (info, "xexecit"))
+	  riscv_has_subset (info, "xnexecit"))
 	execit.execit_op = NEXECIT_INSN;
       else
 	execit.execit_op = EXECIT_INSN;
