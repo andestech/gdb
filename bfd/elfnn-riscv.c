@@ -4315,10 +4315,16 @@ riscv_merge_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
 {
   riscv_subset_t *in, *out;
   char *merged_arch_str;
-
   unsigned xlen_in, xlen_out;
-  merged_subsets.head = NULL;
-  merged_subsets.tail = NULL;
+
+  /* clean data.  */
+  if (in_subsets.head)
+    riscv_release_subset_list (&in_subsets);
+  if (out_subsets.head)
+    riscv_release_subset_list (&out_subsets);
+  if (merged_subsets.head)
+    riscv_release_subset_list (&merged_subsets);
+  BFD_ASSERT (merged_subsets.tail == NULL);
 
   BFD_ASSERT (nsta.opt);
   bool enabled_execit = nsta.opt->target_optimization & RISCV_RELAX_EXECIT_ON;
