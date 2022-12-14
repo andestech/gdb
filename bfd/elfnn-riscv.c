@@ -4279,17 +4279,18 @@ riscv_merge_multi_letter_ext (riscv_subset_t **pin,
   return true;
 }
 
+#if 0
 /* add a subset to Tag_RISCV_arch attribute.  */
 
 static char *
-riscv_add_arch_attr_subset (char *arch, char *subset, int major, int minor)
+riscv_add_arch_attr_subset (char *arch, char *subset, uint state)
 {
   char *merged_arch;
   unsigned xlen;
 
   riscv_parse_subset_t riscv_rps =
     {&out_subsets, _bfd_error_handler, _bfd_error_handler, &xlen, NULL, false,
-     STATE_DEFAULT, false};
+     state, false};
 
   if (arch == NULL || subset == NULL)
     return NULL;
@@ -4298,7 +4299,8 @@ riscv_add_arch_attr_subset (char *arch, char *subset, int major, int minor)
   if (!riscv_parse_subset (&riscv_rps, arch))
     return NULL;
 
-  riscv_parse_add_subset (&riscv_rps, subset, major, minor, false);
+  riscv_parse_add_subset (&riscv_rps, subset, RISCV_UNKNOWN_VERSION,
+			  RISCV_UNKNOWN_VERSION, false);
 
   merged_arch = riscv_arch_str (xlen, &out_subsets);
 
@@ -4307,6 +4309,7 @@ riscv_add_arch_attr_subset (char *arch, char *subset, int major, int minor)
 
   return merged_arch;
 }
+#endif
 
 /* Merge Tag_RISCV_arch attribute.  */
 
@@ -4385,6 +4388,17 @@ riscv_merge_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
       return NULL;
     }
 
+#if 0
+  /* zcb + xandes + mexecit => xnexecit  */
+  if (enabled_execit)
+    {
+      riscv_rps_ld_out.subset_list = &merged_subsets;
+      if (riscv_subset_supports (&riscv_rps_ld_out, "zcb")
+	  && riscv_subset_supports (&riscv_rps_ld_out, "xandes"))
+	riscv_parse_add_subset (&riscv_rps_ld_out, "xnexecit", 1, 0, false);
+    }
+#endif
+
   merged_arch_str = riscv_arch_str (ARCH_SIZE, &merged_subsets);
 
   /* Release the subset lists.  */
@@ -4450,30 +4464,38 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
 	    }
 	}
 
-      /* insert xnexecit if enabled.  */
-      while (true)
+      /* in case single one file linkage, merge self arch to
+	 apply implict rules.  */
+      if (out_attr[Tag_RISCV_arch].s)
 	{
-	  char *arch = NULL;
-	  if (nsta.opt->execit_flags.nexecit_op == 0)
-	    break;
-	  in_attr = elf_known_obj_attributes_proc (ibfd);
-	  out_attr = elf_known_obj_attributes_proc (obfd);
-	  if (out_attr[Tag_RISCV_arch].s)
-	    arch = out_attr[Tag_RISCV_arch].s;
-	  else if (in_attr[Tag_RISCV_arch].s)
-	    arch = in_attr[Tag_RISCV_arch].s;
-	  else
-	    BFD_ASSERT (0);
-	  if (arch)
+	  char buf[0x100];
+	  char *merged_arch = out_attr[Tag_RISCV_arch].s;
+	  if (nsta.opt->execit_flags.nexecit_op)
 	    {
-	      /* TODO: free old arch string?  */
-	      out_attr[Tag_RISCV_arch].s =
-		riscv_add_arch_attr_subset (arch, "xnexecit", 1, 0);
+	      char *us = strstr (merged_arch, "_");
+	      if (us)
+		{
+		  int len = us - merged_arch;
+		  strncpy (buf, merged_arch, len);
+		  sprintf (&buf[len], "_xnexecit");
+		  merged_arch = buf;
+		}
 	    }
-	  break; /* once */
+
+	  merged_arch =
+		riscv_merge_arch_attr_info (ibfd,
+					    out_attr[Tag_RISCV_arch].s,
+					    merged_arch);
+	    if (merged_arch == NULL)
+	      {
+		result = false;
+		out_attr[Tag_RISCV_arch].s = "";
+	      }
+	    else /* TODO: free old arch string?  */
+	      out_attr[Tag_RISCV_arch].s = merged_arch;
 	}
 
-      return true;
+      return result;
     }
 
   in_attr = elf_known_obj_attributes_proc (ibfd);

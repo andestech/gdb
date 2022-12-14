@@ -1540,7 +1540,8 @@ riscv_elf_add_sub_reloc (bfd *abfd,
 
 static bool
 check_implicit_always (const char *implicit ATTRIBUTE_UNUSED,
-		       riscv_subset_t *subset ATTRIBUTE_UNUSED)
+		       riscv_subset_t *subset ATTRIBUTE_UNUSED,
+		       riscv_parse_subset_t *rps ATTRIBUTE_UNUSED)
 {
   return true;
 }
@@ -1549,11 +1550,38 @@ check_implicit_always (const char *implicit ATTRIBUTE_UNUSED,
 
 static bool
 check_implicit_for_i (const char *implicit ATTRIBUTE_UNUSED,
-		      riscv_subset_t *subset)
+		      riscv_subset_t *subset,
+		      riscv_parse_subset_t *rps ATTRIBUTE_UNUSED)
 {
   return (subset->major_version < 2
 	  || (subset->major_version == 2
 	      && subset->minor_version < 1));
+}
+
+static bool
+check_implicit_for_rv32_f (const char *implicit ATTRIBUTE_UNUSED,
+			   riscv_subset_t *subset ATTRIBUTE_UNUSED,
+			   riscv_parse_subset_t *rps)
+{
+  return (*rps->xlen == 32 && riscv_subset_supports (rps, "f"));
+}
+
+static bool
+check_implicit_for_d (const char *implicit ATTRIBUTE_UNUSED,
+			   riscv_subset_t *subset ATTRIBUTE_UNUSED,
+			   riscv_parse_subset_t *rps)
+{
+  return riscv_subset_supports (rps, "d");
+}
+
+static bool
+check_implicit_for_xandes_execit (const char *implicit ATTRIBUTE_UNUSED,
+				  riscv_subset_t *subset ATTRIBUTE_UNUSED,
+				  riscv_parse_subset_t *rps)
+{
+  return (rps->state == STATE_LINK
+	  && rps->enabled_execit
+	  && riscv_subset_supports (rps, "xandes"));
 }
 
 /* Record all implicit information for the subsets.  */
@@ -1562,7 +1590,7 @@ struct riscv_implicit_subset
   const char *subset_name;
   const char *implicit_name;
   /* A function to determine if we need to add the implicit subset.  */
-  bool (*check_func) (const char *, riscv_subset_t *);
+  bool (*check_func) (const char *, riscv_subset_t *, riscv_parse_subset_t *rps);
 };
 static struct riscv_implicit_subset riscv_implicit_subsets[] =
 {
@@ -1577,6 +1605,9 @@ static struct riscv_implicit_subset riscv_implicit_subsets[] =
   {"g", "zicsr",	check_implicit_always},
   {"g", "zifencei",	check_implicit_always},
   {"q", "d",		check_implicit_always},
+  {"c", "zca",		check_implicit_always},
+  {"c", "zcf",		check_implicit_for_rv32_f},
+  {"c", "zcd",		check_implicit_for_d},
   {"v", "d",		check_implicit_always},
   {"v", "zve64d",	check_implicit_always},
   {"v", "zvl128b",	check_implicit_always},
@@ -1629,6 +1660,7 @@ static struct riscv_implicit_subset riscv_implicit_subsets[] =
   {"zcd", "zca",	check_implicit_always},
   {"zcf", "zca",	check_implicit_always},
   {"zcb", "zca",	check_implicit_always},
+  {"zcb", "xnexecit",	check_implicit_for_xandes_execit},
   {"xv", "xandes",	check_implicit_always},
   {"xv", "xefhw",	check_implicit_always},
   {"xv", "c",		check_implicit_always},
@@ -2085,6 +2117,8 @@ riscv_get_default_ext_version (enum riscv_spec_class *default_isa_spec,
    the subset list, if their versions are RISCV_UNKNOWN_VERSION.
    Afterwards, report errors if we can not find their default versions.  */
 
+static enum riscv_spec_class default_isa_spec = ISA_SPEC_CLASS_2P2;
+
 void
 riscv_parse_add_subset (riscv_parse_subset_t *rps,
 			const char *subset,
@@ -2095,10 +2129,22 @@ riscv_parse_add_subset (riscv_parse_subset_t *rps,
   int major_version = major;
   int minor_version = minor;
 
+  /* linker has no default isa spce, so no default extension version can be
+   * get in current implementation.
+   * TODO: get isa spec from input bfd if there is any.
+   * give a default isa spec if none when linking.
+   */
+  if (rps->state == STATE_LINK && rps->isa_spec == NULL)
+    rps->isa_spec = &default_isa_spec;
+
   if (major_version == RISCV_UNKNOWN_VERSION
        || minor_version == RISCV_UNKNOWN_VERSION)
     riscv_get_default_ext_version (rps->isa_spec, subset,
 				   &major_version, &minor_version);
+
+  /* restore isa spec.  */
+  if (rps->isa_spec == &default_isa_spec)
+    rps->isa_spec = NULL;
 
   /* We don't care the versions of the implicit extensions.  */
   if (!implicit
@@ -2417,7 +2463,7 @@ riscv_parse_add_implicit_subsets (riscv_parse_subset_t *rps)
     {
       riscv_subset_t *subset = NULL;
       if (riscv_lookup_subset (rps->subset_list, t->subset_name, &subset)
-	  && t->check_func (t->implicit_name, subset))
+	  && t->check_func (t->implicit_name, subset, rps))
 	riscv_parse_add_subset (rps, t->implicit_name,
 				RISCV_UNKNOWN_VERSION,
 				RISCV_UNKNOWN_VERSION, true);
@@ -2496,6 +2542,7 @@ riscv_parse_check_conflicts (riscv_parse_subset_t *rps)
   /* zcmb, zcmt, zcmp and zcmpe extensions are not compatible with
   16-bit double precision floating point instructions in C
   extension.  */
+#if 0
   if (riscv_lookup_subset (rps->subset_list, "c", &subset)
       && (riscv_lookup_subset (rps->subset_list, "zcmb", &subset)
 	  || riscv_lookup_subset (rps->subset_list, "zcmp", &subset)
@@ -2506,6 +2553,18 @@ riscv_parse_check_conflicts (riscv_parse_subset_t *rps)
 	(_("zcm* is not compatible with `c' extension."));
       no_conflict = false;
     }
+#else
+  if (riscv_lookup_subset (rps->subset_list, "zcd", &subset)
+      && (riscv_lookup_subset (rps->subset_list, "zcmb", &subset)
+	  || riscv_lookup_subset (rps->subset_list, "zcmp", &subset)
+	  || riscv_lookup_subset (rps->subset_list, "zcmpe", &subset)
+	  || riscv_lookup_subset (rps->subset_list, "zcmt", &subset)))
+    {
+      rps->error_handler
+	(_("cannot link zcmp1p0/zcmt1p0 with zcd1p0."));
+      no_conflict = false;
+    }
+#endif
 
   if (riscv_lookup_subset (rps->subset_list, "zcf", &subset)
       && xlen > 32)
@@ -2531,22 +2590,13 @@ riscv_parse_check_conflicts (riscv_parse_subset_t *rps)
       no_conflict = false;
     }
 
-  /* zcb conflicts with xandes exec.it.
-   * instead of reporting conflict, switch to xnexecit automaticaly!
-   */
+  /* zcb conflicts with xandes exec.it. assert only!  */
   if (rps->state == STATE_LINK && rps->enabled_execit
       && riscv_lookup_subset (rps->subset_list, "zcb", &subset)
       && riscv_lookup_subset (rps->subset_list, "xandes", &subset)
       && !riscv_lookup_subset (rps->subset_list, "xnexecit", &subset))
     {
-      #if 0
-      rps->error_handler
-	(_("Zcb is not compatible with `xandes' extension (exec.it)."
-	   " Use xnexecit extension instead (--mnexecitop)."));
-      no_conflict = false;
-      #else
-      riscv_parse_add_subset (rps, "xnexecit", 1, 0, false);
-      #endif
+      BFD_ASSERT (0);
     }
 
   return no_conflict;
@@ -2967,6 +3017,14 @@ riscv_update_subset (riscv_parse_subset_t *rps,
       else
 	riscv_parse_add_subset (rps, subset, major_version, minor_version, true);
       p += end_of_version - subset;
+
+      /* rvc -> zca [+ zcf] [+ zcd]
+       * '-' also remove zc*
+       * '+' should be added back implictly.
+       */
+      if (removed && 0 == strcmp (subset, "c"))
+	riscv_update_subset (rps, "-zca,-zcf,-zcd");
+
       free (subset);
     }
   while (*p++ == ',');
