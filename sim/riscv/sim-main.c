@@ -444,7 +444,8 @@ execute_d (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_FCVT_WU_D:
       TRACE_INSN (cpu, "fcvt.wu.d %s, %s",
 		  rd_name, frs1_name);
-      cpu->regs[rd].u = f64_to_ui32 (cpu->fpregs[rs1].d[0], rm, true);
+      i32 = f64_to_ui32 (cpu->fpregs[rs1].d[0], rm, true);
+      cpu->regs[rd].u = i32;
       TRACE_REG (cpu, rd);
       goto done;
     case MATCH_FCVT_D_W:
@@ -786,7 +787,8 @@ execute_f (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_FCVT_WU_S:
       TRACE_INSN (cpu, "fcvt.wu.s %s, %s",
 		  rd_name, frs1_name);
-      cpu->regs[rd].u = f32_to_ui32 (cpu->fpregs[rs1].f[0], rm, true);
+      i32 = f32_to_ui32 (cpu->fpregs[rs1].f[0], rm, true);
+      cpu->regs[rd].u = i32;
       TRACE_REG (cpu, rd);
       goto done;
     case MATCH_FCVT_S_W:
