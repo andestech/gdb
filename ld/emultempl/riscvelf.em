@@ -211,7 +211,9 @@ riscv_elf_after_open (void)
   flags = (SEC_CODE | SEC_ALLOC | SEC_LOAD
 	   | SEC_HAS_CONTENTS | SEC_READONLY
 	   | SEC_IN_MEMORY | SEC_KEEP
-	   | SEC_RELOC);
+	   | SEC_RELOC
+	   | SEC_LINKER_CREATED /* to skip output of LTO pass.  */
+	  );
 
   if ((andes.target_optimization & RISCV_RELAX_EXECIT_ON)
       && (andes.execit_import_file == NULL

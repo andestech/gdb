@@ -7468,6 +7468,25 @@ riscv_final_link (bfd * abfd, struct bfd_link_info * info)
   if (!bfd_elf_final_link (abfd, info))
     return false;
 
+  /* Andes: set exec.it table contents.  */
+  while (true) /* once */
+    {
+      asection *itable_sec = execit_get_itable_section (info->input_bfds);
+      bfd_byte *contents = NULL;
+      if (itable_sec == NULL)
+	break;
+      contents = elf_section_data (itable_sec)->this_hdr.contents;
+      if (contents == NULL)
+	break;
+      if (!bfd_set_section_contents (abfd,
+		itable_sec->output_section,
+		contents,
+		(file_ptr) itable_sec->output_offset,
+		itable_sec->size))
+	return false;
+      break; /* once */
+    }
+
   if (riscv_use_table_jump (info)
       /* tablejump_sec is not created if no relocation happened, so we
         need to check section pointer here.  */
@@ -8042,11 +8061,7 @@ andes_execit_build_itable (struct bfd_link_info *info)
       table = riscv_elf_hash_table (info);
       andes = &table->andes;
       abfd = table_sec->owner;
-      /* TODO: hacky! try to do with SEC_LINKER_CREATED  */
-      flagword keep = bfd_section_flags (table_sec);
-      table_sec->flags |= SEC_LINKER_CREATED;
       riscv_get_section_contents (abfd, table_sec, &contents, true);
-      table_sec->flags = keep;
       if (contents == NULL)
 	break;
 
