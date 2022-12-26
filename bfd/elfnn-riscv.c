@@ -5339,8 +5339,8 @@ andes_execit_render_hash (execit_context_t *ctx)
 	  else if (rtype == R_RISCV_HI20 || rtype == R_RISCV_CALL
 		   || rtype == R_RISCV_PCREL_HI20)
 	    { /* LUI/AUIPC symbols having the same HI20 part can be exec.ited.
-	       * # spliting LUIs into 2 groups by __DATA_BEGIN__ to avoid to
-	       * the DATA_SEGMENT_ALIGN issue  */
+	       * # spliting them into 2 groups by __DATA_BEGIN__ to avoid to
+	       * the DATA_SEGMENT_ALIGN issue.  */
 	      if (ARCH_SIZE > 32 &&
 		  !VALID_UTYPE_IMM (RISCV_CONST_HIGH_PART (ctx->ie.relocation)))
 		return rz;

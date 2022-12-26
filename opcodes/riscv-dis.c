@@ -160,7 +160,7 @@ riscv_execit_info (bfd_vma pc ATTRIBUTE_UNUSED,
   /* Lookup section in which itb is located.  */
   if (!section)
     {
-      section = bfd_get_section_by_name (info->section->owner, ".exec.itable");
+      section = bfd_get_section_by_name (info->section->owner, EXECIT_SECTION);
       /* if not found, try symbol "_ITB_BASE_".  */
       if (section == NULL)
 	{ /* TODO: find the existed API to do this.  */
@@ -1134,7 +1134,7 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
 
   /* { Andes */
   if (info->section
-      && strstr (info->section->name, ".exec.itable") != NULL)
+      && strstr (info->section->name, EXECIT_SECTION) != NULL)
     pd->flags |= FLAG_EXECIT_TAB;
   else
     pd->flags &= ~FLAG_EXECIT_TAB;
