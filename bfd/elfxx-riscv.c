@@ -37,10 +37,12 @@ static struct
 {
   bool is_full_arch;
   enum riscv_spec_class isa_spec;
+  bool has_ext_zc;
 } nsta =
 {
   .is_full_arch = false,
   .isa_spec = ISA_SPEC_CLASS_NONE,
+  .has_ext_zc = false,
 };
 /* } Andes */
 
@@ -2759,6 +2761,7 @@ andes_is_hidden_implicit_subset (riscv_subset_t *sub)
 {
   static const char *obsoleted[] = {"xv", NULL};
   static const char *suppressed[] = {"zv", "zfh", NULL};
+  static const void *implied[] = {"zc", &nsta.has_ext_zc, NULL};
   const char **pre;
 
   /* obsoleted are always implicit.  */
@@ -2782,6 +2785,17 @@ andes_is_hidden_implicit_subset (riscv_subset_t *sub)
       if (strncmp (sub->name, *pre, strlen (*pre)) == 0)
         return true;
       pre++;
+    }
+
+  /* suppress implict subsets.  */
+  pre = (const char **) implied;
+  while (*pre)
+    { /* check prefix only.  */
+      if (*(bool *) *(pre+1) == false
+	  && strncmp (sub->name, *pre, strlen (*pre)) == 0
+	  && sub->is_implicit)
+        return true;
+      pre += 2;
     }
 
   return false;
@@ -2849,6 +2863,22 @@ riscv_arch_str_ext (unsigned xlen, const riscv_subset_list_t *subset,
   char *rz;
   bool keep_arch = nsta.is_full_arch;
   enum riscv_spec_class keep_spec = spec;
+
+  /* determine if zc is specificed.  */
+  bool has_zc = false;
+  riscv_subset_t *subset_t = subset->head;
+  while (subset_t)
+    {
+      if (strncmp (subset_t->name, "zc", 2) == 0
+	  && subset_t->is_implicit == false)
+	{
+	  has_zc = true;
+	  break;
+	}
+      subset_t = subset_t->next;
+    }
+  nsta.has_ext_zc = has_zc;
+
   nsta.is_full_arch = is_full_arch;
   nsta.isa_spec = spec;
   rz = riscv_arch_str (xlen, subset);
