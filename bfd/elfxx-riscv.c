@@ -2073,6 +2073,17 @@ riscv_add_subset (riscv_subset_list_t *subset_list,
   subset_list->last = new;
 }
 
+void
+riscv_add_subset_ext (riscv_subset_list_t *subset_list,
+		      const char *subset,
+		      int major, int minor,
+		      bool is_implicit)
+{
+  riscv_add_subset (subset_list, subset, major, minor);
+  if (subset_list->last)
+    subset_list->last->is_implicit = is_implicit;
+}
+
 /* Get the default versions from the riscv_supported_*ext tables.  */
 
 static void

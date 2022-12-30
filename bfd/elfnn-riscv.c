@@ -4119,6 +4119,7 @@ riscv_update_subset_version (struct riscv_subset_t *in,
     {
       out->major_version = in->major_version;
       out->minor_version = in->minor_version;
+      out->is_implicit &= in->is_implicit;
     }
 }
 
@@ -4182,8 +4183,9 @@ riscv_merge_std_ext (bfd *ibfd,
     }
 
   riscv_update_subset_version(in, out);
-  riscv_add_subset (&merged_subsets,
-		    out->name, out->major_version, out->minor_version);
+  riscv_add_subset_ext (&merged_subsets,
+			out->name, out->major_version, out->minor_version,
+			out->is_implicit);
 
   in = in->next;
   out = out->next;
@@ -4205,8 +4207,10 @@ riscv_merge_std_ext (bfd *ibfd,
 	riscv_update_subset_version(ext_in, ext_out);
 
       ext_merged = find_out ? ext_out : ext_in;
-      riscv_add_subset (&merged_subsets, ext_merged->name,
-			ext_merged->major_version, ext_merged->minor_version);
+      riscv_add_subset_ext (&merged_subsets, ext_merged->name,
+			    ext_merged->major_version,
+			    ext_merged->minor_version,
+			    ext_merged->is_implicit);
     }
 
   /* Skip all standard extensions.  */
@@ -4240,15 +4244,17 @@ riscv_merge_multi_letter_ext (riscv_subset_t **pin,
       if (cmp < 0)
 	{
 	  /* `in' comes before `out', append `in' and increment.  */
-	  riscv_add_subset (&merged_subsets, in->name, in->major_version,
-			    in->minor_version);
+	  riscv_add_subset_ext (&merged_subsets, in->name,
+				in->major_version, in->minor_version,
+				in->is_implicit);
 	  in = in->next;
 	}
       else if (cmp > 0)
 	{
 	  /* `out' comes before `in', append `out' and increment.  */
-	  riscv_add_subset (&merged_subsets, out->name, out->major_version,
-			    out->minor_version);
+	  riscv_add_subset_ext (&merged_subsets, out->name,
+				out->major_version, out->minor_version,
+				out->is_implicit);
 	  out = out->next;
 	}
       else
@@ -4256,8 +4262,9 @@ riscv_merge_multi_letter_ext (riscv_subset_t **pin,
 	  /* Both present, check version and increment both.  */
 	  riscv_update_subset_version (in, out);
 
-	  riscv_add_subset (&merged_subsets, out->name, out->major_version,
-			    out->minor_version);
+	  riscv_add_subset_ext (&merged_subsets, out->name,
+				out->major_version, out->minor_version,
+				out->is_implicit);
 	  out = out->next;
 	  in = in->next;
 	}
@@ -4270,8 +4277,9 @@ riscv_merge_multi_letter_ext (riscv_subset_t **pin,
       tail = in ? in : out;
       while (tail)
 	{
-	  riscv_add_subset (&merged_subsets, tail->name, tail->major_version,
-			    tail->minor_version);
+	  riscv_add_subset_ext (&merged_subsets, tail->name,
+				tail->major_version, tail->minor_version,
+				tail->is_implicit);
 	  tail = tail->next;
 	}
     }
@@ -4399,7 +4407,8 @@ riscv_merge_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
     }
 #endif
 
-  merged_arch_str = riscv_arch_str (ARCH_SIZE, &merged_subsets);
+  merged_arch_str = riscv_arch_str_ext (ARCH_SIZE, &merged_subsets,
+					false, ISA_SPEC_CLASS_2P2);
 
   /* Release the subset lists.  */
   riscv_release_subset_list (&in_subsets);

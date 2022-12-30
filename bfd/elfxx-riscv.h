@@ -64,6 +64,11 @@ riscv_add_subset (riscv_subset_list_t *,
 		  const char *,
 		  int, int);
 
+extern void
+riscv_add_subset_ext (riscv_subset_list_t *,
+		      const char *,
+		      int, int, bool);
+
 extern bool
 riscv_lookup_subset (const riscv_subset_list_t *,
 		     const char *,
