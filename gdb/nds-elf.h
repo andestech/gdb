@@ -523,7 +523,7 @@ static bool cpu_support_std_ext(reg_t misa, reg_t mmsc_cfg, char ext)
     return is_ext_en;
 }
 
-static bool cpu_support_arch_config(reg_t mrvarch_cfg, const char *ext, bool is_mrvarch_cfg_exist)
+static bool cpu_support_arch_config(reg_t misa, reg_t mrvarch_cfg, const char *ext, bool is_mrvarch_cfg_exist)
 {
 
     if (!is_mrvarch_cfg_exist)
@@ -592,7 +592,7 @@ static bool cpu_support_arch_config(reg_t mrvarch_cfg, const char *ext, bool is_
     }
     else if (strncmp(ext, "Zca", 3) == 0)
     {
-        is_ext_en = ((mrvarch_cfg & 0x4000000) != 0);
+        is_ext_en = ((mrvarch_cfg & 0x4000000) != 0) || ((misa & 0x4) == 0x4);
     }
     else if (strncmp(ext, "Zcb", 3) == 0)
     {
@@ -600,11 +600,11 @@ static bool cpu_support_arch_config(reg_t mrvarch_cfg, const char *ext, bool is_
     }
     else if (strncmp(ext, "Zcd", 3) == 0)
     {
-        is_ext_en = ((mrvarch_cfg & 0x10000000) != 0);
+        is_ext_en = ((mrvarch_cfg & 0x10000000) != 0) || ((misa & 0xC) == 0xC);
     }
     else if (strncmp(ext, "Zcf", 3) == 0)
     {
-        is_ext_en = ((mrvarch_cfg & 0x20000000) != 0);
+        is_ext_en = ((mrvarch_cfg & 0x20000000) != 0) || ((misa & 0x24) == 0x24);
     }
     else if (strncmp(ext, "Zcmp", 4) == 0)
     {
@@ -1517,7 +1517,7 @@ static int elf_check(void *file_data, unsigned int file_size, CALLBACK_FUNC reg_
         if (elf_use_ext_i(i, ext_type::B_EXT))
         {
             NEC_snprintf(temp, sizeof(temp), "'%s' extension", riscv_b_extensions[i]);
-            if (NEC_check_bool(EFT_ERROR, temp, cpu_support_arch_config(CSR_mrvarch_cfg, riscv_b_extensions[i], is_mrvarch_exist),
+            if (NEC_check_bool(EFT_ERROR, temp, cpu_support_arch_config(CSR_misa, CSR_mrvarch_cfg, riscv_b_extensions[i], is_mrvarch_exist),
                     nds_info.b_ext_use[i]))
                 n_error++;
         }
@@ -1529,7 +1529,7 @@ static int elf_check(void *file_data, unsigned int file_size, CALLBACK_FUNC reg_
         if (elf_use_ext_i(i, ext_type::C_EXT))
         {
             NEC_snprintf(temp, sizeof(temp), "'%s' extension", riscv_c_extensions[i]);
-            if (NEC_check_bool(EFT_ERROR, temp, cpu_support_arch_config(CSR_mrvarch_cfg, riscv_c_extensions[i], is_mrvarch_exist),
+            if (NEC_check_bool(EFT_ERROR, temp, cpu_support_arch_config(CSR_misa, CSR_mrvarch_cfg, riscv_c_extensions[i], is_mrvarch_exist),
                     nds_info.c_ext_use[i]))
                 n_error++;
         }
@@ -1541,7 +1541,7 @@ static int elf_check(void *file_data, unsigned int file_size, CALLBACK_FUNC reg_
         if (elf_use_ext_i(i, ext_type::K_EXT))
         {
             NEC_snprintf(temp, sizeof(temp), "'%s' extension", riscv_k_extensions[i]);
-            if (NEC_check_bool(EFT_ERROR, temp, cpu_support_arch_config(CSR_mrvarch_cfg, riscv_k_extensions[i], is_mrvarch_exist),
+            if (NEC_check_bool(EFT_ERROR, temp, cpu_support_arch_config(CSR_misa, CSR_mrvarch_cfg, riscv_k_extensions[i], is_mrvarch_exist),
                     nds_info.k_ext_use[i]))
                 n_error++;
         }
@@ -1553,8 +1553,8 @@ static int elf_check(void *file_data, unsigned int file_size, CALLBACK_FUNC reg_
         if (elf_use_ext_i(i, ext_type::CMO_EXT))
         {
             NEC_snprintf(temp, sizeof(temp), "'%s' extension", riscv_cmo_extensions[i]);
-            if (NEC_check_bool(EFT_ERROR, temp, cpu_support_arch_config(CSR_mrvarch_cfg, riscv_cmo_extensions[i], is_mrvarch_exist),
-                    nds_info.cmo_ext_use[i]))
+            if (NEC_check_bool(EFT_ERROR, temp,
+                    cpu_support_arch_config(CSR_misa, CSR_mrvarch_cfg, riscv_cmo_extensions[i], is_mrvarch_exist), nds_info.cmo_ext_use[i]))
                 n_error++;
         }
     }
@@ -1565,7 +1565,8 @@ static int elf_check(void *file_data, unsigned int file_size, CALLBACK_FUNC reg_
         if (elf_use_ext_i(i, ext_type::MISC_EXT))
         {
             NEC_snprintf(temp, sizeof(temp), "'%s' extension", riscv_misc_extensions[i]);
-            if (NEC_check_bool(EFT_ERROR, temp, cpu_support_arch_config(CSR_mrvarch_cfg, riscv_misc_extensions[i], is_mrvarch_exist),
+            if (NEC_check_bool(EFT_ERROR, temp,
+                    cpu_support_arch_config(CSR_misa, CSR_mrvarch_cfg, riscv_misc_extensions[i], is_mrvarch_exist),
                     nds_info.misc_ext_use[i]))
                 n_error++;
         }
