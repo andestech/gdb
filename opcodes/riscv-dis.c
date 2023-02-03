@@ -256,6 +256,33 @@ parse_riscv_dis_option_without_args (const char *option)
   return true;
 }
 
+/* Note: sub andes_ace_load_hooks is shared between gas and gdb
+	  without a common header file. */
+
+char *andes_ace_load_hooks (const char *arg)
+{
+  void *dlc = dlopen (arg, RTLD_NOW | RTLD_LOCAL);
+  char *err = NULL;
+
+  if (dlc == NULL)
+    err = (char *) dlerror ();
+  else
+    {
+      ace_ops = (ace_op_t *) dlsym (dlc, "ace_operands");
+      err = (char *) dlerror ();
+      if (err == NULL)
+	{
+	  ace_opcs = (struct riscv_opcode *) dlsym (dlc, "ace_opcodes_3");
+	  err = (char *) dlerror ();
+	}
+    }
+
+  if (err == NULL)
+    ace_lib_load_success = true;
+
+  return err;
+}
+
 static void
 parse_riscv_dis_option (const char *option)
 {
@@ -309,27 +336,9 @@ parse_riscv_dis_option (const char *option)
 #ifndef __MINGW32__
       char *ace_lib_path = malloc (strlen (value));
       strcpy (ace_lib_path, value);
-
-      void *dlc = dlopen (ace_lib_path, RTLD_NOW | RTLD_LOCAL);
-      char *err;
-
-      if (dlc == NULL)
-	err = (char *) dlerror ();
-      else
-	{
-	  ace_ops = (ace_op_t *) dlsym (dlc, "ace_operands");
-	  err = (char *) dlerror ();
-	  if (err == NULL)
-	    {
-	      ace_opcs = (struct riscv_opcode *) dlsym (dlc, "ace_opcodes_3");
-	      err = (char *) dlerror ();
-	    }
-	}
-
-      if (err == NULL)
-	ace_lib_load_success = true;
-      else
-	fprintf (stderr, _("Fault to load ACE shared library: %s\n"), err);
+      char *err = andes_ace_load_hooks(ace_lib_path);
+      if (err)
+        opcodes_error_handler (_("Fault to load ACE shared library: %s\n"), err);
 #endif
     }
   /* } Andes ACE */

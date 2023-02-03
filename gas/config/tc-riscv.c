@@ -36,10 +36,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#ifndef __MINGW32__
-#include <dlfcn.h>
-#endif
-
 /* Information about an instruction, including its format, operands
    and fixups.  */
 struct riscv_cl_insn
@@ -242,15 +238,16 @@ static struct andes_as_states
 /* } Andes  */
 
 /* { Andes ACE */
+extern char *andes_ace_load_hooks (const char *arg);
 /* Hash table for storing symbols from shared library */
 static htab_t ace_keyword_hash = NULL;
 static htab_t ace_op_hash = NULL;
 /* Pointers for storing symbols from ACE shared library */
-struct riscv_opcode *ace_opcs;
+extern struct riscv_opcode *ace_opcs;
 ace_keyword_t *ace_keys;
-ace_op_t *ace_ops;
+extern ace_op_t *ace_ops;
 /* Represent whether ACE shared library is loaded successfully */
-bool ace_lib_load_success = FALSE;
+extern bool ace_lib_load_success;
 
 static void
 ace_ip (char **args, char **str, struct riscv_cl_insn *ip);
@@ -5221,33 +5218,8 @@ md_parse_option (int c, const char *arg)
     case OPTION_ACE:
       {
 #ifndef __MINGW32__
-	void *dlc = dlopen (arg, RTLD_NOW | RTLD_LOCAL);
-	char *err;
-
-	if (dlc == NULL)
-	  err = (char *) dlerror ();
-	else
-	  {
-	    ace_opcs = (struct riscv_opcode *) dlsym (dlc, "ace_opcodes_3");
-	    err = (char *) dlerror ();
-	    if (err == NULL)
-	      {
-		ace_ops = (ace_op_t *) dlsym (dlc, "ace_operands");
-		err = (char *) dlerror ();
-	    }
-	    if (err == NULL)
-	      {
-		ace_keys = (ace_keyword_t *) dlsym (dlc, "ace_keywords");
-		err = (char *) dlerror ();
-	      }
-	  }
-
-	if (err == NULL)
-	  {
-	    ace_lib_load_success = TRUE;
-	    return 1;
-	  }
-	else
+	char *err = andes_ace_load_hooks (arg);
+	if (err)
 	  as_bad ("Fault to load ACE shared library: %s\n", err);
 #endif
       }
