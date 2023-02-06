@@ -559,46 +559,14 @@ nds_endian_check_command (const char *args, int from_tty)
 }
 
 
-/* Data structures used by ACE */
-typedef struct ace_operand
-{
-  const char *name;  /* operand name */
-  int bitpos;  /* operand start position */
-  int bitsize;  /* operand width */
-  int shift;  /* operand shift amount */
-  int hw_res;  /* hardware resource */
-  const char *hw_name;  /* hardware/register name */
-} ace_op_t;
-
-extern struct riscv_opcode *ace_opcs;
-extern ace_op_t *ace_ops;
-/* Represent whether ACE shared library is loaded successfully */
-extern bool ace_lib_load_success;
 
 static void
 nds_handle_ace(const char *ace_lib_path)
 {
   chmod(ace_lib_path, S_IRWXU);
-  void *dlc = dlopen (ace_lib_path, RTLD_NOW | RTLD_LOCAL);
-  char *err;
-
-  if (dlc == NULL)
-    err = (char *) dlerror ();
-  else
-    {
-      ace_ops = (ace_op_t *) dlsym (dlc, "ace_operands");
-      err = (char *) dlerror ();
-      if (err == NULL)
-	{
-	  ace_opcs = (struct riscv_opcode *) dlsym (dlc, "ace_opcodes_3");
-	  err = (char *) dlerror ();
-	}
-    }
-
-  if (err == NULL)
-    ace_lib_load_success = TRUE;
-  else
-    fprintf (stderr, _("Fault to load ACE shared library: %s\n"), err);
+	char *err = andes_ace_load_hooks(ace_lib_path);
+	if (err)
+		fprintf (stderr, _("Fault to load ACE shared library: %s\n"), err);
 }
 
 /* Callback for "nds read_acedesc" command.  */
