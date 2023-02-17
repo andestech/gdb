@@ -5938,14 +5938,13 @@ _bfd_riscv_relax_call (bfd *abfd, asection *sec, asection *sym_sec,
       r_type = R_RISCV_JAL;
       auipc = MATCH_JAL | (rd << OP_SH_RD);
     }
-  else if (VALID_ITYPE_IMM (foff))
+  else
     {
       /* Near zero, relax to JALR rd, x0, addr.  */
+      BFD_ASSERT (VALID_ITYPE_IMM (symval));
       r_type = R_RISCV_LO12_I;
       auipc = MATCH_JALR | (rd << OP_SH_RD);
     }
-  else
-    BFD_ASSERT (0);
 
   /* Replace the R_RISCV_CALL reloc.  */
   rel->r_info = ELFNN_R_INFO (ELFNN_R_SYM (rel->r_info), r_type);
