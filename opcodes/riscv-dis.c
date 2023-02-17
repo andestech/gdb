@@ -212,6 +212,7 @@ riscv_execit_info (bfd_vma pc ATTRIBUTE_UNUSED,
 /* Pointers for storing symbols from ACE shared library */
 struct riscv_opcode *ace_opcs;
 ace_op_t *ace_ops;
+ace_keyword_t *ace_keys;
 /* Represent whether ACE shared library is loaded successfully */
 bool ace_lib_load_success = false;
 /* Debugging mode:
@@ -274,6 +275,11 @@ char *andes_ace_load_hooks (const char *arg)
 	{
 	  ace_opcs = (struct riscv_opcode *) dlsym (dlc, "ace_opcodes_3");
 	  err = (char *) dlerror ();
+	  if (err == NULL)
+	    {
+	      ace_keys = (ace_keyword_t *) dlsym (dlc, "ace_keywords");
+	      err = (char *) dlerror ();
+	    }
 	}
     }
 

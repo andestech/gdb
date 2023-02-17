@@ -244,7 +244,7 @@ static htab_t ace_keyword_hash = NULL;
 static htab_t ace_op_hash = NULL;
 /* Pointers for storing symbols from ACE shared library */
 extern struct riscv_opcode *ace_opcs;
-ace_keyword_t *ace_keys;
+extern ace_keyword_t *ace_keys;
 extern ace_op_t *ace_ops;
 /* Represent whether ACE shared library is loaded successfully */
 extern bool ace_lib_load_success;
