@@ -3454,6 +3454,7 @@ riscv_elf_relocate_section (bfd *output_bfd,
 	case R_RISCV_ANDES_TAG:
 	  {
 	    int tag = relx->flags;
+	    relocation += rel->r_addend;
 	    if (tag == R_RISCV_EXECIT_ITE)
 	      { /* convert relocation for execit_ite.  */
 		bfd_vma index = relx->tag;
@@ -3468,11 +3469,8 @@ riscv_elf_relocate_section (bfd *output_bfd,
 		if (rtype == R_RISCV_CALL || rtype == R_RISCV_PCREL_HI20)
 		  rtype = ELFNN_R_TYPE (rel->r_info);
 		if (rtype == R_RISCV_PCREL_HI20)
-		  {
-		    riscv_record_pcrel_hi_reloc (&pcrel_relocs, pc,
-						 relocation + rel->r_addend,
-						 rtype, false);
-		  }
+		  riscv_record_pcrel_hi_reloc (&pcrel_relocs, pc, relocation,
+					       rtype, false);
 	      }
 	    else if (tag == TAG_GPREL_SUBTYPE_FLX
 		     || tag == TAG_GPREL_SUBTYPE_FSX)
@@ -3480,7 +3478,7 @@ riscv_elf_relocate_section (bfd *output_bfd,
 		relx->saved_irel.r_offset = rel->r_offset;
 		relx->saved_irel.r_addend = rel->r_addend;
 		andes_relax_fls_gp (input_bfd, input_section, NULL, info,
-		  &relx->saved_irel, relocation + rel->r_addend, 0, 0, NULL, NULL, false);
+		  &relx->saved_irel, relocation, 0, 0, NULL, NULL, false);
 	      }
 	    else
 	      BFD_ASSERT (0);
