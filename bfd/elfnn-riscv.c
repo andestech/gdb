@@ -202,6 +202,7 @@ struct riscv_elf_link_hash_table
    ? (struct riscv_elf_link_hash_table *) (p)->hash : NULL)
 
 /* { Andes */
+typedef struct riscv_pcgp_hi_reloc riscv_pcgp_hi_reloc_t;
 static bool
 execit_set_itb_base (struct bfd_link_info *link_info);
 static void
@@ -221,7 +222,8 @@ static int
 compar_reloc (const void *lhs, const void *rhs);
 static int
 andes_relax_gp_insn (uint32_t *insn, Elf_Internal_Rela *rel,
-		     bfd_signed_vma bias, int sym, asection *sym_sec);
+		     riscv_pcgp_hi_reloc_t *hi, asection *sym_sec,
+		     bfd_vma symval, bfd_vma gp, bfd_vma data_start);
 static bool
 riscv_init_global_pointer (bfd *output_bfd, struct bfd_link_info *info);
 static bool
@@ -7784,8 +7786,10 @@ _bfd_riscv_relax_lui_gp_insn (bfd *abfd, asection *sec, asection *sym_sec,
   if (((symval >= gp) && ((symval - gp) < (bfd_vma) effect_range)) ||
       ((symval < gp) && ((gp - symval) <= (bfd_vma) effect_range)))
     {
+      riscv_pcgp_hi_reloc_t hi;
       do_replace = 1;
-      unsigned sym = ELFNN_R_SYM (rel->r_info);
+      hi.hi_sym = ELFNN_R_SYM (rel->r_info);
+      hi.hi_addend = 0;
       if (ELFNN_R_TYPE (rel->r_info) == R_RISCV_HI20
 	  && !record_and_find_relax_gp_syms (sym_sec, isym, h, 0))
 	{
@@ -7795,8 +7799,8 @@ _bfd_riscv_relax_lui_gp_insn (bfd *abfd, asection *sec, asection *sym_sec,
 	  return true;
 	}
       else
-	do_replace = andes_relax_gp_insn (&insn, rel, symval - gp,
-					  sym, sym_sec);
+	do_replace = andes_relax_gp_insn (&insn, rel, &hi, sym_sec,
+					  symval, gp, data_start);
 
       if (do_replace)
 	bfd_put_32 (abfd, insn, contents + rel->r_offset);
@@ -9048,6 +9052,10 @@ andes_execit_mark_irel (Elf_Internal_Rela *irel, int index)
 }
 
 /* TODO: free allocated memory at a proper timing  */
+/* rel {offset, info*, addend, user*}
+ *                             /
+ *                            relx {rel_copy, tag, flags}
+ */
 static andes_irelx_t*
 andes_extend_irel (Elf_Internal_Rela *irel, int subtype,
 		   andes_irelx_t **list)
@@ -10113,7 +10121,6 @@ andes_relax_pc_gp_insn (
   if (((symval >= gp) && ((symval - gp) < (bfd_vma) effect_range)) ||
       ((symval < gp) && ((gp - symval) <= (bfd_vma) effect_range)))
     {
-      unsigned sym = hi_reloc.hi_sym;
       do_replace = 1;
       if (ELFNN_R_TYPE (rel->r_info) == R_RISCV_PCREL_HI20)
 	{ /* here record only, defer relaxation to final  */
@@ -10123,12 +10130,11 @@ andes_relax_pc_gp_insn (
 	    return true;
 	}
       else
-	do_replace = andes_relax_gp_insn (&insn, rel, symval - gp,
-					  sym, sym_sec);
+	do_replace = andes_relax_gp_insn (&insn, rel, hi, sym_sec,
+					  symval, gp, data_start);
 
       if (do_replace)
 	{
-	  rel->r_addend += hi_reloc.hi_addend;
 	  bfd_put_32 (abfd, insn, contents + rel->r_offset);
 	  return riscv_delete_pcgp_lo_reloc (pcgp_relocs, rel->r_offset, 4);
 	}
@@ -10165,12 +10171,15 @@ andes_min_p2align (Elf_Internal_Rela *rel, asection *sec)
 
 static int
 andes_relax_gp_insn (uint32_t *insn, Elf_Internal_Rela *rel,
-		     bfd_signed_vma bias, int sym, asection *sym_sec)
+		     riscv_pcgp_hi_reloc_t *hi, asection *sym_sec,
+		     bfd_vma symval, bfd_vma gp, bfd_vma data_start)
 {
   /* symbols are not necessary aligned to data lenght.
      worst alignment is picked.  */
+  bfd_signed_vma bias = symval - gp;
   int worst_p2alig = andes_min_p2align (rel, sym_sec);
   int type = ELFNN_R_TYPE (rel->r_info);
+  int sym = hi->hi_sym;
 
   /* For Bug-16488, we don not need to consider max_alignment and
   reserve_size here, since they may cause the alignment checking
@@ -10245,22 +10254,39 @@ andes_relax_gp_insn (uint32_t *insn, Elf_Internal_Rela *rel,
     }
   else if (type == R_RISCV_LO12_I || type == R_RISCV_LO12_S
 	   || type == R_RISCV_PCREL_LO12_I || type == R_RISCV_PCREL_LO12_S)
-    {
-      if (((*insn & MASK_FLH) == MATCH_FLH || (*insn & MASK_FLW) == MATCH_FLW
-	   || (*insn & MASK_FLD) == MATCH_FLD) && VALID_ITYPE_IMM (bias)
-	   && worst_p2alig > 1)
+    { /* GP value might reduce by 4K during resizing sections,
+	 filter out symbols before DATA_START for safety.  */
+      bool is_out = false;
+      if ((type == R_RISCV_PCREL_LO12_I) || (type == R_RISCV_PCREL_LO12_S))
+	is_out = (symval - hi->hi_addend) < data_start;
+      else
+	is_out = (symval - rel->r_addend) < data_start;
+
+      if (!is_out
+	  && ((*insn & MASK_FLH) == MATCH_FLH || (*insn & MASK_FLW) == MATCH_FLW
+	      || (*insn & MASK_FLD) == MATCH_FLD)
+	  && VALID_ITYPE_IMM (bias)
+	  && worst_p2alig > 1)
 	{
 	  if (type == R_RISCV_PCREL_LO12_I)
-	    rel->r_info = ELFNN_R_INFO (sym, type);
+	    {
+	      rel->r_info = ELFNN_R_INFO (sym, type);
+	      rel->r_addend = hi->hi_addend;
+	    }
 	  andes_extend_irel(rel, TAG_GPREL_SUBTYPE_FLX, &nsta.ext_irel_list);
 	  *insn = (*insn & ~(OP_MASK_RS1 << OP_SH_RS1)) | (GPR_ABI_GP << OP_SH_RS1);
 	}
-      else if (((*insn & MASK_FSH) == MATCH_FSH || (*insn & MASK_FSW) == MATCH_FSW
-		|| (*insn & MASK_FSD) == MATCH_FSD) && VALID_STYPE_IMM (bias)
+      else if (!is_out
+	       && ((*insn & MASK_FSH) == MATCH_FSH || (*insn & MASK_FSW) == MATCH_FSW
+		   || (*insn & MASK_FSD) == MATCH_FSD)
+	       && VALID_STYPE_IMM (bias)
 	       && worst_p2alig > 1)
 	{
 	  if (type == R_RISCV_PCREL_LO12_S)
-	    rel->r_info = ELFNN_R_INFO (sym, type);
+	    {
+	      rel->r_info = ELFNN_R_INFO (sym, type);
+	      rel->r_addend = hi->hi_addend;
+	    }
 	  andes_extend_irel(rel, TAG_GPREL_SUBTYPE_FSX, &nsta.ext_irel_list);
 	  *insn = (*insn & ~(OP_MASK_RS1 << OP_SH_RS1)) | (GPR_ABI_GP << OP_SH_RS1);
 	}
