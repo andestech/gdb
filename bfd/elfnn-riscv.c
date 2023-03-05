@@ -5216,13 +5216,22 @@ andes_execit_render_hash (execit_context_t *ctx)
       bfd_vma symval;
       char symtype;
       int rtype = ELFNN_R_TYPE (irel->r_info);
+      int stype = TAG_NONE; /* subtype of ANDES_TAG.  */
+      if (rtype == R_RISCV_ANDES_TAG)
+	{
+	  andes_irelx_t *relx = (andes_irelx_t *) irel->r_user;
+	  int tag = relx->flags;
+	  if (tag == TAG_GPREL_SUBTYPE_FLX || tag == TAG_GPREL_SUBTYPE_FSX)
+	    stype = tag;
+	}
       riscv_elf_get_insn_with_reg (abfd, irel, insn, &ctx->ie.fixed);
       if ((!andes->execit_flags.noji && rtype == R_RISCV_JAL)
 	  || (!andes->execit_flags.nols
 	      && (rtype == R_RISCV_HI20 || rtype == R_RISCV_LO12_I
 		  || rtype == R_RISCV_LO12_S || rtype == R_RISCV_GPREL_I
 		  || rtype == R_RISCV_GPREL_S
-		  || (rtype >= R_RISCV_LGP18S0 && rtype <= R_RISCV_SGP17S3)))
+		  || (rtype >= R_RISCV_LGP18S0 && rtype <= R_RISCV_SGP17S3)
+		  || stype != TAG_NONE))
 	  || (!andes->execit_flags.no_auipc
 	      && (rtype == R_RISCV_CALL || rtype == R_RISCV_PCREL_HI20)))
 	{
@@ -5356,7 +5365,8 @@ andes_execit_render_hash (execit_context_t *ctx)
 
 	      bfd_vma data_start = riscv_data_start_value (info);
 	      relocation_section = 0;
-	      relocation_offset = (ctx->ie.relocation >= data_start) ? 1 : 0;
+	      relocation_offset = ((ctx->ie.relocation - irel->r_addend)
+				   >= data_start) ? 1 : 0;
 	      if (rtype == R_RISCV_CALL || rtype == R_RISCV_PCREL_HI20)
 		ctx->ie.relocation -= ctx->ie.pc;
 	    }
@@ -8646,10 +8656,18 @@ riscv_relocation_check (struct bfd_link_info *info,
 	  (*_bfd_error_handler)
 	    (_("Linker: find dynamic relocation when doing relaxation\n"));
 	  break;
+	case R_RISCV_ANDES_TAG:
+	  { /* */
+	    andes_irelx_t *relx = (andes_irelx_t *) (*irel)->r_user;
+	    int tag = relx->flags;
+	    if (tag != R_RISCV_EXECIT_ITE)
+	      irel_save = *irel; /* to skip dropped relocation (NONE).  */
+	    /* EXECIT_ITE is tagged on exec.it (RVC) and would be skip.  */
+	  }
+	  break;
 	default:
 	  /* Relocation not supported.  */
 	  if (ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_RELAX
-	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_ANDES_TAG
 	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_NONE
 	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_RELAX_ENTRY
 	      && ELFNN_R_TYPE ((*irel)->r_info) != R_RISCV_ADD8
@@ -9325,6 +9343,23 @@ andes_execit_relocate_itable (struct bfd_link_info *info)
 		  if (he->next == 0)
 		    break;
 		  he = itable[he->next];
+		}
+	    }
+	  else if (rtype == R_RISCV_ANDES_TAG)
+	    {
+	      andes_irelx_t *relx = (andes_irelx_t *) rel_backup.r_user;
+	      int tag = relx->flags;
+	      if (tag == TAG_GPREL_SUBTYPE_FLX || tag == TAG_GPREL_SUBTYPE_FSX)
+		{
+		  int type = ELFNN_R_TYPE (relx->saved_irel.r_info);
+		  relocation = riscv_elf_execit_reloc_insn (&he->ie, info) - gp;
+		  if (type == R_RISCV_LO12_I || type == R_RISCV_PCREL_LO12_I)
+		    insn = insn_with_reg | ENCODE_ITYPE_IMM(relocation);
+		  else if (type == R_RISCV_LO12_S || type == R_RISCV_PCREL_LO12_S)
+		    insn = insn_with_reg | ENCODE_STYPE_IMM(relocation);
+		  else
+		    BFD_ASSERT (0);
+		  bfd_put_32 (abfd, insn, contents + (he->ie.itable_index) * 4);
 		}
 	    }
 
