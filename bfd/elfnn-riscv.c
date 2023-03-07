@@ -10187,69 +10187,93 @@ andes_relax_gp_insn (uint32_t *insn, Elf_Internal_Rela *rel,
   if ((*insn & MASK_ADDI) == MATCH_ADDI && VALID_GPTYPE_LB_IMM (bias))
     {
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP18S0);
+      if (type == R_RISCV_PCREL_LO12_I)
+	rel->r_addend = hi->hi_addend;
       *insn = (*insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_ADDIGP;
     }
   else if ((*insn & MASK_LB) == MATCH_LB && VALID_GPTYPE_LB_IMM (bias))
     {
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP18S0);
+      if (type == R_RISCV_PCREL_LO12_I)
+	rel->r_addend = hi->hi_addend;
       *insn = (*insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LBGP;
     }
   else if ((*insn & MASK_LBU) == MATCH_LBU && VALID_GPTYPE_LB_IMM (bias))
     {
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP18S0);
+      if (type == R_RISCV_PCREL_LO12_I)
+	rel->r_addend = hi->hi_addend;
       *insn = (*insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LBUGP;
     }
   else if ((*insn & MASK_LH) == MATCH_LH && VALID_GPTYPE_LH_IMM (bias)
 	   && worst_p2alig > 0)
     {
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S1);
+      if (type == R_RISCV_PCREL_LO12_I)
+	rel->r_addend = hi->hi_addend;
       *insn = (*insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LHGP;
     }
   else if ((*insn & MASK_LHU) == MATCH_LHU && VALID_GPTYPE_LH_IMM (bias)
 	   && worst_p2alig > 0)
     {
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S1);
+      if (type == R_RISCV_PCREL_LO12_I)
+	rel->r_addend = hi->hi_addend;
       *insn = (*insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LHUGP;
     }
   else if ((*insn & MASK_LW) == MATCH_LW && VALID_GPTYPE_LW_IMM (bias)
 	   && worst_p2alig > 1)
     {
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S2);
+      if (type == R_RISCV_PCREL_LO12_I)
+	rel->r_addend = hi->hi_addend;
       *insn = (*insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LWGP;
     }
   else if ((*insn & MASK_LWU) == MATCH_LWU && VALID_GPTYPE_LW_IMM (bias)
 	   && worst_p2alig > 1)
     {
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S2);
+      if (type == R_RISCV_PCREL_LO12_I)
+	rel->r_addend = hi->hi_addend;
       *insn = (*insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LWUGP;
     }
   else if ((*insn & MASK_LD) == MATCH_LD && VALID_GPTYPE_LD_IMM (bias)
 	   && worst_p2alig > 2)
     {
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_LGP17S3);
+      if (type == R_RISCV_PCREL_LO12_I)
+	rel->r_addend = hi->hi_addend;
       *insn = (*insn & (OP_MASK_RD << OP_SH_RD)) | MATCH_LDGP;
     }
   else if ((*insn & MASK_SB) == MATCH_SB && VALID_GPTYPE_SB_IMM (bias))
     {
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_SGP18S0);
+      if (type == R_RISCV_PCREL_LO12_S)
+	rel->r_addend = hi->hi_addend;
       *insn = (*insn & (OP_MASK_RS2 << OP_SH_RS2)) | MATCH_SBGP;
     }
   else if ((*insn & MASK_SH) == MATCH_SH && VALID_GPTYPE_SH_IMM (bias)
 	   && worst_p2alig > 0)
     {
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_SGP17S1);
+      if (type == R_RISCV_PCREL_LO12_S)
+	rel->r_addend = hi->hi_addend;
       *insn = (*insn & (OP_MASK_RS2 << OP_SH_RS2)) | MATCH_SHGP;
     }
   else if ((*insn & MASK_SW) == MATCH_SW && VALID_GPTYPE_SW_IMM (bias)
 	   && worst_p2alig > 1)
     {
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_SGP17S2);
+      if (type == R_RISCV_PCREL_LO12_S)
+	rel->r_addend = hi->hi_addend;
       *insn = (*insn & (OP_MASK_RS2 << OP_SH_RS2)) | MATCH_SWGP;
     }
   else if ((*insn & MASK_SD) == MATCH_SD && VALID_GPTYPE_SD_IMM (bias)
 	   && worst_p2alig > 2)
     {
       rel->r_info = ELFNN_R_INFO (sym, R_RISCV_SGP17S3);
+      if (type == R_RISCV_PCREL_LO12_S)
+	rel->r_addend = hi->hi_addend;
       *insn = (*insn & (OP_MASK_RS2 << OP_SH_RS2)) | MATCH_SDGP;
     }
   else if (type == R_RISCV_LO12_I || type == R_RISCV_LO12_S
