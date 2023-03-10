@@ -10313,43 +10313,71 @@ andes_relax_gp_insn (uint32_t *insn, Elf_Internal_Rela *rel,
     }
   else if (type == R_RISCV_LO12_I || type == R_RISCV_LO12_S
 	   || type == R_RISCV_PCREL_LO12_I || type == R_RISCV_PCREL_LO12_S)
-    { /* GP value might reduce by 4K during resizing sections,
-	 filter out symbols before DATA_START for safety.  */
+    {
       bool is_out = false;
-      if ((type == R_RISCV_PCREL_LO12_I) || (type == R_RISCV_PCREL_LO12_S))
-	is_out = (symval - hi->hi_addend) < data_start;
-      else
-	is_out = (symval - rel->r_addend) < data_start;
+      while (true)
+	{
+	  /* GP value might reduce by 4K during resizing sections,
+	     filter out symbols before DATA_START for safety.  */
+	  if ((type == R_RISCV_PCREL_LO12_I) || (type == R_RISCV_PCREL_LO12_S))
+	    is_out = (symval - hi->hi_addend) < data_start;
+	  else
+	    is_out = (symval - rel->r_addend) < data_start;
+	  if (is_out) break;
 
-      if (!is_out
-	  && ((*insn & MASK_FLH) == MATCH_FLH || (*insn & MASK_FLW) == MATCH_FLW
-	      || (*insn & MASK_FLD) == MATCH_FLD)
-	  && VALID_ITYPE_IMM (bias)
-	  && worst_p2alig > 1)
-	{
-	  if (type == R_RISCV_PCREL_LO12_I)
+	  /* alignment would increase gap between gp and symbol. (b26938)
+	     guard with the alignment of the one with larger VMA.  */
+	  /* TODO: replace alignment with gp's if VMA(gp) is larger.  */
+	  {
+	    int range = 0x1000 >> 1;
+	    /* presume gp is XLEN/8 aligned. so mostly guard = 0.  */
+	    unsigned xlen = ARCH_SIZE;
+	    unsigned align = 1u << sym_sec->alignment_power;
+	    bfd_vma guard = (align > (xlen >> 3)) ? (align - (xlen >> 3)) : 0;
+	    bfd_signed_vma effect = range - guard;
+	    if (effect < 0
+		|| !(((symval >= gp) && ((signed)(symval - gp) < effect))
+		     || ((symval < gp) && ((signed)(gp - symval) <= effect))))
+	      {
+		is_out = true;
+		break;
+	      }
+	  }
+
+	  if (((*insn & MASK_FLH) == MATCH_FLH
+	       || (*insn & MASK_FLW) == MATCH_FLW
+	       || (*insn & MASK_FLD) == MATCH_FLD)
+	      && VALID_ITYPE_IMM (bias)
+	      && worst_p2alig > 1)
 	    {
-	      rel->r_info = ELFNN_R_INFO (sym, type);
-	      rel->r_addend = hi->hi_addend;
+	      if (type == R_RISCV_PCREL_LO12_I)
+		{
+		  rel->r_info = ELFNN_R_INFO (sym, type);
+		  rel->r_addend = hi->hi_addend;
+		}
+	      andes_extend_irel(rel, TAG_GPREL_SUBTYPE_FLX, &nsta.ext_irel_list);
+	      *insn = (*insn & ~(OP_MASK_RS1 << OP_SH_RS1)) | (GPR_ABI_GP << OP_SH_RS1);
 	    }
-	  andes_extend_irel(rel, TAG_GPREL_SUBTYPE_FLX, &nsta.ext_irel_list);
-	  *insn = (*insn & ~(OP_MASK_RS1 << OP_SH_RS1)) | (GPR_ABI_GP << OP_SH_RS1);
-	}
-      else if (!is_out
-	       && ((*insn & MASK_FSH) == MATCH_FSH || (*insn & MASK_FSW) == MATCH_FSW
-		   || (*insn & MASK_FSD) == MATCH_FSD)
-	       && VALID_STYPE_IMM (bias)
-	       && worst_p2alig > 1)
-	{
-	  if (type == R_RISCV_PCREL_LO12_S)
+	  else if (((*insn & MASK_FSH) == MATCH_FSH
+		    || (*insn & MASK_FSW) == MATCH_FSW
+		    || (*insn & MASK_FSD) == MATCH_FSD)
+		   && VALID_STYPE_IMM (bias)
+		   && worst_p2alig > 1)
 	    {
-	      rel->r_info = ELFNN_R_INFO (sym, type);
-	      rel->r_addend = hi->hi_addend;
+	      if (type == R_RISCV_PCREL_LO12_S)
+		{
+		  rel->r_info = ELFNN_R_INFO (sym, type);
+		  rel->r_addend = hi->hi_addend;
+		}
+	      andes_extend_irel(rel, TAG_GPREL_SUBTYPE_FSX, &nsta.ext_irel_list);
+	      *insn = (*insn & ~(OP_MASK_RS1 << OP_SH_RS1)) | (GPR_ABI_GP << OP_SH_RS1);
 	    }
-	  andes_extend_irel(rel, TAG_GPREL_SUBTYPE_FSX, &nsta.ext_irel_list);
-	  *insn = (*insn & ~(OP_MASK_RS1 << OP_SH_RS1)) | (GPR_ABI_GP << OP_SH_RS1);
+	  else
+	    is_out = true;
+	  break; /* once */
 	}
-      else
+
+      if (is_out)
 	return false;
     }
   else
