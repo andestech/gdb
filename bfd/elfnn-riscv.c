@@ -6224,6 +6224,8 @@ _bfd_riscv_relax_align (bfd *abfd, asection *sec,
 
 /* Relax PC-relative references to GP-relative references.  */
 
+#define MAX(a, b) (a) > (b) ? (a) : (b)
+
 static bool
 _bfd_riscv_relax_pc (bfd *abfd ATTRIBUTE_UNUSED,
 		     asection *sec,
@@ -6303,6 +6305,15 @@ _bfd_riscv_relax_pc (bfd *abfd ATTRIBUTE_UNUSED,
       if (h->u.def.section->output_section == sym_sec->output_section
 	  && sym_sec->output_section != bfd_abs_section_ptr)
 	max_alignment = (bfd_vma) 1 << sym_sec->output_section->alignment_power;
+
+      /* alignment might enlarge the gap between symbol and GP when relaxing.
+         guard it with the delta of both alignments.  */
+      {
+	unsigned sym_align = 1u << sym_sec->alignment_power;
+	unsigned gp_align = 1u << h->u.def.section->alignment_power;
+	if (sym_align > gp_align)
+	  max_alignment = MAX (max_alignment, sym_align - gp_align);
+      }
     }
 
   /* Is the reference in range of x0 or gp?
