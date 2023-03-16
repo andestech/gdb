@@ -1491,6 +1491,25 @@ static int elf_check(void *file_data, unsigned int file_size, CALLBACK_FUNC reg_
             base_isas[elf_base_isa], base_isas[mxl]);
     }
 
+    /* Check extensions. */
+    NEC_output("\t   %9s   %9s  \n", "CPU", "ELF");
+
+    char temp[30];
+    char ext_str[2] = {0};
+    int i;
+    for (i = 0; i < EXT_COUNT; i++)
+    {
+        ext_str[0] = riscv_extensions[i];
+        // ignore c flag checking if zc flag is defined
+        if (('C' == ext_str[0]) && (elf_use_ext_i(RISCV_C_EXT::C_EXT_ZCA, ext_type::C_EXT)))
+            continue;
+
+        NEC_snprintf(temp, sizeof(temp), "Extension '%s'", ext_str);
+        if (NEC_check_bool(
+                EFT_ERROR, temp, cpu_support_std_ext(CSR_misa, CSR_mmsc_cfg, riscv_extensions[i]), elf_use_ext_i(i, ext_type::STANDARD)))
+            n_error++;
+    }
+
     // The code in ELF checking to access mrvarch_cfg should check mmsc_cfg.RVARCH == 1(for RV64),
     // mmsc2_cfg.RVARCH (for RV32). For mmsc_cfg2, it should check the condition, misa.MXL==1 && mmsc_cfg[31] == 1 (RV32 Only).
     if (elf_base_isa == BASE_ISA_RV32I || elf_base_isa == BASE_ISA_RV32E)
@@ -1512,24 +1531,6 @@ static int elf_check(void *file_data, unsigned int file_size, CALLBACK_FUNC reg_
             CSR_mrvarch_cfg = reg_read_callback(0xFCA);
             is_mrvarch_exist = true;
         }
-    }
-
-    /* Check extensions. */
-    NEC_output("\t   %9s   %9s  \n", "CPU", "ELF");
-
-    char temp[30];
-    char ext_str[2] = {0};
-    int i;
-    for (i = 0; i < EXT_COUNT; i++)
-    {
-        ext_str[0] = riscv_extensions[i];
-        if (('C' == ext_str[0]) && (elf_use_ext_i(RISCV_C_EXT::C_EXT_ZCA, ext_type::C_EXT)))
-            continue;
-
-        NEC_snprintf(temp, sizeof(temp), "Extension '%s'", ext_str);
-        if (NEC_check_bool(
-                EFT_ERROR, temp, cpu_support_std_ext(CSR_misa, CSR_mmsc_cfg, riscv_extensions[i]), elf_use_ext_i(i, ext_type::STANDARD)))
-            n_error++;
     }
 
     // check b-ext
