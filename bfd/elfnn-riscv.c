@@ -996,7 +996,7 @@ bfd_elf_riscv_make_tablejump_section (bfd *abfd, struct bfd_link_info *info)
 		  | SEC_IN_MEMORY | SEC_KEEP));
 
       if (sec == NULL
-	  || !bfd_set_section_alignment (sec, bed->s->log_file_align)
+	  || !bfd_set_section_alignment (sec, 6) /* CSR JVT aligns on 2^6.  */
 	  || !bfd_set_section_size (sec, 256 * RISCV_ELF_WORD_BYTES))
 	return false;
 
