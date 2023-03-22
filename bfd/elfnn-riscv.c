@@ -971,13 +971,11 @@ bfd_elf_riscv_make_tablejump_section (bfd *abfd, struct bfd_link_info *info)
 {
   asection *sec;
   struct riscv_elf_link_hash_table *htab;
-  const struct elf_backend_data *bed;
 
   /* Skip if no Zcmt.  */
   if (!riscv_use_table_jump (info))
     return true;
 
-  bed = get_elf_backend_data (abfd);
   htab = riscv_elf_hash_table (info);
   sec = bfd_get_linker_section (abfd, TABLE_JUMP_SEC_NAME);
 
