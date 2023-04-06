@@ -379,6 +379,7 @@ struct riscv_set_options
   int b22827_1;
   /* } workaround */
   int full_arch;
+  int no_branch_relax;
   /* } Andes  */
 };
 
@@ -407,6 +408,7 @@ static struct riscv_set_options riscv_opts =
   0, /* b22827 */
   0, /* b22827_1 */
   0, /* full arch */
+  0, /* no_branch_relax */
   /* } Andes  */
 };
 
@@ -950,9 +952,11 @@ relaxed_branch_length (fragS *fragp, asection *sec, int update)
   range = RELAX_BRANCH_RANGE (fragp->fr_subtype);
 
   /* Assume jumps are in range; the linker will catch any that aren't.  */
-  length = jump ? 4 : 8;
+  if (!riscv_opts.no_branch_relax)
+    length = jump ? 4 : 8;
 
-  if (fragp->fr_symbol != NULL
+  if (!riscv_opts.no_branch_relax
+      && fragp->fr_symbol != NULL
       && S_IS_DEFINED (fragp->fr_symbol)
       && !S_IS_WEAK (fragp->fr_symbol)
       && sec == S_GET_SEGMENT (fragp->fr_symbol))
@@ -2049,6 +2053,9 @@ append_insn (struct riscv_cl_insn *ip, expressionS *address_expr,
 	  int best_case = riscv_insn_length (ip->insn_opcode);
 	  unsigned worst_case = relaxed_branch_length (NULL, NULL, 0);
 	  int range = ENUM_BRANCH_RANGE (reloc_type);
+
+	  if (riscv_opts.no_branch_relax)
+	    worst_case = best_case;
 
 	  if (now_seg == absolute_section)
 	    {
@@ -5028,6 +5035,7 @@ enum options
   OPTION_MB22827_1,
   OPTION_FULL_ARCH,
   OPTION_MNEXECIT_OP,
+  OPTION_MNO_BRANCH_RELAX,
   /* } Andes  */
   OPTION_END_OF_ENUM
 };
@@ -5072,6 +5080,7 @@ struct option md_longopts[] =
   {"mb22827", no_argument, NULL, OPTION_MB22827},
   {"mb22827.1", no_argument, NULL, OPTION_MB22827_1},
   {"mfull-arch", no_argument, NULL, OPTION_FULL_ARCH},
+  {"mno-branch-relax", no_argument, NULL, OPTION_MNO_BRANCH_RELAX},
   /* } Andes  */
 
   {NULL, no_argument, NULL, 0}
@@ -5210,6 +5219,10 @@ md_parse_option (int c, const char *arg)
 
     case OPTION_MEXT_EFHW:
       riscv_opts.efhw = true;
+      break;
+
+    case OPTION_MNO_BRANCH_RELAX:
+      riscv_opts.no_branch_relax = true;
       break;
     /* } Andes  */
 
@@ -5812,6 +5825,8 @@ s_riscv_option (int x ATTRIBUTE_UNUSED)
     riscv_opts.execit = TRUE;
   else if (strcmp (name, "verbatim") == 0)
     riscv_opts.verbatim = TRUE;
+  else if (strcmp (name, "no_branch_relax") == 0)
+    riscv_opts.no_branch_relax = true;
   else if (strncmp (name, "cmodel_", 7) == 0)
     {
       if (strcmp (name+7, "large") == 0 && xlen > 32)
