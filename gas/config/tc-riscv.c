@@ -380,6 +380,7 @@ struct riscv_set_options
   /* } workaround */
   int full_arch;
   int no_branch_relax;
+  int no_rvc_convert;
   /* } Andes  */
 };
 
@@ -409,6 +410,7 @@ static struct riscv_set_options riscv_opts =
   0, /* b22827_1 */
   0, /* full arch */
   0, /* no_branch_relax */
+  0, /* no_rvc_convert */
   /* } Andes  */
 };
 
@@ -3417,6 +3419,14 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
       if (!riscv_multi_subset_supports (&riscv_rps_as, insn->insn_class))
 	continue;
 
+      /* VLSI mode desires AS IT conversion.  */
+      if (riscv_opts.no_rvc_convert
+	  && (insn->insn_class == INSN_CLASS_C
+	      || insn->insn_class == INSN_CLASS_F_AND_C
+	      || insn->insn_class == INSN_CLASS_D_AND_C)
+	  && 0 != strncmp (insn->name, "c.", 2))
+	continue;
+
       nsta.ict_exp = NULL;
 
       /* Reset error message of the previous round.  */
@@ -5036,6 +5046,7 @@ enum options
   OPTION_FULL_ARCH,
   OPTION_MNEXECIT_OP,
   OPTION_MNO_BRANCH_RELAX,
+  OPTION_MNO_RVC_CONVERT,
   /* } Andes  */
   OPTION_END_OF_ENUM
 };
@@ -5081,6 +5092,7 @@ struct option md_longopts[] =
   {"mb22827.1", no_argument, NULL, OPTION_MB22827_1},
   {"mfull-arch", no_argument, NULL, OPTION_FULL_ARCH},
   {"mno-branch-relax", no_argument, NULL, OPTION_MNO_BRANCH_RELAX},
+  {"mno-rvc-convert", no_argument, NULL, OPTION_MNO_RVC_CONVERT},
   /* } Andes  */
 
   {NULL, no_argument, NULL, 0}
@@ -5223,6 +5235,10 @@ md_parse_option (int c, const char *arg)
 
     case OPTION_MNO_BRANCH_RELAX:
       riscv_opts.no_branch_relax = true;
+      break;
+
+    case OPTION_MNO_RVC_CONVERT:
+      riscv_opts.no_rvc_convert = true;
       break;
     /* } Andes  */
 
@@ -5827,6 +5843,8 @@ s_riscv_option (int x ATTRIBUTE_UNUSED)
     riscv_opts.verbatim = TRUE;
   else if (strcmp (name, "no_branch_relax") == 0)
     riscv_opts.no_branch_relax = true;
+  else if (strcmp (name, "no_rvc_convert") == 0)
+    riscv_opts.no_rvc_convert = true;
   else if (strncmp (name, "cmodel_", 7) == 0)
     {
       if (strcmp (name+7, "large") == 0 && xlen > 32)
