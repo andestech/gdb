@@ -5015,9 +5015,7 @@ andes_relax_pc_gp_insn (
   riscv_pcgp_relocs *pcgp_relocs,
   bool undefined_weak);
 static bool
-riscv_delete_pcgp_lo_reloc (riscv_pcgp_relocs *p,
-			    bfd_vma lo_sec_off,
-			    size_t bytes ATTRIBUTE_UNUSED);
+riscv_mark_pcgp_hi_reloc (riscv_pcgp_relocs *p, riscv_pcgp_hi_reloc *hi);
 static void
 andes_relax_pc_gp_insn_final (riscv_pcgp_relocs *p);
 
@@ -6246,6 +6244,7 @@ _bfd_riscv_relax_pc (bfd *abfd ATTRIBUTE_UNUSED,
 
   /* Chain the _LO relocs to their cooresponding _HI reloc to compute the
      actual target address.  */
+  riscv_pcgp_hi_reloc *hi = NULL;
   riscv_pcgp_hi_reloc hi_reloc;
   memset (&hi_reloc, 0, sizeof (hi_reloc));
   switch (ELFNN_R_TYPE (rel->r_info))
@@ -6258,8 +6257,7 @@ _bfd_riscv_relax_pc (bfd *abfd ATTRIBUTE_UNUSED,
 	   hi part instruction.  So we must subtract it here for the lookup.
 	   It is still used below in the final symbol address.  */
 	bfd_vma hi_sec_off = symval - sec_addr (sym_sec) - rel->r_addend;
-	riscv_pcgp_hi_reloc *hi = riscv_find_pcgp_hi_reloc (pcgp_relocs,
-							    hi_sec_off);
+	hi = riscv_find_pcgp_hi_reloc (pcgp_relocs, hi_sec_off);
 	if (hi == NULL)
 	  {
 	    riscv_record_pcgp_lo_reloc (pcgp_relocs, hi_sec_off);
@@ -6344,7 +6342,7 @@ _bfd_riscv_relax_pc (bfd *abfd ATTRIBUTE_UNUSED,
 	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_GPREL_I);
 	      rel->r_addend += hi_reloc.hi_addend;
 	    }
-	  return true;
+	  return riscv_mark_pcgp_hi_reloc (pcgp_relocs, hi);
 
 	case R_RISCV_PCREL_LO12_S:
 	  if (undefined_weak)
@@ -6362,7 +6360,7 @@ _bfd_riscv_relax_pc (bfd *abfd ATTRIBUTE_UNUSED,
 	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_GPREL_S);
 	      rel->r_addend += hi_reloc.hi_addend;
 	    }
-	  return true;
+	  return riscv_mark_pcgp_hi_reloc (pcgp_relocs, hi);
 
 	case R_RISCV_PCREL_HI20:
 	  riscv_record_pcgp_hi_reloc (pcgp_relocs,
@@ -10034,12 +10032,10 @@ andes_relax_execit_ite (
 }
 
 static bool
-riscv_delete_pcgp_lo_reloc (riscv_pcgp_relocs *p,
-			    bfd_vma lo_sec_off,
-			    size_t bytes ATTRIBUTE_UNUSED)
+riscv_mark_pcgp_hi_reloc (riscv_pcgp_relocs *p,riscv_pcgp_hi_reloc *hi)
 {
   bool out = false;
-  bfd_vma hi_sec_off = lo_sec_off - 4;
+  bfd_vma hi_sec_off = hi->hi_sec_off;
   riscv_pcgp_hi_reloc *c;
 
   for (c = p->hi; c != NULL; c = c->next)
@@ -10182,7 +10178,7 @@ andes_relax_pc_gp_insn (
       if (do_replace)
 	{
 	  bfd_put_32 (abfd, insn, contents + rel->r_offset);
-	  return riscv_delete_pcgp_lo_reloc (pcgp_relocs, rel->r_offset, 4);
+	  return riscv_mark_pcgp_hi_reloc (pcgp_relocs, hi);
 	}
       else
 	{
