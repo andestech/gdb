@@ -1240,7 +1240,9 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
 	    continue;
 
 	  /* pick nexec.it if support xnexecit.  */
-	  if (args.has_xnexecit && 0 == strcmp (op->name, "exec.it"))
+	  if (args.has_xnexecit
+	      && ((0 == strcmp (op->name, "exec.it"))
+		  || (0 == strcmp (op->name, "ex9.it"))))
 	    continue;
 
 	  /* prefer cm.* if support zcm*.  */
