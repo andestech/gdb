@@ -59,6 +59,7 @@ struct riscv_private_data
   bfd_vma gp;
   bfd_vma print_addr;
   bfd_vma jvt_base;
+  bfd_vma jvt_start; /* real table start.  */
   bfd_vma jvt_end;
   bfd_vma hi_addr[OP_MASK_RD + 1];
   /* { Andes */
@@ -1101,17 +1102,18 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
 
   if (info->private_data == NULL)
     {
+      const bfd_vma minus = (bfd_vma) -1;
       int i;
       bfd_vma sym_val;
 
       pd = info->private_data = xcalloc (1, sizeof (struct riscv_private_data));
-      pd->gp = -1;
-      pd->print_addr = -1;
-      pd->jvt_base = -1;
-      pd->jvt_end = -1;
+      pd->gp = minus;
+      pd->print_addr = minus;
+      pd->jvt_base = minus;
+      pd->jvt_end = minus;
 
       for (i = 0; i < (int)ARRAY_SIZE (pd->hi_addr); i++)
-	pd->hi_addr[i] = -1;
+	pd->hi_addr[i] = minus;
 
       for (i = 0; i < info->symtab_size; i++)
         {
@@ -1123,9 +1125,29 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
 	    pd->jvt_base = bfd_asymbol_value (info->symtab[i]);
 	}
 
+      /* find jump table section.  */
+      if (info->section && info->section->owner
+	  && info->section->owner->sections)
+	{
+	  asection *p = info->section->owner->sections;
+	  const char *LD_JVT_SEC_NAME = TABLE_JUMP_SEC_NAME;
+	  const char *LLD_JVT_SEC_NAME = ".riscv.jvt";
+	  while (p)
+	    {
+	      if (0 == strcmp (p->name, LD_JVT_SEC_NAME)
+		  || 0 == strcmp (p->name, LLD_JVT_SEC_NAME))
+		{
+		  pd->jvt_start = p->vma;
+		  pd->jvt_end = p->vma + p->size;
+		  break;
+		}
+	      p = p->next;
+	    }
+	}
+
       /* Calculate the closest symbol from jvt base to determine the size of table jump
           entry section.  */
-      if (pd->jvt_base != 0)
+      if (pd->jvt_base != 0 && pd->jvt_end == minus)
 	{
 	  for (i = 0; i < info->symtab_size; i++)
 	    {
@@ -1134,6 +1156,11 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
 	        pd->jvt_end = sym_val;
 	    }
 	}
+
+      if (pd->jvt_base == minus || pd->jvt_end == minus)
+	pd->jvt_start = pd->jvt_end = 0;
+      if (pd->jvt_base != minus && pd->jvt_start < pd->jvt_base)
+	pd->jvt_start = pd->jvt_base;
     }
   else
     pd = info->private_data;
@@ -1184,7 +1211,7 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
       if (riscv_subset_supports (&riscv_rps_dis, "zcmt")
 	  && pd->jvt_base != 0
 	  && pd->jvt_base != (bfd_vma)-1
-	  && memaddr >= pd->jvt_base
+	  && memaddr >= pd->jvt_start
 	  && memaddr < pd->jvt_end
 	  && print_jvt_entry_value (info, memaddr))
 	{
