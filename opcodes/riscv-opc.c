@@ -616,9 +616,9 @@ const struct riscv_opcode riscv_opcodes[] =
 {"remuw",     64, INSN_CLASS_M,   "d,s,t",     MATCH_REMUW, MASK_REMUW, match_opcode, 0 },
 
 /* Half-precision floating-point instruction subset */
-{"flh",        0, INSN_CLASS_F_AND_ZFHMIN,   "D,o(s)",  MATCH_FLH, MASK_FLH, match_opcode, INSN_DREF|INSN_2_BYTE },
+{"flh",        0, INSN_CLASS_F_AND_ZFHMIN_BF16,   "D,o(s)",  MATCH_FLH, MASK_FLH, match_opcode, INSN_DREF|INSN_2_BYTE },
 {"flh",        0, INSN_CLASS_F_AND_ZFHMIN,   "D,A,s",  0, (int) M_FLH, match_never, INSN_MACRO },
-{"fsh",        0, INSN_CLASS_F_AND_ZFHMIN,   "T,q(s)",  MATCH_FSH, MASK_FSH, match_opcode, INSN_DREF|INSN_2_BYTE },
+{"fsh",        0, INSN_CLASS_F_AND_ZFHMIN_BF16,   "T,q(s)",  MATCH_FSH, MASK_FSH, match_opcode, INSN_DREF|INSN_2_BYTE },
 {"fsh",        0, INSN_CLASS_F_AND_ZFHMIN,   "T,A,s",  0, (int) M_FSH, match_never, INSN_MACRO },
 {"fmv.h",      0, INSN_CLASS_F_AND_ZFH,   "D,U",  MATCH_FSGNJ_H, MASK_FSGNJ_H, match_rs1_eq_rs2, INSN_ALIAS },
 {"fneg.h",     0, INSN_CLASS_F_AND_ZFH,   "D,U",  MATCH_FSGNJN_H, MASK_FSGNJN_H, match_rs1_eq_rs2, INSN_ALIAS },
@@ -669,8 +669,8 @@ const struct riscv_opcode riscv_opcodes[] =
 {"fle.h",      0, INSN_CLASS_F_AND_ZFH,   "d,S,T",  MATCH_FLE_H, MASK_FLE_H, match_opcode, 0 },
 {"fgt.h",      0, INSN_CLASS_F_AND_ZFH,   "d,T,S",  MATCH_FLT_H, MASK_FLT_H, match_opcode, 0 },
 {"fge.h",      0, INSN_CLASS_F_AND_ZFH,   "d,T,S",  MATCH_FLE_H, MASK_FLE_H, match_opcode, 0 },
-{"fmv.x.h",    0, INSN_CLASS_F_AND_ZFHMIN,   "d,S",  MATCH_FMV_X_H, MASK_FMV_X_H, match_opcode, 0 },
-{"fmv.h.x",    0, INSN_CLASS_F_AND_ZFHMIN,   "D,s",  MATCH_FMV_H_X, MASK_FMV_H_X, match_opcode, 0 },
+{"fmv.x.h",    0, INSN_CLASS_F_AND_ZFHMIN_BF16,   "d,S",  MATCH_FMV_X_H, MASK_FMV_X_H, match_opcode, 0 },
+{"fmv.h.x",    0, INSN_CLASS_F_AND_ZFHMIN_BF16,   "D,s",  MATCH_FMV_H_X, MASK_FMV_H_X, match_opcode, 0 },
 {"fcvt.l.h",  64, INSN_CLASS_F_AND_ZFH,   "d,S",  MATCH_FCVT_L_H | MASK_RM, MASK_FCVT_L_H | MASK_RM, match_opcode, 0 },
 {"fcvt.l.h",  64, INSN_CLASS_F_AND_ZFH,   "d,S,m",  MATCH_FCVT_L_H, MASK_FCVT_L_H, match_opcode, 0 },
 {"fcvt.lu.h", 64, INSN_CLASS_F_AND_ZFH,   "d,S",  MATCH_FCVT_LU_H | MASK_RM, MASK_FCVT_LU_H | MASK_RM, match_opcode, 0 },
@@ -1093,6 +1093,15 @@ const struct riscv_opcode riscv_opcodes[] =
 {"prefetch.w", 0, INSN_CLASS_ZICBOP, "f(s)", MATCH_PREFETCH_W, MASK_PREFETCH_W, match_opcode, 0 },
 /* } Zicbo */
 
+/* } rv_bf16 */
+// {"fcvt.bf16.s", 0, INSN_CLASS_ZFBFMIN, "D,T,m", MATCH_FCVT_BF16_S, MASK_FCVT_BF16_S, match_opcode, 0},
+// {"fcvt.s.bf16", 0, INSN_CLASS_ZFBFMIN, "D,T,m", MATCH_FCVT_S_BF16, MASK_FCVT_S_BF16, match_opcode, 0},
+{"vfncvtbf16.f.f.w", 0, INSN_CLASS_ZVFBFMIN, "Vd,VtVm", MATCH_VFNCVTBF16_F_F_W, MASK_VFNCVTBF16_F_F_W, match_opcode, 0},
+{"vfwcvtbf16.f.f.v", 0, INSN_CLASS_ZVFBFMIN, "Vd,VtVm", MATCH_VFWCVTBF16_F_F_V, MASK_VFWCVTBF16_F_F_V, match_opcode, 0},
+{"vfwmaccbf16.vv",  0, INSN_CLASS_ZVFBFWMA, "Vd,Vs,VtVm", MATCH_VFWMACCBF16_VV, MASK_VFWMACCBF16_VV, match_opcode, 0},
+{"vfwmaccbf16.vf",  0, INSN_CLASS_ZVFBFWMA, "Vd,Vt,SVm", MATCH_VFWMACCBF16_VF, MASK_VFWMACCBF16_VF, match_opcode, 0},
+/* } rv_bf16 */
+
 /* { Andes  */
 /* rvp.gas */
 {"add8", 0, INSN_CLASS_P, "d,s,t", MATCH_ADD8, MASK_ADD8, match_opcode, 0},
@@ -1460,8 +1469,10 @@ const struct riscv_opcode riscv_opcodes[] =
 {"flmism", 0, INSN_CLASS_XANDES, "d,s,t", MATCH_FLMISM, MASK_FLMISM, match_opcode, 0},
 {"exec.it", 0, INSN_CLASS_XANDES, "Cet", MATCH_EXEC_IT, MASK_EXEC_IT, match_opcode, 0},
 {"ex9.it", 0, INSN_CLASS_XANDES, "Cei", MATCH_EX9_IT, MASK_EX9_IT, match_opcode, 0},
-{"fcvt.s.bf16", 0, INSN_CLASS_XANDES, "D,T", MATCH_FCVT_S_BF16, MASK_FCVT_S_BF16, match_opcode, 0},
-{"fcvt.bf16.s", 0, INSN_CLASS_XANDES, "D,T", MATCH_FCVT_BF16_S, MASK_FCVT_BF16_S, match_opcode, 0},
+{"fcvt.s.bf16", 0, INSN_CLASS_XANDES, "D,T", MATCH_FCVT_S_BF16_NDS, MASK_FCVT_S_BF16_NDS, match_opcode, 0},
+{"fcvt.s.bf16", 0, INSN_CLASS_ZFBFMIN, "D,S,m", MATCH_FCVT_S_BF16, MASK_FCVT_S_BF16, match_opcode, 0},
+{"fcvt.bf16.s", 0, INSN_CLASS_XANDES, "D,T", MATCH_FCVT_BF16_S_NDS, MASK_FCVT_BF16_S_NDS, match_opcode, 0},
+{"fcvt.bf16.s", 0, INSN_CLASS_ZFBFMIN, "D,S,m", MATCH_FCVT_BF16_S, MASK_FCVT_BF16_S, match_opcode, 0},
 {"vfwcvt.s.bf16", 0, INSN_CLASS_XANDES, "Vd,Vt", MATCH_VFWCVT_S_BF16, MASK_VFWCVT_S_BF16, match_opcode, 0},
 {"vfncvt.bf16.s", 0, INSN_CLASS_XANDES, "Vd,Vt", MATCH_VFNCVT_BF16_S, MASK_VFNCVT_BF16_S, match_opcode, 0},
 {"vd4dots.vv", 0, INSN_CLASS_XANDES, "Vd,Vs,VtVm", MATCH_VD4DOTS_VV, MASK_VD4DOTS_VV, match_opcode, 0},

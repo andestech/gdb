@@ -1790,6 +1790,11 @@ static struct riscv_supported_ext riscv_supported_std_z_ext[] =
   {"zicboz",		ISA_SPEC_CLASS_DRAFT,		1, 0,  0 },
   {"zicbop",		ISA_SPEC_CLASS_DRAFT,		1, 0,  0 },
   /* } Zicob */
+  /* { bf16 */
+  {"zfbfmin",		ISA_SPEC_CLASS_DRAFT,		0, 2,  0 },
+  {"zvfbfmin",		ISA_SPEC_CLASS_DRAFT,		0, 2,  0 },
+  {"zvfbfwma",		ISA_SPEC_CLASS_DRAFT,		0, 2,  0 },
+  /* } bf16 */
   {NULL, 0, 0, 0, 0}
 };
 
@@ -3162,6 +3167,20 @@ riscv_multi_subset_supports (riscv_parse_subset_t *rps,
     case INSN_CLASS_Q_OR_ZQINX:
       return (riscv_subset_supports (rps, "q")
 	      || riscv_subset_supports (rps, "zqinx"));
+    case INSN_CLASS_F_AND_ZFHMIN_BF16:
+      return riscv_subset_supports (rps, "f")
+	     && (riscv_subset_supports (rps, "zfhmin")
+		 || riscv_subset_supports (rps, "zfbfmin")
+		 || riscv_subset_supports (rps, "zvfbfwma"));
+    case INSN_CLASS_ZFBFMIN:
+      return riscv_subset_supports (rps, "f")
+	     && riscv_subset_supports (rps, "zfbfmin");
+    case INSN_CLASS_ZVFBFMIN:
+      return riscv_subset_supports (rps, "f")
+	     && riscv_subset_supports (rps, "zvfbfmin");
+    case INSN_CLASS_ZVFBFWMA:
+      return riscv_subset_supports (rps, "f")
+	     && riscv_subset_supports (rps, "zvfbfwma");
     /* { Andes  */
     case INSN_CLASS_ACE:
       return true;
