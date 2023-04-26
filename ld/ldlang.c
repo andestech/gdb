@@ -8435,14 +8435,14 @@ lang_add_data (int type, union etree_union *exp)
 }
 
 /* { Andes */
-extern void*
-andes_ict_entry_list_add (int index, const char *name, bfd_vma vma);
-
+#define ICT_FLG_LD   2
+void *
+andes_ict_list_create (int index, const char *name, bfd_vma vma, unsigned flags);
 void
 lang_add_ict_entry (bfd_vma index, const char *name, union etree_union *exp)
 {
   ASSERT (exp->type.node_class == etree_value);
-  andes_ict_entry_list_add (index, name, exp->value.value);
+  andes_ict_list_create (index, name, exp->value.value, ICT_FLG_LD);
 }
 /* } Andes */
 

@@ -270,12 +270,12 @@ riscv_elf_after_check_relocs (void)
      when we compiling the main project at the first link-time.  */
   int size = get_ict_size ();
   if (!find_imported_ict_table
-      && (ict_table_entries || size))
+      && (nds_ict_sta.hash_entries || size))
     {
       for (abfd = link_info.input_bfds; abfd != NULL; abfd = abfd->link.next)
 	{
 	  /* Create ict table section in the last input object file.  */
-	  /* The ict_table_entries has been set in the check_relocs.  */
+	  /* The nds_ict_sta.hash_entries has been set in the check_relocs.  */
 	  if (abfd->link.next == NULL)
 	    riscv_elf_create_target_section (&link_info, abfd,
 					     ANDES_ICT_SECTION,

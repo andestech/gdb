@@ -452,8 +452,7 @@ V_IDENTIFIER [*?.$_a-zA-Z\[\]\-\!\^\\]([*?.$_a-zA-Z0-9\[\]\-\!\^\\]|::)*
 
 <VERS_NODE>extern		{ RTOKEN(EXTERN); }
 
-<VERS_NODE>{V_IDENTIFIER}	{ yylval.name = xstrdup (yytext);
-				  return VERS_IDENTIFIER; }
+<VERS_NODE>{V_IDENTIFIER}	{ return try_split_comma (); }
 
 <VERS_SCRIPT>{V_TAG}		{ yylval.name = xstrdup (yytext);
 				  return VERS_TAG; }

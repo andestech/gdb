@@ -195,7 +195,6 @@ enum relax_pass {
 #define ANDES_ALIGN_DONE (1u << 31)
 
 extern unsigned int ict_model;
-extern unsigned int ict_table_entries;
 extern bool find_imported_ict_table;
 extern const unsigned int number_of_howto_table;
 
@@ -444,19 +443,41 @@ typedef struct riscv_elf_link_hash_table link_hash_table_t;
 
 typedef struct andes_ict_entry
 {
-  struct bfd_hash_entry root;
   struct andes_ict_entry *next;
   struct elf_link_hash_entry *h;
   char *name;
   bfd_vma vma;
   int index;
+  unsigned flags;
 } andes_ict_entry_t;
 
-extern andes_ict_entry_t *get_ict_entry_list_head (void);
+typedef struct andes_ict_hash
+{
+  struct bfd_hash_entry root;
+  andes_ict_entry_t *entry;
+} andes_ict_hash_t;
+
+typedef struct andes_ict_state
+{
+  struct bfd_hash_table indirect_call_table;
+  andes_ict_entry_t *list_head;
+  andes_ict_entry_t *list_tail;
+  unsigned int hash_entries;
+  int list_len;
+} andes_ict_state_t;
+
+#define ICT_FLG_NONE 0
+#define ICT_FLG_CODE 1
+#define ICT_FLG_LD   2
+#define ICT_FLG_VMA  4
+
+extern andes_ict_state_t nds_ict_sta;
 extern int get_ict_size (void);
-extern
-andes_ict_entry_t *andes_ict_entry_list_add (int index, const char *name, bfd_vma vma);
-andes_ict_entry_t *andes_ict_entry_list_insert (struct elf_link_hash_entry *h);
+andes_ict_entry_t *
+andes_ict_list_create (int index, const char *name, bfd_vma vma, unsigned flags);
+andes_ict_entry_t *
+andes_ict_list_update_symbol (struct elf_link_hash_entry *h);
+/* } ICT stuff */
 
 /* ACE stuff  */
 enum hw_res_type

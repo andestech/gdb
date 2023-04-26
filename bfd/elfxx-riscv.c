@@ -1434,7 +1434,6 @@ static const struct elf_reloc_map riscv_reloc_map[] =
 
 /* { Andes  */
 unsigned int ict_model = 0;             /* Default set ict to tiny model.  */
-unsigned int ict_table_entries = 0;
 bool find_imported_ict_table = false;
 const unsigned int number_of_howto_table = (unsigned int) ARRAY_SIZE (howto_table);
 /* } Andes  */
@@ -3270,24 +3269,24 @@ riscv_disassemble_subset_tweak (riscv_parse_subset_t *rps,
 
 /* { Andes  */
 /* ICT stuff  */
-static andes_ict_entry_t *ict_entry_list_head = NULL;
-static andes_ict_entry_t *ict_entry_list_tail = NULL;
-static int ict_entry_list_len = 0;
-
-andes_ict_entry_t *
-get_ict_entry_list_head (void) { return ict_entry_list_head; }
+andes_ict_state_t nds_ict_sta = {
+	.list_head = NULL,
+	.list_tail = NULL,
+	.list_len = 0,
+	.hash_entries = 0,
+	};
 
 int
 get_ict_size (void)
 {
   int size = ict_model ? 8 : 4;
-  return size * ict_entry_list_len;
+  return size * nds_ict_sta.list_len;
 }
 
 /* name == NULL for collection, others for ICT_ENTRY inputs from .ld  */
 
 andes_ict_entry_t *
-andes_ict_entry_list_add (int index, const char *name, bfd_vma vma)
+andes_ict_list_create (int index, const char *name, bfd_vma vma, unsigned flags)
 {
   andes_ict_entry_t *it = calloc (1, sizeof (andes_ict_entry_t));
   if (it == NULL)
@@ -3295,22 +3294,25 @@ andes_ict_entry_list_add (int index, const char *name, bfd_vma vma)
   else
     {
       it->index = index;
+      it->vma = vma;
+      it->flags = flags;
       if (name)
 	it->name = strdup (name);
-      it->vma = vma;
-      if (ict_entry_list_tail)
-	ict_entry_list_tail = ict_entry_list_tail->next = it;
+      if (nds_ict_sta.list_tail)
+	nds_ict_sta.list_tail = nds_ict_sta.list_tail->next = it;
       else
-	ict_entry_list_head = ict_entry_list_tail = it;
-      ict_entry_list_len++;
+	nds_ict_sta.list_head = nds_ict_sta.list_tail = it;
+      nds_ict_sta.list_len++;
     }
   return it;
 }
 
+/* update symbol in ict entry or append a new one.  */
+
 andes_ict_entry_t *
-andes_ict_entry_list_insert (struct elf_link_hash_entry *h)
+andes_ict_list_update_symbol (struct elf_link_hash_entry *h)
 {
-  andes_ict_entry_t *p = ict_entry_list_head;
+  andes_ict_entry_t *p = nds_ict_sta.list_head;
   while (p)
     {
       if (strcmp (h->root.root.string, p->name) == 0)
@@ -3322,13 +3324,14 @@ andes_ict_entry_list_insert (struct elf_link_hash_entry *h)
     {
       BFD_ASSERT (p->h == NULL);
       p->h = h;
+      p->flags |= ICT_FLG_CODE;
     }
   else
     {
-      int index = ict_entry_list_len;
-      if (ict_entry_list_tail)
-	index = ict_entry_list_tail->index + 1;
-      p = andes_ict_entry_list_add (index, h->root.root.string, 0);
+      int index = nds_ict_sta.list_len;
+      if (nds_ict_sta.list_tail)
+	index = nds_ict_sta.list_tail->index + 1;
+      p = andes_ict_list_create (index, h->root.root.string, 0, ICT_FLG_CODE);
       BFD_ASSERT (p);
       p->h = h;
     }
