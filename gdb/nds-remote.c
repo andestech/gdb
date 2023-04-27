@@ -557,6 +557,22 @@ nds_endian_check_command (const char *args, int from_tty)
   if (nds_remote_info.endian != elf_endian)
     warning ("Target and elf have different endian");
 }
+
+static void
+nds_set_args_command (const char *args, int from_tty)
+{
+  const std::string &infargs = current_inferior ()->args ();
+
+  if (!infargs.empty ()) {
+    /*printf_unfiltered (_("nds_set_args: current_inferior->args = %s\n"), current_inferior ()->args ().c_str ());*/
+    if (current_inferior ()->args ().c_str ()) {
+      char cmd[512];
+      xsnprintf (cmd, sizeof (cmd), "nds set_args %s", current_inferior ()->args ().c_str ());
+      target_rcmd (cmd, gdb_stdtarg);
+    }
+  }
+}
+
 
 
 
@@ -871,6 +887,10 @@ nds_init_remote_cmds (void)
   /* Hook for query remote target information.  */
 
   nds_remote_info_init ();
+
+  add_cmd ("set_args", class_files, nds_set_args_command,
+    _("Specify the arguments to the target program."),
+    &nds_cmdlist);
 
   /* nds elf-check */
   add_cmd ("elf-check", class_files, nds_elf_check_command,
