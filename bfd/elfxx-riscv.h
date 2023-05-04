@@ -176,6 +176,10 @@ typedef struct
 } riscv_table_jump_htab_entry;
 
 /* { Andes  */
+#define MASK_LSB_32 (0xffffffffu)
+#define LO_32B(x) ((x >>  0) & MASK_LSB_32)
+#define HI_32B(x) ((x >> 32) & MASK_LSB_32)
+
 enum relax_pass {
   PASS_ANDES_INIT = 0,
   PASS_ZCE_TABLE_JUMP_COLLECT,

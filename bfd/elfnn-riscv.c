@@ -5353,16 +5353,16 @@ andes_execit_render_hash (execit_context_t *ctx)
 	    { /* LUI/AUIPC symbols having the same HI20 part can be exec.ited.
 	       * # spliting them into 2 groups by __DATA_BEGIN__ to avoid to
 	       * the DATA_SEGMENT_ALIGN issue.  */
-	      if (ARCH_SIZE > 32 &&
-		  !VALID_UTYPE_IMM (RISCV_CONST_HIGH_PART (ctx->ie.relocation)))
-		return rz;
-
 	      bfd_vma data_start = riscv_data_start_value (info);
 	      relocation_section = 0;
 	      relocation_offset = ((ctx->ie.relocation - irel->r_addend)
 				   >= data_start) ? 1 : 0;
 	      if (rtype == R_RISCV_CALL || rtype == R_RISCV_PCREL_HI20)
 		ctx->ie.relocation -= ctx->ie.pc;
+
+	      if (ARCH_SIZE > 32 &&
+		  !VALID_UTYPE_IMM (RISCV_CONST_HIGH_PART (ctx->ie.relocation)))
+		return rz;
 	    }
 
 	  ctx->ie.irel = ctx->irel;
@@ -9485,8 +9485,8 @@ riscv_elf_execit_reloc_insn (execit_itable_t *ptr,
 /* Encode relocation into Imm field.  */
 
 static bfd_vma
-riscv_elf_encode_relocation (bfd *abfd,
-			     Elf_Internal_Rela *irel, bfd_vma relocation)
+riscv_elf_encode_relocation (bfd *abfd, Elf_Internal_Rela *irel,
+			     bfd_vma relocation)
 {
   reloc_howto_type *howto = NULL;
 
@@ -9504,7 +9504,12 @@ riscv_elf_encode_relocation (bfd *abfd,
       relocation = ENCODE_UTYPE_IMM (RISCV_CONST_HIGH_PART (relocation));
       break;
     case R_RISCV_PCREL_HI20:
-      relocation = ENCODE_UTYPE_IMM (RISCV_CONST_HIGH_PART (relocation));
+      {
+	bfd_vma a = RISCV_CONST_HIGH_PART (relocation);
+	bfd_vma d = HI_32B (a);
+	BFD_ASSERT (d == 0 || d == MASK_LSB_32);
+	relocation = ENCODE_UTYPE_IMM (a);
+      }
       break;
     case R_RISCV_LO12_I:
     case R_RISCV_PCREL_LO12_I:
