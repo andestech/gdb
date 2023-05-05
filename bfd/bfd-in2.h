@@ -75,6 +75,11 @@ extern "C" {
 
 /* The word size of the default bfd target.  */
 #define BFD_DEFAULT_TARGET_SIZE @bfd_default_target_size@
+#if BFD_DEFAULT_TARGET_SIZE == 32
+#define VMALEN "8"
+#else
+#define VMALEN "16"
+#endif
 
 #define BFD_HOST_64BIT_LONG @BFD_HOST_64BIT_LONG@
 #define BFD_HOST_64BIT_LONG_LONG @BFD_HOST_64BIT_LONG_LONG@
@@ -137,8 +142,8 @@ typedef BFD_HOST_U_64_BIT symvalue;
 #endif
 
 #ifndef fprintf_vma
-#define sprintf_vma(s,x) sprintf (s, "%016" BFD_VMA_FMT "x", x)
-#define fprintf_vma(f,x) fprintf (f, "%016" BFD_VMA_FMT "x", x)
+#define sprintf_vma(s,x) sprintf (s, "%0" VMALEN BFD_VMA_FMT "x", x)
+#define fprintf_vma(f,x) fprintf (f, "%0" VMALEN BFD_VMA_FMT "x", x)
 #endif
 
 #else /* not BFD64  */
@@ -159,8 +164,8 @@ typedef unsigned long bfd_size_type;
 
 /* Print a bfd_vma x on stream s.  */
 #define BFD_VMA_FMT "l"
-#define fprintf_vma(s,x) fprintf (s, "%08" BFD_VMA_FMT "x", x)
-#define sprintf_vma(s,x) sprintf (s, "%08" BFD_VMA_FMT "x", x)
+#define fprintf_vma(s,x) fprintf (s, "%0" VMALEN BFD_VMA_FMT "x", x)
+#define sprintf_vma(s,x) sprintf (s, "%0" VMALEN BFD_VMA_FMT "x", x)
 
 #endif /* not BFD64  */
 

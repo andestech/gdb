@@ -6,7 +6,7 @@
 
 Disassembly of section .text:
 
-0000000000000000 <target>:
+0+ <target>:
 [^:]+:[ 	]+6521[ 	]+lui[ 	]+a0,0x8
 [^:]+:[ 	]+2505[ 	]+addiw[ 	]+a0,a0,1 # .*
 [^:]+:[ 	]+6509[ 	]+lui[ 	]+a0,0x2
