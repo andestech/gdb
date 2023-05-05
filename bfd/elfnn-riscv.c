@@ -1044,6 +1044,8 @@ riscv_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
       unsigned int r_symndx;
       struct elf_link_hash_entry *h;
 
+      ((Elf_Internal_Rela *)rel)->r_user = REL_R_USER_FLG_NONE;
+
       r_symndx = ELFNN_R_SYM (rel->r_info);
       r_type = ELFNN_R_TYPE (rel->r_info);
 
@@ -1179,6 +1181,7 @@ riscv_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	case R_RISCV_RVC_JUMP:
 	  /* In shared libraries and pie, these relocs are known
 	     to bind locally.  */
+	  ((Elf_Internal_Rela *)rel)->r_user = REL_R_USER_FLG_RAW;
 	  if (bfd_link_pic (info))
 	    break;
 	  goto static_reloc;
@@ -3089,7 +3092,8 @@ riscv_elf_relocate_section (bfd *output_bfd,
 	case R_RISCV_RVC_JUMP:
 	case R_RISCV_JAL:
 	  /* This line has to match the check in _bfd_riscv_relax_section.  */
-	  if (bfd_link_pic (info) && h != NULL && h->plt.offset != MINUS_ONE)
+	  if (bfd_link_pic (info) && h != NULL && h->plt.offset != MINUS_ONE
+	      && rel->r_user != REL_R_USER_FLG_RAW)
 	    {
 	      /* Refer to the PLT entry.  */
 	      relocation = sec_addr (htab->elf.splt) + h->plt.offset;

@@ -518,6 +518,8 @@ typedef struct ace_operand
 #define TAG_GPREL_SUBTYPE_FLX 1
 #define TAG_GPREL_SUBTYPE_FSX 2
 #define TAG_EXECIT_ITE R_RISCV_EXECIT_ITE
+#define REL_R_USER_FLG_NONE (0)
+#define REL_R_USER_FLG_RAW  (1)
 
 typedef struct andes_irelx
 {
