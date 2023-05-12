@@ -20013,7 +20013,7 @@ struct cooked_index_functions : public dwarf2_base_index_functions
 
   void dump (struct objfile *objfile) override
   {
-    gdb_printf ("Cooked index in use\n");
+    fprintf_filtered (gdb_stderr, "Cooked index in use\n");
   }
 
   void expand_matching_symbols

@@ -111,7 +111,7 @@ complaint_interceptor::~complaint_interceptor ()
       if (m_saved_warning_hook)
 	wrap_warning_hook (m_saved_warning_hook, str.c_str ());
       else
-	gdb_printf (gdb_stderr, _("During symbol reading: %s\n"),
+	fprintf_filtered (gdb_stderr, _("During symbol reading: %s\n"),
 		    str.c_str ());
     }
 
