@@ -62,6 +62,7 @@ static andes_ld_options_t andes =
   .execit_jal_over_2m = 0,
   /* andes internal options.  */
   .set_table_jump = 0,
+  .set_table_jump_cli = 0,
 };
 /* } Andes  */
 
@@ -536,9 +537,11 @@ PARSE_AND_LIST_ARGS_CASES='
 #if defined RISCV_ANDES_INTERNAL_OPTIONS
   case OPTION_OPT_TABLE_JUMP:
     andes.set_table_jump = 1;
+    andes.set_table_jump_cli = 1;
     break;
   case OPTION_NO_OPT_TABLE_JUMP:
     andes.set_table_jump = 0;
+    andes.set_table_jump_cli = 1;
     break;
 #endif
 

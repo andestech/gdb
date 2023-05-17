@@ -6674,6 +6674,19 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 				"or turn off the gp relative instructions "
 				"(--mno-gp-insn).\n"), align);
 	}
+      /* final andes->set_table_jump:
+	   if not explicitly from CLI, then by extension "zcmt".  */
+      {
+	bool has_zcmt = riscv_use_table_jump (info);
+	if (! andes->set_table_jump_cli)
+	  andes->set_table_jump = (uint) has_zcmt;
+	if (!has_zcmt && andes->set_table_jump)
+	  {
+	    andes->set_table_jump = 0;
+	    (*_bfd_error_handler) (_("warning: table jump enabled without zcmt "
+				     "extension. disabled now.\n"));
+	  }
+      }
     }
 
   /* Reset aligned offset each input section.  */
