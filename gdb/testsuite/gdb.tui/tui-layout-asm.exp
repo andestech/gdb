@@ -25,7 +25,7 @@ if {[build_executable "failed to prepare" ${testfile} ${srcfile}] == -1} {
 }
 
 # PPC currently needs a minimum window width of 90 to work correctly.
-set tui_asm_window_width 90
+set tui_asm_window_width 120
 
 Term::clean_restart 24 ${tui_asm_window_width} $testfile
 if {![Term::prepare_for_tui]} {
@@ -98,7 +98,7 @@ while (1) {
 	break
     }
 
-    if { $down_count > 250 } {
+    if { $down_count > 2000 } {
 	# Maybe we should accept this as a pass in case a target
 	# really does have loads of assembler to scroll through.
 	xfail "$testname (too much assembler)"
