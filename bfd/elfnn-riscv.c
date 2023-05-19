@@ -6920,23 +6920,25 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
       /* Skip generating table jump instructions if they do not help reduce code size.   */
       else if (info->relax_trip == 2)
 	{
+	  bfd *owner = table_jump_htab->tablejump_sec_owner;
+	  asection *tjsec = table_jump_htab->tablejump_sec;
 	  /* Check if table jump can save size. Skip generating table
 	    jump instruction if not.  */
 	  if ((signed) table_jump_htab->total_saving <=
 			  table_jump_htab->end_idx * RISCV_ELF_WORD_BYTES
-	      && table_jump_htab->tablejump_sec->size > 0)
+	      && tjsec->size > 0)
 	    {
 	      jvt_sym = elf_link_hash_lookup (elf_hash_table (info),
 			RISCV_TABLE_JUMP_BASE_SYMBOL,
 			false, false, true);
 	      jvt_sym->root.u.def.section = bfd_abs_section_ptr;
-	      return riscv_relax_delete_bytes (table_jump_htab->tablejump_sec_owner,
-				table_jump_htab->tablejump_sec,
-				0, table_jump_htab->tablejump_sec->size, info, NULL);
+	      tjsec->alignment_power = 0; /* b27458 */
+	      tjsec->output_section->alignment_power = 0; /* b27458 */
+	      return riscv_relax_delete_bytes (owner, tjsec, 0, tjsec->size, info, NULL);
 	    }
-	  else if (table_jump_htab->tablejump_sec->size == 0)
+	  else if (tjsec->size == 0)
 	    return true;
-	  else if (table_jump_htab->tablejump_sec->size > 0)
+	  else if (tjsec->size > 0)
 	    *again = true;
 	}
       /* Trim the unused slot at the table jump section.
