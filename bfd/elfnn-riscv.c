@@ -5878,15 +5878,24 @@ _bfd_riscv_relax_call (bfd *abfd, asection *sec, asection *sym_sec,
   bfd_byte *contents = elf_section_data (sec)->this_hdr.contents;
   bfd_vma foff = symval - (sec_addr (sec) + rel->r_offset);
   bool near_zero = (symval + RISCV_IMM_REACH / 2) < RISCV_IMM_REACH;
-  bfd_vma auipc, jalr;
   int rd, r_type, len = 4, rvc = elf_elfheader (abfd)->e_flags & EF_RISCV_RVC;
+  bool is_table_jump = (link_info->relax_pass == PASS_ZCE_TABLE_JUMP_COLLECT
+			|| link_info->relax_pass == PASS_ZCE_TABLE_JUMP_APPLY);
 
+  bfd_vma auipc = bfd_getl32 (contents + rel->r_offset);
+  bfd_vma jalr = bfd_getl32 (contents + rel->r_offset + 4);
+  rd = (jalr >> OP_SH_RD) & OP_MASK_RD;
+  rvc = rvc && VALID_CJTYPE_IMM (foff);
+
+  if (!is_table_jump)
+    {
   /* If the call crosses section boundaries, fixed sections or alignment
      directive could casue the PC-relative offset to later increase.  */
+  /* table jump has no such limitation.  */
   struct riscv_elf_link_hash_table *htab = riscv_elf_hash_table (link_info);
   andes_ld_options_t *andes = &htab->andes;
-  if (!andes->set_relax_cross_section_call
-      && sym_sec->output_section != sec->output_section)
+  if ((!andes->set_relax_cross_section_call
+       && sym_sec->output_section != sec->output_section))
     return true;
 
   /* If the call crosses section boundaries, an alignment directive could
@@ -5902,20 +5911,14 @@ _bfd_riscv_relax_call (bfd *abfd, asection *sec, asection *sym_sec,
     }
 
   /* See if this function call can be shortened.  */
-  if (!VALID_JTYPE_IMM (foff) && !(!bfd_link_pic (link_info) && near_zero)
-      && link_info->relax_pass != PASS_ZCE_TABLE_JUMP_COLLECT
-      && link_info->relax_pass != PASS_ZCE_TABLE_JUMP_APPLY)
+  if (!VALID_JTYPE_IMM (foff) && !(!bfd_link_pic (link_info) && near_zero))
     return true;
 
   /* Shorten the function call.  */
   BFD_ASSERT (rel->r_offset + 8 <= sec->size);
-
-  auipc = bfd_getl32 (contents + rel->r_offset);
-  jalr = bfd_getl32 (contents + rel->r_offset + 4);
-
-  rd = (jalr >> OP_SH_RD) & OP_MASK_RD;
-  rvc = rvc && VALID_CJTYPE_IMM (foff);
-
+    }
+  else
+    {
   /* Table jump profiling stage. It will be moved out of the relax_call function. */
   if (link_info->relax_pass == PASS_ZCE_TABLE_JUMP_COLLECT)
     {
@@ -5945,6 +5948,7 @@ _bfd_riscv_relax_call (bfd *abfd, asection *sec, asection *sym_sec,
 	  return riscv_relax_delete_bytes (abfd, sec, rel->r_offset + 2, 6, link_info, pcgp_relocs);
 	}
       return true;
+    }
     }
 
   /* C.J exists on RV32 and RV64, but C.JAL is RV32-only.  */
