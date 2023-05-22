@@ -205,8 +205,6 @@ static bool
 execit_set_itb_base (struct bfd_link_info *link_info);
 static void
 andes_execit_relocate_itable (struct bfd_link_info *link_info);
-static asection*
-execit_get_itable_section (bfd *input_bfds);
 static bfd_vma
 riscv_elf_execit_reloc_insn (execit_itable_t *ptr,
 			     struct bfd_link_info *link_info);
@@ -4968,7 +4966,7 @@ andes_execit_replace_insn (struct bfd_link_info *link_info,
 static void
 andes_execit_delete_blank (struct bfd_link_info *info);
 static asection*
-andes_execit_get_section (bfd *input_bfds);
+andes_execit_get_itable_section (bfd *input_bfds);
 static int
 riscv_get_section_contents (bfd *abfd, asection *sec,
 			    bfd_byte **contents_p, bool cache);
@@ -6849,7 +6847,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	      andes->update_execit_table)
 	    {
 	      asection *table_sec;
-	      table_sec = andes_execit_get_section (info->input_bfds);
+	      table_sec = andes_execit_get_itable_section (info->input_bfds);
 	      BFD_ASSERT (table_sec != NULL);
 	      #ifdef ITABLE_IS_SAFE_TO_REDUCE
 	      table_sec->size = execit.next_itable_index << 2;
@@ -7549,7 +7547,7 @@ riscv_final_link (bfd * abfd, struct bfd_link_info * info)
   /* Andes: set exec.it table contents.  */
   while (true) /* once */
     {
-      asection *itable_sec = execit_get_itable_section (info->input_bfds);
+      asection *itable_sec = andes_execit_get_itable_section (info->input_bfds);
       bfd_byte *contents = NULL;
       if (itable_sec == NULL)
 	break;
@@ -8147,7 +8145,7 @@ andes_execit_build_itable (struct bfd_link_info *info)
   while (true)
     {
       /* Find the section .exec.itable, and put all entries into it.  */
-      table_sec = andes_execit_get_section (info->input_bfds);
+      table_sec = andes_execit_get_itable_section (info->input_bfds);
       if (table_sec == NULL)
 	break;
 
@@ -8467,7 +8465,7 @@ andes_execit_delete_blank (struct bfd_link_info *info)
 /* Get section .exec.itable.  */
 
 static asection*
-andes_execit_get_section (bfd *input_bfds)
+andes_execit_get_itable_section (bfd *input_bfds)
 {
   asection *sec = NULL;
   bfd *abfd;
@@ -9503,7 +9501,7 @@ execit_set_itb_base (struct bfd_link_info *link_info)
 
   execit.is_itb_base_set = 1;
 
-  sec = execit_get_itable_section (link_info->input_bfds);
+  sec = andes_execit_get_itable_section (link_info->input_bfds);
   if (sec != NULL)
     output_bfd = sec->output_section->owner;
 
@@ -9571,7 +9569,7 @@ andes_execit_relocate_itable (struct bfd_link_info *info)
   if (andes->execit_import_file && !andes->update_execit_table)
     return;
 
-  itable_sec = execit_get_itable_section (info->input_bfds);
+  itable_sec = andes_execit_get_itable_section (info->input_bfds);
   if (itable_sec == NULL)
     {
       (*_bfd_error_handler) (_("ld: error cannot find .exec.itable section.\n"));
@@ -9734,26 +9732,6 @@ andes_execit_relocate_itable (struct bfd_link_info *info)
       fwrite (contents, sizeof (bfd_byte), size, export_file);
       fclose (export_file);
     }
-}
-
-static asection*
-execit_get_itable_section (bfd *input_bfds)
-{
-  asection *sec = NULL;
-  bfd *abfd;
-
-  if (execit.itable_section != NULL)
-    return execit.itable_section;
-
-  for (abfd = input_bfds; abfd != NULL; abfd = abfd->link.next)
-    {
-      sec = bfd_get_section_by_name (abfd, EXECIT_SECTION);
-      if (sec != NULL)
-	break;
-    }
-
-  execit.itable_section = sec;
-  return sec;
 }
 
 /* Relocate the entries in .exec.itable.  */
