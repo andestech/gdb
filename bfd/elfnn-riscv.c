@@ -1018,6 +1018,7 @@ riscv_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
   asection *sreloc = NULL;
   bool update_ict_hash_collect = false;
   bool update_ict_hash_patch = false; /* TO REVIEW: should be removed.  */
+  andes_ld_options_t *andes;
 
   if (bfd_link_relocatable (info))
     return true;
@@ -1025,6 +1026,7 @@ riscv_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
   htab = riscv_elf_hash_table (info);
   symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
   sym_hashes = elf_sym_hashes (abfd);
+  andes = &htab->andes;
 
   if (htab->elf.dynobj == NULL)
     htab->elf.dynobj = abfd;
@@ -1363,7 +1365,25 @@ riscv_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	}
     }
 
-  if (!bfd_elf_riscv_make_tablejump_section (abfd, info))
+  /* { Andes  */
+  {
+    /* final andes->set_table_jump:
+	if not explicitly from CLI, then by extension "zcmt".  */
+    bool has_zcmt = riscv_use_table_jump (info);
+    if (! andes->set_table_jump_cli)
+      andes->set_table_jump = (uint) has_zcmt;
+    if (!has_zcmt && andes->set_table_jump)
+      {
+	andes->set_table_jump = 0;
+	(*_bfd_error_handler) (_("warning: table jump enabled without zcmt "
+				 "extension. disabled now.\n"));
+      }
+  }
+  /* } Andes  */
+
+  /* make table jump section only when enabled.  */
+  if (andes->set_table_jump &&
+      !bfd_elf_riscv_make_tablejump_section (abfd, info))
     return false;
 
   return true;
@@ -6678,19 +6698,6 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 				"or turn off the gp relative instructions "
 				"(--mno-gp-insn).\n"), align);
 	}
-      /* final andes->set_table_jump:
-	   if not explicitly from CLI, then by extension "zcmt".  */
-      {
-	bool has_zcmt = riscv_use_table_jump (info);
-	if (! andes->set_table_jump_cli)
-	  andes->set_table_jump = (uint) has_zcmt;
-	if (!has_zcmt && andes->set_table_jump)
-	  {
-	    andes->set_table_jump = 0;
-	    (*_bfd_error_handler) (_("warning: table jump enabled without zcmt "
-				     "extension. disabled now.\n"));
-	  }
-      }
     }
 
   /* Reset aligned offset each input section.  */
