@@ -967,6 +967,7 @@ riscv_use_table_jump (struct bfd_link_info *info)
   return ret;
 }
 
+#if 0
 static bool
 bfd_elf_riscv_make_tablejump_section (bfd *abfd, struct bfd_link_info *info)
 {
@@ -985,14 +986,20 @@ bfd_elf_riscv_make_tablejump_section (bfd *abfd, struct bfd_link_info *info)
 
   if (htab->table_jump_htab->tablejump_sec == NULL)
     {
+      flagword flags = (SEC_CODE | SEC_ALLOC | SEC_LOAD
+			| SEC_HAS_CONTENTS | SEC_READONLY
+			| SEC_IN_MEMORY | SEC_KEEP
+			| SEC_RELOC
+			| SEC_LINKER_CREATED /* to skip output of LTO pass.  */
+		       );
       sec = bfd_make_section_anyway_with_flags (abfd, TABLE_JUMP_SEC_NAME,
-		  (SEC_ALLOC | SEC_LOAD | SEC_READONLY | SEC_HAS_CONTENTS
-		  | SEC_IN_MEMORY | SEC_KEEP));
+		flags);
 
       if (sec == NULL
 	  || !bfd_set_section_alignment (sec, 6) /* CSR JVT aligns on 2^6.  */
 	  || !bfd_set_section_size (sec, 256 * RISCV_ELF_WORD_BYTES))
 	return false;
+      sec->gc_mark = 1;
 
       htab->table_jump_htab->tablejump_sec = sec;
       htab->table_jump_htab->tablejump_sec_owner = abfd;
@@ -1000,6 +1007,7 @@ bfd_elf_riscv_make_tablejump_section (bfd *abfd, struct bfd_link_info *info)
 
   return true;
 }
+#endif
 
 /* Look through the relocs for a section during the first phase, and
    allocate space in the global offset table or procedure linkage
@@ -1016,15 +1024,38 @@ riscv_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
   asection *sreloc = NULL;
   bool update_ict_hash_collect = false;
   bool update_ict_hash_patch = false; /* TO REVIEW: should be removed.  */
-  andes_ld_options_t *andes;
+
+  htab = riscv_elf_hash_table (info);
+
+  static int is_inited = false;
+  if (! is_inited) { /*Andes */
+    is_inited = true;
+
+    andes_ld_options_t *andes = &htab->andes;
+    /* determine table jump enable:
+	if not explicitly from CLI, then by the extension "zcmt".  */
+    bool ena_zcmt = riscv_use_table_jump (info);
+    bool determine = ena_zcmt;
+    if (andes->set_table_jump_cli)
+      {
+	determine = andes->set_table_jump && ena_zcmt;
+	if (determine != andes->set_table_jump)
+	  {
+	    andes->set_table_jump = determine;
+	    (*_bfd_error_handler) (
+		_("warning: failed to enable table jump! either without zcmt"
+		  " or not linking executable.\n"));
+	  }
+      }
+    andes->set_table_jump = (uint) determine;
+    /* create section at "riscv_elf_after_check_relocs".  */
+  } /* Andes */
 
   if (bfd_link_relocatable (info))
     return true;
 
-  htab = riscv_elf_hash_table (info);
   symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
   sym_hashes = elf_sym_hashes (abfd);
-  andes = &htab->andes;
 
   if (htab->elf.dynobj == NULL)
     htab->elf.dynobj = abfd;
@@ -1362,27 +1393,6 @@ riscv_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	  break;
 	}
     }
-
-  /* { Andes  */
-  {
-    /* final andes->set_table_jump:
-	if not explicitly from CLI, then by extension "zcmt".  */
-    bool has_zcmt = riscv_use_table_jump (info);
-    if (! andes->set_table_jump_cli)
-      andes->set_table_jump = (uint) has_zcmt;
-    if (!has_zcmt && andes->set_table_jump)
-      {
-	andes->set_table_jump = 0;
-	(*_bfd_error_handler) (_("warning: table jump enabled without zcmt "
-				 "extension. disabled now.\n"));
-      }
-  }
-  /* } Andes  */
-
-  /* make table jump section only when enabled.  */
-  if (andes->set_table_jump &&
-      !bfd_elf_riscv_make_tablejump_section (abfd, info))
-    return false;
 
   return true;
 }
@@ -1845,9 +1855,11 @@ riscv_elf_size_dynamic_sections (bfd *output_bfd, struct bfd_link_info *info)
       s = htab->table_jump_htab->tablejump_sec;
 
       BFD_ASSERT (s != NULL);
+      BFD_ASSERT (s->contents);
 
-      s->contents = (bfd_byte *) bfd_zalloc (
-	      htab->table_jump_htab->tablejump_sec_owner, s->size);
+      if (s->contents == NULL)
+	s->contents = (bfd_byte *) bfd_zalloc (
+	  htab->table_jump_htab->tablejump_sec_owner, s->size);
 
       if (s->contents == NULL)
 	return false;
@@ -4967,6 +4979,10 @@ static void
 andes_execit_delete_blank (struct bfd_link_info *info);
 static asection*
 andes_execit_get_itable_section (bfd *input_bfds);
+#if 0
+static asection*
+andes_table_jump_get_section (struct bfd_link_info *info);
+#endif
 static int
 riscv_get_section_contents (bfd *abfd, asection *sec,
 			    bfd_byte **contents_p, bool cache);
@@ -6696,6 +6712,19 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 				"or turn off the gp relative instructions "
 				"(--mno-gp-insn).\n"), align);
 	}
+      /* allocate content of jump table section. (why?)
+       * riscv_relax_delete_bytes get contents from "sec->used_by_bfd->this_hdr.contents"
+       * but allocated another copy in "sec->contents".
+       */
+      if (andes->set_table_jump)
+	{
+	  bfd_byte *contents = NULL;
+	  Elf_Internal_Sym *isym = NULL;
+	  bfd *owner = htab->table_jump_htab->tablejump_sec_owner;
+	  asection *tjsec = htab->table_jump_htab->tablejump_sec;
+	  riscv_get_section_contents (owner, tjsec, &contents, true);
+	  riscv_get_local_syms (owner, tjsec, &isym);
+	}
     }
 
   /* Reset aligned offset each input section.  */
@@ -6951,7 +6980,8 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	  used_bytes = table_jump_htab->end_idx * RISCV_ELF_WORD_BYTES;
 	  trimmed_bytes = (256 - table_jump_htab->end_idx) * RISCV_ELF_WORD_BYTES;
 	  /* Trim unused slots.  */
-	  if (!riscv_relax_delete_bytes (table_jump_htab->tablejump_sec_owner,
+	  if ((trimmed_bytes > 0) &&
+	      !riscv_relax_delete_bytes (table_jump_htab->tablejump_sec_owner,
 				table_jump_htab->tablejump_sec,
 				used_bytes, trimmed_bytes, info, NULL))
 	    return false;
@@ -8461,6 +8491,29 @@ andes_execit_delete_blank (struct bfd_link_info *info)
     }
   execit.blank_list = NULL;
 }
+
+#if 0
+static asection*
+andes_table_jump_get_section (struct bfd_link_info *info)
+{
+  asection *sec = NULL;
+  bfd *abfd;
+  struct riscv_elf_link_hash_table *htab = riscv_elf_hash_table (info);
+
+  if (htab->table_jump_htab->tablejump_sec != NULL)
+    return htab->table_jump_htab->tablejump_sec;
+
+  for (abfd = info->input_bfds; abfd != NULL; abfd = abfd->link.next)
+    {
+      sec = bfd_get_section_by_name (abfd, TABLE_JUMP_SEC_NAME);
+      if (sec != NULL)
+	break;
+    }
+
+  htab->table_jump_htab->tablejump_sec = sec;
+  return sec;
+}
+#endif
 
 /* Get section .exec.itable.  */
 

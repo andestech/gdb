@@ -174,7 +174,31 @@ riscv_create_output_section_statements (void)
 /* { Andes */
 /* Create the target usage section for RISCV.  */
 
-static void
+#define TABLE_SEC_FLGS ( \
+	SEC_CODE | SEC_ALLOC | SEC_LOAD \
+	| SEC_HAS_CONTENTS | SEC_READONLY \
+	| SEC_IN_MEMORY | SEC_KEEP \
+	| SEC_RELOC \
+	| SEC_LINKER_CREATED /* to skip output of LTO pass.  */ \
+	)
+
+#define ICT_SEC_FLGS(x) ((x) \
+	| SEC_ALLOC | SEC_LOAD \
+	| SEC_HAS_CONTENTS | SEC_READONLY \
+	| SEC_IN_MEMORY | SEC_KEEP \
+	| SEC_RELOC \
+	)
+
+static bfd*
+riscv_get_last_bfd (struct bfd_link_info *info)
+{
+  bfd *abfd = info->input_bfds;
+  while (abfd->link.next)
+    abfd = abfd->link.next;
+  return abfd;
+}
+
+static asection *
 riscv_elf_create_target_section (struct bfd_link_info *info, bfd *abfd,
 				 char *sec_name, char *sym_name,
 				 bfd_size_type sec_size,
@@ -201,37 +225,27 @@ riscv_elf_create_target_section (struct bfd_link_info *info, bfd *abfd,
 	 BSF_GLOBAL | BSF_WEAK, itable, 0, (const char *) NULL, false,
 	 get_elf_backend_data (info->output_bfd)->collect, &h);
     }
+  return itable;
 }
 
 static void
 riscv_elf_after_open (void)
 {
-  bfd *abfd;
-  flagword flags;
-
-  flags = (SEC_CODE | SEC_ALLOC | SEC_LOAD
-	   | SEC_HAS_CONTENTS | SEC_READONLY
-	   | SEC_IN_MEMORY | SEC_KEEP
-	   | SEC_RELOC
-	   | SEC_LINKER_CREATED /* to skip output of LTO pass.  */
-	  );
+  bfd *abfd = riscv_get_last_bfd (&link_info);
+  flagword flags = TABLE_SEC_FLGS;
 
   if ((andes.target_optimization & RISCV_RELAX_EXECIT_ON)
       && (andes.execit_import_file == NULL
 	  || andes.keep_import_execit
 	  || andes.update_execit_table))
     {
-      for (abfd = link_info.input_bfds; abfd != NULL; abfd = abfd->link.next)
-	{
-	  /* Create execit section in the last input object file.  */
-	  /* Default size of .exec.itable can not be zero, so we can not set
-	     it according to execit_limit. Since we will adjust the table size
-	     in riscv_elf_execit_build_itable, it is okay to set the size to
-	     the maximum value 0x1000 here.  */
-	  if (abfd->link.next == NULL)
-	    riscv_elf_create_target_section (&link_info, abfd, EXECIT_SECTION,
-					     "_EXECIT_BASE_", 0x1000, 2, flags);
-	}
+      /* Create execit section in the last input object file.  */
+      /* Default size of .exec.itable can not be zero, so we can not set
+         it according to execit_limit. Since we will adjust the table size
+         in riscv_elf_execit_build_itable, it is okay to set the size to
+         the maximum value 0x1000 here.  */
+      riscv_elf_create_target_section (&link_info, abfd, EXECIT_SECTION,
+				       "_EXECIT_BASE_", 0x1000, 2, flags);
     }
 
   /* The ict table is imported in this link time.  */
@@ -253,19 +267,14 @@ riscv_elf_after_open (void)
 static void
 riscv_elf_after_check_relocs (void)
 {
+  struct riscv_elf_link_hash_table *htab = riscv_elf_hash_table (&link_info);
   bfd *abfd;
   flagword flags;
 
   if (ict_model == 2)
-    flags = (SEC_DATA | SEC_ALLOC | SEC_LOAD
-	     | SEC_HAS_CONTENTS | SEC_READONLY
-	     | SEC_IN_MEMORY | SEC_KEEP
-	     | SEC_RELOC);
+    flags = ICT_SEC_FLGS(SEC_DATA);
   else
-    flags = (SEC_CODE | SEC_ALLOC | SEC_LOAD
-	     | SEC_HAS_CONTENTS | SEC_READONLY
-	     | SEC_IN_MEMORY | SEC_KEEP
-	     | SEC_RELOC);
+    flags = ICT_SEC_FLGS(SEC_CODE);
 
   /* We only create the ict table and _INDIRECT_CALL_TABLE_BASE_ symbol
      when we compiling the main project at the first link-time.  */
@@ -283,6 +292,21 @@ riscv_elf_after_check_relocs (void)
 					     "_INDIRECT_CALL_TABLE_BASE_",
 					     size, 2, flags);
 	}
+    }
+
+  /*  create the table jump section when enabled.
+      the enable is determined in "riscv_elf_check_relocs".
+      allocate the section aligns to 64 at the last position.  */
+  if (andes.set_table_jump)
+    {
+      riscv_table_jump_htab_t *tjhtab = htab->table_jump_htab;
+      abfd = riscv_get_last_bfd (&link_info);
+      flags = TABLE_SEC_FLGS;
+      tjhtab->tablejump_sec_owner = abfd;
+      /* Since we'll adjust the table size in "riscv_elf_execit_build_itable",
+	 it is okay to set the size to the maximum here.  */
+      tjhtab->tablejump_sec = riscv_elf_create_target_section (&link_info,
+	abfd, TABLE_JUMP_SEC_NAME, "_JVT_BASE_", 8 * 256, 6, flags);
     }
 }
 

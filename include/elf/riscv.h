@@ -148,7 +148,7 @@ END_RELOC_NUMBERS (R_RISCV_max)
 
 #define RISCV_TABLE_JUMP_BASE_SYMBOL "__jvt_base$"
 
-#define TABLE_JUMP_SEC_NAME ".text.tbljal"
+#define TABLE_JUMP_SEC_NAME ".riscv.jvt"
 
 /* Processor specific dynamic array tags.  */
 #define DT_RISCV_VARIANT_CC (DT_LOPROC + 1)
