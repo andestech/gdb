@@ -6637,12 +6637,12 @@ bfd_elfNN_riscv_set_data_segment_info (struct bfd_link_info *info,
    * denotes mandatory.
 
   *Pass ini: init stuff
-   Pass tj0: Table jump collect
-   Pass tj1:            apply
    Pass gp0: GP instruction relaxation: pcrel
    Pass gp1:                          : low part
    Pass gp2:                          : high part
    Pass   0: Shortens code sequences for LUI/CALL/TPREL/PCREL relocs.
+   Pass tj0: Table jump collect (after jal => c.jal)
+   Pass tj1:            apply
   *Pass   1: Deletes the bytes that PCREL relaxation in pass 0 made obsolete.
    Pass ex1: Exec.it #1 collection
    Pass ex2:         #2 replacement
@@ -6884,8 +6884,8 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	    }
 	}
       return true;
-    case PASS_ZCE_TABLE_JUMP_COLLECT ... PASS_ZCE_TABLE_JUMP_APPLY:
     case PASS_ANDES_GP_PCREL ... PASS_ANDES_GP_2:
+    //case PASS_ZCE_TABLE_JUMP_COLLECT ... PASS_ZCE_TABLE_JUMP_APPLY:
     case PASS_SHORTEN_ORG ... PASS_DELETE_ORG:
     case PASS_ALIGN_ORG ... PASS_RESLOVE:
       break;
