@@ -297,7 +297,7 @@ riscv_elf_after_check_relocs (void)
   /*  create the table jump section when enabled.
       the enable is determined in "riscv_elf_check_relocs".
       allocate the section aligns to 64 at the last position.  */
-  if (andes.set_table_jump)
+  if (htab->andes.set_table_jump)
     {
       riscv_table_jump_htab_t *tjhtab = htab->table_jump_htab;
       abfd = riscv_get_last_bfd (&link_info);

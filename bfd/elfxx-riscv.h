@@ -159,6 +159,10 @@ typedef struct
      and it is set to -1 if the profiling stage completed.  */
   int end_idx;
   unsigned int total_saving;
+  int tbljt_count;  /* by single entry */
+  int tbljt_count2; /* by block (8-entry) */
+  int tbljalt_count;
+  int *accumulation;
 
   /* debug use.  */
   unsigned int *savings;
@@ -168,11 +172,13 @@ typedef struct
 typedef struct
 {
   bfd_vma address;
+  unsigned int id;
   unsigned int index;
+  unsigned int count;
+  unsigned int benefit;
 
   /* debug use.  */
   const char *name;
-  unsigned int benefit;
 } riscv_table_jump_htab_entry;
 
 /* { Andes  */
