@@ -1205,9 +1205,9 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
 	  xlen = ehdr->e_ident[EI_CLASS] == ELFCLASS64 ? 64 : 32;
 	}
 
-      if (pd->jvt_base
-	  && (pd->jvt_end > pd->jvt_base + 255 * (xlen / 8)))
-        pd->jvt_end = pd->jvt_base + 255 * (xlen / 8);
+      if (pd->jvt_base > 0
+	  && (pd->jvt_end > pd->jvt_base + 256 * (xlen / 8)))
+        pd->jvt_end = pd->jvt_base + 256 * (xlen / 8);
 
       /* Dump jump table entries.  */
       if (riscv_subset_supports (&riscv_rps_dis, "zcmt")
