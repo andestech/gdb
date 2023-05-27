@@ -9260,7 +9260,7 @@ static int andes_execit_hi20_collect_multiple (hi20_context_t *ctx)
       BFD_ASSERT (found == false);
 
       /* transaction: all new group members will have better score?  */
-      entries = 1 + (window >> 12);
+      entries = 2 + (window >> 12);
       if (count > (entries * 2))
 	{
 	  found = true;
