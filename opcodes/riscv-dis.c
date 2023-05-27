@@ -128,6 +128,7 @@ typedef struct
   {
     bool has_c;
     bool has_p;
+    bool has_zcb;
     bool has_zcm;
     bool has_xnexecit;
   } args_t;
@@ -1095,6 +1096,7 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
       /* { Andes */
       args.has_c = riscv_multi_subset_supports (&riscv_rps_dis, INSN_CLASS_C);
       args.has_p = riscv_subset_supports (&riscv_rps_dis, "p");
+      args.has_zcb = riscv_subset_supports_fuzzy (&riscv_rps_dis, "zcb");
       args.has_zcm = riscv_subset_supports_fuzzy (&riscv_rps_dis, "zcm");
       args.has_xnexecit = riscv_subset_supports (&riscv_rps_dis, "xnexecit");
       /* } Andes */
@@ -1269,7 +1271,7 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
 	    continue;
 
 	  /* pick nexec.it if support xnexecit.  */
-	  if (args.has_xnexecit
+	  if ((args.has_xnexecit || args.has_zcb)
 	      && ((0 == strcmp (op->name, "exec.it"))
 		  || (0 == strcmp (op->name, "ex9.it"))))
 	    continue;
