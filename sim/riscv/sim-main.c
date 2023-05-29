@@ -1562,7 +1562,7 @@ execute_andes(SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int
       break;
     }
     case MATCH_BBC:
-      TRACE_INSN (cpu, "bbc %s, %d, %#"PRIxTW";  // if (!(%s & (1 << %d))) goto %#"PRIxTW,
+      TRACE_INSN (cpu, "bbc %s, %ld, %#"PRIxTW";  // if (!(%s & (1 << %ld))) goto %#"PRIxTW,
 		  rs1_name, cimm6, simm10, rs1_name, cimm6, cpu->pc + simm10);
       if (!(cpu->regs[rs1].u & (((uint64_t) 1) << cimm6)))
 	{
@@ -1571,7 +1571,7 @@ execute_andes(SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int
 	}
       break;
     case MATCH_BBS:
-      TRACE_INSN (cpu, "bbs %s, %d, %#"PRIxTW";  // if (%s & (1 << %d)) goto %#"PRIxTW,
+      TRACE_INSN (cpu, "bbs %s, %ld, %#"PRIxTW";  // if (%s & (1 << %ld)) goto %#"PRIxTW,
 		  rs1_name, cimm6, simm10, rs1_name, cimm6, cpu->pc + simm10);
       if (cpu->regs[rs1].u & (((uint64_t) 1) << cimm6))
 	{
@@ -1580,7 +1580,7 @@ execute_andes(SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int
 	}
       break;
     case MATCH_BEQC:
-      TRACE_INSN (cpu, "beqc %s, %d, %#"PRIxTW";  // if (%s == %d) goto %#"PRIxTW,
+      TRACE_INSN (cpu, "beqc %s, %ld, %#"PRIxTW";  // if (%s == %ld) goto %#"PRIxTW,
 		  rs1_name, simm7, simm10, rs1_name, simm7, cpu->pc + simm10);
       if (cpu->regs[rs1].u == simm7)
 	{
@@ -1589,7 +1589,7 @@ execute_andes(SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int
 	}
       break;
     case MATCH_BNEC:
-      TRACE_INSN (cpu, "bnec %s, %d, %#"PRIxTW";  // if (%s == %d) goto %#"PRIxTW,
+      TRACE_INSN (cpu, "bnec %s, %ld, %#"PRIxTW";  // if (%s == %ld) goto %#"PRIxTW,
 		  rs1_name, simm7, simm10, rs1_name, simm7, cpu->pc + simm10);
       if (cpu->regs[rs1].u != simm7)
 	{
