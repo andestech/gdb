@@ -973,48 +973,6 @@ riscv_use_table_jump (struct bfd_link_info *info)
   return ret;
 }
 
-#if 0
-static bool
-bfd_elf_riscv_make_tablejump_section (bfd *abfd, struct bfd_link_info *info)
-{
-  asection *sec;
-  struct riscv_elf_link_hash_table *htab;
-
-  /* Skip if no Zcmt.  */
-  if (!riscv_use_table_jump (info))
-    return true;
-
-  htab = riscv_elf_hash_table (info);
-  sec = bfd_get_linker_section (abfd, TABLE_JUMP_SEC_NAME);
-
-  if (sec != NULL)
-    return true;
-
-  if (htab->table_jump_htab->tablejump_sec == NULL)
-    {
-      flagword flags = (SEC_CODE | SEC_ALLOC | SEC_LOAD
-			| SEC_HAS_CONTENTS | SEC_READONLY
-			| SEC_IN_MEMORY | SEC_KEEP
-			| SEC_RELOC
-			| SEC_LINKER_CREATED /* to skip output of LTO pass.  */
-		       );
-      sec = bfd_make_section_anyway_with_flags (abfd, TABLE_JUMP_SEC_NAME,
-		flags);
-
-      if (sec == NULL
-	  || !bfd_set_section_alignment (sec, 6) /* CSR JVT aligns on 2^6.  */
-	  || !bfd_set_section_size (sec, 256 * RISCV_ELF_WORD_BYTES))
-	return false;
-      sec->gc_mark = 1;
-
-      htab->table_jump_htab->tablejump_sec = sec;
-      htab->table_jump_htab->tablejump_sec_owner = abfd;
-    }
-
-  return true;
-}
-#endif
-
 /* Look through the relocs for a section during the first phase, and
    allocate space in the global offset table or procedure linkage
    table.  */
@@ -7121,8 +7079,9 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	  /* final jvt_base location.  */
 	  if (tjhtab->tbljalt_count && (tjhtab->tbljt_count != 32))
 	    {
-	      bfd_vma addend = 4 * ((bfd_vma)tjhtab->tbljt_count -32);
-	      BFD_ASSERT ((addend & 0x7) == 0);
+	      int dummy_count = (bfd_vma) tjhtab->tbljt_count - 32;
+	      bfd_vma addend = RISCV_ELF_WORD_BYTES * dummy_count;
+	      BFD_ASSERT ((addend & 0x3f) == 0);
 	      jvt_sym = elf_link_hash_lookup (elf_hash_table (info),
 				RISCV_TABLE_JUMP_BASE_SYMBOL,
 				false, false, true);
