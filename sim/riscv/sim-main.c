@@ -978,7 +978,7 @@ execute_f (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       TRACE_INSN (cpu, "fsrm %s, %s",
 		  rd_name, rs1_name);
       store_rd (cpu, rd, fetch_csr (cpu, "frm", CSR_FCSR, &cpu->csr.frm));
-      store_csr (cpu, "frm", CSR_FCSR, &cpu->csr.frm, cpu->regs[rs1].u);
+      store_csr (cpu, "frm", CSR_FRM, &cpu->csr.frm, cpu->regs[rs1].u);
       break;
     case MATCH_FRFLAGS:
       TRACE_INSN (cpu, "frflags %s",
