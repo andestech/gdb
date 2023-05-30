@@ -9218,8 +9218,11 @@ static int andes_execit_hi20_collect_multiple (hi20_context_t *ctx)
       /* reached a mismatched or the end.  */
       BFD_ASSERT (found == false);
 
-      /* transaction: all new group members will have better score?  */
-      entries = 2 + (window >> 12);
+      /* transaction: all new group members will have better score.  */
+      /* LUI reserves 1 extra entry while AUIPC reserves 2.  */
+      int rtype = ELFNN_R_TYPE (a->irel_copy.r_info);
+      entries = (rtype == R_RISCV_HI20) ? 1 : 2;
+      entries += (window >> 12);
       if (count > (entries * 2))
 	{
 	  found = true;
