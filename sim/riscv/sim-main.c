@@ -298,6 +298,25 @@ insn_sat_khm8_helper (sim_cpu *cpu, int8_t aop, int8_t bop)
   return res;
 }
 
+static void
+set_rounding_mode (SIM_CPU *cpu, unsigned rm)
+{
+  SIM_DESC sd = CPU_STATE (cpu);
+
+  if (rm <= 4)
+    softfloat_roundingMode = rm;
+  else if (7 == rm)
+    {
+      unsigned_word frm = fetch_csr (cpu, "frm", CSR_FRM, &cpu->csr.frm);
+      if (frm <= 4)
+        softfloat_roundingMode = frm;
+      else
+        sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
+    }
+  else
+    sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
+}
+
 static sim_cia
 execute_d (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex9)
 {
@@ -305,14 +324,6 @@ execute_d (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
   unsigned int mask_arithmetic = MASK_FADD_D;
   unsigned int mask_mul_add = MASK_FMADD_S;
   unsigned int mask_convert = MASK_FCVT_S_W;
-
-  static const int round_modes[] =
-  {
-      sim_fpu_round_near, sim_fpu_round_zero,
-      sim_fpu_round_down, sim_fpu_round_up,
-      sim_fpu_round_default, sim_fpu_round_default,
-      sim_fpu_round_default
-  };
 
   int rd = (iw >> OP_SH_RD) & OP_MASK_RD;
   int rs1 = (iw >> OP_SH_RS1) & OP_MASK_RS1;
@@ -326,65 +337,60 @@ execute_d (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
   const char *rs1_name = riscv_gpr_names_abi[rs1];
   unsigned_word i_imm = EXTRACT_ITYPE_IMM (iw);
   unsigned_word s_imm = EXTRACT_STYPE_IMM (iw);
-  uint32_t u32;
+
   int32_t i32;
-  uint64_t u64;
-  int64_t i64;
+  uint32_t u32;
+  FRegister a, c;
+
   sim_cia pc = cpu->pc + 4;
+
   /* Rounding mode.  */
   int rm = (iw >> OP_SH_RM) & OP_MASK_RM;
-  int rounding = round_modes[rm];
-  sim_fpu sft, sft2;
-  sim_fpu sfa, sfb, sfc;
+  set_rounding_mode(cpu, rm);
 
   if (ex9)
     pc -= 2;
-
-  sim_fpu_64to (&sfa, cpu->fpregs[rs1].v[0]);
-  sim_fpu_64to (&sfb, cpu->fpregs[rs2].v[0]);
 
   switch (op->match & mask_mul_add)
     {
     case MATCH_FMADD_D:
       TRACE_INSN (cpu, "fmadd.d %s, %s, %s, %s",
 		  frd_name, frs1_name, frs2_name, frs3_name);
-      sim_fpu_64to (&sfc, cpu->fpregs[rs3].v[0]);
-      sim_fpu_mul (&sft2, &sfa, &sfb);
-      sim_fpu_add (&sft, &sfc, &sft2);
-      sim_fpu_round_64 (&sft, rounding, sim_fpu_denorm_default);
-      sim_fpu_to64 (&cpu->fpregs[rd].v[0], &sft);
+      cpu->fpregs[rd].d[0] = f64_mulAdd (cpu->fpregs[rs1].d[0],
+                                         cpu->fpregs[rs2].d[0],
+                                         cpu->fpregs[rs3].d[0]);
       TRACE_FREG (cpu, rd);
       goto done;
     case MATCH_FMSUB_D:
       TRACE_INSN (cpu, "fmsub.d %s, %s, %s, %s",
 		  frd_name, frs1_name, frs2_name, frs3_name);
-      sim_fpu_64to (&sfc, cpu->fpregs[rs3].v[0]);
-      sim_fpu_mul (&sft2, &sfa, &sfb);
-      sim_fpu_sub (&sft, &sft2, &sfc);
-      sim_fpu_round_64 (&sft, rounding, sim_fpu_denorm_default);
-      sim_fpu_to64 (&cpu->fpregs[rd].v[0], &sft);
+      c = cpu->fpregs[rs3];
+      c.v[0] ^= (uint64_t)INT64_MIN;
+      cpu->fpregs[rd].d[0] = f64_mulAdd (cpu->fpregs[rs1].d[0],
+                                         cpu->fpregs[rs2].d[0],
+                                         c.d[0]);
       TRACE_FREG (cpu, rd);
       goto done;
     case MATCH_FNMADD_D:
       TRACE_INSN (cpu, "fnmadd.d %s, %s, %s, %s",
 		  frd_name, frs1_name, frs2_name, frs3_name);
-      sim_fpu_64to (&sfc, cpu->fpregs[rs3].v[0]);
-      sim_fpu_neg (&sfa, &sfa);
-      sim_fpu_mul (&sft2, &sfa, &sfb);
-      sim_fpu_sub (&sft, &sft2, &sfc);
-      sim_fpu_round_64 (&sft, rounding, sim_fpu_denorm_default);
-      sim_fpu_to64 (&cpu->fpregs[rd].v[0], &sft);
+      a = cpu->fpregs[rs1];
+      c = cpu->fpregs[rs3];
+      a.v[0] ^= (uint64_t)INT64_MIN;
+      c.v[0] ^= (uint64_t)INT64_MIN;
+      cpu->fpregs[rd].d[0] = f64_mulAdd (a.d[0],
+                                         cpu->fpregs[rs2].d[0],
+                                         c.d[0]);
       TRACE_FREG (cpu, rd);
       goto done;
     case MATCH_FNMSUB_D:
       TRACE_INSN (cpu, "fnmsub.d %s, %s, %s, %s",
 		  frd_name, frs1_name, frs2_name, frs3_name);
-      sim_fpu_64to (&sfc, cpu->fpregs[rs3].v[0]);
-      sim_fpu_neg (&sfa, &sfa);
-      sim_fpu_mul (&sft2, &sfa, &sfb);
-      sim_fpu_add (&sft, &sft2, &sfc);
-      sim_fpu_round_64 (&sft, rounding, sim_fpu_denorm_default);
-      sim_fpu_to64 (&cpu->fpregs[rd].v[0], &sft);
+      a = cpu->fpregs[rs1];
+      a.v[0] ^= (uint64_t)INT64_MIN;
+      cpu->fpregs[rd].d[0] = f64_mulAdd (a.d[0],
+                                         cpu->fpregs[rs2].d[0],
+                                         cpu->fpregs[rs3].d[0]);
       TRACE_FREG (cpu, rd);
       goto done;
     }
@@ -392,43 +398,32 @@ execute_d (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
   switch (op->match & mask_arithmetic)
     {
     case MATCH_FADD_D:
-      TRACE_INSN (cpu, "fadd.d %s, %s, %s",
-		  frd_name, frs1_name, frs2_name);
-      sim_fpu_add (&sft, &sfa, &sfb);
-      sim_fpu_round_64 (&sft, rounding, sim_fpu_denorm_default);
-      sim_fpu_to64 (&cpu->fpregs[rd].v[0], &sft);
+      TRACE_INSN (cpu, "fadd.d %s, %s, %s", frd_name, frs1_name, frs2_name);
+      cpu->fpregs[rd].d[0] = f64_add (cpu->fpregs[rs1].d[0],
+                                      cpu->fpregs[rs2].d[0]);
       TRACE_FREG (cpu, rd);
       goto done;
     case MATCH_FSUB_D:
-      TRACE_INSN (cpu, "fsub.d %s, %s, %s",
-		  frd_name, frs1_name, frs2_name);
-      sim_fpu_sub (&sft, &sfa, &sfb);
-      sim_fpu_round_64 (&sft, rounding, sim_fpu_denorm_default);
-      sim_fpu_to64 (&cpu->fpregs[rd].v[0], &sft);
+      TRACE_INSN (cpu, "fsub.d %s, %s, %s", frd_name, frs1_name, frs2_name);
+      cpu->fpregs[rd].d[0] = f64_sub (cpu->fpregs[rs1].d[0],
+                                      cpu->fpregs[rs2].d[0]);
       TRACE_FREG (cpu, rd);
       goto done;
     case MATCH_FMUL_D:
-      TRACE_INSN (cpu, "fmul.d %s, %s, %s",
-		  frd_name, frs1_name, frs2_name);
-      sim_fpu_mul (&sft, &sfa, &sfb);
-      sim_fpu_round_64 (&sft, rounding, sim_fpu_denorm_default);
-      sim_fpu_to64 (&cpu->fpregs[rd].v[0], &sft);
+      TRACE_INSN (cpu, "fmul.d %s, %s, %s", frd_name, frs1_name, frs2_name);
+      cpu->fpregs[rd].d[0] = f64_mul (cpu->fpregs[rs1].d[0],
+                                      cpu->fpregs[rs2].d[0]);
       TRACE_FREG (cpu, rd);
       goto done;
     case MATCH_FDIV_D:
-      TRACE_INSN (cpu, "fdiv.d %s, %s, %s",
-		  frd_name, frs1_name, frs2_name);
-      sim_fpu_div (&sft, &sfa, &sfb);
-      sim_fpu_round_64 (&sft, rounding, sim_fpu_denorm_default);
-      sim_fpu_to64 (&cpu->fpregs[rd].v[0], &sft);
+      TRACE_INSN (cpu, "fdiv.d %s, %s, %s", frd_name, frs1_name, frs2_name);
+      cpu->fpregs[rd].d[0] = f64_div (cpu->fpregs[rs1].d[0],
+                                      cpu->fpregs[rs2].d[0]);
       TRACE_FREG (cpu, rd);
       goto done;
     case MATCH_FSQRT_D:
-      TRACE_INSN (cpu, "fsqrt.d %s, %s",
-		  frd_name, frs1_name);
-      sim_fpu_sqrt (&sft, &sfa);
-      sim_fpu_round_64 (&sft, rounding, sim_fpu_denorm_default);
-      sim_fpu_to64 (&cpu->fpregs[rd].v[0], &sft);
+      TRACE_INSN (cpu, "fsqrt.d %s, %s", frd_name, frs1_name);
+      cpu->fpregs[rd].d[0] = f64_sqrt (cpu->fpregs[rs1].d[0]);
       TRACE_FREG (cpu, rd);
       goto done;
     }
@@ -436,69 +431,78 @@ execute_d (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
   switch (op->match & mask_convert)
     {
     case MATCH_FCVT_W_D:
-      TRACE_INSN (cpu, "fcvt.w.d %s, %s",
-		  rd_name, frs1_name);
-      cpu->regs[rd].s = f64_to_i32 (cpu->fpregs[rs1].d[0], rm, true);
+      TRACE_INSN (cpu, "fcvt.w.d %s, %s", rd_name, frs1_name);
+      cpu->regs[rd].s = f64_to_i32 (cpu->fpregs[rs1].d[0],
+                                    softfloat_roundingMode, true);
       TRACE_REG (cpu, rd);
       goto done;
     case MATCH_FCVT_WU_D:
-      TRACE_INSN (cpu, "fcvt.wu.d %s, %s",
-		  rd_name, frs1_name);
-      i32 = f64_to_ui32 (cpu->fpregs[rs1].d[0], rm, true);
+      TRACE_INSN (cpu, "fcvt.wu.d %s, %s", rd_name, frs1_name);
+      i32 = f64_to_ui32 (cpu->fpregs[rs1].d[0],
+                         softfloat_roundingMode, true);
       cpu->regs[rd].u = i32;
       TRACE_REG (cpu, rd);
       goto done;
     case MATCH_FCVT_D_W:
-      TRACE_INSN (cpu, "fcvt.d.w %s, %s",
-		  frd_name, rs1_name);
-      sim_fpu_i32to (&sft, cpu->regs[rs1].u, rounding);
-      sim_fpu_to64 ((unsigned64 *) (cpu->fpregs + rd), &sft);
+      TRACE_INSN (cpu, "fcvt.d.w %s, %s", frd_name, rs1_name);
+      cpu->fpregs[rd].d[0] = i32_to_f64 (cpu->regs[rs1].s);
       TRACE_FREG (cpu, rd);
       goto done;
     case MATCH_FCVT_D_WU:
-      TRACE_INSN (cpu, "fcvt.d.wu %s, %s",
-		  frd_name, rs1_name);
-      sim_fpu_u32to (&sft, cpu->regs[rs1].u, rounding);
-      sim_fpu_to64 ((unsigned64 *) (cpu->fpregs + rd), &sft);
-      TRACE_FREG (cpu, rd);
-      goto done;
-    case MATCH_FCVT_S_D:
-      TRACE_INSN (cpu, "fcvt.s.d %s, %s",
-		  frd_name, frs1_name);
-      sft = sfa;
-      sim_fpu_round_32 (&sft, sim_fpu_round_near, sim_fpu_denorm_default);
-      sim_fpu_to32 ((unsigned32 *) (cpu -> fpregs + rd), &sft);
-      TRACE_FREG (cpu, rd);
-      goto done;
-    case MATCH_FCVT_D_S:
-      TRACE_INSN (cpu, "fcvt.d.s %s, %s",
-		  frd_name, frs1_name);
-      sim_fpu_32to (&sft, cpu->fpregs[rs1].w[0]);
-      sim_fpu_to64 (&cpu->fpregs[rd].v[0], &sft);
+      TRACE_INSN (cpu, "fcvt.d.wu %s, %s", frd_name, rs1_name);
+      cpu->fpregs[rd].d[0] = ui32_to_f64 (cpu->regs[rs1].u);
       TRACE_FREG (cpu, rd);
       goto done;
     case MATCH_FCVT_L_D:
-      TRACE_INSN (cpu, "fcvt.l.d %s, %s",
-		  rd_name, frs1_name);
-      cpu->regs[rd].s = f64_to_i64 (cpu->fpregs[rs1].d[0], rm, true);
+#if (WITH_TARGET_WORD_BITSIZE == 64)
+      TRACE_INSN (cpu, "fcvt.l.d %s, %s", rd_name, frs1_name);
+      cpu->regs[rd].s = f64_to_i64 (cpu->fpregs[rs1].d[0],
+                                    softfloat_roundingMode, true);
       TRACE_REG (cpu, rd);
+#else
+      TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
+      sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
+#endif
       goto done;
     case MATCH_FCVT_LU_D:
-      TRACE_INSN (cpu, "fcvt.lu.d %s, %s",
-		  rd_name, frs1_name);
-      cpu->regs[rd].u = f64_to_ui64 (cpu->fpregs[rs1].d[0], rm, true);
+#if (WITH_TARGET_WORD_BITSIZE == 64)
+      TRACE_INSN (cpu, "fcvt.lu.d %s, %s", rd_name, frs1_name);
+      cpu->regs[rd].u = f64_to_ui64 (cpu->fpregs[rs1].d[0],
+                                     softfloat_roundingMode, true);
       TRACE_REG (cpu, rd);
+#else
+      TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
+      sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
+#endif
       goto done;
     case MATCH_FCVT_D_L:
-      TRACE_INSN (cpu, "fcvt.d.l %s, %s",
-		  frd_name, rs1_name);
-      cpu->fpregs[rd].D[0] = (double) ((int64_t) cpu->regs[rs1].u);
+#if (WITH_TARGET_WORD_BITSIZE == 64)
+      TRACE_INSN (cpu, "fcvt.d.l %s, %s", frd_name, rs1_name);
+      cpu->fpregs[rd].d[0] = i64_to_f64 (cpu->regs[rs1].s);
       TRACE_FREG (cpu, rd);
+#else
+      TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
+      sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
+#endif
       goto done;
     case MATCH_FCVT_D_LU:
-      TRACE_INSN (cpu, "fcvt.d.lu %s, %s",
-		  frd_name, rs1_name);
-      cpu->fpregs[rd].D[0] = (double) cpu->regs[rs1].u;
+#if (WITH_TARGET_WORD_BITSIZE == 64)
+      TRACE_INSN (cpu, "fcvt.d.lu %s, %s", frd_name, rs1_name);
+      cpu->fpregs[rd].d[0] = ui64_to_f64 (cpu->regs[rs1].u);
+      TRACE_FREG (cpu, rd);
+#else
+      TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
+      sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
+#endif
+      goto done;
+    case MATCH_FCVT_S_D:
+      TRACE_INSN (cpu, "fcvt.s.d %s, %s", frd_name, frs1_name);
+      cpu->fpregs[rd].f[0] = f64_to_f32 (cpu->fpregs[rs1].d[0]);
+      TRACE_FREG (cpu, rd);
+      goto done;
+    case MATCH_FCVT_D_S:
+      TRACE_INSN (cpu, "fcvt.d.s %s, %s", frd_name, frs1_name);
+      cpu->fpregs[rd].d[0] = f32_to_f64 (cpu->fpregs[rs1].f[0]);
       TRACE_FREG (cpu, rd);
       goto done;
     }
@@ -506,22 +510,19 @@ execute_d (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
   switch (op->match)
     {
     case MATCH_FLD:
-      TRACE_INSN (cpu, "fld %s, %" PRIiTW "(%s)",
-		  frd_name, i_imm, rs1_name);
+      TRACE_INSN (cpu, "fld %s, %" PRIiTW "(%s)", frd_name, i_imm, rs1_name);
       store_frd64 (cpu, rd,
 	sim_core_read_unaligned_8 (cpu, cpu->pc, read_map,
 				   cpu->regs[rs1].u + i_imm));
       break;
     case MATCH_FSD:
-		  TRACE_INSN (cpu, "fsd %s, %" PRIiTW "(%s)",
-		  frs2_name, s_imm, rs1_name);
+      TRACE_INSN (cpu, "fsd %s, %" PRIiTW "(%s)", frs2_name, s_imm, rs1_name);
       sim_core_write_unaligned_8 (cpu, cpu->pc, write_map,
 				  cpu->regs[rs1].u + s_imm,
 				  cpu->fpregs[rs2].v[0]);
       break;
     case MATCH_FSGNJ_D:
-      TRACE_INSN (cpu, "fsgnj.d %s, %s, %s",
-		  frd_name, frs1_name, frs2_name);
+      TRACE_INSN (cpu, "fsgnj.d %s, %s, %s", frd_name, frs1_name, frs2_name);
       u32 = cpu->fpregs[rs1].w[1] & 0x7fffffff;
       u32 |= cpu->fpregs[rs2].w[1] & 0x80000000;
       cpu->fpregs[rd].w[1] = u32;
@@ -529,8 +530,7 @@ execute_d (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       TRACE_FREG (cpu, rd);
       break;
     case MATCH_FSGNJN_D:
-      TRACE_INSN (cpu, "fsgnjn.d %s, %s, %s",
-		  frd_name, frs1_name, frs2_name);
+      TRACE_INSN (cpu, "fsgnjn.d %s, %s, %s", frd_name, frs1_name, frs2_name);
       u32 = cpu->fpregs[rs1].w[1] & 0x7fffffff;
       u32 |= (cpu->fpregs[rs2].w[1] & 0x80000000) ^ 0x80000000;
       cpu->fpregs[rd].w[1] = u32;
@@ -538,8 +538,7 @@ execute_d (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       TRACE_FREG (cpu, rd);
       break;
     case MATCH_FSGNJX_D:
-      TRACE_INSN (cpu, "fsgnjx.d %s, %s, %s",
-		  frd_name, frs1_name, frs2_name);
+      TRACE_INSN (cpu, "fsgnjx.d %s, %s, %s", frd_name, frs1_name, frs2_name);
       u32 = cpu->fpregs[rs1].w[1] & 0x7fffffff;
       u32 |= (cpu->fpregs[rs1].w[1] & 0x80000000) ^ (cpu->fpregs[rs2].w[1] & 0x80000000);
       cpu->fpregs[rd].w[1] = u32;
@@ -547,8 +546,7 @@ execute_d (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       TRACE_FREG (cpu, rd);
       break;
     case MATCH_FMIN_D:
-      TRACE_INSN (cpu, "fmin.d %s, %s, %s",
-		  frd_name, frs1_name, frs2_name);
+      TRACE_INSN (cpu, "fmin.d %s, %s, %s", frd_name, frs1_name, frs2_name);
       if (cpu->fpregs[rs1].D[0] < cpu->fpregs[rs2].D[0])
         cpu->fpregs[rd].D[0] = cpu->fpregs[rs1].D[0];
       else
@@ -556,8 +554,7 @@ execute_d (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       TRACE_FREG (cpu, rd);
       break;
     case MATCH_FMAX_D:
-      TRACE_INSN (cpu, "fmax.d %s, %s, %s",
-		  frd_name, frs1_name, frs2_name);
+      TRACE_INSN (cpu, "fmax.d %s, %s, %s", frd_name, frs1_name, frs2_name);
       if (cpu->fpregs[rs1].D[0] > cpu->fpregs[rs2].D[0])
         cpu->fpregs[rd].D[0] = cpu->fpregs[rs1].D[0];
       else
@@ -565,71 +562,36 @@ execute_d (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       TRACE_FREG (cpu, rd);
       break;
     case MATCH_FMV_X_D:
-      TRACE_INSN (cpu, "fmv.x.d %s, %s",
-		  rd_name, frs1_name);
+      TRACE_INSN (cpu, "fmv.x.d %s, %s", rd_name, frs1_name);
       cpu->regs[rd].u = cpu->fpregs[rs1].v[0];
       TRACE_REG (cpu, rd);
       break;
     case MATCH_FMV_D_X:
-      TRACE_INSN (cpu, "fmv.d.x %s, %s",
-		  frd_name, frs1_name);
+      TRACE_INSN (cpu, "fmv.d.x %s, %s", frd_name, frs1_name);
       cpu->fpregs[rd].v[0] = cpu->regs[rs1].u;
       TRACE_FREG (cpu, rd);
       break;
     case MATCH_FEQ_D:
-      TRACE_INSN (cpu, "feq.d %s, %s, %s",
-		  rd_name, frs1_name, frs2_name);
-      cpu->regs[rd].u = sim_fpu_is_eq (&sfa, &sfb);
+      TRACE_INSN (cpu, "feq.d %s, %s, %s", rd_name, frs1_name, frs2_name);
+      cpu->regs[rd].u = f64_eq (cpu->fpregs[rs1].d[0],
+                                cpu->fpregs[rs2].d[0]);
       TRACE_REG (cpu, rd);
       break;
     case MATCH_FLE_D:
-      TRACE_INSN (cpu, "fle.d %s, %s, %s",
-		  rd_name, frs1_name, frs2_name);
-      cpu->regs[rd].u = sim_fpu_is_le (&sfa, &sfb);
+      TRACE_INSN (cpu, "fle.d %s, %s, %s", rd_name, frs1_name, frs2_name);
+      cpu->regs[rd].u = f64_le (cpu->fpregs[rs1].d[0],
+                                cpu->fpregs[rs2].d[0]);
       TRACE_REG (cpu, rd);
       break;
     case MATCH_FLT_D:
-      TRACE_INSN (cpu, "flt.d %s, %s, %s",
-		  rd_name, frs1_name, frs2_name);
-      cpu->regs[rd].u = sim_fpu_is_lt (&sfa, &sfb);
+      TRACE_INSN (cpu, "flt.d %s, %s, %s", rd_name, frs1_name, frs2_name);
+      cpu->regs[rd].u = f64_lt (cpu->fpregs[rs1].d[0],
+                                cpu->fpregs[rs2].d[0]);
       TRACE_REG (cpu, rd);
       break;
     case MATCH_FCLASS_D:
-      TRACE_INSN (cpu, "fclass.d %s, %s",
-		  rd_name, frs1_name);
-      switch (sim_fpu_is (&sfa))
-	{
-	case SIM_FPU_IS_NINF:
-	  cpu->regs[rd].u = 1;
-	  break;
-	case SIM_FPU_IS_NNUMBER:
-	  cpu->regs[rd].u = 1 << 1;
-	  break;
-	case SIM_FPU_IS_NDENORM:
-	  cpu->regs[rd].u = 1 << 2;
-	  break;
-	case SIM_FPU_IS_NZERO:
-	  cpu->regs[rd].u = 1 << 3;
-	  break;
-	case SIM_FPU_IS_PZERO:
-	  cpu->regs[rd].u = 1 << 4;
-	  break;
-	case SIM_FPU_IS_PDENORM:
-	  cpu->regs[rd].u = 1 << 5;
-	  break;
-	case SIM_FPU_IS_PNUMBER:
-	  cpu->regs[rd].u = 1 << 6;
-	  break;
-	case SIM_FPU_IS_PINF:
-	  cpu->regs[rd].u = 1 << 7;
-	  break;
-	case SIM_FPU_IS_SNAN:
-	  cpu->regs[rd].u = 1 << 8;
-	  break;
-	case SIM_FPU_IS_QNAN:
-	  cpu->regs[rd].u = 1 << 9;
-	  break;
-	}
+      TRACE_INSN (cpu, "fclass.d %s, %s", rd_name, frs1_name);
+      cpu->regs[rd].u = f64_classify (cpu->fpregs[rs1].d[0]);
       TRACE_REG (cpu, rd);
       break;
     default:
@@ -650,14 +612,6 @@ execute_f (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
   unsigned int mask_mul_add = MASK_FMADD_S;
   unsigned int mask_convert = MASK_FCVT_S_W;
 
-  static const int round_modes[] =
-  {
-      sim_fpu_round_near, sim_fpu_round_zero,
-      sim_fpu_round_down, sim_fpu_round_up,
-      sim_fpu_round_default, sim_fpu_round_default,
-      sim_fpu_round_default
-  };
-
   int rd = (iw >> OP_SH_RD) & OP_MASK_RD;
   int rs1 = (iw >> OP_SH_RS1) & OP_MASK_RS1;
   int rs2 = (iw >> OP_SH_RS2) & OP_MASK_RS2;
@@ -670,19 +624,16 @@ execute_f (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
   const char *rs1_name = riscv_gpr_names_abi[rs1];
   unsigned_word i_imm = EXTRACT_ITYPE_IMM (iw);
   unsigned_word s_imm = EXTRACT_STYPE_IMM (iw);
-  uint32_t u32;
+
   int32_t i32;
-  int64_t i64;
-  uint64_t u64;
+  uint32_t u32;
+  FRegister a, c;
+
   sim_cia pc = cpu->pc + 4;
+
   /* Rounding mode.  */
   int rm = (iw >> OP_SH_RM) & OP_MASK_RM;
-  int rounding = round_modes[rm];
-
-  sim_fpu sft, sft2;
-  sim_fpu sfa, sfb, sfc;
-  sim_fpu_32to (&sfa, cpu->fpregs[rs1].w[0]);
-  sim_fpu_32to (&sfb, cpu->fpregs[rs2].w[0]);
+  set_rounding_mode(cpu, rm);
 
   if (ex9)
     pc -= 2;
@@ -692,43 +643,41 @@ execute_f (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_FMADD_S:
       TRACE_INSN (cpu, "fmadd.s %s, %s, %s, %s",
 		  frd_name, frs1_name, frs2_name, frs3_name);
-      sim_fpu_32to (&sfc, cpu->fpregs[rs3].w[0]);
-      sim_fpu_mul (&sft2, &sfa, &sfb);
-      sim_fpu_add (&sft, &sfc, &sft2);
-      sim_fpu_round_32 (&sft, rounding, sim_fpu_denorm_default);
-      sim_fpu_to32 (&cpu->fpregs[rd].w[0], &sft);
+      cpu->fpregs[rd].f[0] = f32_mulAdd (cpu->fpregs[rs1].f[0],
+                                         cpu->fpregs[rs2].f[0],
+                                         cpu->fpregs[rs3].f[0]);
       TRACE_FREG (cpu, rd);
       goto done;
     case MATCH_FMSUB_S:
       TRACE_INSN (cpu, "fmsub.s %s, %s, %s, %s",
 		  frd_name, frs1_name, frs2_name, frs3_name);
-      sim_fpu_32to (&sfc, cpu->fpregs[rs3].w[0]);
-      sim_fpu_mul (&sft2, &sfa, &sfb);
-      sim_fpu_sub (&sft, &sft2, &sfc);
-      sim_fpu_round_32 (&sft, rounding, sim_fpu_denorm_default);
-      sim_fpu_to32 (&cpu->fpregs[rd].w[0], &sft);
+      c = cpu->fpregs[rs3];
+      c.w[0] ^= (uint32_t)INT32_MIN;
+      cpu->fpregs[rd].f[0] = f32_mulAdd (cpu->fpregs[rs1].f[0],
+                                         cpu->fpregs[rs2].f[0],
+                                         c.f[0]);
       TRACE_FREG (cpu, rd);
       goto done;
     case MATCH_FNMADD_S:
       TRACE_INSN (cpu, "fnmadd.s %s, %s, %s, %s",
 		  frd_name, frs1_name, frs2_name, frs3_name);
-      sim_fpu_32to (&sfc, cpu->fpregs[rs3].w[0]);
-      sim_fpu_neg (&sfa, &sfa);
-      sim_fpu_mul (&sft2, &sfa, &sfb);
-      sim_fpu_sub (&sft, &sft2, &sfc);
-      sim_fpu_round_32 (&sft, rounding, sim_fpu_denorm_default);
-      sim_fpu_to32 (&cpu->fpregs[rd].w[0], &sft);
+      a = cpu->fpregs[rs1];
+      c = cpu->fpregs[rs3];
+      a.w[0] ^= (uint32_t)INT32_MIN;
+      c.w[0] ^= (uint32_t)INT32_MIN;
+      cpu->fpregs[rd].f[0] = f32_mulAdd (a.f[0],
+                                         cpu->fpregs[rs2].f[0],
+                                         c.f[0]);
       TRACE_FREG (cpu, rd);
       goto done;
     case MATCH_FNMSUB_S:
       TRACE_INSN (cpu, "fnmsub.s %s, %s, %s, %s",
 		  frd_name, frs1_name, frs2_name, frs3_name);
-      sim_fpu_32to (&sfc, cpu->fpregs[rs3].w[0]);
-      sim_fpu_neg (&sfa, &sfa);
-      sim_fpu_mul (&sft2, &sfa, &sfb);
-      sim_fpu_add (&sft, &sft2, &sfc);
-      sim_fpu_round_32 (&sft, rounding, sim_fpu_denorm_default);
-      sim_fpu_to32 (&cpu->fpregs[rd].w[0], &sft);
+      a = cpu->fpregs[rs1];
+      a.w[0] ^= (uint32_t)INT32_MIN;
+      cpu->fpregs[rd].f[0] = f32_mulAdd (a.f[0],
+                                         cpu->fpregs[rs2].f[0],
+                                         cpu->fpregs[rs3].f[0]);
       TRACE_FREG (cpu, rd);
       goto done;
     }
@@ -736,42 +685,31 @@ execute_f (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
   switch (op->match & mask_arithmetic)
     {
     case MATCH_FADD_S:
-      TRACE_INSN (cpu, "fadd.s %s, %s, %s",
-		  frd_name, frs1_name, frs2_name);
-      sim_fpu_add (&sft, &sfa, &sfb);
-      sim_fpu_round_32 (&sft, rounding, sim_fpu_denorm_default);
-      sim_fpu_to32 (&cpu->fpregs[rd].w[0], &sft);
+      TRACE_INSN (cpu, "fadd.s %s, %s, %s", frd_name, frs1_name, frs2_name);
+      cpu->fpregs[rd].f[0] = f32_add (cpu->fpregs[rs1].f[0],
+                                      cpu->fpregs[rs2].f[0]);
       goto done;
     case MATCH_FSUB_S:
-      TRACE_INSN (cpu, "fsub.s %s, %s, %s",
-		  frd_name, frs1_name, frs2_name);
-      sim_fpu_sub (&sft, &sfa, &sfb);
-      sim_fpu_round_32 (&sft, rounding, sim_fpu_denorm_default);
-      sim_fpu_to32 (&cpu->fpregs[rd].w[0], &sft);
+      TRACE_INSN (cpu, "fsub.s %s, %s, %s", frd_name, frs1_name, frs2_name);
+      cpu->fpregs[rd].f[0] = f32_sub (cpu->fpregs[rs1].f[0],
+                                      cpu->fpregs[rs2].f[0]);
       TRACE_FREG (cpu, rd);
       goto done;
     case MATCH_FMUL_S:
-      TRACE_INSN (cpu, "fmul.s %s, %s, %s",
-		  frd_name, frs1_name, frs2_name);
-      sim_fpu_mul (&sft, &sfa, &sfb);
-      sim_fpu_round_64 (&sft, rounding, sim_fpu_denorm_default);
-      sim_fpu_round_32 (&sft, rounding, sim_fpu_denorm_default);
-      sim_fpu_to32 (&cpu->fpregs[rd].w[0], &sft);
+      TRACE_INSN (cpu, "fmul.s %s, %s, %s", frd_name, frs1_name, frs2_name);
+      cpu->fpregs[rd].f[0] = f32_mul (cpu->fpregs[rs1].f[0],
+                                      cpu->fpregs[rs2].f[0]);
       TRACE_FREG (cpu, rd);
       goto done;
     case MATCH_FDIV_S:
-      TRACE_INSN (cpu, "fdiv.s %s, %s, %s",
-		  frd_name, frs1_name, frs2_name);
-      sim_fpu_div (&sft, &sfa, &sfb);
-      sim_fpu_round_32 (&sft, rounding, sim_fpu_denorm_default);
-      sim_fpu_to32 (&cpu->fpregs[rd].w[0], &sft);
+      TRACE_INSN (cpu, "fdiv.s %s, %s, %s", frd_name, frs1_name, frs2_name);
+      cpu->fpregs[rd].f[0] = f32_div (cpu->fpregs[rs1].f[0],
+                                      cpu->fpregs[rs2].f[0]);
       TRACE_FREG (cpu, rd);
       goto done;
     case MATCH_FSQRT_S:
-      TRACE_INSN (cpu, "fsqrt.s %s, %s, %s",
-		  frd_name, frs1_name, frs2_name);
-      sim_fpu_sqrt (&sft, &sfa);
-      sim_fpu_to32 (&cpu->fpregs[rd].w[0], &sft);
+      TRACE_INSN (cpu, "fsqrt.s %s, %s, %s", frd_name, frs1_name, frs2_name);
+      cpu->fpregs[rd].f[0] = f32_sqrt (cpu->fpregs[rs1].f[0]);
       TRACE_FREG (cpu, rd);
       goto done;
     }
@@ -779,102 +717,108 @@ execute_f (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
   switch (op->match & mask_convert)
     {
     case MATCH_FCVT_W_S:
-      TRACE_INSN (cpu, "fcvt.w.s %s, %s",
-		  rd_name, frs1_name);
-      cpu->regs[rd].s = f32_to_i32 (cpu->fpregs[rs1].f[0], rm, true);
+      TRACE_INSN (cpu, "fcvt.w.s %s, %s", rd_name, frs1_name);
+      cpu->regs[rd].s = f32_to_i32 (cpu->fpregs[rs1].f[0],
+                                    softfloat_roundingMode, true);
       TRACE_REG (cpu, rd);
       goto done;
     case MATCH_FCVT_WU_S:
-      TRACE_INSN (cpu, "fcvt.wu.s %s, %s",
-		  rd_name, frs1_name);
-      i32 = f32_to_ui32 (cpu->fpregs[rs1].f[0], rm, true);
+      TRACE_INSN (cpu, "fcvt.wu.s %s, %s", rd_name, frs1_name);
+      i32 = f32_to_ui32 (cpu->fpregs[rs1].f[0],
+                         softfloat_roundingMode, true);
       cpu->regs[rd].u = i32;
       TRACE_REG (cpu, rd);
       goto done;
     case MATCH_FCVT_S_W:
-      TRACE_INSN (cpu, "fcvt.s.w %s, %s",
-		  frd_name, rs1_name);
-      sim_fpu_i32to (&sft, cpu->regs[rs1].u, rounding);
-      sim_fpu_round_32 (&sft, rounding, sim_fpu_denorm_default);
-      sim_fpu_to32 ((unsigned32 *) (cpu->fpregs + rd), &sft);
+      TRACE_INSN (cpu, "fcvt.s.w %s, %s", frd_name, rs1_name);
+      cpu->fpregs[rd].f[0] = i32_to_f32 (cpu->regs[rs1].s);
       TRACE_FREG (cpu, rd);
       goto done;
     case MATCH_FCVT_S_WU:
-      TRACE_INSN (cpu, "fcvt.s.wu %s, %s",
-		  frd_name, rs1_name);
-      sim_fpu_u32to (&sft, cpu->regs[rs1].u, rounding);
-      sim_fpu_round_32 (&sft, rounding, sim_fpu_denorm_default);
-      sim_fpu_to32 ((unsigned32 *) (cpu->fpregs + rd), &sft);
+      TRACE_INSN (cpu, "fcvt.s.wu %s, %s", frd_name, rs1_name);
+      cpu->fpregs[rd].f[0] = ui32_to_f32 (cpu->regs[rs1].u);
       TRACE_FREG (cpu, rd);
       goto done;
     case MATCH_FCVT_L_S:
-		  TRACE_INSN (cpu, "fcvt.l.s %s, %s",
-		  rd_name, frs1_name);
-      cpu->regs[rd].s = f32_to_i64 (cpu->fpregs[rs1].f[0], rm, true);
+#if (WITH_TARGET_WORD_BITSIZE == 64)
+      TRACE_INSN (cpu, "fcvt.l.s %s, %s", rd_name, frs1_name);
+      cpu->regs[rd].s = f32_to_i64 (cpu->fpregs[rs1].f[0],
+                                    softfloat_roundingMode, true);
       TRACE_REG (cpu, rd);
+#else
+      TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
+      sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
+#endif
       goto done;
     case MATCH_FCVT_LU_S:
-      TRACE_INSN (cpu, "fcvt.lu.s %s, %s",
-		  rd_name, frs1_name);
-      cpu->regs[rd].u = f32_to_ui64 (cpu->fpregs[rs1].f[0], rm, true);
+#if (WITH_TARGET_WORD_BITSIZE == 64)
+      TRACE_INSN (cpu, "fcvt.lu.s %s, %s", rd_name, frs1_name);
+      cpu->regs[rd].u = f32_to_ui64 (cpu->fpregs[rs1].f[0],
+                                     softfloat_roundingMode, true);
       TRACE_REG (cpu, rd);
+#else
+      TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
+      sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
+#endif
       goto done;
     case MATCH_FCVT_S_L:
-      TRACE_INSN (cpu, "fcvt.s.l %s, %s",
-		  frd_name, rs1_name);
-      cpu->fpregs[rd].S[0] = (float) ((int64_t) cpu->regs[rs1].u);
+#if (WITH_TARGET_WORD_BITSIZE == 64)
+      TRACE_INSN (cpu, "fcvt.s.l %s, %s", frd_name, rs1_name);
+      cpu->fpregs[rd].f[0] = i64_to_f32 (cpu->regs[rs1].s);
       TRACE_FREG (cpu, rd);
+#else
+      TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
+      sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
+#endif
       goto done;
     case MATCH_FCVT_S_LU:
-      TRACE_INSN (cpu, "fcvt.s.lu %s, %s",
-		  frd_name, rs1_name);
-      cpu->fpregs[rd].S[0] = (float) cpu->regs[rs1].u;
+#if (WITH_TARGET_WORD_BITSIZE == 64)
+      TRACE_INSN (cpu, "fcvt.s.lu %s, %s", frd_name, rs1_name);
+      cpu->fpregs[rd].f[0] = ui64_to_f32 (cpu->regs[rs1].u);
       TRACE_FREG (cpu, rd);
+#else
+      TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
+      sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
+#endif
       goto done;
     }
 
   switch (op->match)
     {
     case MATCH_FLW:
-		  TRACE_INSN (cpu, "flw %s, %" PRIiTW "(%s)",
-		  frd_name, i_imm, rs1_name);
+      TRACE_INSN (cpu, "flw %s, %" PRIiTW "(%s)", frd_name, i_imm, rs1_name);
       store_frd (cpu, rd, EXTEND32 (
 	sim_core_read_unaligned_4 (cpu, cpu->pc, read_map,
 				   cpu->regs[rs1].u + i_imm)));
       break;
     case MATCH_FSW:
-      TRACE_INSN (cpu, "fsw %s, %" PRIiTW "(%s)",
-		  frs2_name, s_imm, rs1_name);
+      TRACE_INSN (cpu, "fsw %s, %" PRIiTW "(%s)", frs2_name, s_imm, rs1_name);
       sim_core_write_unaligned_4 (cpu, cpu->pc, write_map,
 				  cpu->regs[rs1].u + s_imm, cpu->fpregs[rs2].w[0]);
       break;
     case MATCH_FSGNJ_S:
-      TRACE_INSN (cpu, "fsgnj.s %s, %s, %s",
-		  frd_name, frs1_name, frs2_name);
+      TRACE_INSN (cpu, "fsgnj.s %s, %s, %s", frd_name, frs1_name, frs2_name);
       u32 = cpu->fpregs[rs1].w[0] & 0x7fffffff;
       u32 |= cpu->fpregs[rs2].w[0] & 0x80000000;
       cpu->fpregs[rd].w[0] = u32;
       TRACE_FREG (cpu, rd);
       break;
     case MATCH_FSGNJN_S:
-      TRACE_INSN (cpu, "fsgnjn.s %s, %s, %s",
-		  frd_name, frs1_name, frs2_name);
+      TRACE_INSN (cpu, "fsgnjn.s %s, %s, %s", frd_name, frs1_name, frs2_name);
       u32 = cpu->fpregs[rs1].w[0] & 0x7fffffff;
       u32 |= (cpu->fpregs[rs2].w[0] & 0x80000000) ^ 0x80000000;
       cpu->fpregs[rd].w[0] = u32;
       TRACE_FREG (cpu, rd);
       break;
     case MATCH_FSGNJX_S:
-      TRACE_INSN (cpu, "fsgnx.s %s, %s, %s",
-		  frd_name, frs1_name, frs2_name);
+      TRACE_INSN (cpu, "fsgnx.s %s, %s, %s", frd_name, frs1_name, frs2_name);
       u32 = cpu->fpregs[rs1].w[0] & 0x7fffffff;
       u32 |= (cpu->fpregs[rs1].w[0] & 0x80000000) ^ (cpu->fpregs[rs2].w[0] & 0x80000000);
       cpu->fpregs[rd].w[0] = u32;
       TRACE_FREG (cpu, rd);
       break;
     case MATCH_FMIN_S:
-      TRACE_INSN (cpu, "fmin.s %s, %s, %s",
-		  frd_name, frs1_name, frs2_name);
+      TRACE_INSN (cpu, "fmin.s %s, %s, %s", frd_name, frs1_name, frs2_name);
       if (cpu->fpregs[rs1].S[0] < cpu->fpregs[rs2].S[0])
         cpu->fpregs[rd].S[0] = cpu->fpregs[rs1].S[0];
       else
@@ -882,8 +826,7 @@ execute_f (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       TRACE_FREG (cpu, rd);
       break;
     case MATCH_FMAX_S:
-      TRACE_INSN (cpu, "fmax.s %s, %s, %s",
-		  frd_name, frs1_name, frs2_name);
+      TRACE_INSN (cpu, "fmax.s %s, %s, %s", frd_name, frs1_name, frs2_name);
       if (cpu->fpregs[rs1].S[0] > cpu->fpregs[rs2].S[0])
         cpu->fpregs[rd].S[0] = cpu->fpregs[rs1].S[0];
       else
@@ -891,111 +834,69 @@ execute_f (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       TRACE_FREG (cpu, rd);
       break;
     case MATCH_FMV_X_S:
-      TRACE_INSN (cpu, "fmv.x.s %s, %s",
-		  rd_name, frs1_name);
-      cpu->regs[rd].u = cpu->fpregs[rs1].W[0];
+      TRACE_INSN (cpu, "fmv.x.s %s, %s", rd_name, frs1_name);
+      cpu->regs[rd].u = cpu->fpregs[rs1].w[0];
       TRACE_REG (cpu, rd);
       break;
     case MATCH_FMV_S_X:
-      TRACE_INSN (cpu, "fmv.s.x %s, %s",
-		  frd_name, rs1_name);
+      TRACE_INSN (cpu, "fmv.s.x %s, %s", frd_name, rs1_name);
       cpu->fpregs[rd].w[0] = cpu->regs[rs1].u;
       TRACE_FREG (cpu, rd);
       break;
     case MATCH_FEQ_S:
-      TRACE_INSN (cpu, "feq.s %s, %s, %s",
-		  rd_name, frs1_name, frs2_name);
-      cpu->regs[rd].u = sim_fpu_is_eq (&sfa, &sfb);
+      TRACE_INSN (cpu, "feq.s %s, %s, %s", rd_name, frs1_name, frs2_name);
+      cpu->regs[rd].u = f32_eq (cpu->fpregs[rs1].f[0],
+                                cpu->fpregs[rs2].f[0]);
       TRACE_REG (cpu, rd);
       break;
     case MATCH_FLE_S:
-      TRACE_INSN (cpu, "fle.s %s, %s, %s",
-		  rd_name, frs1_name, frs2_name);
-      cpu->regs[rd].u = sim_fpu_is_le (&sfa, &sfb);
+      TRACE_INSN (cpu, "fle.s %s, %s, %s", rd_name, frs1_name, frs2_name);
+      cpu->regs[rd].u = f32_le (cpu->fpregs[rs1].f[0],
+                                cpu->fpregs[rs2].f[0]);
       TRACE_REG (cpu, rd);
       break;
     case MATCH_FLT_S:
-      TRACE_INSN (cpu, "flt.s %s, %s, %s",
-		  rd_name, frs1_name, frs2_name);
-      cpu->regs[rd].u = sim_fpu_is_lt (&sfa, &sfb);
+      TRACE_INSN (cpu, "flt.s %s, %s, %s", rd_name, frs1_name, frs2_name);
+      cpu->regs[rd].u = f32_lt (cpu->fpregs[rs1].f[0],
+                                cpu->fpregs[rs2].f[0]);
       TRACE_REG (cpu, rd);
       break;
     case MATCH_FCLASS_S:
-      TRACE_INSN (cpu, "fclass.s %s, %s",
-		  rd_name, frs1_name);
-      switch (sim_fpu_is (&sfa))
-	{
-	case SIM_FPU_IS_NINF:
-	  cpu->regs[rd].u = 1;
-	  break;
-	case SIM_FPU_IS_NNUMBER:
-	  cpu->regs[rd].u = 1 << 1;
-	  break;
-	case SIM_FPU_IS_NDENORM:
-	  cpu->regs[rd].u = 1 << 2;
-	  break;
-	case SIM_FPU_IS_NZERO:
-	  cpu->regs[rd].u = 1 << 3;
-	  break;
-	case SIM_FPU_IS_PZERO:
-	  cpu->regs[rd].u = 1 << 4;
-	  break;
-	case SIM_FPU_IS_PDENORM:
-	  cpu->regs[rd].u = 1 << 5;
-	  break;
-	case SIM_FPU_IS_PNUMBER:
-	  cpu->regs[rd].u = 1 << 6;
-	  break;
-	case SIM_FPU_IS_PINF:
-	  cpu->regs[rd].u = 1 << 7;
-	  break;
-	case SIM_FPU_IS_SNAN:
-	  cpu->regs[rd].u = 1 << 8;
-	  break;
-	case SIM_FPU_IS_QNAN:
-	  cpu->regs[rd].u = 1 << 9;
-	  break;
-	}
+      TRACE_INSN (cpu, "fclass.s %s, %s", rd_name, frs1_name);
+      cpu->regs[rd].u = f32_classify (cpu->fpregs[rs1].f[0]);
       TRACE_REG (cpu, rd);
       break;
     case MATCH_FRCSR:
-      TRACE_INSN (cpu, "frcsr %s",
-		  rd_name);
+      TRACE_INSN (cpu, "frcsr %s", rd_name);
       store_rd (cpu, rd, fetch_csr (cpu, "fcsr", CSR_FCSR, &cpu->csr.fcsr));
       break;
     case MATCH_FSCSR:
-      TRACE_INSN (cpu, "fscsr %s, %sf",
-		  rd_name, rs1_name);
+      TRACE_INSN (cpu, "fscsr %s, %sf", rd_name, rs1_name);
       store_rd (cpu, rd, fetch_csr (cpu, "fcsr", CSR_FCSR, &cpu->csr.fcsr));
       store_csr (cpu, "fcsr", CSR_FCSR, &cpu->csr.fcsr, cpu->regs[rs1].u);
       break;
     case MATCH_FRRM:
-      TRACE_INSN (cpu, "frrm %s",
-		  rd_name);
+      TRACE_INSN (cpu, "frrm %s", rd_name);
       store_rd (cpu, rd, fetch_csr (cpu, "frm", CSR_FRM, &cpu->csr.frm));
       break;
     case MATCH_FSRM:
-      TRACE_INSN (cpu, "fsrm %s, %s",
-		  rd_name, rs1_name);
+      TRACE_INSN (cpu, "fsrm %s, %s", rd_name, rs1_name);
       store_rd (cpu, rd, fetch_csr (cpu, "frm", CSR_FCSR, &cpu->csr.frm));
       store_csr (cpu, "frm", CSR_FRM, &cpu->csr.frm, cpu->regs[rs1].u);
       break;
     case MATCH_FRFLAGS:
-      TRACE_INSN (cpu, "frflags %s",
-		  rd_name);
+      TRACE_INSN (cpu, "frflags %s", rd_name);
       store_rd (cpu, rd, fetch_csr (cpu, "fflags", CSR_FFLAGS, &cpu->csr.fflags));
       break;
     case MATCH_FSFLAGS:
-      TRACE_INSN (cpu, "fsflags %s, %s",
-		  rd_name, frs1_name);
+      TRACE_INSN (cpu, "fsflags %s, %s", rd_name, frs1_name);
       store_rd (cpu, rd, fetch_csr (cpu, "fflags", CSR_FFLAGS, &cpu->csr.fflags));
       store_csr (cpu, "fflags", CSR_FFLAGS, &cpu->csr.fflags, cpu->regs[rs1].u);
       break;
     case MATCH_FLHW:
       {
         union32_t val;
-	TRACE_INSN (cpu, "flhw %s, %" PRIiTW "(%s)",
-		    frd_name, i_imm, rs1_name);
+	TRACE_INSN (cpu, "flhw %s, %" PRIiTW "(%s)", frd_name, i_imm, rs1_name);
 	val.h[0] = sim_core_read_unaligned_2 (cpu, cpu->pc,
 					      read_map,
 					      cpu->regs[rs1].u + i_imm);
@@ -1008,8 +909,7 @@ execute_f (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_FSHW:
       {
         union32_t val;
-        TRACE_INSN (cpu, "fshw %s, %" PRIiTW "(%s)",
-		    frs2_name, s_imm, rs1_name);
+        TRACE_INSN (cpu, "fshw %s, %" PRIiTW "(%s)", frs2_name, s_imm, rs1_name);
 	/* Round towards Zero. */
 	softfloat_roundingMode = softfloat_round_minMag;
 	val.hf[0] = f32_to_f16 (cpu->fpregs[rs2].f[0]);
@@ -8370,11 +8270,6 @@ execute_zfh (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op,
   unsigned int mask_mul_add = MASK_FMADD_H;
   unsigned int mask_convert = MASK_FCVT_H_W;
 
-  static const int round_modes[]
-    = {sim_fpu_round_near,   sim_fpu_round_zero,    sim_fpu_round_down,
-       sim_fpu_round_up,     sim_fpu_round_default, sim_fpu_round_default,
-       sim_fpu_round_default};
-
   int rd = (iw >> OP_SH_RD) & OP_MASK_RD;
   int rs1 = (iw >> OP_SH_RS1) & OP_MASK_RS1;
   int rs2 = (iw >> OP_SH_RS2) & OP_MASK_RS2;
@@ -8387,14 +8282,16 @@ execute_zfh (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op,
   const char *rs1_name = riscv_gpr_names_abi[rs1];
   unsigned_word i_imm = EXTRACT_ITYPE_IMM (iw);
   unsigned_word s_imm = EXTRACT_STYPE_IMM (iw);
+
+  int32_t i32;
   uint16_t u16;
-  int16_t i16;
-  float16_t tmp;
-  float16_t zero = {0};
+  FRegister a, c;
+
   sim_cia pc = cpu->pc + 4;
+
   /* Rounding mode.  */
   int rm = (iw >> OP_SH_RM) & OP_MASK_RM;
-  int rounding = round_modes[rm];
+  set_rounding_mode(cpu, rm);
 
   if (ex9)
     pc -= 2;
@@ -8404,31 +8301,41 @@ execute_zfh (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op,
     case MATCH_FMADD_H:
       TRACE_INSN (cpu, "fmadd.h %s, %s, %s, %s",
 		  frd_name, frs1_name, frs2_name, frs3_name);
-      tmp = f16_mul (cpu->fpregs[rs1].hf[0], cpu->fpregs[rs2].hf[0]);
-      cpu->fpregs[rd].hf[0] = f16_add (tmp, cpu->fpregs[rs3].hf[0]);
+      cpu->fpregs[rd].hf[0] = f16_mulAdd (cpu->fpregs[rs1].hf[0],
+                                          cpu->fpregs[rs2].hf[0],
+                                          cpu->fpregs[rs3].hf[0]);
       TRACE_FREG (cpu, rd);
       goto done;
     case MATCH_FMSUB_H:
       TRACE_INSN (cpu, "fmsub.h %s, %s, %s, %s",
 		  frd_name, frs1_name, frs2_name, frs3_name);
-      tmp = f16_mul (cpu->fpregs[rs1].hf[0], cpu->fpregs[rs2].hf[0]);
-      cpu->fpregs[rd].hf[0] = f16_sub (tmp, cpu->fpregs[rs3].hf[0]);
+      c = cpu->fpregs[rs3];
+      c.h[0] ^= (uint16_t)INT16_MIN;
+      cpu->fpregs[rd].hf[0] = f16_mulAdd (cpu->fpregs[rs1].hf[0],
+                                          cpu->fpregs[rs2].hf[0],
+                                          c.hf[0]);
       TRACE_FREG (cpu, rd);
       goto done;
     case MATCH_FNMADD_H:
       TRACE_INSN (cpu, "fnmadd.h %s, %s, %s, %s",
 		  frd_name, frs1_name, frs2_name, frs3_name);
-      tmp = f16_sub (zero, cpu->fpregs[rs1].hf[0]);
-      tmp = f16_mul (tmp, cpu->fpregs[rs2].hf[0]);
-      cpu->fpregs[rd].hf[0] = f16_sub (tmp, cpu->fpregs[rs3].hf[0]);
+      a = cpu->fpregs[rs1];
+      c = cpu->fpregs[rs3];
+      a.h[0] ^= (uint16_t)INT16_MIN;
+      c.h[0] ^= (uint16_t)INT16_MIN;
+      cpu->fpregs[rd].hf[0] = f16_mulAdd (a.hf[0],
+                                          cpu->fpregs[rs2].hf[0],
+                                          c.hf[0]);
       TRACE_FREG (cpu, rd);
       goto done;
     case MATCH_FNMSUB_H:
       TRACE_INSN (cpu, "fnmsub.h %s, %s, %s, %s",
 		  frd_name, frs1_name, frs2_name, frs3_name);
-      tmp = f16_sub (zero, cpu->fpregs[rs1].hf[0]);
-      tmp = f16_mul (tmp, cpu->fpregs[rs2].hf[0]);
-      cpu->fpregs[rd].hf[0] = f16_add (tmp, cpu->fpregs[rs3].hf[0]);
+      a = cpu->fpregs[rs1];
+      a.h[0] ^= (uint16_t)INT16_MIN;
+      cpu->fpregs[rd].hf[0] = f16_mulAdd (a.hf[0],
+                                          cpu->fpregs[rs2].hf[0],
+                                          cpu->fpregs[rs3].hf[0]);
       TRACE_FREG (cpu, rd);
       goto done;
     }
@@ -8437,27 +8344,32 @@ execute_zfh (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op,
     {
     case MATCH_FADD_H:
       TRACE_INSN (cpu, "fadd.h %s, %s, %s", frd_name, frs1_name, frs2_name);
-      cpu->fpregs[rd].hf[0]
-	= f16_add (cpu->fpregs[rs1].hf[0], cpu->fpregs[rs2].hf[0]);
+      cpu->fpregs[rd].hf[0] = f16_add (cpu->fpregs[rs1].hf[0],
+                                       cpu->fpregs[rs2].hf[0]);
+      TRACE_FREG (cpu, rd);
       goto done;
     case MATCH_FSUB_H:
       TRACE_INSN (cpu, "fsub.h %s, %s, %s", frd_name, frs1_name, frs2_name);
-      cpu->fpregs[rd].hf[0]
-	= f16_sub (cpu->fpregs[rs1].hf[0], cpu->fpregs[rs2].hf[0]);
+      cpu->fpregs[rd].hf[0] = f16_sub (cpu->fpregs[rs1].hf[0],
+                                       cpu->fpregs[rs2].hf[0]);
+      TRACE_FREG (cpu, rd);
       goto done;
     case MATCH_FMUL_H:
       TRACE_INSN (cpu, "fmul.h %s, %s, %s", frd_name, frs1_name, frs2_name);
-      cpu->fpregs[rd].hf[0]
-	= f16_mul (cpu->fpregs[rs1].hf[0], cpu->fpregs[rs2].hf[0]);
+      cpu->fpregs[rd].hf[0] = f16_mul (cpu->fpregs[rs1].hf[0],
+                                       cpu->fpregs[rs2].hf[0]);
+      TRACE_FREG (cpu, rd);
       goto done;
     case MATCH_FDIV_H:
       TRACE_INSN (cpu, "fdiv.h %s, %s, %s", frd_name, frs1_name, frs2_name);
-      cpu->fpregs[rd].hf[0]
-	= f16_div (cpu->fpregs[rs1].hf[0], cpu->fpregs[rs2].hf[0]);
+      cpu->fpregs[rd].hf[0] = f16_div (cpu->fpregs[rs1].hf[0],
+                                       cpu->fpregs[rs2].hf[0]);
+      TRACE_FREG (cpu, rd);
       goto done;
     case MATCH_FSQRT_H:
-      TRACE_INSN (cpu, "fdiv.h %s, %s, %s", frd_name, frs1_name, frs2_name);
+      TRACE_INSN (cpu, "fsqrt.h %s, %s, %s", frd_name, frs1_name, frs2_name);
       cpu->fpregs[rd].hf[0] = f16_sqrt (cpu->fpregs[rs1].hf[0]);
+      TRACE_FREG (cpu, rd);
       goto done;
     }
 
@@ -8465,18 +8377,21 @@ execute_zfh (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op,
     {
     case MATCH_FCVT_W_H:
       TRACE_INSN (cpu, "fcvt.w.h %s, %s", rd_name, frs1_name);
-      cpu->regs[rd].s = f16_to_i32 (cpu->fpregs[rs1].hf[0], rm, true);
+      cpu->regs[rd].s = f16_to_i32 (cpu->fpregs[rs1].hf[0],
+                                    softfloat_roundingMode, true);
+      TRACE_REG (cpu, rd);
+      goto done;
+    case MATCH_FCVT_WU_H:
+      TRACE_INSN (cpu, "fcvt.wu.h %s, %s", rd_name, frs1_name);
+      i32 = cpu->regs[rd].u = f16_to_ui32 (cpu->fpregs[rs1].hf[0],
+                                           softfloat_roundingMode, true);
+      cpu->regs[rd].u = i32;
       TRACE_REG (cpu, rd);
       goto done;
     case MATCH_FCVT_H_W:
       TRACE_INSN (cpu, "fcvt.h.w %s, %s", frd_name, rs1_name);
       cpu->fpregs[rd].hf[0] = i32_to_f16 (cpu->regs[rd].s);
       TRACE_FREG (cpu, rd);
-      goto done;
-    case MATCH_FCVT_WU_H:
-      TRACE_INSN (cpu, "fcvt.wu.h %s, %s", rd_name, frs1_name);
-      cpu->regs[rd].u = f16_to_ui32 (cpu->fpregs[rs1].hf[0], rm, true);
-      TRACE_REG (cpu, rd);
       goto done;
     case MATCH_FCVT_H_WU:
       TRACE_INSN (cpu, "fcvt.h.wu %s, %s", frd_name, rs1_name);
@@ -8486,8 +8401,19 @@ execute_zfh (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op,
     case MATCH_FCVT_L_H:
 #if (WITH_TARGET_WORD_BITSIZE == 64)
       TRACE_INSN (cpu, "fcvt.l.h %s, %s", rd_name, frs1_name);
-      cpu->regs[rd].s
-	= f16_to_i64 (cpu->fpregs[rs1].hf[0], softfloat_round_minMag, true);
+      cpu->regs[rd].s = f16_to_i64 (cpu->fpregs[rs1].hf[0],
+                                    softfloat_round_minMag, true);
+      TRACE_REG (cpu, rd);
+#else
+      TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
+      sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
+#endif
+      goto done;
+    case MATCH_FCVT_LU_H:
+#if (WITH_TARGET_WORD_BITSIZE == 64)
+      TRACE_INSN (cpu, "fcvt.lu.h %s, %s", rd_name, frs1_name);
+      cpu->regs[rd].u = f16_to_ui64 (cpu->fpregs[rs1].hf[0],
+                                     softfloat_round_minMag, true);
       TRACE_REG (cpu, rd);
 #else
       TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
@@ -8499,17 +8425,6 @@ execute_zfh (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op,
       TRACE_INSN (cpu, "fcvt.h.l %s, %s", frd_name, rs1_name);
       cpu->fpregs[rd].hf[0] = i64_to_f16 (cpu->regs[rd].s);
       TRACE_FREG (cpu, rd);
-#else
-      TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
-      sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
-#endif
-      goto done;
-    case MATCH_FCVT_LU_H:
-#if (WITH_TARGET_WORD_BITSIZE == 64)
-      TRACE_INSN (cpu, "fcvt.lu.h %s, %s", rd_name, frs1_name);
-      cpu->regs[rd].u
-	= f16_to_ui64 (cpu->fpregs[rs1].hf[0], softfloat_round_minMag, true);
-      TRACE_REG (cpu, rd);
 #else
       TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
       sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
@@ -8557,9 +8472,8 @@ execute_zfh (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op,
     case MATCH_FLH:
       TRACE_INSN (cpu, "flh %s, %" PRIiTW "(%s)", frd_name, i_imm, rs1_name);
       store_frd (cpu, rd,
-		 EXTEND16 (
-		   sim_core_read_unaligned_2 (cpu, cpu->pc, read_map,
-					      cpu->regs[rs1].u + i_imm)));
+                 EXTEND16 (sim_core_read_unaligned_2 (cpu, cpu->pc, read_map,
+                                                      cpu->regs[rs1].u + i_imm)));
       break;
     case MATCH_FSH:
       TRACE_INSN (cpu, "fsh %s, %" PRIiTW "(%s)", frs2_name, s_imm, rs1_name);
@@ -8616,17 +8530,20 @@ execute_zfh (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op,
       break;
     case MATCH_FEQ_H:
       TRACE_INSN (cpu, "feq.h %s, %s, %s", rd_name, frs1_name, frs2_name);
-      cpu->regs[rd].u = f16_eq (cpu->fpregs[rs1].hf[0], cpu->fpregs[rs2].hf[0]);
+      cpu->regs[rd].u = f16_eq (cpu->fpregs[rs1].hf[0],
+                                cpu->fpregs[rs2].hf[0]);
       TRACE_REG (cpu, rd);
       break;
     case MATCH_FLE_H:
       TRACE_INSN (cpu, "fle.h %s, %s, %s", rd_name, frs1_name, frs2_name);
-      cpu->regs[rd].u = f16_le (cpu->fpregs[rs1].hf[0], cpu->fpregs[rs2].hf[0]);
+      cpu->regs[rd].u = f16_le (cpu->fpregs[rs1].hf[0],
+                                cpu->fpregs[rs2].hf[0]);
       TRACE_REG (cpu, rd);
       break;
     case MATCH_FLT_H:
       TRACE_INSN (cpu, "flt.h %s, %s, %s", rd_name, frs1_name, frs2_name);
-      cpu->regs[rd].u = f16_lt (cpu->fpregs[rs1].hf[0], cpu->fpregs[rs2].hf[0]);
+      cpu->regs[rd].u = f16_lt (cpu->fpregs[rs1].hf[0],
+                                cpu->fpregs[rs2].hf[0]);
       TRACE_REG (cpu, rd);
       break;
     case MATCH_FCLASS_S:
