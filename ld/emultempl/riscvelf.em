@@ -55,6 +55,7 @@ static andes_ld_options_t andes =
   .execit_export_file = NULL,
   .target_optimization = 0,
   .execit_limit = -1, /* default */
+  .execit_auipc_entry = 1,
   .execit_flags = {0},
   .update_execit_table = 0,
   .keep_import_execit = 0,
@@ -376,6 +377,7 @@ PARSE_AND_LIST_PROLOGUE='
 #define OPTION_EXECIT_RVP		(OPTION_EXECIT_BASELINE + 25)
 #define OPTION_NO_EXECIT_RVP		(OPTION_EXECIT_BASELINE + 26)
 #define OPTION_NEXECIT_OP		(OPTION_EXECIT_BASELINE + 27)
+#define OPTION_EXECIT_AUIPC_ENTRY		(OPTION_EXECIT_BASELINE + 28)
 #endif
 
 /* These are only for lld internal usage and not affected for bfd.  */
@@ -444,6 +446,7 @@ PARSE_AND_LIST_LONGOPTS='
   { "mexecit-xdsp", no_argument, NULL, OPTION_EXECIT_XDSP},
   { "mno-execit-xdsp", no_argument, NULL, OPTION_NO_EXECIT_XDSP},
   { "mnexecitop", no_argument, NULL, OPTION_NEXECIT_OP},
+  { "mexecit-auipc-entry", required_argument, NULL, OPTION_EXECIT_AUIPC_ENTRY},
   /* Obsolete options for EXECIT.  */
   { "mex9", no_argument, NULL, OPTION_EX9_TABLE},
   { "mno-ex9", no_argument, NULL, OPTION_NO_EXECIT_TABLE},
@@ -676,6 +679,19 @@ PARSE_AND_LIST_ARGS_CASES='
     break;
   case OPTION_NEXECIT_OP:
     andes.execit_flags.nexecit_op = 1;
+    break;
+  case OPTION_EXECIT_AUIPC_ENTRY:
+    if (!optarg)
+      einfo (_("%P: missing entry for --mexecit-auipc-entry.\n"));
+    else
+      {
+	andes.execit_auipc_entry = atoi (optarg);
+	if(andes.execit_auipc_entry == 0)
+	  {
+	    andes.execit_auipc_entry = 1;
+	    einfo (_("%P: Bad value '%s' for --mexecit-auipc-entry.\n"), optarg);
+	  }
+      }
     break;
 #endif
   case OPTION_DEBUG_EXECIT_LIMIT:

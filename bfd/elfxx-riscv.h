@@ -299,6 +299,7 @@ typedef struct andes_ld_options
   char *execit_export_file;
   int target_optimization;
   int execit_limit;
+  int execit_auipc_entry;
   struct
   {
     uint noji:1;      /* exclude JI insns.  */
@@ -347,6 +348,7 @@ typedef struct execit_irel_entry
 {
   struct execit_irel_entry *next;
   execit_itable_t ie;
+  uint id;
   uint is_chosen:1;
 } execit_irel_t;
 

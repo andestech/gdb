@@ -197,7 +197,9 @@ struct riscv_elf_link_hash_table
    ? (struct riscv_elf_link_hash_table *) (p)->hash : NULL)
 
 /* { Andes */
-#define SZ_4K (0x1000)
+#define SZ_4K (1u << 12)
+#define SZ_16K (1u << 14)
+#define SZ_32K (1u << 15)
 
 typedef struct riscv_pcgp_hi_reloc riscv_pcgp_hi_reloc_t;
 
@@ -5192,6 +5194,7 @@ andes_execit_render_hash (execit_context_t *ctx)
   const uint32_t insn = ctx->ie.insn;
   bfd_vma relocation_section = 0;
   bfd_vma relocation_offset = 0;
+  int rtype = 0;
 
   const char *symbol ="ABS";
   int rz = EXECIT_HASH_NG;
@@ -5207,8 +5210,8 @@ andes_execit_render_hash (execit_context_t *ctx)
       asection *sym_sec;
       bfd_vma symval;
       char symtype;
-      int rtype = ELFNN_R_TYPE (irel->r_info);
       int stype = TAG_NONE; /* subtype of ANDES_TAG.  */
+      rtype = ELFNN_R_TYPE (irel->r_info);
       if (rtype == R_RISCV_ANDES_TAG)
 	{
 	  andes_irelx_t *relx = (andes_irelx_t *) irel->r_user;
@@ -5356,7 +5359,10 @@ andes_execit_render_hash (execit_context_t *ctx)
 	      relocation_offset = ((ctx->ie.relocation - irel->r_addend)
 				   >= data_start) ? 1 : 0;
 	      if (rtype == R_RISCV_CALL || rtype == R_RISCV_PCREL_HI20)
-		ctx->ie.bias = ctx->ie.relocation - ctx->ie.pc;
+		{
+		  bfd_signed_vma bias = ctx->ie.relocation - ctx->ie.pc;
+		  ctx->ie.bias = ENCODE_UTYPE_IMM (RISCV_CONST_HIGH_PART (bias));
+		}
 	      else if (rtype == R_RISCV_HI20)
 		ctx->ie.bias = ctx->ie.relocation;
 
@@ -6236,6 +6242,7 @@ _bfd_riscv_relax_align (bfd *abfd, asection *sec,
 /* Relax PC-relative references to GP-relative references.  */
 
 #define MAX(a, b) (a) > (b) ? (a) : (b)
+#define ABS(a) (a) < 0 ? (-a) : (a)
 
 static bool
 _bfd_riscv_relax_pc (bfd *abfd ATTRIBUTE_UNUSED,
@@ -8041,6 +8048,7 @@ static bool
 andes_execit_hash_insn (bfd *abfd, asection *sec,
 			struct bfd_link_info *link_info)
 {
+  static uint irel_id = 0;
   bfd_byte *contents = NULL;
   Elf_Internal_Sym *isym = NULL;
   struct riscv_elf_link_hash_table *htab = riscv_elf_hash_table (link_info);
@@ -8152,6 +8160,7 @@ andes_execit_hash_insn (bfd *abfd, asection *sec,
 	      || rtype == R_RISCV_PCREL_HI20))
 	{
 	  execit_irel_t *e = bfd_zmalloc (sizeof (execit_irel_t));
+	  e->id = ++irel_id;
 	  e->ie = ctx.ie;
 	  LIST_APPEND (&he->irels, e);
 	}
@@ -8379,19 +8388,20 @@ andes_execit_build_itable (struct bfd_link_info *info)
 
       bfd_put_32 (abfd, (bfd_vma) ie->fixed, (char *) contents + (index << 2));
 
-      p->is_chosen = true;
+      p->is_chosen = 1;
       if (p->type == ET_RK_TYPE_HI20)
 	{
 	  for (int i = 0; i < ie->est_count; ++i)
 	    {
 	      BFD_ASSERT (irel);
-	      irel->is_chosen = true;
+	      BFD_ASSERT (irel->is_chosen == 0);
+	      irel->is_chosen = 1;
 	      irel->ie.rank_order = order;
 	      irel->ie.itable_index = index;
 	      irel = irel->next;
 	    }
 	}
-      he->is_chosen = true;
+      he->is_chosen = 1;
       he->type = p->type;
       ie->rank_order = order++;
       ie->itable_index = index++;
@@ -9100,23 +9110,88 @@ free_each_cb (void *l ATTRIBUTE_UNUSED, void *j ATTRIBUTE_UNUSED,
 #endif
 
 /* exec.it hi20 (lui/auipc) helpers  */
+typedef struct hi20_group_type
+{
+  void *next;
+  execit_irel_t *head;
+  execit_irel_t *tail;
+  int insts;
+} hi20_group_t;
+
 typedef struct hi20_context
 {
   execit_irel_t *p, *q;
+  hi20_group_t *hi20s;
   int id;
-
 } hi20_context_t;
 
-#if 0 //KILLME
-static void
-andes_execit_estimate_lui (execit_hash_t *he, execit_vma_t **lst_pp)
+static int andes_execit_estimate_hi20_post (hi20_context_t *ctx)
 {
-  LIST_EACH (&he->irels, andes_execit_estimate_lui_each_cb);
-  /* count itable entries are required  */
-  collect_lui_vma_each_cb (NULL, NULL, NULL, NULL); /* reset cache  */
-  LIST_EACH1 (&he->irels, collect_lui_vma_each_cb, lst_pp);
+  BFD_ASSERT (ctx->p);
+  execit_irel_t *p = ctx->p;
+  int rtype = ELFNN_R_TYPE (p->ie.irel_copy.r_info);
+  if (!((rtype == R_RISCV_CALL) || (rtype == R_RISCV_PCREL_HI20)))
+    return 0;
+
+  if (ctx->hi20s == NULL)
+    {
+      hi20_group_t *grp = bfd_zmalloc(sizeof (hi20_group_t));
+      BFD_ASSERT (grp);
+      grp->head = grp->tail = p;
+      grp->insts = 1;
+      ctx->hi20s = grp;
+    }
+  else
+    {
+      hi20_group_t *grp = ctx->hi20s;
+      while (grp)
+	{
+	  if ((grp->tail->next == p)
+	      && (p->ie.bias == grp->head->ie.bias))
+	    {
+	      grp->tail = p;
+	      grp->insts += 1;
+	      break;
+	    }
+	#if 0
+	  grp = (hi20_group_t *) grp->next;
+	#else
+	  /* as the biases are sorted, no need to check others.  */
+	  grp = NULL;
+	  break;
+	#endif
+	}
+      if (grp == NULL)
+	{
+	  grp = bfd_zmalloc(sizeof (hi20_group_t));
+	  BFD_ASSERT (grp);
+	  grp->head = grp->tail = p;
+	  grp->insts = 1;
+	  grp->next = ctx->hi20s;
+	  ctx->hi20s = grp;
+	}
+    }
+  return 1;
 }
-#endif
+
+static int andes_execit_estimate_hi20_clean (hi20_context_t *ctx)
+{
+  if (ctx->hi20s == NULL)
+    return 0;
+
+  int count = 0;
+  hi20_group_t *grp = ctx->hi20s;
+  while (grp)
+    {
+      hi20_group_t *p = grp;
+      grp = (hi20_group_t *) grp->next;
+      count++;
+      free (p);
+    }
+
+  ctx->hi20s = NULL;
+  return count;
+}
 
 static int andes_execit_hi20_collect_one (hi20_context_t *ctx)
 {
@@ -9167,6 +9242,7 @@ static int andes_execit_hi20_collect_one (hi20_context_t *ctx)
 	      BFD_ASSERT (r->ie.est_count == 0 && r->ie.entries == 0);
 	      r->ie.est_count = count;
 	      r->ie.entries = entries;
+	      BFD_ASSERT (r->ie.group_id == 0);
 	      r->ie.group_id = id;
 	      r = r->next;
 	    }
@@ -9182,27 +9258,39 @@ static int andes_execit_hi20_collect_one (hi20_context_t *ctx)
  * compare: countB/entryB > countA/entryA
  *          => countB*entryA - countA*entryB > 0
  */
-#define AUIPC_COMPARE(cb,eb,ca,ea) ((cb*ea - ca*eb) > 0)
+#define HI20_COMPARE(cb,eb,ca,ea) ((cb*ea - ca*eb) > 0)
+#define HI20(x) ENCODE_UTYPE_IMM (RISCV_CONST_HIGH_PART (x))
 
-static int andes_execit_hi20_collect_multiple (hi20_context_t *ctx)
+static int andes_execit_hi20_collect_multiple (hi20_context_t *ctx, int rtype)
 {
   BFD_ASSERT (ctx->p);
-  bfd_signed_vma window = SZ_4K;
+  bfd_vma window = SZ_4K;
   execit_itable_t *a = &ctx->p->ie; /* data of node A. */
+  execit_itable_t *b;
+  execit_irel_t *effect_p = ctx->p;
   execit_irel_t *p; /* node B. */
   execit_irel_t *pp; /* backword ref.  */
   ctx->q = ctx->p->next; /* if no new group found.  */
   int count = 1; /* 1 for *p self.  */
-  int group_count = 0;
+  int pre_count = 1;
+  int total_insn_count = 0;
+  int window_count = 1;
+  int pre_group_count = 0;
   bool found;
   for (p = ctx->p->next; p; pp = p, p = p->next)
     {
       execit_irel_t *q;
-      execit_itable_t *b;
       int entries;
       /* count nodes within the window.  */
       b = &p->ie;
-      found = (b->bias - a->bias) < window;
+      if (rtype == R_RISCV_HI20)
+	found = (unsigned) (b->bias - a->bias) < window;
+      else
+	{
+	  bfd_vma delta = b->pc - a->pc;
+	  int wcount = b->bias - a->bias;
+	  found = (delta < window) && (wcount < window_count);
+	}
       if (found)
 	{
 	  count++;
@@ -9219,20 +9307,21 @@ static int andes_execit_hi20_collect_multiple (hi20_context_t *ctx)
       BFD_ASSERT (found == false);
 
       /* transaction: all new group members will have better score.  */
-      /* LUI reserves 1 extra entry while AUIPC reserves 2.  */
-      int rtype = ELFNN_R_TYPE (a->irel_copy.r_info);
-      entries = (rtype == R_RISCV_HI20) ? 1 : 2;
-      entries += (window >> 12);
-      if (count > (entries * 2))
+      if (rtype != R_RISCV_HI20 && nsta.opt && nsta.opt->execit_auipc_entry)
+	entries = nsta.opt->execit_auipc_entry;
+      else
+	entries = 1;
+      entries += window_count + pre_group_count;
+      if ((count > pre_count) && (count > (entries * 2)))
 	{
 	  found = true;
-	  q = ctx->p;
+	  q = effect_p;
 	  while(q != p) /* iter all nodes of the new gorup.  */
 	    {
 	      b = &q->ie;
 	      if (q->ie.entries
-		  && !AUIPC_COMPARE (count, entries, b->est_count, b->entries))
-		{ /* no, stop.  */
+		  && ! HI20_COMPARE (count, entries, b->est_count, b->entries))
+		{ /* no, found one worse, stop.  */
 		  found = false;
 		  break;
 		}
@@ -9240,36 +9329,76 @@ static int andes_execit_hi20_collect_multiple (hi20_context_t *ctx)
 	    }
 	}
 
+      /* try merge previous 'small' group.  */
+      if (found && rtype != R_RISCV_HI20 && ctx->hi20s)
+	{
+	  hi20_group_t *grp = ctx->hi20s;
+	  while (grp)
+	    {
+	      bfd_signed_vma bias = effect_p->ie.bias - SZ_4K;
+	      bfd_vma base = (effect_p->ie.pc > SZ_4K) ?
+				effect_p->ie.pc - SZ_4K : 0;
+	      if (grp->tail->next == effect_p
+		  && grp->head->ie.bias >= bias
+		  && grp->head->ie.pc >= base
+		  && grp->head->ie.pc < effect_p->ie.pc
+		  && grp->insts > 2)
+		{
+		  count += grp->insts;
+		  pre_count++;
+		  entries++;
+		  effect_p = grp->head;
+		  /* remove last group.  */
+		  void *t = ctx->hi20s;
+		  ctx->hi20s = ctx->hi20s->next;
+		  free (t);
+		#if 0
+		  grp = (hi20_group_t *) grp->next;
+		  continue;
+		#else
+		  break; /* by now merge only one window right before.  */
+		#endif
+		}
+	      break;
+	    }
+	}
+
       /* update new group info.  */
       if (found)
 	{
-	  int id = ctx->id++;
-	  q = ctx->p;
+	  int id = ctx->id++; /* new group id.  */
+	  int cnt = 0;
+	  q = effect_p;
 	  while(q != p)
 	    {
+	      cnt++;
+	      q->ie.group_id = id;
 	      q->ie.est_count = count;
 	      q->ie.entries = entries;
-	      q->ie.group_id = id;
 	      q = q->next;
 	    }
+	  BFD_ASSERT (cnt == count);
 	  ctx->q = q;
-	  group_count = count;
+	  total_insn_count = count;
 	}
 
-      /* try larger window.  */
+      /* try merge consecutive windows.  */
       if (found && p)
 	{
 	  p = pp; /* continue from p.  */
 	  window += SZ_4K;
+	  window_count++;
+	  pre_count = count;
 	  continue;
 	}
 
       break; /* try next node by the caller.  */
     }
 
-  return group_count;
+  return total_insn_count;
 }
 
+/* sort by hi20 bias ascending + pc ascending.  */
 static void
 andes_execit_sort_irel_list (execit_irel_t **list)
 {
@@ -9277,32 +9406,34 @@ andes_execit_sort_irel_list (execit_irel_t **list)
   p = *list;
   if (p == NULL)
     return;
-  q = p;
-  p = p->next;
-  q->next = NULL;
+  q = p;           /* sorted head */
+  p = p->next;     /* current */
+  q->next = NULL;  /* pop first item from list to sorted.  */
   while (p)
     { /* find the node, t, to insert.  */
-      s = p->next;
-      r = q;
-      t = NULL;
+      s = p->next; /* next to check */
+      r = q;       /* comparing head */
+      t = NULL;    /* insert point.  */
       while (r)
 	{
-	  if (r->ie.bias > p->ie.bias)
+	  if (p->ie.bias < r->ie.bias)
+	    break;
+	  if ((p->ie.bias == r->ie.bias) && (p->ie.pc < r->ie.pc))
 	    break;
 	  t = r;
 	  r = r->next;
 	}
       if (t == NULL)
-	{
+	{ /* insert at sorrted head.  */
 	  p->next = q;
 	  q = p;
 	}
       else
-	{
+	{ /* insert at node t.  */
 	  p->next = t->next;
 	  t->next = p;
 	}
-      p = s;
+      p = s; /* restore the next node to check.  */
     }
 
   *list = q;
@@ -9313,15 +9444,15 @@ andes_execit_estimate_hi20 (execit_hash_t *he)
 {
   static int group_id = 1; /* 0 for non-grouped.  */
   hi20_context_t ctx = {.id = group_id};
-  int type;
+  int rtype;
 
   BFD_ASSERT (he);
   if (he == NULL)
     return;
 
-  type = ELFNN_R_TYPE (he->ie.irel_copy.r_info);
-  BFD_ASSERT (type == R_RISCV_HI20
-	      || type == R_RISCV_CALL || type == R_RISCV_PCREL_HI20);
+  rtype = ELFNN_R_TYPE (he->ie.irel_copy.r_info);
+  BFD_ASSERT (rtype == R_RISCV_HI20
+	      || rtype == R_RISCV_CALL || rtype == R_RISCV_PCREL_HI20);
 
   /* grade each element of the list.  */
   andes_execit_sort_irel_list (&he->irels);
@@ -9330,7 +9461,7 @@ andes_execit_estimate_hi20 (execit_hash_t *he)
   /* LUIs with the same target can be treated as the same instructions.
    * but AUIPCs cannot, as the relative offset are not the same.
    */
-  if (type == R_RISCV_HI20)
+  if (rtype == R_RISCV_HI20)
     {
       andes_execit_hi20_collect_one (&ctx);
       BFD_ASSERT (ctx.p == he->irels);
@@ -9338,10 +9469,13 @@ andes_execit_estimate_hi20 (execit_hash_t *he)
 
   while (ctx.p)
     {
-      andes_execit_hi20_collect_multiple (&ctx);
+      if (0 == andes_execit_hi20_collect_multiple (&ctx, rtype)
+	  && rtype != R_RISCV_HI20)
+	andes_execit_estimate_hi20_post (&ctx);
       ctx.p = ctx.q;
     }
 
+  andes_execit_estimate_hi20_clean (&ctx);
   group_id = ctx.id;
 }
 
@@ -10412,6 +10546,7 @@ andes_relax_execit_ite (
 	      if ((i + 1) >= entries)
 		{
 		  BFD_ASSERT (0);
+		  printf("execit_index = %d\n", execit_index);
 		  /* TODO: fatal handling
 		   *   not enough entry reverved.
 		   */
