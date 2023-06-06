@@ -9,6 +9,7 @@ Disassembly of section .text:
 
 0+000 <zcmp64>:
 [	 ]*[0-9a-f]+:[	 ]+b84e[	 ]+cm.push[	 ]+\{ra\},-64
+.*R_RISCV_RELAX_ENTRY.*
 [	 ]*[0-9a-f]+:[	 ]+b85e[	 ]+cm.push[	 ]+\{ra,s0\},-64
 [	 ]*[0-9a-f]+:[	 ]+b86a[	 ]+cm.push[	 ]+\{ra,s0-s1\},-64
 [	 ]*[0-9a-f]+:[	 ]+b87a[	 ]+cm.push[	 ]+\{ra,s0-s2\},-64

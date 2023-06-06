@@ -1,2 +1,2 @@
 .*Assembler messages:
-.*Error: zcm\* is not incompatible with `c' extension.
+.*Error: cannot link zcmp1p0/zcmt1p0 with zcd1p0\.

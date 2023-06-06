@@ -8,4 +8,4 @@
 Disassembly of section .text:
 
 0+000 <target>:
-[ 	]+0:[ 	]+a001[ 	]+c.j[ 	]+0[ ]+\<target\>
+[ 	]+0:[ 	]+a001[ 	]+c.j[ 	]+0x0[ ]+\<target\>

@@ -9,6 +9,7 @@ Disassembly of section .text:
 
 0+000 <zcmp32>:
 [	 ]*[0-9a-f]+:[	 ]+bc4e[	 ]+cm.popretz[	 ]+\{ra\},64
+.*R_RISCV_RELAX_ENTRY.*
 [	 ]*[0-9a-f]+:[	 ]+bc5e[	 ]+cm.popretz[	 ]+\{ra,s0\},64
 [	 ]*[0-9a-f]+:[	 ]+bc6e[	 ]+cm.popretz[	 ]+\{ra,s0-s1\},64
 [	 ]*[0-9a-f]+:[	 ]+bc7e[	 ]+cm.popretz[	 ]+\{ra,s0-s2\},64

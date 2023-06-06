@@ -9,6 +9,7 @@ Disassembly of section .text:
 
 0+000 <target>:
 [	 ]*[0-9a-f]+:[	 ]+009480a3+[	 ]+sb[	 ]+s1,1\(s1\)
+.*R_RISCV_RELAX_ENTRY.*
 [	 ]*[0-9a-f]+:[	 ]+00f780a3+[	 ]+sb[	 ]+a5,1\(a5\)
 [	 ]*[0-9a-f]+:[	 ]+0014c483+[	 ]+lbu[	 ]+s1,1\(s1\)
 [	 ]*[0-9a-f]+:[	 ]+0017c783+[	 ]+lbu[	 ]+a5,1\(a5\)

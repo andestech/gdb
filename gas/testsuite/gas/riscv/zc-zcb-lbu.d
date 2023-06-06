@@ -9,6 +9,7 @@ Disassembly of section .text:
 
 0+000 <zcb_lbu>:
 [	 ]*[0-9a-f]+:[	 ]+8120[	 ]+c.lbu[	 ]+s0,2\(a0\)
+.*R_RISCV_RELAX_ENTRY.*
 [	 ]*[0-9a-f]+:[	 ]+825c[	 ]+c.lbu[	 ]+a5,1\(a2\)
 [	 ]*[0-9a-f]+:[	 ]+80e0[	 ]+c.lbu[	 ]+s0,3\(s1\)
 [	 ]*[0-9a-f]+:[	 ]+8024[	 ]+c.lbu[	 ]+s1,2\(s0\)
