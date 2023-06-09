@@ -5866,66 +5866,66 @@ _bfd_riscv_relax_call (bfd *abfd, asection *sec, asection *sym_sec,
 
   if (!is_table_jump)
     {
-  /* If the call crosses section boundaries, fixed sections or alignment
-     directive could casue the PC-relative offset to later increase.  */
-  /* table jump has no such limitation.  */
-  struct riscv_elf_link_hash_table *htab = riscv_elf_hash_table (link_info);
-  andes_ld_options_t *andes = &htab->andes;
-  if ((!andes->set_relax_cross_section_call
-       && sym_sec->output_section != sec->output_section))
-    return true;
+      /* If the call crosses section boundaries, fixed sections or alignment
+	 directive could casue the PC-relative offset to later increase.  */
+      /* table jump has no such limitation.  */
+      struct riscv_elf_link_hash_table *htab = riscv_elf_hash_table (link_info);
+      andes_ld_options_t *andes = &htab->andes;
+      if (!andes->set_relax_cross_section_call
+	  && sym_sec->output_section != sec->output_section)
+	return true;
 
-  /* If the call crosses section boundaries, an alignment directive could
-     cause the PC-relative offset to later increase, so we need to add in the
-     max alignment of any section inclusive from the call to the target.
-     Otherwise, we only need to use the alignment of the current section.  */
-  if (VALID_JTYPE_IMM (foff))
-    {
-      if (sym_sec->output_section == sec->output_section
-	  && sym_sec->output_section != bfd_abs_section_ptr)
-	max_alignment = (bfd_vma) 1 << sym_sec->output_section->alignment_power;
-      foff += ((bfd_signed_vma) foff < 0 ? -max_alignment : max_alignment);
-    }
+      /* If the call crosses section boundaries, an alignment directive could
+	 cause the PC-relative offset to later increase, so we need to add in the
+	 max alignment of any section inclusive from the call to the target.
+	 Otherwise, we only need to use the alignment of the current section.  */
+      if (VALID_JTYPE_IMM (foff))
+	{
+	  if (sym_sec->output_section == sec->output_section
+	      && sym_sec->output_section != bfd_abs_section_ptr)
+	    max_alignment = (bfd_vma) 1 << sym_sec->output_section->alignment_power;
+	  foff += ((bfd_signed_vma) foff < 0 ? -max_alignment : max_alignment);
+	}
 
-  /* See if this function call can be shortened.  */
-  if (!VALID_JTYPE_IMM (foff) && !(!bfd_link_pic (link_info) && near_zero))
-    return true;
+      /* See if this function call can be shortened.  */
+      if (!VALID_JTYPE_IMM (foff) && !(!bfd_link_pic (link_info) && near_zero))
+	return true;
 
-  /* Shorten the function call.  */
-  BFD_ASSERT (rel->r_offset + 8 <= sec->size);
+      /* Shorten the function call.  */
+      BFD_ASSERT (rel->r_offset + 8 <= sec->size);
     }
   else
     {
-  /* Table jump profiling stage. It will be moved out of the relax_call function. */
-  if (link_info->relax_pass == PASS_ZCE_TABLE_JUMP_COLLECT)
-    {
-      /* Early stop to prevent _bfd_riscv_relax_call to delete bytes in pass 0.  */
-      if (link_info->relax_trip != 0)
-	return true;
-
-      htab_t tbljal_htab = riscv_get_table_jump_htab (link_info, rd);
-      const char *name = riscv_get_symbol_name (abfd, rel);
-      unsigned int benefit = len - 2;
-
-      if (tbljal_htab == NULL
-	  || name == NULL
-	  || benefit == 0)
-	return true;
-
-      return riscv_update_table_jump_entry (tbljal_htab, symval, benefit, name);
-    }
-
-  /* Relax a table jump instruction that is marked. */
-  if (link_info->relax_pass == PASS_ZCE_TABLE_JUMP_APPLY)
-    {
-      if (((auipc ^ MATCH_TABLE_JUMP) & MASK_CM_JALT) == 0)
+      /* Table jump profiling stage. It will be moved out of the relax_call function. */
+      if (link_info->relax_pass == PASS_ZCE_TABLE_JUMP_COLLECT)
 	{
-	  rel->r_info = ELFNN_R_INFO (ELFNN_R_SYM (rel->r_info), R_RISCV_TABLE_JUMP);
-	  *again = true;
-	  return riscv_relax_delete_bytes (abfd, sec, rel->r_offset + 2, 6, link_info, pcgp_relocs);
+	  /* Early stop to prevent _bfd_riscv_relax_call to delete bytes in pass 0.  */
+	  if (link_info->relax_trip != 0)
+	    return true;
+
+	  htab_t tbljal_htab = riscv_get_table_jump_htab (link_info, rd);
+	  const char *name = riscv_get_symbol_name (abfd, rel);
+	  unsigned int benefit = 8 - 2; /* auipc + jalr => cm.jalt */
+
+	  if (tbljal_htab == NULL
+	      || name == NULL
+	      || benefit == 0)
+	    return true;
+
+	  return riscv_update_table_jump_entry (tbljal_htab, symval, benefit, name);
 	}
-      return true;
-    }
+
+      /* Relax a table jump instruction that is marked. */
+      if (link_info->relax_pass == PASS_ZCE_TABLE_JUMP_APPLY)
+	{
+	  if (((auipc ^ MATCH_TABLE_JUMP) & MASK_CM_JALT) == 0)
+	    {
+	      rel->r_info = ELFNN_R_INFO (ELFNN_R_SYM (rel->r_info), R_RISCV_TABLE_JUMP);
+	      *again = true;
+	      return riscv_relax_delete_bytes (abfd, sec, rel->r_offset + 2, 6, link_info, pcgp_relocs);
+	    }
+	  return true;
+	}
     }
 
   /* C.J exists on RV32 and RV64, but C.JAL is RV32-only.  */
@@ -6423,7 +6423,7 @@ _bfd_riscv_record_jal (bfd *abfd,
       || link_info->relax_pass > PASS_ZCE_TABLE_JUMP_COLLECT)
     return true;
 
-  return riscv_update_table_jump_entry (tbljal_htab, symval, 2, name);
+  return riscv_update_table_jump_entry (tbljal_htab, symval, 2, name); /* j => cm.jt */
 }
 
 typedef struct
@@ -6434,7 +6434,7 @@ typedef struct
   unsigned int end;
 } riscv_table_jump_args;
 
-/* insert sort the jumps in index range [arg->start, arg->end].  */
+/* sort the table jump benefits in index range [arg->start, arg->end].  */
 
 static int
 riscv_ranking_table_jump (void **entry_ptr, void *_arg)
@@ -6498,30 +6498,22 @@ riscv_ranking_table_jump (void **entry_ptr, void *_arg)
   return true;
 }
 
+/* trim off no-gain collections.  */
 static void
-riscv_optimize_table_jump_count (riscv_table_jump_args *args)
+riscv_estimate_table_jump_optimal_count (riscv_table_jump_args *args)
 {
   uint i;
   riscv_table_jump_htab_t *tbj_htab = args->htab;
   int *acc = tbj_htab->accumulation;
-  int block = 64 / RISCV_ELF_WORD_BYTES;
-  int cost1; /* before: auipc + jalr */
-  int cost2; /* after : cm.jx + sizeof(entry)*/
-  /* cost1 = 8-byte * count
-     cost2 = 2-byte * count + sizeof(entry) * 8  */
+  unsigned int *sav = tbj_htab->savings;
+  int block = 64 / RISCV_ELF_WORD_BYTES; /* entry count per 64-bytes.  */
 
   if (args->start == 0)
     { /* tbljt */
       /* by single entry */
       for (i = args->start; i < args->end; i++)
 	{
-	  int count = acc[i];
-	  if (i > args->start)
-	    count -= acc[i - 1];
-	  count >>= 1; /* benefit to count.  */
-	  cost1 = 8 * count;
-	  cost2 = 2 * count + RISCV_ELF_WORD_BYTES;
-	  if (cost2 >= cost1)
+	  if (sav[i] <= RISCV_ELF_WORD_BYTES)
 	    break;
 	}
       tbj_htab->tbljt_count = i - args->start;
@@ -6529,13 +6521,11 @@ riscv_optimize_table_jump_count (riscv_table_jump_args *args)
       /* by block entries */
       for (i = args->start; i < args->end; i += block)
 	{
-	  int count = acc[i + block -1];
+	  int gain = acc[i + block - 1];
 	  if (i > args->start)
-	    count -= acc[i - 1];
-	  count >>= 1; /* benefit to count.  */
-	  cost1 = 8 * count;
-	  cost2 = 2 * count + RISCV_ELF_WORD_BYTES * block;
-	  if (cost2 >= cost1)
+	    gain -= acc[i - 1];
+	  int cost = RISCV_ELF_WORD_BYTES * block;
+	  if (gain <= cost)
 	    break;
 	}
       tbj_htab->tbljt_count2 = i - args->start;
@@ -6545,17 +6535,14 @@ riscv_optimize_table_jump_count (riscv_table_jump_args *args)
       /* by single entry */
       for (i = args->start; i < args->end; i++)
 	{
-	  int count = acc[i] - acc[i - 1];
-	  count >>= 1; /* benefit to count.  */
-	  cost1 = 8 * count;
-	  cost2 = 2 * count + RISCV_ELF_WORD_BYTES;
-	  if (cost2 >= cost1)
+	  if (sav[i] <= RISCV_ELF_WORD_BYTES)
 	    break;
 	}
       tbj_htab->tbljalt_count = i - args->start;
     }
 }
 
+/* estimate total benefits and accumulated ones.  */
 static bool
 riscv_record_table_jump_index (htab_t htab, riscv_table_jump_args *args)
 {
@@ -6573,7 +6560,7 @@ riscv_record_table_jump_index (htab_t htab, riscv_table_jump_args *args)
       entry = htab_find (htab, &search);
 
       BFD_ASSERT (entry != NULL);
-      entry->index = idx + 1;
+      entry->index = idx + 1; /* base 1, 0 for not used.  */
       tbj_htab->total_saving += tbj_htab->savings[idx];
       acc[idx] = tbj_htab->total_saving;
     }
@@ -6609,7 +6596,6 @@ riscv_table_jump_profiling (riscv_table_jump_htab_t *table_jump_htab,
   riscv_record_table_jump_index (
 	  table_jump_htab->tbljt_htab,
 	  args);
-  riscv_optimize_table_jump_count (args);
 
   args->start = 32, args->end = 255;
   args->tblj_htab = table_jump_htab->tbljalt_htab;
@@ -6619,53 +6605,48 @@ riscv_table_jump_profiling (riscv_table_jump_htab_t *table_jump_htab,
   riscv_record_table_jump_index (
 	  table_jump_htab->tbljalt_htab,
 	  args);
-  riscv_optimize_table_jump_count (args);
 
-  /* determine the scheme.  */
+  riscv_estimate_table_jump_optimal_count (args);
+
+  /* determine which scheme to apply.  */
+  /* 3 types: cm.jt | cm.jalt | cm.jt + cm.jalt  */
   if (table_jump_htab->tbljalt_count)
-    { /* 3 types: cm.jt | cm.jalt | cm.jt + cm.jalt  */
-	int entry_count, insn_count;
-	int cost1, cost2;
-	int gain1, gain2, gain3, maxgain;
-	entry_count = table_jump_htab->tbljt_count;
-	if (entry_count == 0)
-	  gain1 = 0;
-	else
-	  {
-	    insn_count = buf[entry_count-1] >> 1;
-	    cost1 = 8 * insn_count;
-	    cost2 = 2 * insn_count + RISCV_ELF_WORD_BYTES * entry_count;
-	    gain1 = cost1 - cost2;
-	  }
-	/* cm.jalt */
-	entry_count = table_jump_htab->tbljalt_count;
-	insn_count = (buf[entry_count + 31] - buf[31]) >> 1;
-	cost1 = 8 * insn_count;
-	cost2 = 2 * insn_count + RISCV_ELF_WORD_BYTES * entry_count;
-	gain2 = cost1 - cost2;
-	/* cm.jt' + cm.jalt */
-	entry_count = table_jump_htab->tbljt_count2;
-	if (entry_count == 0)
-	  gain3 = 0;
-	else
-	  {
-	    insn_count = buf[entry_count-1] >> 1;
-	    cost1 = 8 * insn_count;
-	    cost2 = 2 * insn_count + RISCV_ELF_WORD_BYTES * entry_count;
-	    gain3 = cost1 - cost2;
-	  }
-	gain3 += gain2;
-	/* settle up */
-	maxgain = MAX (gain1, MAX (gain2, gain3));
-	if (maxgain == gain1)
-	  table_jump_htab->tbljalt_count = 0;
-	else if (maxgain == gain2)
-	  table_jump_htab->tbljt_count = 0;
-	else
-	  table_jump_htab->tbljt_count = table_jump_htab->tbljt_count2;
+    {
+      int gain1, gain2, gain3, maxgain;
+      int count;
+      /* type 1: cm.jt only */
+      count = table_jump_htab->tbljt_count;
+      if (count == 0)
+	gain1 = 0;
+      else
+	gain1 = buf[count] - RISCV_ELF_WORD_BYTES * count;
+
+      /* type 2: cm.jalt only */
+      count = table_jump_htab->tbljalt_count;
+      if (count == 0)
+	gain2 = 0;
+      else
+	gain2 = (buf[count + 31] - buf[31]) - RISCV_ELF_WORD_BYTES * count;
+
+      /* type 3: cm.jt' + cm.jalt */
+      count = table_jump_htab->tbljt_count2;
+      if (count == 0)
+	gain3 = 0;
+      else
+	gain3 = buf[count] - RISCV_ELF_WORD_BYTES * count;
+      gain3 += gain2;
+
+      /* settle up */
+      maxgain = MAX (gain1, MAX (gain2, gain3));
+      if (maxgain == gain1)
+	table_jump_htab->tbljalt_count = 0;
+      else if (maxgain == gain2)
+	table_jump_htab->tbljt_count = 0;
+      else
+	table_jump_htab->tbljt_count = table_jump_htab->tbljt_count2;
     }
   else
-    { /* cm.jt only  */
+    { /* type 1: cm.jt only  */
       /* blank */
     }
 
