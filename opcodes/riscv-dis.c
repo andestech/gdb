@@ -434,6 +434,42 @@ print_jvt_index (disassemble_info *info, unsigned int index)
   memaddr = pd->jvt_base + index * (xlen/8);
   status = (*info->read_memory_func) (memaddr, packet, xlen / 8, info);
   if (status != 0)
+    { /* try read directly from table jump section.  */
+      static asection *section = NULL;
+      static bfd_vma bias = 0;
+      static bool no_more_try = false;
+      if (!section && !no_more_try)
+	{
+	  section = bfd_get_section_by_name (info->section->owner, TABLE_JUMP_SEC_NAME);
+	  if (section == NULL)
+	    { /* if not found, try symbol "_JVT_BASE_".  */
+	      /* TODO: find the existed API to do this.  */
+	      int i;
+	      for (i=0; i<info->symtab_size; i++)
+		{
+		  if (0 == strcmp ("_JVT_BASE_", info->symtab[i]->name))
+		    {
+		      section = info->symtab[i]->section;
+		      bias = info->symtab[i]->value;
+		      break;
+		    }
+		}
+	    }
+
+	  /* Lookup once only */
+	  if (section == NULL)
+	    no_more_try = true;
+	}
+
+      if (section)
+	{
+	  int off = pd->jvt_base + index * (xlen/8) - pd->jvt_start;
+	  if (bfd_get_section_contents (section->owner, section, packet,
+			off + bias, (xlen/8)))
+	    status = 0;
+	}
+    }
+  if (status != 0)
     return false;
 
   entry_value = xlen == 32 ? bfd_getl32 (packet)

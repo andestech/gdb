@@ -6596,6 +6596,7 @@ riscv_table_jump_profiling (riscv_table_jump_htab_t *table_jump_htab,
   riscv_record_table_jump_index (
 	  table_jump_htab->tbljt_htab,
 	  args);
+  riscv_estimate_table_jump_optimal_count (args); /* cm.jt */
 
   args->start = 32, args->end = 255;
   args->tblj_htab = table_jump_htab->tbljalt_htab;
@@ -6605,8 +6606,7 @@ riscv_table_jump_profiling (riscv_table_jump_htab_t *table_jump_htab,
   riscv_record_table_jump_index (
 	  table_jump_htab->tbljalt_htab,
 	  args);
-
-  riscv_estimate_table_jump_optimal_count (args);
+  riscv_estimate_table_jump_optimal_count (args); /* cm.jalt */
 
   /* determine which scheme to apply.  */
   /* 3 types: cm.jt | cm.jalt | cm.jt + cm.jalt  */
@@ -6619,7 +6619,7 @@ riscv_table_jump_profiling (riscv_table_jump_htab_t *table_jump_htab,
       if (count == 0)
 	gain1 = 0;
       else
-	gain1 = buf[count] - RISCV_ELF_WORD_BYTES * count;
+	gain1 = buf[count - 1] - RISCV_ELF_WORD_BYTES * count;
 
       /* type 2: cm.jalt only */
       count = table_jump_htab->tbljalt_count;
@@ -6633,7 +6633,7 @@ riscv_table_jump_profiling (riscv_table_jump_htab_t *table_jump_htab,
       if (count == 0)
 	gain3 = 0;
       else
-	gain3 = buf[count] - RISCV_ELF_WORD_BYTES * count;
+	gain3 = buf[count - 1] - RISCV_ELF_WORD_BYTES * count;
       gain3 += gain2;
 
       /* settle up */
