@@ -3356,6 +3356,32 @@ andes_ict_list_update_symbol (struct elf_link_hash_entry *h)
     }
   return p;
 }
+
+
+int
+andes_insert_unreferenced_ict_symbols (struct bfd_link_info *info)
+{
+  andes_ict_entry_t *s = nds_ict_sta.list_head;
+  struct elf_link_hash_entry *h;
+  while (s)
+  {
+    h = elf_link_hash_lookup(elf_hash_table(info),
+			     s->name, false, false, false);
+    if (h == NULL)
+      {
+	h = elf_link_hash_lookup(elf_hash_table(info),
+				 s->name, true, false, false);
+	BFD_ASSERT(h);
+	h->root.type = bfd_link_hash_defweak;
+	h->root.u.def.section = bfd_abs_section_ptr;
+	h->root.u.def.value = s->vma;
+	riscv_elf_hash_entry(h)->indirect_call = true;
+      }
+    s = s->next;
+  }
+
+  return 1;
+}
 /* } Andes  */
 
 /* get base sp adjustment */

@@ -478,6 +478,27 @@ typedef struct riscv_elf_link_hash_table link_hash_table_t;
 /* ICT stuff  */
 #define ANDES_ICT_SECTION ".nds.ict"
 
+/* RISC-V ELF linker hash entry.  */
+
+struct riscv_elf_link_hash_entry
+{
+  struct elf_link_hash_entry elf;
+
+#define GOT_UNKNOWN	0
+#define GOT_NORMAL	1
+#define GOT_TLS_GD	2
+#define GOT_TLS_IE	4
+#define GOT_TLS_LE	8
+  char tls_type;
+
+  /* { Andes */
+  bool indirect_call;
+  /* } Andes */
+};
+
+#define riscv_elf_hash_entry(ent) \
+  ((struct riscv_elf_link_hash_entry *) (ent))
+
 typedef struct andes_ict_entry
 {
   struct andes_ict_entry *next;
@@ -514,6 +535,8 @@ andes_ict_entry_t *
 andes_ict_list_create (int index, const char *name, bfd_vma vma, unsigned flags);
 andes_ict_entry_t *
 andes_ict_list_update_symbol (struct elf_link_hash_entry *h);
+int
+andes_insert_unreferenced_ict_symbols (struct bfd_link_info *info);
 /* } ICT stuff */
 
 /* ACE stuff  */

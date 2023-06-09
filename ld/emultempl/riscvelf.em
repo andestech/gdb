@@ -288,10 +288,14 @@ riscv_elf_after_check_relocs (void)
 	  /* Create ict table section in the last input object file.  */
 	  /* The nds_ict_sta.hash_entries has been set in the check_relocs.  */
 	  if (abfd->link.next == NULL)
-	    riscv_elf_create_target_section (&link_info, abfd,
-					     ANDES_ICT_SECTION,
-					     "_INDIRECT_CALL_TABLE_BASE_",
-					     size, 2, flags);
+	    {
+	      riscv_elf_create_target_section (&link_info, abfd,
+					       ANDES_ICT_SECTION,
+					       "_INDIRECT_CALL_TABLE_BASE_",
+					       size, 2, flags);
+	      /* insert un-referenced ICT_ENTRY symbols.  */
+	      andes_insert_unreferenced_ict_symbols (&link_info);
+	    }
 	}
     }
 

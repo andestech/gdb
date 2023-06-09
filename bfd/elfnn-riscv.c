@@ -91,27 +91,6 @@ static void andes_complement_ict_symbols (struct bfd_link_info *info);
 #define ELF_MAXPAGESIZE			0x1000
 #define ELF_COMMONPAGESIZE		0x1000
 
-/* RISC-V ELF linker hash entry.  */
-
-struct riscv_elf_link_hash_entry
-{
-  struct elf_link_hash_entry elf;
-
-#define GOT_UNKNOWN	0
-#define GOT_NORMAL	1
-#define GOT_TLS_GD	2
-#define GOT_TLS_IE	4
-#define GOT_TLS_LE	8
-  char tls_type;
-
-  /* { Andes */
-  bool indirect_call;
-  /* } Andes */
-};
-
-#define riscv_elf_hash_entry(ent) \
-  ((struct riscv_elf_link_hash_entry *) (ent))
-
 struct _bfd_riscv_elf_obj_tdata
 {
   struct elf_obj_tdata root;
@@ -10242,7 +10221,7 @@ andes_complement_ict_symbols (struct bfd_link_info *info)
       else
 	{
 	  s->h = h;
-	  riscv_elf_hash_entry (h)->indirect_call = true;		
+	  riscv_elf_hash_entry (h)->indirect_call = true;
 	}
 
       s = s->next;
