@@ -3486,6 +3486,21 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 		}
 	      if (*asarg != '\0')
 		break;
+
+	      /* Convert "add rd, rs, zero" and "add rd, zero, rs"
+		 to "mv rd, rs".  */
+	      if (strcmp (insn->name, "add") == 0 && !riscv_opts.rvc)
+		{
+		  if (EXTRACT_OPERAND (RS2, ip->insn_opcode) == 0)
+		    ip->insn_opcode &= ~(1 << 5);
+		  else if (EXTRACT_OPERAND (RS1, ip->insn_opcode) == 0)
+		    {
+		      ip->insn_opcode &= ~(1 << 5);
+		      INSERT_OPERAND (RS1, *ip, EXTRACT_OPERAND (RS2, ip->insn_opcode));
+		      INSERT_OPERAND (RS2, *ip, 0);
+		    }
+		}
+
 	      /* Successful assembly.  */
 	      error = NULL;
 	      insn_with_csr = false;
