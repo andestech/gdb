@@ -4277,10 +4277,10 @@ dwarf2_base_index_functions::find_pc_sect_compunit_symtab
   result = recursively_find_pc_sect_compunit_symtab
     (dw2_instantiate_symtab (data, per_objfile, false), pc);
 
-  if (warn_if_readin && result == nullptr)
+  /*if (warn_if_readin && result == nullptr)
     warning (_("(Error: pc %s in address map, but not in symtab.)"),
 	     paddress (objfile->arch (), pc));
-
+  */
   return result;
 }
 
