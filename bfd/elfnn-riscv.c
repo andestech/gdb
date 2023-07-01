@@ -5846,6 +5846,84 @@ _bfd_riscv_table_jump_mark (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
   return true;
 }
 
+/* Relax j to c.j.  */
+
+static bool
+_bfd_riscv_relax_jump (bfd *abfd, asection *sec, asection *sym_sec,
+		       struct bfd_link_info *link_info,
+		       Elf_Internal_Rela *rel,
+		       bfd_vma symval,
+		       bfd_vma max_alignment,
+		       bfd_vma reserve_size ATTRIBUTE_UNUSED,
+		       bool *again,
+		       riscv_pcgp_relocs *pcgp_relocs,
+		       bool undefined_weak ATTRIBUTE_UNUSED)
+{
+  bfd_byte *contents = elf_section_data (sec)->this_hdr.contents;
+  bfd_vma foff = symval - (sec_addr (sec) + rel->r_offset);
+  int rvc = elf_elfheader (abfd)->e_flags & EF_RISCV_RVC;
+  int rd, r_type;
+
+  bfd_vma jal = bfd_getl32 (contents + rel->r_offset);
+  rd = (jal >> OP_SH_RD) & OP_MASK_RD;
+  rvc = rvc && VALID_CJTYPE_IMM (foff);
+
+  if (true)
+    {
+      /* If the call crosses section boundaries, fixed sections or alignment
+	 directive could casue the PC-relative offset to later increase.  */
+      /* table jump has no such limitation.  */
+      struct riscv_elf_link_hash_table *htab = riscv_elf_hash_table (link_info);
+      andes_ld_options_t *andes = &htab->andes;
+      if (!andes->set_relax_cross_section_call
+	  && sym_sec->output_section != sec->output_section)
+	return true;
+
+      /* If the call crosses section boundaries, an alignment directive could
+	 cause the PC-relative offset to later increase, so we need to add in the
+	 max alignment of any section inclusive from the call to the target.
+	 Otherwise, we only need to use the alignment of the current section.  */
+      if (VALID_JTYPE_IMM (foff))
+	{
+	  if (sym_sec->output_section == sec->output_section
+	      && sym_sec->output_section != bfd_abs_section_ptr)
+	    max_alignment = (bfd_vma) 1 << sym_sec->output_section->alignment_power;
+	  foff += ((bfd_signed_vma) foff < 0 ? -max_alignment : max_alignment);
+	}
+
+      /* See if this function call can be shortened.  */
+      if (!VALID_JTYPE_IMM (foff))
+	return true;
+
+      /* Shorten the function call.  */
+      BFD_ASSERT (rel->r_offset + 4 <= sec->size);
+    }
+
+  /* C.J exists on RV32 and RV64, but C.JAL is RV32-only.  */
+  rvc = rvc && (rd == 0 || (rd == X_RA && ARCH_SIZE == 32));
+
+  if (rvc)
+    {
+      /* Relax to C.J[AL] rd, addr.  */
+      r_type = R_RISCV_RVC_JUMP;
+      jal = (rd == 0) ? MATCH_C_J : MATCH_C_JAL;
+    }
+  else
+    {
+      return true;
+    }
+
+  /* Replace the R_RISCV_JAL reloc.  */
+  rel->r_info = ELFNN_R_INFO (ELFNN_R_SYM (rel->r_info), r_type);
+  /* Replace the JAL.  */
+  riscv_put_insn (8 * 2, jal, contents + rel->r_offset);
+
+  /* Delete unnecessary bytes.  */
+  *again = true;
+  return riscv_relax_delete_bytes (abfd, sec, rel->r_offset + 2, 2,
+				   link_info, pcgp_relocs);
+}
+
 /* Relax AUIPC + JALR into JAL.  */
 
 static bool
@@ -7107,6 +7185,9 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	      (type == R_RISCV_CALL
 	       || type == R_RISCV_CALL_PLT))
 	    relax_func = _bfd_riscv_relax_call;
+	  else if (andes->set_relax_jump &&
+		   (type == R_RISCV_JAL))
+	    relax_func = _bfd_riscv_relax_jump;
 	  else if (andes->set_relax_lui &&
 		   (type == R_RISCV_HI20
 		    || type == R_RISCV_LO12_I

@@ -46,6 +46,7 @@ static andes_ld_options_t andes =
   .avoid_btb_miss = 1,
   .set_relax_lui = 1,
   .set_relax_pc = 1,
+  .set_relax_jump = 1,
   .set_relax_call = 1,
   .set_relax_tls_le = 1,
   .set_relax_cross_section_call = $D4_RCSC,

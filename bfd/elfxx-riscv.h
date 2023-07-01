@@ -283,6 +283,8 @@ typedef struct andes_ld_options
   int set_relax_lui;
   /* Defalut do relax pc.  */
   int set_relax_pc;
+  /* Defalut do relax jump.  */
+  int set_relax_jump;
   /* Defalut do relax call.  */
   int set_relax_call;
   /* Defalut do relax tls le.  */
