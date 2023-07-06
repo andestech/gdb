@@ -7383,6 +7383,9 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	  if (h->type != STT_FUNC)
 	    reserve_size =
 	      (h->size - rel->r_addend) > h->size ? 0 : h->size - rel->r_addend;
+	  else
+	    reserve_size = 0; /* b28278, reserve_size should NOT vary. */
+
 	  symtype = h->type;
 	}
 
