@@ -4909,22 +4909,16 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 #if (WITH_TARGET_WORD_BITSIZE == 64)
 	int64_t acc = cpu->regs[rd].s;
 	int64_t mul_val = (int64_t) cpu->regs[ra].b32.i0 * cpu->regs[rb].b32.i0;
-	int64_t res = acc + mul_val;
-	if ((acc > 0) && (mul_val > 0))
+	int64_t res;
+	bool ov = __builtin_add_overflow (acc, mul_val, &res);
+	if (ov)
 	  {
-	    if (res <= 0)
-	      {
-		res = 0x7fffffffffffffffLL;
-		CCPU_UCODE_OV_SET();
-	      }
-	  }
-	else if ((acc < 0) && (mul_val < 0))
-	  {
-	    if (res >= 0)
-	      {
-		res = 0x8000000000000000LL;
-		CCPU_UCODE_OV_SET();
-	      }
+	    if (res < 0)
+	      res = 0x7fffffffffffffffLL;
+	    else
+	      res = 0x8000000000000000LL;
+
+	    CCPU_UCODE_OV_SET();
 	  }
 
 	cpu->regs[rd].s = res;
@@ -4954,22 +4948,16 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 #if (WITH_TARGET_WORD_BITSIZE == 64)
 	int64_t acc = cpu->regs[rd].s;
 	int64_t mul_val = (int64_t) cpu->regs[ra].b32.i0 * cpu->regs[rb].b32.i1;
-	int64_t res = acc + mul_val;
-	if ((acc > 0) && (mul_val > 0))
+	int64_t res;
+	bool ov = __builtin_add_overflow (acc, mul_val, &res);
+	if (ov)
 	  {
-	    if (res <= 0)
-	      {
-		res = 0x7fffffffffffffffLL;
-		CCPU_UCODE_OV_SET();
-	      }
-	  }
-	else if ((acc < 0) && (mul_val < 0))
-	  {
-	    if (res >= 0)
-	      {
-		res = 0x8000000000000000LL;
-		CCPU_UCODE_OV_SET();
-	      }
+	    if (res < 0)
+	      res = 0x7fffffffffffffffLL;
+	    else
+	      res = 0x8000000000000000LL;
+
+	    CCPU_UCODE_OV_SET();
 	  }
 
 	cpu->regs[rd].s = res;
@@ -4999,22 +4987,16 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 #if (WITH_TARGET_WORD_BITSIZE == 64)
 	int64_t acc = cpu->regs[rd].s;
 	int64_t mul_val = (int64_t) cpu->regs[ra].b32.i1 * cpu->regs[rb].b32.i1;
-	int64_t res = acc + mul_val;
-	if ((acc > 0) && (mul_val > 0))
+	int64_t res;
+	bool ov = __builtin_add_overflow (acc, mul_val, &res);
+	if (ov)
 	  {
-	    if (res <= 0)
-	      {
-		res = 0x7fffffffffffffffLL;
-		CCPU_UCODE_OV_SET();
-	      }
-	  }
-	else if ((acc < 0) && (mul_val < 0))
-	  {
-	    if (res >= 0)
-	      {
-		res = 0x8000000000000000LL;
-		CCPU_UCODE_OV_SET();
-	      }
+	    if (res < 0)
+	      res = 0x7fffffffffffffffLL;
+	    else
+	      res = 0x8000000000000000LL;
+
+	    CCPU_UCODE_OV_SET();
 	  }
 
 	cpu->regs[rd].s = res;
@@ -5146,22 +5128,16 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int64_t add_val =
 	  (((int64_t) cpu->regs[ra].b32.i1 * cpu->regs[rb].b32.i0))
 	  + ((int64_t) cpu->regs[ra].b32.i0 * cpu->regs[rb].b32.i1);
-	int64_t res = acc + add_val;
-	if ((acc > 0) && (add_val > 0))
+	int64_t res;
+	bool ov = __builtin_add_overflow (acc, add_val, &res);
+	if (ov)
 	  {
-	    if (res <= 0)
-	      {
-		res = 0x7fffffffffffffffLL;
-		CCPU_UCODE_OV_SET();
-	      }
-	  }
-	else if ((acc < 0) && (add_val < 0))
-	  {
-	    if (res >= 0)
-	      {
-		res = 0x8000000000000000LL;
-		CCPU_UCODE_OV_SET();
-	      }
+	    if (res < 0)
+	      res = 0x7fffffffffffffffLL;
+	    else
+	      res = 0x8000000000000000LL;
+
+	    CCPU_UCODE_OV_SET();
 	  }
 
 	cpu->regs[rd].s = res;
@@ -5193,22 +5169,16 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int64_t add_val =
 	  (((int64_t) cpu->regs[ra].b32.i1 * cpu->regs[rb].b32.i1))
 	  + ((int64_t) cpu->regs[ra].b32.i0 * cpu->regs[rb].b32.i0);
-	int64_t res = acc - add_val;
-	if ((acc > 0) && (add_val < 0))
+	int64_t res;
+	bool ov = __builtin_sub_overflow (acc, add_val, &res);
+	if (ov)
 	  {
-	    if (res <= 0)
-	      {
-		res = 0x7fffffffffffffffLL;
-		CCPU_UCODE_OV_SET();
-	      }
-	  }
-	else if ((acc < 0) && (add_val > 0))
-	  {
-	    if (res >= 0)
-	      {
-		res = 0x8000000000000000LL;
-		CCPU_UCODE_OV_SET();
-	      }
+	    if (res < 0)
+	      res = 0x7fffffffffffffffLL;
+	    else
+	      res = 0x8000000000000000LL;
+
+	    CCPU_UCODE_OV_SET();
 	  }
 
 	cpu->regs[rd].s = res;
@@ -5240,22 +5210,16 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int64_t add_val =
 	  (((int64_t) cpu->regs[ra].b32.i1 * cpu->regs[rb].b32.i0))
 	  + ((int64_t) cpu->regs[ra].b32.i0 * cpu->regs[rb].b32.i1);
-	int64_t res = acc - add_val;
-	if ((acc > 0) && (add_val < 0))
+	int64_t res;
+	bool ov = __builtin_sub_overflow (acc, add_val, &res);
+	if (ov)
 	  {
-	    if (res <= 0)
-	      {
-		res = 0x7fffffffffffffffLL;
-		CCPU_UCODE_OV_SET();
-	      }
-	  }
-	else if ((acc < 0) && (add_val > 0))
-	  {
-	    if (res >= 0)
-	      {
-		res = 0x8000000000000000LL;
-		CCPU_UCODE_OV_SET();
-	      }
+	    if (res < 0)
+	      res = 0x7fffffffffffffffLL;
+	    else
+	      res = 0x8000000000000000LL;
+
+	    CCPU_UCODE_OV_SET();
 	  }
 
 	cpu->regs[rd].s = res;
@@ -5326,22 +5290,16 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int64_t sub_val =
 	  (((int64_t) cpu->regs[ra].b32.i0 * cpu->regs[rb].b32.i0))
 	  - ((int64_t) cpu->regs[ra].b32.i1 * cpu->regs[rb].b32.i1);
-	int64_t res = acc + sub_val;
-	if ((acc > 0) && (sub_val > 0))
+	int64_t res;
+	bool ov = __builtin_add_overflow (acc, sub_val, &res);
+	if (ov)
 	  {
-	    if (res <= 0)
-	      {
-		res = 0x7fffffffffffffffLL;
-		CCPU_UCODE_OV_SET();
-	      }
-	  }
-	else if ((acc < 0) && (sub_val < 0))
-	  {
-	    if (res >= 0)
-	      {
-		res = 0x8000000000000000LL;
-		CCPU_UCODE_OV_SET();
-	      }
+	    if (res < 0)
+	      res = 0x7fffffffffffffffLL;
+	    else
+	      res = 0x8000000000000000LL;
+
+	    CCPU_UCODE_OV_SET();
 	  }
 
 	cpu->regs[rd].s = res;
@@ -5373,22 +5331,16 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int64_t sub_val =
 	  (((int64_t) cpu->regs[ra].b32.i1 * cpu->regs[rb].b32.i1))
 	  - ((int64_t) cpu->regs[ra].b32.i0 * cpu->regs[rb].b32.i0);
-	int64_t res = acc + sub_val;
-	if ((acc > 0) && (sub_val > 0))
+	int64_t res;
+	bool ov = __builtin_add_overflow (acc, sub_val, &res);
+	if (ov)
 	  {
-	    if (res <= 0)
-	      {
-		res = 0x7fffffffffffffffLL;
-		CCPU_UCODE_OV_SET();
-	      }
-	  }
-	else if ((acc < 0) && (sub_val < 0))
-	  {
-	    if (res >= 0)
-	      {
-		res = 0x8000000000000000LL;
-		CCPU_UCODE_OV_SET();
-	      }
+	    if (res < 0)
+	      res = 0x7fffffffffffffffLL;
+	    else
+	      res = 0x8000000000000000LL;
+
+	    CCPU_UCODE_OV_SET();
 	  }
 
 	cpu->regs[rd].s = res;
@@ -5420,22 +5372,16 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	int64_t sub_val =
 	  (((int64_t) cpu->regs[ra].b32.i1 * cpu->regs[rb].b32.i0))
 	  - ((int64_t) cpu->regs[ra].b32.i0 * cpu->regs[rb].b32.i1);
-	int64_t res = acc + sub_val;
-	if ((acc > 0) && (sub_val > 0))
+	int64_t res;
+	bool ov = __builtin_add_overflow (acc, sub_val, &res);
+	if (ov)
 	  {
-	    if (res <= 0)
-	      {
-		res = 0x7fffffffffffffffLL;
-		CCPU_UCODE_OV_SET();
-	      }
-	  }
-	else if ((acc < 0) && (sub_val < 0))
-	  {
-	    if (res >= 0)
-	      {
-		res = 0x8000000000000000LL;
-		CCPU_UCODE_OV_SET();
-	      }
+	    if (res < 0)
+	      res = 0x7fffffffffffffffLL;
+	    else
+	      res = 0x8000000000000000LL;
+
+	    CCPU_UCODE_OV_SET();
 	  }
 
 	cpu->regs[rd].s = res;
@@ -5681,6 +5627,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_KADD64:
       {
 	int64_t x, y, res;
+	bool ov;
 	if (RISCV_XLEN (cpu) == 64)
 	  {
 	    x = cpu->regs[ra].s;
@@ -5692,22 +5639,15 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    y = get_double (cpu, rb);
 	  }
 
-	res = x + y;
-	if ((x > 0) && (y > 0))
+	ov = __builtin_add_overflow (x, y, &res);
+	if (ov)
 	  {
-	    if (res <= 0)
-	      {
-		res = 0x7fffffffffffffffLL;
-	        CCPU_UCODE_OV_SET();
-	      }
-	  }
-	else if ((x < 0) && (y < 0))
-	  {
-	    if (res >= 0)
-	      {
-		res = 0x8000000000000000LL;
-	        CCPU_UCODE_OV_SET();
-	      }
+	    if (res < 0)
+	      res = 0x7fffffffffffffffLL;
+	    else
+	      res = 0x8000000000000000LL;
+
+	    CCPU_UCODE_OV_SET();
 	  }
 
 	if (RISCV_XLEN (cpu) == 64)
@@ -5823,6 +5763,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_KSUB64:
       {
 	int64_t x, y, res;
+	bool ov;
 	if (RISCV_XLEN (cpu) == 64)
 	  {
 	    x = cpu->regs[ra].s;
@@ -5834,23 +5775,17 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	    y = get_double (cpu, rb);
 	  }
 
-	res = x - y;
-	if ((x > 0) && (y < 0))
+	ov = __builtin_sub_overflow (x, y, &res);
+	if (ov)
 	  {
-	    if (res <= 0)
-	      {
-		res = 0x7fffffffffffffffLL;
-	        CCPU_UCODE_OV_SET();
-	      }
+	    if (res < 0)
+	      res = 0x7fffffffffffffffLL;
+	    else
+	      res = 0x8000000000000000LL;
+
+	    CCPU_UCODE_OV_SET();
 	  }
-	else if ((x < 0) && (y > 0))
-	  {
-	    if (res >= 0)
-	      {
-		res = 0x8000000000000000LL;
-	        CCPU_UCODE_OV_SET();
-	      }
-	  }
+
 	if (RISCV_XLEN (cpu) == 64)
 	  cpu->regs[rd].s = res;
 	else
@@ -5957,6 +5892,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_KMAR64:
       {
 	int64_t acc, mul_val, res;
+	bool ov;
 
 #if (WITH_TARGET_WORD_BITSIZE == 32)
 	acc = get_double (cpu, rd);
@@ -5966,22 +5902,15 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	mul_val = ((int64_t) cpu->regs[ra].b32.i0 * cpu->regs[rb].b32.i0)
 		  + ((int64_t) cpu->regs[ra].b32.i1 * cpu->regs[rb].b32.i1);
 #endif
-	res = acc + mul_val;
-	if ((acc > 0) && (mul_val > 0))
+	ov = __builtin_add_overflow (acc, mul_val, &res);
+	if (ov)
 	  {
-	    if (res <= 0)
-	      {
-		res = 0x7fffffffffffffffLL;
-		CCPU_UCODE_OV_SET();
-	      }
-	  }
-	else if ((acc < 0) && (mul_val < 0))
-	  {
-	    if (res >= 0)
-	      {
-		res = 0x8000000000000000LL;
-		CCPU_UCODE_OV_SET();
-	      }
+	    if (res < 0)
+	      res = 0x7fffffffffffffffLL;
+	    else
+	      res = 0x8000000000000000LL;
+
+	    CCPU_UCODE_OV_SET();
 	  }
 
 	if (RISCV_XLEN (cpu) == 32)
@@ -6021,6 +5950,7 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
     case MATCH_KMSR64:
       {
 	int64_t acc, mul_val, res;
+	bool ov;
 
 #if (WITH_TARGET_WORD_BITSIZE == 32)
 	acc = get_double (cpu, rd);
@@ -6030,24 +5960,17 @@ execute_p (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
 	mul_val = ((int64_t) cpu->regs[ra].b32.i0 * cpu->regs[rb].b32.i0)
 		  + ((int64_t) cpu->regs[ra].b32.i1 * cpu->regs[rb].b32.i1);
 #endif
-	res = acc - mul_val;
+	ov = __builtin_sub_overflow (acc, mul_val, &res);
+	if (ov)
+	  {
+	    if (res < 0)
+	      res = 0x7fffffffffffffffLL;
+	    else
+	      res = 0x8000000000000000LL;
 
-	if ((acc > 0) && (mul_val < 0))
-	  {
-	    if (res <= 0)
-	      {
-		res = 0x7fffffffffffffffLL;
-		CCPU_UCODE_OV_SET();
-	      }
+	    CCPU_UCODE_OV_SET();
 	  }
-	else if ((acc < 0) && (mul_val > 0))
-	  {
-	    if (res >= 0)
-	      {
-		res = 0x8000000000000000LL;
-		CCPU_UCODE_OV_SET();
-	      }
-	  }
+
 	if (RISCV_XLEN (cpu) == 32)
 	  set_double (cpu, rd, res);
 	else
