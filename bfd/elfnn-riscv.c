@@ -6808,7 +6808,11 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
     return true;
 
   /* TODO: if zcmt is not enabled.  */
-  if (!andes->set_table_jump
+  /* b28377: table jump replace wrong.
+   *         relax_section might be invoked more than one time.
+   *         but table jump must do only once.
+   */
+  if ((!andes->set_table_jump || is_init > 1)
       && info->relax_pass >= PASS_ZCE_TABLE_JUMP_COLLECT
       && info->relax_pass <= PASS_ZCE_TABLE_JUMP_APPLY)
     return true;
@@ -6945,9 +6949,12 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	}
       return true;
     case PASS_ANDES_GP_PCREL ... PASS_ANDES_GP_2:
-    //case PASS_ZCE_TABLE_JUMP_COLLECT ... PASS_ZCE_TABLE_JUMP_APPLY:
-    case PASS_SHORTEN_ORG ... PASS_DELETE_ORG:
+    case PASS_SHORTEN_ORG:
+    case PASS_ZCE_TABLE_JUMP_COLLECT ... PASS_ZCE_TABLE_JUMP_APPLY:
     case PASS_ALIGN_ORG ... PASS_RESLOVE:
+      break;
+    case PASS_DELETE_ORG:
+      is_init += 1; /* track relax_section rounds.  */
       break;
     default:
       (*_bfd_error_handler) (_("error: Unknow relax pass."));
