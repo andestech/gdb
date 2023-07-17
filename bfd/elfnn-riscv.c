@@ -11066,73 +11066,6 @@ riscv_elf_output_arch_syms (bfd *output_bfd ATTRIBUTE_UNUSED,
   return true;
 }
 
-/* Store the machine number in the flags field.  */
-
-static bool
-riscv_elf_final_write_processing (bfd *abfd ATTRIBUTE_UNUSED)
-{
-#ifdef OLD_ICT_OUTPUT
-  ict_entry_t *head;
-
-  /* Export the ICT table if needed.  */
-  /* TODO: should we support new linker option to let user
-     can define their own ict table name.  */
-  if (exported_ict_table_head)
-    {
-      FILE *ict_table_file = fopen ("nds_ict.s", FOPEN_WT);
-      if(ict_table_file == NULL)
-	{
-	  (*_bfd_error_handler) (_("Error: Fail to genertare nds_ict.s."));
-	  return false;
-	}
-
-      fprintf (ict_table_file, "\t.section " ANDES_ICT_SECTION ", \"ax\"\n");
-      /* The exported ict table can not be linked with the patch code
-	 that use the different ict model.  */
-      if (ict_model == 0)
-	fprintf (ict_table_file, "\t.attribute ict_model, \"tiny\"\n");
-      else if (ict_model == 1)
-	fprintf (ict_table_file, "\t.attribute ict_model, \"small\"\n");
-      else
-	fprintf (ict_table_file, "\t.attribute ict_model, \"large\"\n");
-      fprintf (ict_table_file, ".global _INDIRECT_CALL_TABLE_BASE_\n"
-	       "_INDIRECT_CALL_TABLE_BASE_:\n");
-      fprintf (ict_table_file, "\t.option push\n\t.option norelax\n");
-
-      /* Output each entry of ict table according to different
-	 ict models.  */
-      head = exported_ict_table_head;
-      while (head)
-	{
-	  if (ict_model == 2)
-	    fprintf (ict_table_file, "\t.dword\t%s\n",
-		     head->h->root.root.string);
-	  else if (ict_model == 1)
-	    fprintf (ict_table_file, "\ttail\t%s\n",
-		     head->h->root.root.string);
-	  else
-	    fprintf (ict_table_file, "\tjal\tt1, %s\n",
-		     head->h->root.root.string);
-	  head = head->next;
-	}
-
-      fprintf (ict_table_file, "\t.option pop\n");
-
-      /* Finish exporting the ict table, close it
-	 and free the unused data.  */
-      while (exported_ict_table_head)
-	{
-	  head = exported_ict_table_head;
-	  exported_ict_table_head = exported_ict_table_head->next;
-	  free (head);
-	}
-      fclose (ict_table_file);
-    }
-#endif /* OLD_ICT_OUTPUT */
-
-  return true;
-}
-
 /* Find the symbol '__global_pointer$' in the output bfd.
    If not found, set it's value to (sdata + 0x800) by default.
    TODO: figure out the best SDA_BASE/GP value.
@@ -12047,7 +11980,6 @@ andes_relax_fls_gp (
 /* { Andes */
 #define elf_backend_link_output_symbol_hook  riscv_elf_output_symbol_hook
 #define elf_backend_output_arch_syms	     riscv_elf_output_arch_syms
-#define elf_backend_final_write_processing   riscv_elf_final_write_processing
 /* } Andes */
 
 #define elf_backend_can_gc_sections		1
