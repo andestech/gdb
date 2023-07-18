@@ -1092,6 +1092,12 @@ riscv_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 
 	  /* It is referenced by a non-shared object.  */
 	  h->ref_regular = 1;
+
+	  /* "__jvt_base$" is not save to relax. (b28438) */
+	  if (h && 0 == strcmp (h->root.root.string, RISCV_TABLE_JUMP_BASE_SYMBOL))
+	    {
+	      ((Elf_Internal_Rela *) rel)->r_user |= REL_R_USER_FLG_JVT;
+	    }
 	}
 
       switch (r_type)
@@ -1158,7 +1164,7 @@ riscv_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	case R_RISCV_RVC_JUMP:
 	  /* In shared libraries and pie, these relocs are known
 	     to bind locally.  */
-	  ((Elf_Internal_Rela *)rel)->r_user = REL_R_USER_FLG_RAW;
+	  ((Elf_Internal_Rela *)rel)->r_user |= REL_R_USER_FLG_RAW;
 	  if (bfd_link_pic (info))
 	    break;
 	  goto static_reloc;
@@ -3058,7 +3064,7 @@ riscv_elf_relocate_section (bfd *output_bfd,
 	case R_RISCV_JAL:
 	  /* This line has to match the check in _bfd_riscv_relax_section.  */
 	  if (bfd_link_pic (info) && h != NULL && h->plt.offset != MINUS_ONE
-	      && rel->r_user != REL_R_USER_FLG_RAW)
+	      && (rel->r_user & REL_R_USER_FLG_RAW) == 0)
 	    {
 	      /* Refer to the PLT entry.  */
 	      relocation = sec_addr (htab->elf.splt) + h->plt.offset;
@@ -10633,7 +10639,7 @@ andes_relax_pc_gp_insn (
 
   /* Chain the _LO relocs to their cooresponding _HI reloc to compute the
    * actual target address.  */
-  riscv_pcgp_hi_reloc *hi;
+  riscv_pcgp_hi_reloc *hi = NULL;
   riscv_pcgp_hi_reloc hi_reloc;
   memset (&hi_reloc, 0, sizeof (hi_reloc));
   switch (ELFNN_R_TYPE (rel->r_info))
@@ -10698,6 +10704,12 @@ andes_relax_pc_gp_insn (
   if ((data_start == 0) || (sec_addr (sym_sec) < data_start))
     guard_size += info->relro ? andes->set_relax_page_size * 2
 				   : andes->set_relax_page_size;
+
+  if (rel->r_user & REL_R_USER_FLG_JVT
+      || (hi && hi->rel->r_user & REL_R_USER_FLG_JVT))
+    { /* symbol "__jvt_base$" is not save to relax. (b28438)  */
+      return true;
+    }
 
   if (gp)
     {
