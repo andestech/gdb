@@ -619,7 +619,8 @@ typedef struct andes_linker_state
   andes_ld_options_t *opt;
   andes_irelx_t *ext_irel_list;
   bfd_vma prev_aligned_offset;
-  int check_start_export_sym : 1;
+  uint check_start_export_sym:1;
+  uint use_table_jump:1;
 } andes_linker_state_t;
 /* } Andes  */
 

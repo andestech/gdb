@@ -993,6 +993,7 @@ riscv_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	  }
       }
     andes->set_table_jump = (uint) determine;
+    nsta.use_table_jump = ena_zcmt ? 1 : 0;
     /* create section at "riscv_elf_after_check_relocs".  */
   } /* Andes */
 
@@ -7138,7 +7139,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	}
       else if (info->relax_pass == PASS_ZCE_TABLE_JUMP_COLLECT)
 	{
-	  if (!riscv_use_table_jump (info))
+	  if (!nsta.use_table_jump)
 	    return true;
 
 	  if (info->relax_trip == 0 || info->relax_trip == 2)
@@ -7169,7 +7170,7 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	}
       else if (info->relax_pass == PASS_ZCE_TABLE_JUMP_APPLY)
 	{
-	  if (!riscv_use_table_jump (info))
+	  if (!nsta.use_table_jump)
 	    return true;
 
 	  if (andes->set_relax_call &&
