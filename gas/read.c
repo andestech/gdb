@@ -1196,6 +1196,12 @@ read_a_source_file (const char *name)
 		      if (next_char == ' ' || next_char == '\t')
 			input_line_pointer++;
 
+                      /* Avoid emitting a cached instruction
+                         after a directive.  */
+#ifdef md_cleanup
+                      md_cleanup ();
+#endif
+
 		      /* Input_line is restored.
 			 Input_line_pointer->1st non-blank char
 			 after pseudo-operation.  */
