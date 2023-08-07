@@ -340,10 +340,11 @@ typedef struct execit_itable_entry
   int est_count;        /* when hashing  */
   int ref_count;        /* when replacing  */
   int rank_order;       /* when building itable  */
-  int itable_index;	/* when replacing/relocating  */
+  int itable_index;     /* when replacing/relocating  */
   int entries;          /* itable slots  */
   uint32_t insn;        /* raw insn  */
   uint32_t fixed;       /* fixed parts of insn  */
+  int is_mergeable:1;   /* is symbol mergeable */
 } execit_itable_t;
 
 typedef struct execit_irel_entry

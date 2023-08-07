@@ -5216,6 +5216,7 @@ andes_execit_render_hash (execit_context_t *ctx)
 	  || (!andes->execit_flags.no_auipc
 	      && (rtype == R_RISCV_CALL || rtype == R_RISCV_PCREL_HI20)))
 	{
+	  bool is_mergeable = false;
 	  unsigned long r_symndx = ELFNN_R_SYM (irel->r_info);
 	  if (r_symndx < symtab_hdr->sh_info)
 	    { /* Local symbol.  */
@@ -5307,6 +5308,7 @@ andes_execit_render_hash (execit_context_t *ctx)
 	  if (sym_sec->sec_info_type == SEC_INFO_TYPE_MERGE
 	      && (sym_sec->flags & SEC_MERGE))
 	    {
+	      is_mergeable = true;
 	      if (symtype == STT_SECTION)
 		symval += irel->r_addend;
 
@@ -5325,11 +5327,19 @@ andes_execit_render_hash (execit_context_t *ctx)
 	   * Why not use relocation/VMA as it?
 	   * the same relocations are not necessary aliases but of the same
 	   * section and offset are (almost?) (b23753)  */
-	  relocation_section = (intptr_t) ctx->ie.isec;
-	  relocation_offset = ctx->ie.addend;
-
 	  symval += sec_addr (sym_sec);
 	  ctx->ie.relocation = symval;
+	  if (is_mergeable)
+	    {
+	      relocation_section = 0;
+	      relocation_offset = symval;
+	      ctx->ie.is_mergeable = 1;
+	    }
+	  else
+	    {
+	      relocation_section = (intptr_t) ctx->ie.isec;
+	      relocation_offset = ctx->ie.addend;
+	    }
 
 	  /* special treaments for certain types of relocations.  */
 	  if (rtype == R_RISCV_JAL &&
@@ -9686,6 +9696,9 @@ andes_execit_itable_lookup (execit_context_t *ctx,
 	  if ((rta == R_RISCV_HI20 && rtb == R_RISCV_HI20)
 	      || ((rta == R_RISCV_CALL || rta == R_RISCV_PCREL_HI20)
 		  && (rtb == R_RISCV_CALL || rtb == R_RISCV_PCREL_HI20)))
+	    return b;
+	  if ((a->is_mergeable && b->is_mergeable)
+	      && (a->relocation == b->relocation))
 	    return b;
 	  if ((ELFNN_R_SYM (a->irel_copy.r_info)
 	       != ELFNN_R_SYM (b->irel_copy.r_info))
