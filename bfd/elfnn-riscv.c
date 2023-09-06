@@ -4820,6 +4820,7 @@ struct riscv_pcgp_hi_reloc
   Elf_Internal_Rela *rel;
   int is_deleted:1;
   int is_marked:1;  /* by the lo12 pal  */
+  int is_keep:1;    /* by the lo12 pal  */
   /* } Andes */
 };
 
@@ -4997,7 +4998,8 @@ andes_relax_pc_gp_insn (
   riscv_pcgp_relocs *pcgp_relocs,
   bool undefined_weak);
 static bool
-riscv_mark_pcgp_hi_reloc (riscv_pcgp_relocs *p, riscv_pcgp_hi_reloc *hi);
+riscv_mark_pcgp_hi_reloc (riscv_pcgp_relocs *p, riscv_pcgp_hi_reloc *hi,
+			  bool keep);
 static void
 andes_relax_pc_gp_insn_final (riscv_pcgp_relocs *p);
 
@@ -5510,7 +5512,7 @@ riscv_record_pcgp_hi_reloc (riscv_pcgp_relocs *p, bfd_vma hi_sec_off,
 			    unsigned hi_sym, asection *sym_sec,
 			    bool undefined_weak)
 {
-  riscv_pcgp_hi_reloc *new = bfd_malloc (sizeof (*new));
+  riscv_pcgp_hi_reloc *new = bfd_zmalloc (sizeof (*new));
   if (!new)
     return false;
   new->hi_sec_off = hi_sec_off;
@@ -6436,7 +6438,7 @@ _bfd_riscv_relax_pc (bfd *abfd ATTRIBUTE_UNUSED,
 	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_GPREL_I);
 	      rel->r_addend += hi_reloc.hi_addend;
 	    }
-	  return riscv_mark_pcgp_hi_reloc (pcgp_relocs, hi);
+	  return riscv_mark_pcgp_hi_reloc (pcgp_relocs, hi, false);
 
 	case R_RISCV_PCREL_LO12_S:
 	  if (undefined_weak)
@@ -6454,7 +6456,7 @@ _bfd_riscv_relax_pc (bfd *abfd ATTRIBUTE_UNUSED,
 	      rel->r_info = ELFNN_R_INFO (sym, R_RISCV_GPREL_S);
 	      rel->r_addend += hi_reloc.hi_addend;
 	    }
-	  return riscv_mark_pcgp_hi_reloc (pcgp_relocs, hi);
+	  return riscv_mark_pcgp_hi_reloc (pcgp_relocs, hi, false);
 
 	case R_RISCV_PCREL_HI20:
 	  riscv_record_pcgp_hi_reloc (pcgp_relocs,
@@ -10692,7 +10694,8 @@ andes_relax_execit_ite (
 }
 
 static bool
-riscv_mark_pcgp_hi_reloc (riscv_pcgp_relocs *p,riscv_pcgp_hi_reloc *hi)
+riscv_mark_pcgp_hi_reloc (riscv_pcgp_relocs *p,riscv_pcgp_hi_reloc *hi,
+			  bool keep)
 {
   bool out = false;
   bfd_vma hi_sec_off = hi->hi_sec_off;
@@ -10702,7 +10705,10 @@ riscv_mark_pcgp_hi_reloc (riscv_pcgp_relocs *p,riscv_pcgp_hi_reloc *hi)
     if (c->hi_sec_off == hi_sec_off)
       {
 	out = true;
-	c->is_marked = 1;
+	if (keep)
+	  c->is_keep = 1;
+	else
+	  c->is_marked = 1;
       }
 
   return out;
@@ -10844,12 +10850,13 @@ andes_relax_pc_gp_insn (
       if (do_replace)
 	{
 	  bfd_put_32 (abfd, insn, contents + rel->r_offset);
-	  return riscv_mark_pcgp_hi_reloc (pcgp_relocs, hi);
+	  return riscv_mark_pcgp_hi_reloc (pcgp_relocs, hi, false);
 	}
       else
 	{
 	  BFD_ASSERT (hi);
-	  hi->rel = NULL; /* mark (no relax it)  */
+	  /* mark (no relax it)  */
+	  return riscv_mark_pcgp_hi_reloc (pcgp_relocs, hi, true);
 	}
     }
 
@@ -11066,7 +11073,7 @@ andes_relax_pc_gp_insn_final (riscv_pcgp_relocs *p)
 
   for (c = p->hi; c != NULL; c = c->next)
     {
-      if (c->rel && c->is_marked)
+      if (c->rel && c->is_marked && !c->is_keep)
 	{ /* We can delete the unnecessary AUIPC and reloc.  */
 	  c->rel->r_info = ELFNN_R_INFO (0, R_RISCV_DELETE);
 	  c->rel->r_addend = 4;
