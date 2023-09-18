@@ -9076,7 +9076,12 @@ riscv_elf_execit_check_insn_available (uint32_t insn,
       || (insn & MASK_EBREAK) == MATCH_EBREAK
       || (insn & 0x7f) == 0x7b /* ACE  */
       || ((insn & (MASK_JALR | MASK_RD | MASK_RS1 | MASK_IMM))
-	  == (MATCH_JALR | (X_RA << OP_SH_RS1)))) /* ret  */
+	  == (MATCH_JALR | (X_RA << OP_SH_RS1))) /* ret  */
+      || (insn & MASK_URET) == MATCH_URET /* uret */
+      || (insn & MASK_SRET) == MATCH_SRET /* sret */
+      || (insn & MASK_HRET) == MATCH_HRET /* hret */
+      || (insn & MASK_MRET) == MATCH_MRET /* mret */
+      || (insn & MASK_DRET) == MATCH_DRET) /* dret */
     return false;
 
   /* configurable sets  */
