@@ -592,6 +592,7 @@ typedef struct andes_irelx
 typedef struct execit_state
 {
   /* EXECIT hash table, used to store all patterns of code.  */
+  asection *first_sec;
   asection *final_sec;
   asection *itable_section;
   execit_rank_t *rank_list;

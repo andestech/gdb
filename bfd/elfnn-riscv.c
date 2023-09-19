@@ -4904,6 +4904,8 @@ static int
 andes_execit_rank_insn (execit_hash_t *he);
 static int
 andes_execit_rank_imported_insn (execit_hash_t *he);
+static int
+andes_execit_free (execit_hash_t *he);
 static void
 andes_execit_build_itable (struct bfd_link_info *info);
 static bool
@@ -6927,6 +6929,56 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
       && info->relax_pass <= PASS_EXECIT_2)
     return true;
 
+  /* The exp_seg_adjust is enum phase_enum (0x5),
+     and defined in ld/ldexp.h.  */
+  if (*(htab->data_segment_phase) == 5)
+    {
+      if (info->relax_pass == PASS_EXECIT_1)
+	{ /* stop recursive hell.  */
+	  if (info->relax_trip > 0)
+	    return true;
+
+	  if (sec == execit.first_sec)
+	    { /* reset hash and restart EXECIT_1.  */
+	      /* hash insn. */
+	      execit.is_init = 0;
+	      if (execit.code_hash.memory)
+		{
+		  andes_execit_traverse_insn_hash (andes_execit_free);
+		  bfd_hash_table_free (&execit.code_hash);
+		}
+	  /* rank insn.  */
+	  if (execit.rank_list)
+	    {
+	      execit_rank_t *p, *pp;
+	      p = execit.rank_list;
+	      while (p)
+		{
+		  pp = p;
+		  p = p->next;
+		  free (pp);
+		}
+	      execit.rank_list = NULL;
+	    }
+	  /* build itable.  */
+	  execit.raw_itable_entries = 0;
+	  execit.next_itable_index = 0;
+	  execit.is_built = 0;
+	  if (execit.itable_array)
+	    {
+	      free (execit.itable_array);
+	      execit.itable_array = NULL;
+	    }
+	  *again = true;
+	  }
+	  return true;
+	}
+      else if (info->relax_pass == PASS_EXECIT_2)
+	{ /* there must be no seg_adjust between EXECIT passes.  */
+	  return true;
+	}
+    }
+
   /* exec.it initializatoin if enabled.  */
   if (!execit.is_init && info->relax_pass == PASS_EXECIT_1)
     {
@@ -6981,6 +7033,8 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
   switch (info->relax_pass)
     {
     case PASS_ANDES_INIT:
+      if (execit.first_sec == NULL)
+	execit.first_sec = sec;
       if (execit.is_built && execit.is_replaced)
 	return true;
       execit.final_sec = sec;
@@ -8351,6 +8405,27 @@ andes_execit_rank_imported_insn (execit_hash_t *he)
     pp->next = re;
   else
     execit.rank_list = re;
+
+  return true;
+}
+
+/* free each insn hash entry deeply.  */
+
+static int
+andes_execit_free (execit_hash_t *he)
+{
+  if (he->irels)
+    {
+      execit_irel_t *p, *pp;
+      p = he->irels;
+      while (p)
+	{
+	  pp = p;
+	  p = p->next;
+	  free (pp);
+	}
+      he->irels = NULL;
+    }
 
   return true;
 }
