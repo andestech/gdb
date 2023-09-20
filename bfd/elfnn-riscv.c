@@ -8896,7 +8896,10 @@ riscv_relocation_check (struct bfd_link_info *info,
 	{
 	case R_RISCV_RELAX_REGION_BEGIN:
 	  result = 0;
-	  irel_save = *irel; /* in case multiple relocations.  */
+	  /* don't alter irel_save when optimize == 0 (converting RVC to RVI)
+	     (b28863)  */
+	  if (optimize)
+	    irel_save = *irel; /* in case multiple relocations.  */
 	  /* to ignore code block.  */
 	  is_no_execit = (*irel)->r_addend & R_RISCV_RELAX_REGION_NO_EXECIT_FLAG;
 	  is_inner_loop = execit_loop_aware
