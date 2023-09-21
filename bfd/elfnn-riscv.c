@@ -10972,6 +10972,11 @@ andes_relax_gp_insn (uint32_t *insn, Elf_Internal_Rela *rel,
 		     riscv_pcgp_hi_reloc_t *hi, asection *sym_sec,
 		     bfd_vma symval, bfd_vma gp, bfd_vma data_start)
 {
+  /* absolute address symbols are not safe to do gp relaxations.
+     the offset might increase after estimations.  */
+  if (sym_sec->output_section == bfd_abs_section_ptr)
+    return false;
+
   /* symbols are not necessary aligned to data lenght.
      worst alignment is picked.  */
   bfd_signed_vma bias = symval - gp;
