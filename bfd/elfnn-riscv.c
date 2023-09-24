@@ -6903,7 +6903,11 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	  && info->relax_pass <= PASS_DELETE_ORG)
       /* The exp_seg_relro_adjust is enum phase_enum (0x4),
 	 and defined in ld/ldexp.h.  */
-      || *(htab->data_segment_phase) == 4)
+      || *(htab->data_segment_phase) == 4
+      /* b28830: section bases and GP changed during exp_seg_adjust.  */
+      || (*(htab->data_segment_phase) == 5
+	  && info->relax_pass != PASS_EXECIT_1)
+     )
     return true;
 
   /* TODO: if zcmt is not enabled.  */
@@ -6929,24 +6933,35 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
       && info->relax_pass <= PASS_EXECIT_2)
     return true;
 
-  /* The exp_seg_adjust is enum phase_enum (0x5),
+  /* b28830: The exp_seg_adjust is enum phase_enum (0x5),
      and defined in ld/ldexp.h.  */
-  if (*(htab->data_segment_phase) == 5)
+  while (info->relax_pass == PASS_EXECIT_1) /* once */
     {
-      if (info->relax_pass == PASS_EXECIT_1)
+      static bfd_vma last_gp, curr_gp = 0;
+
+      if (*(htab->data_segment_phase) == 0)
+	{
+	  if (sec == execit.first_sec)
+	    {
+ 	      last_gp = curr_gp;
+	      curr_gp = riscv_global_pointer_value (info);
+	    }
+	  break;
+	}
+
+      if ((*(htab->data_segment_phase) == 5) && (sec == execit.first_sec))
 	{ /* stop recursive hell.  */
-	  if (info->relax_trip > 0)
+	  if ((info->relax_trip > 0) && (curr_gp == last_gp))
 	    return true;
 
-	  if (sec == execit.first_sec)
-	    { /* reset hash and restart EXECIT_1.  */
-	      /* hash insn. */
-	      execit.is_init = 0;
-	      if (execit.code_hash.memory)
-		{
-		  andes_execit_traverse_insn_hash (andes_execit_free);
-		  bfd_hash_table_free (&execit.code_hash);
-		}
+	  /* reset hash and restart EXECIT_1.  */
+	  /* hash insn. */
+	  execit.is_init = 0;
+	  if (execit.code_hash.memory)
+	    {
+	      andes_execit_traverse_insn_hash (andes_execit_free);
+	      bfd_hash_table_free (&execit.code_hash);
+	    }
 	  /* rank insn.  */
 	  if (execit.rank_list)
 	    {
@@ -6970,13 +6985,9 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	      execit.itable_array = NULL;
 	    }
 	  *again = true;
-	  }
-	  return true;
 	}
-      else if (info->relax_pass == PASS_EXECIT_2)
-	{ /* there must be no seg_adjust between EXECIT passes.  */
-	  return true;
-	}
+      return true;
+      break; /* once */
     }
 
   /* exec.it initializatoin if enabled.  */
