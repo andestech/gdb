@@ -62,6 +62,7 @@ struct riscv_cl_insn
       int method;
       int state;
       int type;
+      int relax;
       int index;
       int offset;
     } cmodel;
@@ -612,14 +613,16 @@ static struct riscv_combiner *insn_combiner;
   | ((range) << 6))
 #define RELAX_BRANCH_RANGE(i) (((i) >> 6) & 0xF)
 
-#define RELAX_CMODEL_ENCODE(type, length, index)	\
+#define RELAX_CMODEL_ENCODE(type, relax, length, index)	\
   ((relax_substateT) 					\
    (0xd0000000						\
     | ((type) << 0)					\
+    | ((relax) << 7)					\
     | ((length) << 8)					\
     | ((index) << 16)))
 #define RELAX_CMODEL_P(i) (((i) & 0xf0000000) == 0xd0000000)
-#define RELAX_CMODEL_TYPE(i) ((i) & 0xff)
+#define RELAX_CMODEL_TYPE(i) ((i) & 0x7f)
+#define RELAX_CMODEL_RELAX(i) (((i) >> 7) & 0x01)
 #define RELAX_CMODEL_LENGTH(i) (((i) >> 8) & 0xff)
 #define RELAX_CMODEL_INDEX(i) (((i) >> 16) & 0xff)
 
@@ -991,6 +994,7 @@ static unsigned
 relaxed_cmodel_length (fragS *fragp, asection *sec)
 {
   int type = RELAX_CMODEL_TYPE (fragp->fr_subtype);
+  int relax = RELAX_CMODEL_RELAX (fragp->fr_subtype);
   int length = RELAX_CMODEL_LENGTH (fragp->fr_subtype);
   int index = RELAX_CMODEL_INDEX (fragp->fr_subtype);
   int is_same_sec = is_same_section_symbol (fragp->fr_symbol, sec);
@@ -1069,7 +1073,7 @@ relaxed_cmodel_length (fragS *fragp, asection *sec)
       as_fatal (_("internal error: invalid CModel index!"));
     }
 
-  fragp->fr_subtype = RELAX_CMODEL_ENCODE (type, length, index);
+  fragp->fr_subtype = RELAX_CMODEL_ENCODE (type, relax, length, index);
   return length;
 }
 /* } Andes */
@@ -2120,7 +2124,7 @@ append_insn (struct riscv_cl_insn *ip, expressionS *address_expr,
 		    mne = "fclass.s";
 		  nsta.frag_b22827 = frag_now;
 		  macro_build (NULL, mne, "d,s,C", 0, insn_fp_rd(ip->insn_opcode),
-			       0, TYPE_B22827, CSI_B22827, 0);
+			       0, TYPE_B22827, 0, CSI_B22827, 0);
 		}
 
 	      /* to provide a separate flag to turn it off, with the following rule:
@@ -2131,7 +2135,7 @@ append_insn (struct riscv_cl_insn *ip, expressionS *address_expr,
 		{
 		  nsta.frag_b22827 = frag_now;
 		  macro_build (NULL, "nop", "C",
-			       0, TYPE_B22827_1, CSI_B22827_1, 0);
+			       0, TYPE_B22827_1, 0, CSI_B22827_1, 0);
 		}
 	    }
 	}
@@ -2145,8 +2149,8 @@ append_insn (struct riscv_cl_insn *ip, expressionS *address_expr,
 	  symbolS *symbol = address_expr ? address_expr->X_add_symbol : NULL;
 	  offsetT offset = address_expr ? address_expr->X_add_number : 0;
 	  add_insn_grow_done (ip, length, 0,
-			      RELAX_CMODEL_ENCODE (ip->cmodel.type, length,
-						   ip->cmodel.index),
+			      RELAX_CMODEL_ENCODE (ip->cmodel.type, ip->cmodel.relax,
+						   length, ip->cmodel.index),
 			      symbol, offset);
 	  andes_insert_btb_reloc (ip);
 	}
@@ -2463,6 +2467,7 @@ macro_build (expressionS *ep, const char *name, const char *fmt, ...)
 	  insn.cmodel.method = METHOD_VARIABLE;
 	  insn.cmodel.state = va_arg (args, int);
 	  insn.cmodel.type = va_arg (args, int);
+	  insn.cmodel.relax = va_arg (args, int);
 	  insn.cmodel.index = va_arg (args, int);
 	  insn.cmodel.offset = va_arg (args, int);
 	  continue;
@@ -2594,14 +2599,14 @@ void make_indirect_symbol (expressionS *ep, expressionS *ep_ind)
       char *nops = frag_more (0);
       riscv_make_nops (nops, ALIGN_LEN);
       frag_var (rs_machine_dependent, ALIGN_LEN, 0,
-		RELAX_CMODEL_ENCODE (TYPE_ALIGN, ALIGN_LEN, 0),
+		RELAX_CMODEL_ENCODE (TYPE_ALIGN, riscv_opts.relax, ALIGN_LEN, 0),
 		ep->X_add_symbol, ep->X_add_number, NULL);
       /* SYMBOL */
       isym = colon (isym_name);
       #define DATA_LEN (8)
       frag_grow (DATA_LEN);
       frag_var (rs_machine_dependent, DATA_LEN, 0,
-		RELAX_CMODEL_ENCODE (TYPE_IS, DATA_LEN, 0),
+		RELAX_CMODEL_ENCODE (TYPE_IS, riscv_opts.relax, DATA_LEN, 0),
 		ep->X_add_symbol, ep->X_add_number, NULL);
       /* #  */
       obj_elf_popsection (0); /* .popsection  */
@@ -2628,7 +2633,7 @@ pcrel_access (int destreg, int tempreg, expressionS *ep,
     {
       gas_assert (ep->X_op == O_symbol);
       char lo_pattern_ex[0x100];
-      int index, type;
+      int index, type, relax = riscv_opts.relax;
       expressionS ep_ind, ep_ref;
       bfd_boolean is_la = strcmp (lo_insn, "addi") == 0;
       bfd_boolean is_st = lo_reloc == BFD_RELOC_RISCV_PCREL_LO12_S;
@@ -2644,18 +2649,18 @@ pcrel_access (int destreg, int tempreg, expressionS *ep,
 
       /* index 0: argument, C: state, type, index, offset.  */
       index = CSI_INDIRECT_SYMBOL;
-      macro_build (&ep_ind, "nop", "j,C", hi_reloc, 0, type, index, 0);
+      macro_build (&ep_ind, "nop", "j,C", hi_reloc, 0, type, relax, index, 0);
 
       /* index 1: argument, C: state, type, index, offset.  */
       index++; /* CSI_REFERENCE_SYMBOL  */
-      macro_build (&ep_ref, "nop", "j,C", hi_reloc, 0, type, index, 0);
+      macro_build (&ep_ref, "nop", "j,C", hi_reloc, 0, type, relax, index, 0);
 
       /* index 2: generic form, C: state, type, index, offset.  */
       index++; /* CSI_LARGE_CODE  */
       frag_grow(4 * 3); /* ensure folloiwng instructions without frag bump.  */
-      macro_build (&ep_ind, "auipc", "d,u,C", tempreg, hi_reloc, 1, type, index, 0);
-      macro_build (&ep_ref, "ld", "d,s,j,C", tempreg, tempreg, hi_reloc, 1, type, index, 4);
-      macro_build (ep, lo_insn, lo_pattern_ex, destreg, tempreg, lo_reloc, 0, type, index, 8);
+      macro_build (&ep_ind, "auipc", "d,u,C", tempreg, hi_reloc, 1, type, relax, index, 0);
+      macro_build (&ep_ref, "ld", "d,s,j,C", tempreg, tempreg, hi_reloc, 1, type, relax, index, 4);
+      macro_build (ep, lo_insn, lo_pattern_ex, destreg, tempreg, lo_reloc, 0, type, relax, index, 8);
 
       /* CSI_DEFAULT_CODE can be extracted from CSI_LARGE_CODE  */
     }
@@ -2700,7 +2705,7 @@ static void
       && is_cmodel_relaxable (ep->X_add_symbol, now_seg))
     {
       gas_assert (ep->X_op == O_symbol);
-      int index;
+      int index, relax = riscv_opts.relax;
       expressionS ep_ind, ep_ref;
       make_indirect_symbol (ep, &ep_ind);
       ep_ref.X_op = O_symbol;
@@ -2710,24 +2715,24 @@ static void
 
       /* index 0: argument, C: state, type, index, offset.  */
       index = CSI_INDIRECT_SYMBOL;
-      macro_build (&ep_ind, "nop", "j,C", reloc, 0, TYPE_JX, index, 0);
+      macro_build (&ep_ind, "nop", "j,C", reloc, 0, TYPE_JX, relax, index, 0);
 
       /* index 1: argument, C: state, type, index, offset.  */
       index++; /* CSI_REFERENCE_SYMBOL  */
-      macro_build (&ep_ref, "nop", "j,C", reloc, 0, TYPE_JX, index, 0);
+      macro_build (&ep_ref, "nop", "j,C", reloc, 0, TYPE_JX, relax, index, 0);
 
       /* index 2: generic form, C: state, type, index, offset.  */
       index++; /* CSI_LARGE_CODE  */
       frag_grow(4 * 3); /* ensure folloiwng instructions without frag bump.  */
-      macro_build (&ep_ind, "auipc", "d,u,C", tempreg, reloc, 1, TYPE_JX, index, 0);
-      macro_build (&ep_ref, "ld", "d,s,j,C", tempreg, tempreg, reloc, 1, TYPE_JX, index, 4);
-      macro_build (ep, "jalr", "d,s,j,C", destreg, tempreg, reloc, 0, TYPE_JX, index, 8);
+      macro_build (&ep_ind, "auipc", "d,u,C", tempreg, reloc, 1, TYPE_JX, relax, index, 0);
+      macro_build (&ep_ref, "ld", "d,s,j,C", tempreg, tempreg, reloc, 1, TYPE_JX, relax, index, 4);
+      macro_build (ep, "jalr", "d,s,j,C", destreg, tempreg, reloc, 0, TYPE_JX, relax, index, 8);
 
       /* index 3: relaxed form  */
       index++; /* CSI_DEFAULT_CODE  */
       frag_grow(4 * 2); /* ensure folloiwng instructions without frag bump.  */
-      macro_build (ep, "auipc", "d,u,C", tempreg, reloc, 1, TYPE_JX, index, 0);
-      macro_build (ep, "jalr", "d,s,j,C", destreg, tempreg, reloc, 0, TYPE_JX, index, 4);
+      macro_build (ep, "auipc", "d,u,C", tempreg, reloc, 1, TYPE_JX, relax, index, 0);
+      macro_build (ep, "jalr", "d,s,j,C", destreg, tempreg, reloc, 0, TYPE_JX, relax, index, 4);
     }
   /* } Andes */
   else
@@ -6303,6 +6308,7 @@ md_convert_frag_cmodel (fragS *fragp, segT sec)
   fixS *fixp = NULL;
   int reloc;
   int type = RELAX_CMODEL_TYPE (fragp->fr_subtype);
+  int relax = RELAX_CMODEL_RELAX (fragp->fr_subtype);
   int length = RELAX_CMODEL_LENGTH (fragp->fr_subtype);
   int index = RELAX_CMODEL_INDEX (fragp->fr_subtype);
   int is_same_sec = is_same_section_symbol (fragp->fr_symbol, sec);
@@ -6370,19 +6376,16 @@ md_convert_frag_cmodel (fragS *fragp, segT sec)
         gas_assert (length == 0);
       else
 	{
+	  fixS *fix;
 	  reloc = BFD_RELOC_RISCV_PCREL_HI20;
-	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
-		       4, &exp_ind, FALSE, reloc);
-	  reloc = BFD_RELOC_RISCV_RELAX;
-	  fix_new (fragp, buf - (bfd_byte *)fragp->fr_literal,
-		   0, abs_section_sym, 0, FALSE, reloc);
+	  fix = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+			     4, &exp_ind, FALSE, reloc);
+	  fix->fx_tcbit = relax;
 
 	  reloc = BFD_RELOC_RISCV_PCREL_LO12_I;
-	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal + 4,
-		       4, &exp_ref, FALSE, reloc);
-	  reloc = BFD_RELOC_RISCV_RELAX;
-	  fix_new (fragp, buf - (bfd_byte *)fragp->fr_literal +4,
-		   0, abs_section_sym, 0, FALSE, reloc);
+	  fix = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal + 4,
+			     4, &exp_ref, FALSE, reloc);
+	  fix->fx_tcbit = relax;
 
 	  /* TODO: relax jalr to c.jalr  */
 	}
@@ -6391,116 +6394,98 @@ md_convert_frag_cmodel (fragS *fragp, segT sec)
       gas_assert (length == 8);
       if (is_same_sec)
 	{
+	  fixS *fix;
 	  int32_t *bin = (int32_t *) buf;
 	  bin[1] = bin[2];
 
 	  reloc = BFD_RELOC_RISCV_PCREL_HI20;
-	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
-		       4, &exp, FALSE, reloc);
-	  reloc = BFD_RELOC_RISCV_RELAX;
-	  fix_new (fragp, buf - (bfd_byte *)fragp->fr_literal,
-		   0, abs_section_sym, 0, FALSE, reloc);
+	  fix = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+			     4, &exp, FALSE, reloc);
+	  fix->fx_tcbit = relax;
 
 	  reloc = BFD_RELOC_RISCV_PCREL_LO12_I;
-	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal + 4,
-		       4, &exp_ref, FALSE, reloc);
-	  reloc = BFD_RELOC_RISCV_RELAX;
-	  fix_new (fragp, buf - (bfd_byte *)fragp->fr_literal +4,
-		   0, abs_section_sym, 0, FALSE, reloc);
+	  fix = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal + 4,
+			     4, &exp_ref, FALSE, reloc);
+	  fix->fx_tcbit = relax;
 	}
       else
 	{
+	  fixS *fix;
 	  reloc = BFD_RELOC_RISCV_PCREL_HI20;
-	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
-		       4, &exp_ind, FALSE, reloc);
-	  reloc = BFD_RELOC_RISCV_RELAX;
-	  fix_new (fragp, buf - (bfd_byte *)fragp->fr_literal,
-		   0, abs_section_sym, 0, FALSE, reloc);
+	  fix = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+			     4, &exp_ind, FALSE, reloc);
+	  fix->fx_tcbit = relax;
 
 	  reloc = BFD_RELOC_RISCV_PCREL_LO12_I;
-	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal + 4,
-		       4, &exp_ref, FALSE, reloc);
-	  reloc = BFD_RELOC_RISCV_RELAX;
-	  fix_new (fragp, buf - (bfd_byte *)fragp->fr_literal +4,
-		   0, abs_section_sym, 0, FALSE, reloc);
+	  fix = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal + 4,
+			     4, &exp_ref, FALSE, reloc);
+	  fix->fx_tcbit = relax;
 	}
       break;
     case TYPE_LD:
       if (is_same_sec)
 	{
+	  fixS *fix;
 	  gas_assert (length == 8);
 	  int32_t *bin = (int32_t *) buf;
 	  bin[1] = bin[2];
 
 	  reloc = BFD_RELOC_RISCV_PCREL_HI20;
-	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
-		       4, &exp, FALSE, reloc);
-	  reloc = BFD_RELOC_RISCV_RELAX;
-	  fix_new (fragp, buf - (bfd_byte *)fragp->fr_literal,
-		   0, abs_section_sym, 0, FALSE, reloc);
+	  fix = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+			     4, &exp, FALSE, reloc);
+	  fix->fx_tcbit = relax;
 
 	  reloc = BFD_RELOC_RISCV_PCREL_LO12_I;
-	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal + 4,
-		       4, &exp_ref, FALSE, reloc);
-	  reloc = BFD_RELOC_RISCV_RELAX;
-	  fix_new (fragp, buf - (bfd_byte *)fragp->fr_literal +4,
-		   0, abs_section_sym, 0, FALSE, reloc);
+	  fix = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal + 4,
+			     4, &exp_ref, FALSE, reloc);
+	  fix->fx_tcbit = relax;
 	}
       else
 	{
+	  fixS *fix;
 	  gas_assert (length == 12);
 	  reloc = BFD_RELOC_RISCV_PCREL_HI20;
-	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
-		       4, &exp_ind, FALSE, reloc);
-	  reloc = BFD_RELOC_RISCV_RELAX;
-	  fix_new (fragp, buf - (bfd_byte *)fragp->fr_literal,
-		   0, abs_section_sym, 0, FALSE, reloc);
+	  fix = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+			     4, &exp_ind, FALSE, reloc);
+	  fix->fx_tcbit = relax;
 
 	  reloc = BFD_RELOC_RISCV_PCREL_LO12_I;
-	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal + 4,
-		       4, &exp_ref, FALSE, reloc);
-	  reloc = BFD_RELOC_RISCV_RELAX;
-	  fix_new (fragp, buf - (bfd_byte *)fragp->fr_literal +4,
-		   0, abs_section_sym, 0, FALSE, reloc);
+	  fix = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal + 4,
+			     4, &exp_ref, FALSE, reloc);
+	  fix->fx_tcbit = relax;
 	}
       break;
     case TYPE_ST:
       if (is_same_sec)
 	{
+	  fixS *fix;
 	  gas_assert (length == 8);
 	  int32_t *bin = (int32_t *) buf;
 	  bin[1] = bin[2];
 
 	  reloc = BFD_RELOC_RISCV_PCREL_HI20;
-	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
-		       4, &exp, FALSE, reloc);
-	  reloc = BFD_RELOC_RISCV_RELAX;
-	  fix_new (fragp, buf - (bfd_byte *)fragp->fr_literal,
-		   0, abs_section_sym, 0, FALSE, reloc);
+	  fix = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+			     4, &exp, FALSE, reloc);
+	  fix->fx_tcbit = relax;
 
 	  reloc = BFD_RELOC_RISCV_PCREL_LO12_S;
-	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal + 4,
-		       4, &exp_ref, FALSE, reloc);
-	  reloc = BFD_RELOC_RISCV_RELAX;
-	  fix_new (fragp, buf - (bfd_byte *)fragp->fr_literal +4,
-		   0, abs_section_sym, 0, FALSE, reloc);
+	  fix = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal + 4,
+			     4, &exp_ref, FALSE, reloc);
+	  fix->fx_tcbit = relax;
 	}
       else
 	{
+	  fixS *fix;
 	  gas_assert (length == 12);
 	  reloc = BFD_RELOC_RISCV_PCREL_HI20;
-	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
-		       4, &exp_ind, FALSE, reloc);
-	  reloc = BFD_RELOC_RISCV_RELAX;
-	  fix_new (fragp, buf - (bfd_byte *)fragp->fr_literal,
-		   0, abs_section_sym, 0, FALSE, reloc);
+	  fix = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+			     4, &exp_ind, FALSE, reloc);
+	  fix->fx_tcbit = relax;
 
 	  reloc = BFD_RELOC_RISCV_PCREL_LO12_I;
-	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal + 4,
-		       4, &exp_ref, FALSE, reloc);
-	  reloc = BFD_RELOC_RISCV_RELAX;
-	  fix_new (fragp, buf - (bfd_byte *)fragp->fr_literal +4,
-		   0, abs_section_sym, 0, FALSE, reloc);
+	  fix = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal + 4,
+			     4, &exp_ref, FALSE, reloc);
+	  fix->fx_tcbit = relax;
 	}
       break;
     default:
@@ -6516,12 +6501,11 @@ md_convert_frag_cmodel (fragS *fragp, segT sec)
         gas_assert (length == 0);
       else
 	{
+	  fixS *fix;
 	  reloc = BFD_RELOC_RISCV_CALL;
-	  fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
-		       4, &exp, FALSE, reloc);
-	  reloc = BFD_RELOC_RISCV_RELAX;
-	  fix_new (fragp, buf - (bfd_byte *)fragp->fr_literal,
-		   0, abs_section_sym, 0, FALSE, reloc);
+	  fix = fix_new_exp (fragp, buf - (bfd_byte *)fragp->fr_literal,
+			     4, &exp, FALSE, reloc);
+	  fix->fx_tcbit = relax;
 	}
       break;
     default:
