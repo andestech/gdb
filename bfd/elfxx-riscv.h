@@ -602,6 +602,8 @@ typedef struct execit_state
   struct riscv_elf_link_hash_table *htab;
   struct bfd_hash_table code_hash;
   bfd_vma jal_window_end;
+  bfd_vma prev_gp;
+  bfd_vma curr_gp;
   int raw_itable_entries;
   int next_itable_index;
   int import_number;
@@ -615,7 +617,11 @@ typedef struct execit_state
   uint is_itb_base_set:1;
   uint is_itable_relocated:1;
   uint is_replace_again:1;
+  uint is_update_itable:1;
   uint is_import_ranked:1;
+  uint is_collect_again:1;
+  uint is_collect_done:1;
+  uint is_collect_finish:1;
 } execit_state_t;
 
 typedef struct andes_linker_state

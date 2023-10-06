@@ -4915,6 +4915,11 @@ static void
 andes_execit_delete_blank (struct bfd_link_info *info);
 static asection*
 andes_execit_get_itable_section (bfd *input_bfds);
+static bool
+andes_execit_deal_phase (struct bfd_link_info *info, asection *sec,
+			 bool *again);
+static void
+andes_execit_reset (bool *again);
 #if 0
 static asection*
 andes_table_jump_get_section (struct bfd_link_info *info);
@@ -5150,7 +5155,12 @@ riscv_elf_execit_import_table (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info 
 
       num++;
     }
+
+  #if 0
+  /* keep it in case EXEC.IT reset.  */
   fclose (execit_import_file);
+  andes->execit_import_file = NULL;
+  #endif
 
   /* Default set the maximun number of the EXECIT entries to 1024.
      There are still 1024 entries in .exec.itable even though the
@@ -6901,11 +6911,9 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	  && info->relax_pass != PASS_ANDES_INIT
 	  && info->relax_pass != PASS_DELETE_ORG
 	  && info->relax_pass <= PASS_DELETE_ORG)
-      /* The exp_seg_relro_adjust is enum phase_enum (0x4),
-	 and defined in ld/ldexp.h.  */
-      || *(htab->data_segment_phase) == 4
+      /* The exp_seg_none is enum phase_enum (0) defined in ld/ldexp.h.  */
       /* b28830: section bases and GP changed during exp_seg_adjust.  */
-      || (*(htab->data_segment_phase) == 5
+      || (*(htab->data_segment_phase) != 0
 	  && info->relax_pass != PASS_EXECIT_1)
      )
     return true;
@@ -6933,61 +6941,11 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
       && info->relax_pass <= PASS_EXECIT_2)
     return true;
 
-  /* b28830: The exp_seg_adjust is enum phase_enum (0x5),
-     and defined in ld/ldexp.h.  */
-  while (info->relax_pass == PASS_EXECIT_1) /* once */
+  /* b28830: deal with enum phase_enum defined in ld/ldexp.h.  */
+  if (info->relax_pass == PASS_EXECIT_1)
     {
-      static bfd_vma last_gp, curr_gp = 0;
-
-      if (*(htab->data_segment_phase) == 0)
-	{
-	  if (sec == execit.first_sec)
-	    {
- 	      last_gp = curr_gp;
-	      curr_gp = riscv_global_pointer_value (info);
-	    }
-	  break;
-	}
-
-      if ((*(htab->data_segment_phase) == 5) && (sec == execit.first_sec))
-	{ /* stop recursive hell.  */
-	  if ((info->relax_trip > 0) && (curr_gp == last_gp))
-	    return true;
-
-	  /* reset hash and restart EXECIT_1.  */
-	  /* hash insn. */
-	  execit.is_init = 0;
-	  if (execit.code_hash.memory)
-	    {
-	      andes_execit_traverse_insn_hash (andes_execit_free);
-	      bfd_hash_table_free (&execit.code_hash);
-	    }
-	  /* rank insn.  */
-	  if (execit.rank_list)
-	    {
-	      execit_rank_t *p, *pp;
-	      p = execit.rank_list;
-	      while (p)
-		{
-		  pp = p;
-		  p = p->next;
-		  free (pp);
-		}
-	      execit.rank_list = NULL;
-	    }
-	  /* build itable.  */
-	  execit.raw_itable_entries = 0;
-	  execit.next_itable_index = 0;
-	  execit.is_built = 0;
-	  if (execit.itable_array)
-	    {
-	      free (execit.itable_array);
-	      execit.itable_array = NULL;
-	    }
-	  *again = true;
-	}
-      return true;
-      break; /* once */
+      if (andes_execit_deal_phase (info, sec, again))
+	return true;
     }
 
   /* exec.it initializatoin if enabled.  */
@@ -7005,7 +6963,8 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	     to do EXECIT replacement again.  */
 	  if (andes->execit_import_file)
 	    {
-	      execit.is_built = 1;
+	      if (!execit.is_update_itable)
+		execit.is_built = 1;
 	      riscv_elf_execit_import_table (abfd, info);
 	    }
 	}
@@ -7086,9 +7045,13 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	  if (andes->update_execit_table && !execit.is_replace_again)
 	    {
 	      execit.is_replace_again = 1;
+	      execit.is_update_itable = 1;
 	      execit.is_built = 0;
 	      execit.is_replaced = 0;
+	      execit.is_collect_done = 0;
+	      execit.is_collect_finish = 0;
 	      info->relax_pass = PASS_EXECIT_1;
+	      info->relax_trip = -1;
 	      *again = true;
 	    }
 	}
@@ -8799,6 +8762,102 @@ andes_execit_get_itable_section (bfd *input_bfds)
 
   execit.itable_section = sec;
   return sec;
+}
+
+static bool
+andes_execit_deal_phase (struct bfd_link_info *info, asection *sec,
+			 bool *again)
+{
+  struct riscv_elf_link_hash_table *htab = riscv_elf_hash_table (info);
+
+  if (*(htab->data_segment_phase) == 0)
+    {
+      if (sec == execit.first_sec)
+	{
+	  execit.prev_gp = execit.curr_gp;
+	  execit.curr_gp = riscv_global_pointer_value (info);
+	  if (info->relax_trip > 0)
+	    {
+	      execit.is_collect_again = (execit.curr_gp != execit.prev_gp) ?
+		1 : 0;
+	    }
+
+	  if (execit.is_collect_again == 1)
+	    andes_execit_reset (again);
+
+	  if (execit.is_collect_done == 1)
+	    {
+	      if (execit.is_collect_finish == 1)
+		{
+		  *again = false;
+		}
+	      else
+		{
+		  *again = true;
+		  execit.is_collect_finish = 1;
+		}
+	      return true;
+	    }
+	  else
+	    {
+	      *again = true;
+	      execit.is_collect_done = 1;
+	    }
+	}
+      else if (execit.is_collect_finish == 1)
+	return true;
+    }
+  else
+    {
+      return true;
+    }
+
+  return false;
+}
+
+static void
+andes_execit_reset (bool *again)
+{
+  printf(">>> collection restart <<<\n\n");
+
+  /* reset hash and restart EXECIT_1.  */
+  execit.is_collect_again = 0;
+  execit.is_collect_done = 0;
+  execit.is_collect_finish = 0;
+
+  /* hash insn. */
+  execit.is_init = 0;
+  if (execit.code_hash.memory)
+    {
+      andes_execit_traverse_insn_hash (andes_execit_free);
+      bfd_hash_table_free (&execit.code_hash);
+    }
+
+  /* rank insn.  */
+  if (execit.rank_list)
+    {
+      execit_rank_t *p, *pp;
+      p = execit.rank_list;
+      while (p)
+	{
+	  pp = p;
+	  p = p->next;
+	  free (pp);
+	}
+      execit.rank_list = NULL;
+    }
+
+  /* build itable.  */
+  execit.raw_itable_entries = 0;
+  execit.next_itable_index = 0;
+  execit.is_built = 0;
+  if (execit.itable_array)
+    {
+      free (execit.itable_array);
+      execit.itable_array = NULL;
+    }
+
+  *again = true;
 }
 
 /* Get the contents of a section.  */
