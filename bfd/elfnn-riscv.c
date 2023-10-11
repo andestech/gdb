@@ -8818,8 +8818,6 @@ andes_execit_deal_phase (struct bfd_link_info *info, asection *sec,
 static void
 andes_execit_reset (bool *again)
 {
-  printf(">>> collection restart <<<\n\n");
-
   /* reset hash and restart EXECIT_1.  */
   execit.is_collect_again = 0;
   execit.is_collect_done = 0;
