@@ -5341,12 +5341,12 @@ andes_execit_render_hash (execit_context_t *ctx)
 	   * Why not use relocation/VMA as it?
 	   * the same relocations are not necessary aliases but of the same
 	   * section and offset are (almost?) (b23753)  */
-	  symval += sec_addr (sym_sec);
-	  ctx->ie.relocation = symval;
+	  ctx->ie.symval = symval + sym_sec->output_offset;
+	  ctx->ie.relocation = symval + sec_addr (sym_sec);
 	  if (is_mergeable)
 	    {
-	      relocation_section = 0;
-	      relocation_offset = symval;
+	      relocation_section = (intptr_t) sym_sec->output_section;
+	      relocation_offset = ctx->ie.symval;
 	      ctx->ie.is_mergeable = 1;
 	    }
 	  else
@@ -6911,10 +6911,10 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	  && info->relax_pass != PASS_ANDES_INIT
 	  && info->relax_pass != PASS_DELETE_ORG
 	  && info->relax_pass <= PASS_DELETE_ORG)
-      /* The exp_seg_none is enum phase_enum (0) defined in ld/ldexp.h.  */
-      /* b28830: section bases and GP changed during exp_seg_adjust.  */
-      || (*(htab->data_segment_phase) != 0
-	  && info->relax_pass != PASS_EXECIT_1)
+      /* The exp_seg_relro_adjust (4) of enum phase_enum
+	     is defined in ld/ldexp.h.  */
+      /* b28830: section bases and GP changed during exp_seg_adjust (5).  */
+      || (*(htab->data_segment_phase) >= 4)
      )
     return true;
 
@@ -8807,10 +8807,8 @@ andes_execit_deal_phase (struct bfd_link_info *info, asection *sec,
       else if (execit.is_collect_finish == 1)
 	return true;
     }
-  else
-    {
-      return true;
-    }
+
+  BFD_ASSERT (*(htab->data_segment_phase) < 4);
 
   return false;
 }
@@ -9850,7 +9848,8 @@ andes_execit_itable_lookup (execit_context_t *ctx,
 		  && (rtb == R_RISCV_CALL || rtb == R_RISCV_PCREL_HI20)))
 	    return b;
 	  if ((a->is_mergeable && b->is_mergeable)
-	      && (a->relocation == b->relocation))
+	      && a->symval == b->symval
+	      && a->isec->output_section == b->isec->output_section)
 	    return b;
 	  if ((ELFNN_R_SYM (a->irel_copy.r_info)
 	       != ELFNN_R_SYM (b->irel_copy.r_info))

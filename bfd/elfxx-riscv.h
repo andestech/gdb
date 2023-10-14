@@ -332,6 +332,7 @@ typedef struct execit_itable_entry
   asection *isec;               /* section of local symbol  */
   bfd_vma pc;                   /* insn vma  */
   bfd_vma relocation;           /* might keep host-addr of irel instead  */
+  bfd_vma symval;               /* debug only  */
   bfd_signed_vma bias;          /* hi20 offset  */
   bfd_vma addend;               /* relocation addend  */
   Elf_Internal_Rela irel_copy;
