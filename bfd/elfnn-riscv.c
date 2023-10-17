@@ -5890,7 +5890,6 @@ _bfd_riscv_relax_jump (bfd *abfd, asection *sec, asection *sym_sec,
 
   bfd_vma jal = bfd_getl32 (contents + rel->r_offset);
   rd = (jal >> OP_SH_RD) & OP_MASK_RD;
-  rvc = rvc && VALID_CJTYPE_IMM (foff);
 
   if (true)
     {
@@ -5907,7 +5906,7 @@ _bfd_riscv_relax_jump (bfd *abfd, asection *sec, asection *sym_sec,
 	 cause the PC-relative offset to later increase, so we need to add in the
 	 max alignment of any section inclusive from the call to the target.
 	 Otherwise, we only need to use the alignment of the current section.  */
-      if (VALID_JTYPE_IMM (foff))
+      if (VALID_CJTYPE_IMM (foff))
 	{
 	  if (sym_sec->output_section == sec->output_section
 	      && sym_sec->output_section != bfd_abs_section_ptr)
@@ -5916,7 +5915,7 @@ _bfd_riscv_relax_jump (bfd *abfd, asection *sec, asection *sym_sec,
 	}
 
       /* See if this function call can be shortened.  */
-      if (!VALID_JTYPE_IMM (foff))
+      if (!VALID_CJTYPE_IMM (foff))
 	return true;
 
       /* Shorten the function call.  */
@@ -5971,7 +5970,6 @@ _bfd_riscv_relax_call (bfd *abfd, asection *sec, asection *sym_sec,
   bfd_vma auipc = bfd_getl32 (contents + rel->r_offset);
   bfd_vma jalr = bfd_getl32 (contents + rel->r_offset + 4);
   rd = (jalr >> OP_SH_RD) & OP_MASK_RD;
-  rvc = rvc && VALID_CJTYPE_IMM (foff);
 
   if (!is_table_jump)
     {
@@ -6038,7 +6036,8 @@ _bfd_riscv_relax_call (bfd *abfd, asection *sec, asection *sym_sec,
     }
 
   /* C.J exists on RV32 and RV64, but C.JAL is RV32-only.  */
-  rvc = rvc && (rd == 0 || (rd == X_RA && ARCH_SIZE == 32));
+  rvc = rvc && VALID_CJTYPE_IMM (foff)
+	&& (rd == 0 || (rd == X_RA && ARCH_SIZE == 32));
 
   if (rvc)
     {
