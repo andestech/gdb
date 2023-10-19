@@ -1493,6 +1493,7 @@ thread_try_catch_cmd (thread_info *thr, gdb::optional<int> ada_task,
 	  if (!flags.quiet)
 	    printf_filtered ("%s", thr_header.c_str ());
 	  printf_filtered ("%s", cmd_result.c_str ());
+		gdb_flush (gdb_stdout);
 	}
     }
   catch (const gdb_exception_error &ex)
