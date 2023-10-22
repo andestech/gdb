@@ -623,6 +623,7 @@ typedef struct execit_state
   uint is_collect_again:1;
   uint is_collect_done:1;
   uint is_collect_finish:1;
+  uint is_rebuilding:1;
 } execit_state_t;
 
 typedef struct andes_linker_state

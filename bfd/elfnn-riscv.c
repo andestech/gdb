@@ -8471,11 +8471,16 @@ andes_execit_build_itable (struct bfd_link_info *info)
 
   /* TODO: change the e_flag for EXECIT.  */
 
-  limit = andes->execit_limit;
+  if (execit.is_rebuilding)
+    limit = table_sec->size >> 2;
+  else
+    limit = andes->execit_limit;
+
   /* odd old definition (v5_toolmisc_test)  */
-  if (andes->execit_import_file &&
-      andes->update_execit_table &&
-      andes->execit_limit >= 0)
+  if (andes->execit_import_file
+      && andes->update_execit_table
+      && andes->execit_limit >= 0
+      && execit.is_rebuilding == 0)
     limit += execit.next_itable_index;
   if ((limit < 0) || (limit > EXECIT_HW_ENTRY_MAX))
     limit = EXECIT_HW_ENTRY_MAX;
@@ -8540,7 +8545,10 @@ andes_execit_build_itable (struct bfd_link_info *info)
 #endif
     }
 
-  table_sec->size = total << 2;
+  if (execit.is_rebuilding == 0)
+    table_sec->size = total << 2;
+  else
+    BFD_ASSERT (table_sec->size >= ((bfd_size_type)total << 2));
 
   /* build itable[0..size] = [item, ...]  */
   execit.itable_array = bfd_zmalloc (sizeof (execit_item_t) * total);
@@ -8782,7 +8790,10 @@ andes_execit_deal_phase (struct bfd_link_info *info, asection *sec,
 	    }
 
 	  if (execit.is_collect_again == 1)
-	    andes_execit_reset (again);
+	    {
+	      execit.is_rebuilding = 1;
+	      andes_execit_reset (again);
+	    }
 
 	  if (execit.is_collect_done == 1)
 	    {
