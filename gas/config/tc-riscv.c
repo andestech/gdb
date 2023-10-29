@@ -382,6 +382,7 @@ struct riscv_set_options
   int full_arch;
   int no_branch_relax;
   int no_rvc_convert;
+  int is_linux;
   /* } Andes  */
 };
 
@@ -412,6 +413,7 @@ static struct riscv_set_options riscv_opts =
   0, /* full arch */
   0, /* no_branch_relax */
   0, /* no_rvc_convert */
+  0, /* is_linux */
   /* } Andes  */
 };
 
@@ -5321,6 +5323,12 @@ md_parse_option (int c, const char *arg)
 void
 riscv_after_parse_args (void)
 {
+#ifdef TARGET_OS
+  riscv_opts.is_linux = (0 == strcmp (TARGET_OS, "elf")) ? 0 : 1;
+#else
+  #error "TARGET_OS not defined!"
+#endif
+
   /* The --with-arch is optional for now, so we still need to set the xlen
      according to the default_arch, which is set by the --target.  */
   if (xlen == 0)
@@ -5777,7 +5785,8 @@ s_riscv_option (int x ATTRIBUTE_UNUSED)
       /* Force to set the 4-byte aligned when converting
 	 rvc to norvc.  The repeated alignment setting is
 	 fine since linker will remove the redundant nops.  */
-      if (riscv_opts.rvc && !riscv_opts.no_16_bit && start_assemble)
+      if (riscv_opts.rvc && !riscv_opts.no_16_bit && start_assemble
+	  && !riscv_opts.is_linux)
 	riscv_frag_align_code (2);
       riscv_update_subset (&riscv_rps_as, "-c");
       riscv_set_rvc (false);
@@ -5849,7 +5858,8 @@ s_riscv_option (int x ATTRIBUTE_UNUSED)
 	  if (!riscv_opts.no_16_bit)
 	    {
 	      riscv_opts.rvc = 1;
-	      riscv_frag_align_code (2);
+	      if (!riscv_opts.is_linux)
+		riscv_frag_align_code (2);
 	    }
 	  riscv_opts.rvc = 0;
 	  riscv_rvc_reloc_setting (0);
