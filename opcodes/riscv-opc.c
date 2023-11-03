@@ -912,6 +912,9 @@ const struct riscv_opcode riscv_opcodes[] =
 {"c.srli64",   0, INSN_CLASS_C,   "Cs",        MATCH_C_SRLI64, MASK_C_SRLI64, match_c_slli64, 0 },
 {"c.srai64",   0, INSN_CLASS_C,   "Cs",        MATCH_C_SRAI64, MASK_C_SRAI64, match_c_slli64, 0 },
 {"c.andi",     0, INSN_CLASS_C,   "Cs,Co",     MATCH_C_ANDI, MASK_C_ANDI, match_opcode, 0 },
+/* { ZCB hack for objdump.  */
+{"c.sext.w",  64, INSN_CLASS_ZCB, "d",  MATCH_C_ADDIW, MASK_C_ADDIW|MASK_RVC_IMM, match_rd_nonzero, INSN_ALIAS },
+/* } ZCB hack for objdump.  */
 {"c.addiw",   64, INSN_CLASS_C,   "d,Co",      MATCH_C_ADDIW, MASK_C_ADDIW, match_rd_nonzero, 0 },
 {"c.addw",    64, INSN_CLASS_C,   "Cs,Ct",     MATCH_C_ADDW, MASK_C_ADDW, match_opcode, 0 },
 {"c.subw",    64, INSN_CLASS_C,   "Cs,Ct",     MATCH_C_SUBW, MASK_C_SUBW, match_opcode, 0 },
@@ -2311,7 +2314,7 @@ const struct riscv_opcode riscv_opcodes[] =
 {"c.zext.h",   0, INSN_CLASS_ZCB_AND_ZBB, "Cs",  MATCH_C_ZEXT_H, MASK_C_ZEXT_H, match_opcode, 0 },
 {"c.zext.w",  64, INSN_CLASS_ZCB_AND_ZBA, "Cs",  MATCH_C_ZEXT_W, MASK_C_ZEXT_W, match_opcode, 0 },
 {"c.zext.b",   0, INSN_CLASS_ZCB, "Cs",  MATCH_C_ZEXT_B, MASK_C_ZEXT_B, match_opcode, 0 },
-{"c.sext.w",  64, INSN_CLASS_ZCB, "d",  MATCH_C_ADDIW, MASK_C_ADDIW|MASK_RVC_IMM, match_rd_nonzero, INSN_ALIAS },
+// {"c.sext.w",  64, INSN_CLASS_ZCB, "d",  MATCH_C_ADDIW, MASK_C_ADDIW|MASK_RVC_IMM, match_rd_nonzero, INSN_ALIAS },
 /* ZCMB instructions */
 {"cm.lbu",     0, INSN_CLASS_ZCMB, "Ct,CZB(Cs)", MATCH_CM_LBU, MASK_CM_LBU, match_opcode, INSN_DREF|INSN_1_BYTE },
 {"cm.lhu",     0, INSN_CLASS_ZCMB, "Ct,CZH(Cs)", MATCH_CM_LHU, MASK_CM_LHU, match_opcode, INSN_DREF|INSN_2_BYTE },

@@ -1316,6 +1316,12 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
 	  if (args.has_zcm && 0 == strncmp (op->name, "c.f", 3))
 	    continue;
 
+	  /* prefer c.?ext.*  */
+	  if (!no_prefer
+	      && insnlen == 2 
+	      && 0 == strncmp (op->name+1, "ext.", 4))
+	    continue;
+
 	  /* It's a match.  */
 	  (*info->fprintf_func) (info->stream, "%s", op->name);
 	  print_insn_args (op->args, word, memaddr, info);
