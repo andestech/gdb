@@ -8457,8 +8457,14 @@ init_breakpoint_sal (struct breakpoint *b, struct gdbarch *gdbarch,
   for (const auto &sal : sals)
     {
       struct bp_location *loc;
+			if (thread != -1) {
+				struct inferior *inf = find_inferior_id (thread);
+				/* printf_unfiltered ("inf->pspace: 0x%x, sal.pspace: 0x%x\n", inf->pspace, sal.pspace); */
+				if (sal.pspace != inf->pspace)
+					continue;
+			}
 
-      if (from_tty)
+			if (from_tty)
 	{
 	  struct gdbarch *loc_gdbarch = get_sal_arch (sal);
 	  if (!loc_gdbarch)
@@ -8468,7 +8474,7 @@ init_breakpoint_sal (struct breakpoint *b, struct gdbarch *gdbarch,
 				      sal.pspace, sal.pc, sal.section, thread);
 	}
 
-      if (&sal == &sals[0])
+      if ((&sal == &sals[0]) || (thread != -1))
 	{
 	  init_raw_breakpoint (b, gdbarch, sal, type, ops);
 	  b->thread = thread;
