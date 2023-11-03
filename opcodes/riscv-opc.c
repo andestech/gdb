@@ -960,6 +960,9 @@ const struct riscv_opcode riscv_opcodes[] =
 {"sfence.vma", 0, INSN_CLASS_I,    "s,t",      MATCH_SFENCE_VMA, MASK_SFENCE_VMA, match_opcode, 0 },
 {"wfi",        0, INSN_CLASS_I,    "",         MATCH_WFI, MASK_WFI, match_opcode, 0 },
 
+/* Resumable NMI proposal-v0.2.1-draft  */
+{"mnret",      0, INSN_CLASS_I,    "",         MATCH_MNRET, MASK_MNRET, match_opcode, 0 },
+
 /* Zbb or zbkb instructions.  */
 {"clz",        0, INSN_CLASS_ZBB,  "d,s",   MATCH_CLZ, MASK_CLZ, match_opcode, 0 },
 {"ctz",        0, INSN_CLASS_ZBB,  "d,s",   MATCH_CTZ, MASK_CTZ, match_opcode, 0 },
