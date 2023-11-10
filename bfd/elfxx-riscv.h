@@ -20,6 +20,10 @@
    along with this program; see the file COPYING3. If not,
    see <http://www.gnu.org/licenses/>.  */
 
+#ifdef __APPLE__
+typedef unsigned int uint;
+#endif
+
 #include "elf/common.h"
 #include "elf/internal.h"
 #include "opcode/riscv.h"
