@@ -316,6 +316,7 @@ typedef struct andes_ld_options
     uint fls:1;
     uint xdsp:1;
     uint nexecit_op:1;
+    uint no_jump:1;
   } execit_flags;
   uint update_execit_table:1;
   uint keep_import_execit:1;

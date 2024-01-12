@@ -9279,6 +9279,16 @@ riscv_elf_execit_check_insn_available (uint32_t insn,
 	return false;
     }
 
+  if (andes->execit_flags.no_jump)
+    { /* non-seq insns are excluded.
+       * ecall, ebreak, and *ret has been filtered.
+       * here filter BRANCH(BEQ), JAL, and JALR.  */
+      if (major == MATCH_BEQ
+	  || major == MATCH_JAL
+	  || major == MATCH_JALR)
+	return false;
+    }
+
   /* others  */
   return true;
 }

@@ -382,12 +382,14 @@ PARSE_AND_LIST_PROLOGUE='
 #define OPTION_EXECIT_RVP		(OPTION_EXECIT_BASELINE + 25)
 #define OPTION_NO_EXECIT_RVP		(OPTION_EXECIT_BASELINE + 26)
 #define OPTION_NEXECIT_OP		(OPTION_EXECIT_BASELINE + 27)
-#define OPTION_EXECIT_AUIPC_ENTRY		(OPTION_EXECIT_BASELINE + 28)
+#define OPTION_EXECIT_AUIPC_ENTRY	(OPTION_EXECIT_BASELINE + 28)
+#define OPTION_EXECIT_JUMP		(OPTION_EXECIT_BASELINE + 29)
+#define OPTION_EXECIT_NO_JUMP		(OPTION_EXECIT_BASELINE + 30)
 #endif
 
 /* These are only for lld internal usage and not affected for bfd.  */
-#define OPTION_LLD_COMPATIBLE_BASELINE	370
-#define OPTION_LLD_COMPATIBLE		370
+#define OPTION_LLD_COMPATIBLE_BASELINE	380
+#define OPTION_LLD_COMPATIBLE		380
 #define OPTION_BEST_GP			(OPTION_LLD_COMPATIBLE_BASELINE + 1)
 #define OPTION_EXECIT_OPT_DATA		(OPTION_LLD_COMPATIBLE_BASELINE + 2)
 #define OPTION_EXECIT_OPT_RODATA	(OPTION_LLD_COMPATIBLE_BASELINE + 3)
@@ -450,6 +452,8 @@ PARSE_AND_LIST_LONGOPTS='
   { "mno-execit-rvp", no_argument, NULL, OPTION_NO_EXECIT_RVP},
   { "mexecit-xdsp", no_argument, NULL, OPTION_EXECIT_XDSP},
   { "mno-execit-xdsp", no_argument, NULL, OPTION_NO_EXECIT_XDSP},
+  { "mexecit-jump", no_argument, NULL, OPTION_EXECIT_JUMP},
+  { "mno-execit-jump", no_argument, NULL, OPTION_EXECIT_NO_JUMP},
   { "mnexecitop", no_argument, NULL, OPTION_NEXECIT_OP},
   { "mexecit-auipc-entry", required_argument, NULL, OPTION_EXECIT_AUIPC_ENTRY},
   /* Obsolete options for EXECIT.  */
@@ -697,6 +701,12 @@ PARSE_AND_LIST_ARGS_CASES='
 	    einfo (_("%P: Bad value '%s' for --mexecit-auipc-entry.\n"), optarg);
 	  }
       }
+    break;
+  case OPTION_EXECIT_JUMP:
+    andes.execit_flags.no_jump = 0;
+    break;
+  case OPTION_EXECIT_NO_JUMP:
+    andes.execit_flags.no_jump = 1;
     break;
 #endif
   case OPTION_DEBUG_EXECIT_LIMIT:
