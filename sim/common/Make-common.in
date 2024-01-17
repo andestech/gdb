@@ -172,6 +172,7 @@ LIBSOFTFLOAT_OBJS = \
 	f128_to_ui64.o \
 	f128_to_ui64_r_minMag.o \
 	f16_add.o \
+	f16_classify.o \
 	f16_div.o \
 	f16_eq.o \
 	f16_eq_signaling.o \

@@ -8469,9 +8469,10 @@ execute_zfh (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op,
                                 cpu->fpregs[rs2].hf[0]);
       TRACE_REG (cpu, rd);
       break;
-    case MATCH_FCLASS_S:
-      TRACE_INSN (cpu, "UNIMPLEMENTED INSN: %s", op->name);
-      sim_engine_halt (sd, cpu, NULL, cpu->pc, sim_signalled, SIM_SIGILL);
+    case MATCH_FCLASS_H:
+      TRACE_INSN (cpu, "fclass.h %s, %s", rd_name, frs1_name);
+      cpu->regs[rd].u = f16_classify (cpu->fpregs[rs1].hf[0]);
+      TRACE_REG (cpu, rd);
       break;
     default:
       TRACE_INSN (cpu, "UNHANDLED INSN: %s", op->name);
