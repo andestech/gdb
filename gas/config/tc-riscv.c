@@ -1620,12 +1620,18 @@ validate_riscv_insn (const struct riscv_opcode *opc, int length)
 	    case 'U': break; /* CRS1, constrained to equal RD.  */
 	    case 'c': break; /* CRS1, constrained to equal sp.  */
 	    case 'T': /* CRS2, floating point.  */
-	    case 'V': USE_BITS (OP_MASK_CRS2, OP_SH_CRS2); break;
+	    case 'V':
+	      if (*(oparg + 1) == '2') oparg++;
+	      USE_BITS (OP_MASK_CRS2, OP_SH_CRS2);
+	      break;
 	    case 'S': /* CRS1S, floating point.  */
 	    case 's': USE_BITS (OP_MASK_CRS1S, OP_SH_CRS1S); break;
 	    case 'w': break; /* CRS1S, constrained to equal RD.  */
 	    case 'D': /* CRS2S, floating point.  */
-	    case 't': USE_BITS (OP_MASK_CRS2S, OP_SH_CRS2S); break;
+	    case 't':
+	      if (*(oparg + 1) == '2') oparg++;
+	      USE_BITS (OP_MASK_CRS2S, OP_SH_CRS2S);
+	      break;
 	    case 'x': break; /* CRS2S, constrained to equal RD.  */
 	    case 'z': break; /* CRS2S, constrained to be x0.  */
 	    case '>': /* CITYPE immediate, compressed shift.  */
@@ -1792,7 +1798,10 @@ validate_riscv_insn (const struct riscv_opcode *opc, int length)
 	case 'B': break; /* Macro operand, must be symbol or constant.  */
 	case 'I': break; /* Macro operand, must be constant.  */
 	case 'D': /* RD, floating point.  */
-	case 'd': USE_BITS (OP_MASK_RD, OP_SH_RD); break;
+	case 'd':
+	  if (*(oparg + 1) == '2' || *(oparg + 1) == 'n') oparg++;
+	  USE_BITS (OP_MASK_RD, OP_SH_RD);
+	  break;
 	case 'y': USE_BITS (OP_MASK_BS,	OP_SH_BS); break;
 	case 'Y': USE_BITS (OP_MASK_RNUM, OP_SH_RNUM); break;
 	case 'Z': /* RS1, CSR number.  */
@@ -1802,7 +1811,10 @@ validate_riscv_insn (const struct riscv_opcode *opc, int length)
 	  USE_BITS (OP_MASK_RS1, OP_SH_RS1);
 	  /* Fall through.  */
 	case 'T': /* RS2, floating point.  */
-	case 't': USE_BITS (OP_MASK_RS2, OP_SH_RS2); break;
+	case 't':
+	  if (*(oparg + 1) == '2') oparg++;
+	  USE_BITS (OP_MASK_RS2, OP_SH_RS2);
+	  break;
 	case 'R': /* RS3, floating point.  */
 	case 'r': USE_BITS (OP_MASK_RS3, OP_SH_RS3); break;
 	case 'm': USE_BITS (OP_MASK_RM, OP_SH_RM); break;
@@ -3531,6 +3543,12 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 		  if (!reg_lookup (&asarg, RCLASS_GPR, &regno)
 		      || !(regno >= 8 && regno <= 15))
 		    break;
+		  if (*(oparg + 1) == '2')
+		    {
+		      oparg++;
+		      if (regno % 2 != 0)
+			break;
+		    }
 		  INSERT_OPERAND (CRS2S, *ip, regno % 8);
 		  continue;
 		case 'x': /* RS2 x8-x15, constrained to equal RD x8-x15.  */
@@ -3546,6 +3564,12 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 		case 'V': /* RS2 */
 		  if (!reg_lookup (&asarg, RCLASS_GPR, &regno))
 		    break;
+		  if (*(oparg + 1) == '2')
+		    {
+		      oparg++;
+		      if (regno % 2 != 0)
+			break;
+		    }
 		  INSERT_OPERAND (CRS2, *ip, regno);
 		  continue;
 		case 'c': /* RS1, constrained to equal sp.  */
@@ -4222,9 +4246,27 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 		      INSERT_OPERAND (RS1, *ip, regno);
 		      break;
 		    case 'd':
+		      if (*(oparg + 1) == '2')
+			{
+			  oparg++;
+			  if (regno % 2 != 0)
+			    goto invalid_register;
+			}
+		      else if (*(oparg + 1) == 'n')
+		        {
+			  oparg++;
+			  if (regno % 2 != 0 || regno == 0)
+			    goto invalid_register;
+			}
 		      INSERT_OPERAND (RD, *ip, regno);
 		      break;
 		    case 't':
+		      if (*(oparg + 1) == '2')
+			{
+			  oparg++;
+			  if (regno % 2 != 0)
+			    goto invalid_register;
+			}
 		      INSERT_OPERAND (RS2, *ip, regno);
 		      break;
 		    case 'r':
@@ -4233,7 +4275,8 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 		    }
 		  continue;
 		}
-	      break;
+	      invalid_register:
+		break;
 
 	    case 'D': /* Floating point RD.  */
 	    case 'S': /* Floating point RS1.  */

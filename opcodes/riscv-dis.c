@@ -584,6 +584,7 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 	      break;
 	    case 't': /* RS2 x8-x15.  */
 	    case 'x': /* RS2 x8-x15.  */
+	      if (*(oparg) == 't' && *(oparg + 1) == '2') oparg++;
 	      print (info->stream, "%s",
 		     riscv_gpr_names[EXTRACT_OPERAND (CRS2S, l) + 8]);
 	      break;
@@ -594,6 +595,7 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 	      print (info->stream, "%s", riscv_gpr_names[X_SP]);
 	      break;
 	    case 'V': /* RS2 */
+	      if (*(oparg + 1) == '2') oparg++;
 	      print (info->stream, "%s",
 		     riscv_gpr_names[EXTRACT_OPERAND (CRS2, l)]);
 	      break;
@@ -914,6 +916,8 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 	  break;
 
 	case 't':
+	  if (*(oparg + 1) == '2')
+	    oparg++;
 	  print (info->stream, "%s",
 		 riscv_gpr_names[EXTRACT_OPERAND (RS2, l)]);
 	  break;
@@ -981,6 +985,8 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 	  break;
 
 	case 'd':
+	  if (*(oparg + 1) == '2' || *(oparg + 1) == 'n')
+	    oparg++;
 	  if ((l & MASK_AUIPC) == MATCH_AUIPC)
 	    pd->hi_addr[rd] = pc + EXTRACT_UTYPE_IMM (l);
 	  else if ((l & MASK_LUI) == MATCH_LUI)
