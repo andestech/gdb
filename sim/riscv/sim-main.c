@@ -835,12 +835,14 @@ execute_f (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op, int ex
       break;
     case MATCH_FMV_X_S:
       TRACE_INSN (cpu, "fmv.x.s %s, %s", rd_name, frs1_name);
-      cpu->regs[rd].u = cpu->fpregs[rs1].w[0];
+      cpu->regs[rd].s = (int64_t)cpu->fpregs[rs1].W[0];
       TRACE_REG (cpu, rd);
       break;
     case MATCH_FMV_S_X:
       TRACE_INSN (cpu, "fmv.s.x %s, %s", frd_name, rs1_name);
       cpu->fpregs[rd].w[0] = cpu->regs[rs1].u;
+      // Nan-boxing
+      cpu->fpregs[rd].w[1] = 0xffffffff;
       TRACE_FREG (cpu, rd);
       break;
     case MATCH_FEQ_S:
@@ -8443,12 +8445,16 @@ execute_zfh (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op,
       break;
     case MATCH_FMV_X_H:
       TRACE_INSN (cpu, "fmv.x.h %s, %s", rd_name, frs1_name);
-      cpu->regs[rd].b16.h0 = cpu->fpregs[rs1].H[0];
+      cpu->regs[rd].s = (int64_t)cpu->fpregs[rs1].H[0];
       TRACE_REG (cpu, rd);
       break;
     case MATCH_FMV_H_X:
       TRACE_INSN (cpu, "fmv.h.x %s, %s", frd_name, rs1_name);
       cpu->fpregs[rd].H[0] = cpu->regs[rs1].b16.h0;
+      // Nan-boxing
+      cpu->fpregs[rd].H[1] = 0xffff;
+      cpu->fpregs[rd].H[2] = 0xffff;
+      cpu->fpregs[rd].H[3] = 0xffff;
       TRACE_FREG (cpu, rd);
       break;
     case MATCH_FEQ_H:
