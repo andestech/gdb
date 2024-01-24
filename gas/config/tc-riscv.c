@@ -218,6 +218,10 @@ enum cmodel_subtype_index
 };
 /* } Andes  */
 
+/* lto discard.  */
+/* Hash table for lookup lto discard names.  */
+static htab_t lto_discard_names_hash = NULL;
+
 /* { Andes  */
 /* Save option -O1 for perfomance.  */
 static int optimize = 0;
@@ -1964,6 +1968,9 @@ md_begin (void)
 
   /* Set the default alignment for the text section.  */
   record_alignment (text_section, riscv_opts.rvc ? 1 : 2);
+
+  /* LTO discard.  */
+  lto_discard_names_hash = str_htab_create ();
 
   /* { Andes ACE */
   /* Load symbols from ACE shared library if exists */
@@ -7185,6 +7192,47 @@ riscv_innermost_loop (int mode)
     }
 }
 
+/* Insert LTO discard symbols.  */
+
+static void
+andes_lto_discard (int mode ATTRIBUTE_UNUSED)
+{
+  const char *error = NULL;
+  char *str = input_line_pointer;
+  char save_c;
+
+  while (!is_end_of_line[(unsigned char) *input_line_pointer])
+    ++input_line_pointer;
+
+  save_c = *input_line_pointer;
+  *input_line_pointer = '\0';
+
+  if (error)
+    as_bad ("%s `%s'", error, str);
+  else
+    {
+      char *token;
+      for (token = strtok (str, ",");
+	   token != NULL;
+	   token = strtok (NULL, ","))
+	{
+	  char *name = strdup (token);
+	  if (name == NULL)
+	    {
+	      as_bad (_("[.lto_discard]: out of memory for %s"), token);
+	      continue;
+	    }
+
+	  //printf ("[%s]: '%s'\n", __func__, token);
+	  if (str_hash_insert (lto_discard_names_hash, name, (void *) 1, 0))
+	    as_bad (_("[.lto_discard]: duplicate %s"), name);
+	}
+    }
+
+  *input_line_pointer = save_c;
+  demand_empty_rest_of_line ();
+}
+
 /* } Andes */
 
 /* Adjust the symbol table.  */
@@ -7368,6 +7416,7 @@ static const pseudo_typeS riscv_pseudo_table[] =
   {"no_execit_end", riscv_no_execit, 0},
   {"innermost_loop_begin", riscv_innermost_loop, 1},
   {"innermost_loop_end", riscv_innermost_loop, 0},
+  {"lto_discard", andes_lto_discard, 0},
   /* } Andes */
 
   { NULL, NULL, 0 },
@@ -7779,6 +7828,39 @@ andes_insert_btb_reloc (struct riscv_cl_insn *ip)
 		   &ex, false, BFD_RELOC_RISCV_ALIGN_BTB);
     }
 }
+
+#if 0
+static int
+andes_lto_discard_traverse (void **slot, void *arg ATTRIBUTE_UNUSED)
+{
+  string_tuple_t *tuple = *((string_tuple_t **) slot);
+  printf ("%s: (%s, %ld)\n", __func__, tuple->key, (long) tuple->value);
+  return 1; /* continue traverse.  */
+}
+#endif
+
+bool
+is_lto_discarded (char *name)
+{
+  intptr_t *pv;
+  pv = (intptr_t *) str_hash_find (lto_discard_names_hash, name);
+  if (pv)
+    {
+      //printf ("%s: '%s'\n", __func__, name);
+      return true;
+    }
+
+#if 0
+  if (name[0] == 'z')
+    {
+      htab_print_statistics (stdout, "lto discard table", lto_discard_names_hash);
+      htab_traverse_noresize (lto_discard_names_hash, andes_lto_discard_traverse, NULL);
+    }
+#endif
+
+  return false;
+}
+
 /* } Andes */
 
 /* { Andes ACE */

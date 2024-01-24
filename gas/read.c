@@ -2392,8 +2392,11 @@ s_globl (int ignore ATTRIBUTE_UNUSED)
       if ((name = read_symbol_name ()) == NULL)
 	return;
 
-      symbolP = symbol_find_or_make (name);
-      S_SET_EXTERNAL (symbolP);
+      if (! is_lto_discarded (name))
+	{
+	  symbolP = symbol_find_or_make (name);
+	  S_SET_EXTERNAL (symbolP);
+	}
 
       SKIP_WHITESPACE ();
       c = *input_line_pointer;
@@ -3314,7 +3317,13 @@ s_set (int equiv)
     }
 
   input_line_pointer++;
-  assign_symbol (name, equiv);
+  if (is_lto_discarded (name))
+    {
+      expressionS exp;
+      get_known_segmented_expression (&exp);
+    }
+  else
+    assign_symbol (name, equiv);
   demand_empty_rest_of_line ();
   free (name);
 }
@@ -3856,6 +3865,9 @@ s_weakref (int ignore ATTRIBUTE_UNUSED)
 
   if ((name = read_symbol_name ()) == NULL)
     return;
+
+  if (is_lto_discarded (name))
+    goto err_out;
 
   symbolP = symbol_find_or_make (name);
 
