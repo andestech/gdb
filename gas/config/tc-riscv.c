@@ -7255,6 +7255,74 @@ andes_lto_discard (int mode ATTRIBUTE_UNUSED)
   demand_empty_rest_of_line ();
 }
 
+/* Set LTO symbol conditionally.  */
+
+static void
+andes_lto_set_conditional (int mode ATTRIBUTE_UNUSED)
+{
+  char *str = input_line_pointer;
+  char *sym1 = NULL, *sym2 = NULL;
+  char save_c;
+  bool is_done = false;
+
+  while (!is_end_of_line[(unsigned char) *input_line_pointer])
+    ++input_line_pointer;
+
+  save_c = *input_line_pointer;
+  *input_line_pointer = '\0';
+
+  if (true)
+    {
+      char *token;
+      int i = 0;
+      for (token = strtok (str, ",");
+	   token != NULL;
+	   token = strtok (NULL, ","), ++i)
+	{
+	  symbolS *sym;
+	  char *name = strdup (token);
+	  if (name == NULL)
+	    {
+	      as_bad (_("[.lto_set_conditional]: out of memory for %s"), token);
+	      break;
+	    }
+	  if (i == 0)
+	    {
+	      sym1 = name;
+	      continue;
+	    }
+	  sym2 = name;
+	  /* check if sym2 defined.  */
+	  sym = symbol_find (sym2);
+	  if (sym == NULL)
+	    {
+	      printf ("[%s]: drop '%s'\n", __func__, sym1);
+	      break;
+	    }
+
+	  printf ("[%s]: set '%s' '%s'\n", __func__, sym1, sym2);
+	  /* bypass to "".equ". */
+	  *input_line_pointer = save_c;
+	  input_line_pointer = str;
+	  token[-1] = ',';
+	  s_set (0);
+	  is_done = true;
+	  break;
+	}
+    }
+
+  if (sym1)
+    free (sym1);
+  if (sym2)
+    free (sym2);
+
+  if (!is_done)
+    {
+      *input_line_pointer = save_c;
+      demand_empty_rest_of_line ();
+    }
+}
+
 /* } Andes */
 
 /* Adjust the symbol table.  */
@@ -7439,6 +7507,7 @@ static const pseudo_typeS riscv_pseudo_table[] =
   {"innermost_loop_begin", riscv_innermost_loop, 1},
   {"innermost_loop_end", riscv_innermost_loop, 0},
   {"lto_discard", andes_lto_discard, 0},
+  {"lto_set_conditional", andes_lto_set_conditional, 0},
   /* } Andes */
 
   { NULL, NULL, 0 },
