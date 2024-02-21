@@ -7222,7 +7222,6 @@ riscv_innermost_loop (int mode)
 static void
 andes_lto_discard (int mode ATTRIBUTE_UNUSED)
 {
-  const char *error = NULL;
   char *str = input_line_pointer;
   char save_c;
 
@@ -7232,9 +7231,7 @@ andes_lto_discard (int mode ATTRIBUTE_UNUSED)
   save_c = *input_line_pointer;
   *input_line_pointer = '\0';
 
-  if (error)
-    as_bad ("%s `%s'", error, str);
-  else
+  if (true)
     {
       char *token;
       for (token = strtok (str, ",");
