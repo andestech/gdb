@@ -117,8 +117,12 @@ vec_o_reserve (void *vec, int reserve, size_t vec_offset, size_t elt_size)
    We specifically ignore this warning for the vec functions when the compiler
    is clang.  */
 #ifdef __clang__
-# define DIAGNOSTIC_IGNORE_UNUSED_VEC_FUNCTION \
-    DIAGNOSTIC_IGNORE_UNUSED_FUNCTION
+  #ifndef __APPLE__
+    # define DIAGNOSTIC_IGNORE_UNUSED_VEC_FUNCTION \
+      DIAGNOSTIC_IGNORE_UNUSED_FUNCTION
+    #else
+      # define DIAGNOSTIC_IGNORE_UNUSED_VEC_FUNCTION
+  #endif
 #else
 # define DIAGNOSTIC_IGNORE_UNUSED_VEC_FUNCTION
 #endif
