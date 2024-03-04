@@ -341,7 +341,7 @@ parse_riscv_dis_option (const char *option)
   else if (strcmp (option, "ace") == 0)
     {
 #ifndef __MINGW32__
-      char *ace_lib_path = malloc (strlen (value));
+      char *ace_lib_path = malloc (strlen (value) + 1);
       strcpy (ace_lib_path, value);
       char *err = andes_ace_load_hooks(ace_lib_path);
       if (err)
