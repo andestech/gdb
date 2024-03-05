@@ -490,19 +490,20 @@ fprintf (file, _("\
 
 #if defined RISCV_EXECIT_EXT
   fprintf (file, _("\
-    --m[no-]execit              Disable/enable link-time EXECIT relaxation\n\
-    --mexport-execit=FILE       Export .exec.itable after linking\n\
-    --mimport-execit=FILE       Import .exec.itable for EXECIT relaxation\n\
-    --mkeep-import-execit       Keep imported .exec.itable\n\
-    --mupdate-execit            Update existing .exec.itable\n\
-    --mexecit-limit=NUM         Set maximum number of entries in .exec.itable for this times\n\
-    --mexecit-loop-aware        Avoid generate EXEC.IT instruction inside loop\n\
-    --m[no-]execit-fls          Enable/Disable EXEC.IT for floating load/store instructions\n\
-    --m[no-]execit-rvv          Enable/Disable EXEC.IT of RVV instructions\n\
-    --m[no-]execit-xdsp         Enable/Disable EXEC.IT of XDSP instructions\n\
-    --m[no-]execit-auipc        Enable/Disable EXEC.IT conversion for auipc instructions\n\
-    --m[no-]execit-jal          Enable/Disable EXEC.IT conversion for jal instructions\n\
-    --m[no-]execit-jal-over-2mib Disable/enable EXEC.IT conversion for jal instruction over the first 2MiB page of text section\n\
+    --m[no-]execit                Disable/Enable link-time EXECIT relaxation\n\
+    --mexport-execit=FILE         Export .exec.itable after linking\n\
+    --mimport-execit=FILE         Import .exec.itable for EXECIT relaxation\n\
+    --mkeep-import-execit         Keep imported .exec.itable\n\
+    --mupdate-execit              Update existing .exec.itable\n\
+    --mexecit-limit=NUM           Set maximum number of entries in .exec.itable for this times\n\
+    --mexecit-loop-aware          Avoid generate EXEC.IT instruction inside loop\n\
+    --m[no-]execit-fls            Disable/Enable EXEC.IT for floating load/store instructions\n\
+    --m[no-]execit-rvv            Disable/Enable EXEC.IT of RVV instructions\n\
+    --m[no-]execit-xdsp           Disable/Enable EXEC.IT of XDSP instructions\n\
+    --m[no-]execit-auipc          Disable/Enable EXEC.IT conversion for auipc instructions\n\
+    --m[no-]execit-jal            Disable/Enable EXEC.IT conversion for jal instructions\n\
+    --m[no-]execit-jal-over-2mib  Disable/Enable EXEC.IT conversion for jal instruction over the first 2MiB page of text section\n\
+    --m[no-]execit-jump           Disable/Enable EXEC.IT conversion for JUMP instructions\n\
 "));
 
   char *var = getenv("ANDES_HELP");
