@@ -4883,6 +4883,8 @@ _bfd_riscv_relax_lui_gp_insn (bfd *abfd, asection *sec, asection *sym_sec,
 			      bool *again ATTRIBUTE_UNUSED,
 			      riscv_pcgp_relocs *pcgp_relocs ATTRIBUTE_UNUSED,
 			      bool undefined_weak ATTRIBUTE_UNUSED);
+static bool
+is_relaxable_section (bfd *abfd, asection *sec);
 static int
 andes_execit_render_hash (execit_context_t *ctx);
 static void
@@ -7124,6 +7126,8 @@ _bfd_riscv_relax_section (bfd *abfd, asection *sec,
 	  if (*(htab->data_segment_phase) != 0)
 	    return true;
 	  *again = true; /* to clean up if none collected.  */
+	  if (! is_relaxable_section (abfd, sec))
+	    return true;
 	}
       /* Rank the entries, and calculate the expected total saving.  */
       else if (info->relax_trip == 1)
@@ -8136,6 +8140,41 @@ _bfd_riscv_relax_lui_gp_insn (bfd *abfd, asection *sec, asection *sym_sec,
   /* Do not relax lui to c.lui here since the dangerous delete
      behavior.  */
   return true;
+}
+
+/* check if section is relaxation enabled.  */
+
+static bool
+is_relaxable_section (bfd *abfd, asection *sec)
+{
+  bfd_byte *contents = NULL;
+  Elf_Internal_Sym *isym = NULL;
+  Elf_Internal_Rela *internal_relocs;
+  Elf_Internal_Rela *irelend;
+  Elf_Internal_Rela *irel;
+  int rtype;
+
+  /* Load section instructions, relocations, and symbol table.  */
+  if (!riscv_get_section_contents (abfd, sec, &contents, true)
+      || !riscv_get_local_syms (abfd, sec, &isym))
+    return false;
+
+  internal_relocs = _bfd_elf_link_read_relocs (abfd, sec, NULL, NULL,
+					       true /* keep_memory  */);
+  irelend = internal_relocs + sec->reloc_count;
+
+  /* Check the input section enable RELAX?  */
+  irel = find_relocs_at_address (internal_relocs, internal_relocs, irelend,
+				 R_RISCV_RELAX_ENTRY);
+
+  /* Check this input section disabled relaxation.  */
+  rtype = ELFNN_R_TYPE (irel->r_info);
+  if (irel == NULL || irel >= irelend || rtype != R_RISCV_RELAX_ENTRY
+      || (rtype == R_RISCV_RELAX_ENTRY
+	  && !(irel->r_addend & R_RISCV_RELAX_ENTRY_DISABLE_RELAX_FLAG)))
+    return true;
+
+  return false;
 }
 
 /* Generate EXECIT hash table.  */
