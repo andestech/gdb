@@ -31,10 +31,7 @@
 
 #include <stdint.h>
 #include <ctype.h>
-
-#ifndef __MINGW32__
 #include <dlfcn.h>
-#endif
 
 static enum riscv_spec_class default_isa_spec = ISA_SPEC_CLASS_DRAFT - 1;
 static enum riscv_spec_class default_priv_spec = PRIV_SPEC_CLASS_NONE;

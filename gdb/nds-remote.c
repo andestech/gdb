@@ -21,7 +21,10 @@
 #include "defs.h"
 #include <string.h>
 #include <sys/stat.h>
+
+#ifndef __MINGW32__
 #include <sys/utsname.h>
+#endif
 #include <unistd.h>
 #include "gdbcore.h"
 #include "gdbcmd.h"
@@ -590,28 +593,35 @@ nds_handle_ace(const char *ace_lib_path)
 static void
 nds_read_ace_desc_command (const char *args, int from_tty)
 {
+#ifndef __MINGW32__
   struct utsname os;
+  if (uname (&os) != 0)
+    return;
+#endif
 
   /* What kind of platform am I running at?  */
-  if (uname (&os) == 0)
+  string_file str;
+  char qrcmd[80];
+  const char *filename = NULL;
+
+#ifndef __MINGW32__
+  sprintf (qrcmd, "nds ace %s", os.sysname);
+#else
+  /* Tricky approach until we solve it in MinGW */
+  sprintf (qrcmd, "nds ace %s", "MINGW64_NT-10.0-22631");
+#endif
+
+  if (nds_issue_qrcmd (qrcmd, str) == -1)
+    return;
+
+  filename = str.c_str ();
+  if (strlen (filename) != 0)
     {
-      string_file str;
-      char qrcmd[80];
-      const char *filename = NULL;
+      const char *lib = "./libace.so";
 
-      sprintf (qrcmd, "nds ace %s", os.sysname);
-      if (nds_issue_qrcmd (qrcmd, str) == -1)
-	return;
-
-      filename = str.c_str ();
-      if (strlen (filename) != 0)
-	{
-	  const char *lib = "./libace.so";
-
-	  remote_file_get (filename, lib, from_tty);
-	  nds_handle_ace (lib);
-	  unlink (lib);
-	}
+      remote_file_get (filename, lib, from_tty);
+      nds_handle_ace (lib);
+      unlink (lib);
     }
 }
 
