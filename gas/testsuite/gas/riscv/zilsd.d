@@ -1,5 +1,5 @@
-#as: -march=rv32ic_zilsp
-#source: zilsp.s
+#as: -march=rv32ic_zilsd
+#source: zilsd.s
 #objdump: -d
 
 .*:[	 ]+file format .*

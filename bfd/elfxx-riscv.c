@@ -1734,7 +1734,7 @@ static struct riscv_supported_ext riscv_supported_std_z_ext[] =
   {"zifencei",		ISA_SPEC_CLASS_20191213,	2, 0,  0 },
   {"zifencei",		ISA_SPEC_CLASS_20190608,	2, 0,  0 },
   {"zihintpause",	ISA_SPEC_CLASS_DRAFT,		1, 0,  0 },
-  {"zilsp",		ISA_SPEC_CLASS_DRAFT,		0, 8,  0 },
+  {"zilsd",		ISA_SPEC_CLASS_DRAFT,		0, 8,  0 },
   {"zfinx",		ISA_SPEC_CLASS_DRAFT,		1, 0,  0 },
   {"zdinx",		ISA_SPEC_CLASS_DRAFT,		1, 0,  0 },
   {"zqinx",		ISA_SPEC_CLASS_DRAFT,		1, 0,  0 },
@@ -2559,11 +2559,11 @@ riscv_parse_check_conflicts (riscv_parse_subset_t *rps)
     }
   /* } Andes */
 
-  if (riscv_lookup_subset (rps->subset_list, "zilsp", &subset)
+  if (riscv_lookup_subset (rps->subset_list, "zilsd", &subset)
       && xlen > 32)
     {
       rps->error_handler
-	(_("rv%d does not support the `zilsp' extension"), xlen);
+	(_("rv%d does not support the `zilsd' extension"), xlen);
       no_conflict = false;
     }
 
@@ -2618,11 +2618,11 @@ riscv_parse_check_conflicts (riscv_parse_subset_t *rps)
       no_conflict = false;
     }
 
-  if (riscv_lookup_subset (rps->subset_list, "zilsp", &subset)
+  if (riscv_lookup_subset (rps->subset_list, "zilsd", &subset)
       && riscv_lookup_subset (rps->subset_list, "zcf", &subset))
     {
       rps->error_handler
-	(_("`zilsp' is conflict with `zcf' extension"));
+	(_("`zilsd' is conflict with `zcf' extension"));
       no_conflict = false;
     }
 
@@ -3143,10 +3143,10 @@ riscv_multi_subset_supports (riscv_parse_subset_t *rps,
       return riscv_subset_supports (rps, "zifencei");
     case INSN_CLASS_ZIHINTPAUSE:
       return riscv_subset_supports (rps, "zihintpause");
-    case INSN_CLASS_ZILSP:
-      return riscv_subset_supports (rps, "zilsp");
-    case INSN_CLASS_ZILSP_AND_C:
-      return (riscv_subset_supports (rps, "zilsp")
+    case INSN_CLASS_ZILSD:
+      return riscv_subset_supports (rps, "zilsd");
+    case INSN_CLASS_ZILSD_AND_C:
+      return (riscv_subset_supports (rps, "zilsd")
 	      && (riscv_subset_supports (rps, "c")
 		  || riscv_subset_supports (rps, "zca")));
     case INSN_CLASS_M:
