@@ -2093,7 +2093,7 @@ riscv_add_subset_ext (riscv_subset_list_t *subset_list,
 
 /* Get the default versions from the riscv_supported_*ext tables.  */
 
-static void
+void
 riscv_get_default_ext_version (enum riscv_spec_class *default_isa_spec,
 			       const char *name,
 			       int *major_version,
