@@ -1637,6 +1637,9 @@ static struct riscv_implicit_subset riscv_implicit_subsets[] =
   {"zfhmin", "f",	check_implicit_always},
   {"zqinx", "zdinx",	check_implicit_always},
   {"zdinx", "zfinx",	check_implicit_always},
+  {"xv", "xandes",	check_implicit_always},
+  {"xv", "xefhw",	check_implicit_always},
+  {"xv", "c",		check_implicit_always},
   {"c", "zca",		check_implicit_always},
   {"c", "zcf",		check_implicit_for_rv32_f},
   {"c", "zcd",		check_implicit_for_d},
@@ -1662,9 +1665,6 @@ static struct riscv_implicit_subset riscv_implicit_subsets[] =
   {"zcf", "zca",	check_implicit_always},
   {"zcb", "zca",	check_implicit_always},
   {"zcb", "xnexecit",	check_implicit_for_xandes_execit},
-  {"xv", "xandes",	check_implicit_always},
-  {"xv", "xefhw",	check_implicit_always},
-  {"xv", "c",		check_implicit_always},
   {NULL, NULL, NULL}
 };
 
