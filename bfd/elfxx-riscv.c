@@ -2621,8 +2621,13 @@ riscv_parse_check_conflicts (riscv_parse_subset_t *rps)
   if (riscv_lookup_subset (rps->subset_list, "zilsd", &subset)
       && riscv_lookup_subset (rps->subset_list, "zcf", &subset))
     {
-      rps->error_handler
-	(_("`zilsd' is conflict with `zcf' extension"));
+      static bool is_warned = false;
+      if (!is_warned)
+	{
+	  is_warned = true;
+	  rps->error_handler
+	    (_("`zilsd' is conflict with `zcf' extension"));
+	}
       no_conflict = false;
     }
 

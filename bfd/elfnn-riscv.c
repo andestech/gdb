@@ -4467,13 +4467,13 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
 		riscv_merge_arch_attr_info (ibfd,
 					    out_attr[Tag_RISCV_arch].s,
 					    merged_arch);
-	    if (merged_arch == NULL)
-	      {
-		result = false;
-		out_attr[Tag_RISCV_arch].s = "";
-	      }
-	    else /* TODO: free old arch string?  */
-	      out_attr[Tag_RISCV_arch].s = merged_arch;
+	  if (merged_arch == NULL)
+	    {
+	      result = false;
+	      out_attr[Tag_RISCV_arch].s = "";
+	    }
+	  else /* TODO: free old arch string?  */
+	    out_attr[Tag_RISCV_arch].s = merged_arch;
 	}
 
       return result;
@@ -4694,6 +4694,16 @@ riscv_merge_attributes (bfd *ibfd, struct bfd_link_info *info)
   /* Merge Tag_compatibility attributes and any common GNU ones.  */
   if (!_bfd_elf_merge_object_attributes (ibfd, info))
     return false;
+
+  if (result)
+    {
+      riscv_subset_list_t subsets = {NULL, NULL, NULL};
+      unsigned xlen;
+      riscv_parse_subset_t rps =
+	{&subsets, _bfd_error_handler, _bfd_error_handler, &xlen, NULL, false,
+	 STATE_DEFAULT, false};
+      result = riscv_parse_subset (&rps, out_attr[Tag_RISCV_arch].s);
+    }
 
   return result;
 }
