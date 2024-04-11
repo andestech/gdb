@@ -8418,6 +8418,19 @@ update_dprintf_commands (const char *args, int from_tty,
 	update_dprintf_command_list (b);
 }
 
+struct inferior *nds_find_inferior_by_thread (int thread_id)
+{
+	for (inferior *inf : all_inferiors ()) {
+		for (thread_info *thread : inf->threads ())
+		{
+			printf_unfiltered ("thread->global_num: 0x%x\n", thread->global_num);
+			if (thread->global_num == thread_id)
+				 return inf;
+		}
+	}
+	return NULL;
+}
+
 /* Create a breakpoint with SAL as location.  Use LOCATION
    as a description of the location, and COND_STRING
    as condition expression.  If LOCATION is NULL then create an
@@ -8458,9 +8471,9 @@ init_breakpoint_sal (struct breakpoint *b, struct gdbarch *gdbarch,
     {
       struct bp_location *loc;
 			if (thread != -1) {
-				struct inferior *inf = find_inferior_id (thread);
+				struct inferior *inf = nds_find_inferior_by_thread (thread);
 				/* printf_unfiltered ("inf->pspace: 0x%x, sal.pspace: 0x%x\n", inf->pspace, sal.pspace); */
-				if (sal.pspace != inf->pspace)
+				if ((inf) && (sal.pspace != inf->pspace))
 					continue;
 			}
 
