@@ -2027,6 +2027,13 @@ riscv_global_pointer_value (struct bfd_link_info *info)
 }
 
 /* Emplace a static relocation.  */
+/* to track relocation signness.  */
+typedef struct relo_sign
+{
+  const Elf_Internal_Rela *rel;
+  bool is_minus;
+} relo_sign_t;
+static relo_sign_t relosign;
 
 static bfd_reloc_status_type
 perform_relocation (const reloc_howto_type *howto,
@@ -2036,6 +2043,7 @@ perform_relocation (const reloc_howto_type *howto,
 		    bfd *input_bfd,
 		    bfd_byte *contents)
 {
+  /* TODO: value might be truncated here.  */
   if (howto->pc_relative)
     value -= sec_addr (input_section) + rel->r_offset;
   value += rel->r_addend;
@@ -2144,6 +2152,15 @@ perform_relocation (const reloc_howto_type *howto,
     case R_RISCV_32_PCREL:
     case R_RISCV_TLS_DTPREL32:
     case R_RISCV_TLS_DTPREL64:
+      {
+	bfd_signed_vma test = value;
+	test >>= howto->bitsize;
+	if (test == -1LL)
+	  {
+	    relosign.is_minus = true;
+	    relosign.rel = rel;
+	  }
+      }
       break;
 
     case R_RISCV_DELETE:
@@ -2519,6 +2536,7 @@ riscv_elf_relocate_section (bfd *output_bfd,
   is_ict_fini = true;
   /* } Andes */
 
+  relosign.is_minus = false;
   relend = relocs + input_section->reloc_count;
   for (rel = relocs; rel < relend; rel++)
     {
@@ -2564,6 +2582,10 @@ riscv_elf_relocate_section (bfd *output_bfd,
 	  howto = riscv_elf_rtype_to_howto (input_bfd, r_type);
 	}
       /* } Andes */
+
+      if (relosign.is_minus && relosign.rel
+	  && relosign.rel->r_offset != rel->r_offset)
+	relosign.is_minus = false;
 
       /* This is a final link.  */
       r_symndx = ELFNN_R_SYM (rel->r_info);
@@ -3019,7 +3041,22 @@ riscv_elf_relocate_section (bfd *output_bfd,
 	  {
 	    bfd_vma old_value = bfd_get (howto->bitsize, input_bfd,
 					 contents + rel->r_offset);
+	    if (relosign.is_minus && relosign.rel
+		&& relosign.rel->r_offset == rel->r_offset)
+	      {
+		old_value |= (bfd_signed_vma)(-((old_value >> (howto->bitsize - 1)) & 1)) << howto->bitsize;
+	      }
 	    relocation = old_value + relocation;
+	    /* check overflow.  */
+	    if (r_type == R_RISCV_ADD32)
+	      {
+		bfd_signed_vma test = relocation;
+		bfd_vma mask = (1LL << howto->bitsize) - 1;
+		bfd_signed_vma fit = test & mask;
+		test >>= howto->bitsize;
+		if (test && !(test == -1LL && (fit >> (howto->bitsize - 1))))
+		  r = bfd_reloc_overflow;
+	      }
 	  }
 	  break;
 
@@ -3031,7 +3068,22 @@ riscv_elf_relocate_section (bfd *output_bfd,
 	  {
 	    bfd_vma old_value = bfd_get (howto->bitsize, input_bfd,
 					 contents + rel->r_offset);
+	    if (relosign.is_minus && relosign.rel
+		&& relosign.rel->r_offset == rel->r_offset)
+	      {
+		old_value |= (bfd_signed_vma)(-((old_value >> (howto->bitsize - 1)) & 1)) << howto->bitsize;
+	      }
 	    relocation = old_value - relocation;
+	    /* check underflow.  */
+	    if (r_type == R_RISCV_SUB32)
+	      {
+		bfd_signed_vma test = relocation;
+		bfd_vma mask = (1LL << howto->bitsize) - 1;
+		bfd_signed_vma fit = test & mask;
+		test >>= howto->bitsize;
+		if (test && !(test == -1LL && (fit >> (howto->bitsize - 1))))
+		  r = bfd_reloc_overflow;
+	      }
 	  }
 	  break;
 
