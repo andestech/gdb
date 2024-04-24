@@ -250,6 +250,27 @@ static inline bool NEC_check_bool(ELF_Fail_Type type, const char *isa, bool cpu,
     return code;
 }
 
+static inline bool NEC_check_bool_for_C(ELF_Fail_Type type, const char *isa, const char *other_info, bool cpu, bool elf)
+{
+    bool code;
+    const char *NEC_MSG_ISA[2] = {"OFF", "ON"};
+    if (!cpu && elf)
+        code = 1;
+    else
+    {
+        code = 0;
+        type = EFT_NONE;
+    }
+    char error_info[150];
+
+    if (*other_info)
+        NEC_snprintf(error_info, sizeof(error_info), "Not supported by CPU. %s", other_info);
+    else
+        NEC_snprintf(error_info, sizeof(error_info), "Not supported by CPU ");
+    NEC_print(type, isa, NEC_MSG_ISA[cpu], NEC_MSG_ISA[elf], error_info);
+    return code;
+}
+
 #ifdef DEBUG_NEC
 #define Debug_printf(fmt, ...) printf(fmt, ##__VA_ARGS__)
 #else
@@ -594,7 +615,7 @@ static bool cpu_support_arch_config(reg_t mrvarch_cfg, const char *ext, bool is_
     return is_ext_en;
 }
 
-static bool cpu_support_arch_c_config(reg_t misa, reg_t mrvarch_cfg, const char *ext, bool is_mrvarch_cfg_exist)
+static bool cpu_support_arch_c_config(reg_t misa, reg_t mrvarch_cfg, const char *ext, bool is_mrvarch_cfg_exist, char *c_other_error_info)
 {
 
     bool is_ext_en = false;
@@ -603,7 +624,11 @@ static bool cpu_support_arch_c_config(reg_t misa, reg_t mrvarch_cfg, const char 
     if (strncmp(ext, "Zca", 3) == 0)
     {
         is_ext_en = (((mrvarch_cfg & 0x4000000) != 0));
-        is_ext_en_check_misa = ((misa & 0x4) == 0x4);
+        is_ext_en_check_misa = ((misa & 0x4) == 0x4); // RVC support
+        if (!is_ext_en_check_misa)
+            strcat(c_other_error_info, "RVC(imply zca) not support");
+        if ((!is_ext_en_check_misa) && (!is_ext_en))
+            strcat(c_other_error_info, " or ");
     }
     else if (strncmp(ext, "Zcb", 3) == 0)
     {
@@ -612,12 +637,20 @@ static bool cpu_support_arch_c_config(reg_t misa, reg_t mrvarch_cfg, const char 
     else if (strncmp(ext, "Zcd", 3) == 0)
     {
         is_ext_en = ((mrvarch_cfg & 0x10000000) != 0);
-        is_ext_en_check_misa = ((misa & 0xC) == 0xC);
+        is_ext_en_check_misa = ((misa & 0xC) == 0xC); // RVC+RVD support
+        if (!is_ext_en_check_misa)
+            strcat(c_other_error_info, "Need RVC+RVD(imply zcd) support");
+        if ((!is_ext_en_check_misa) && (!is_ext_en))
+            strcat(c_other_error_info, " and ");
     }
     else if (strncmp(ext, "Zcf", 3) == 0)
     {
         is_ext_en = ((mrvarch_cfg & 0x20000000) != 0);
-        is_ext_en_check_misa = ((misa & 0x24) == 0x24);
+        is_ext_en_check_misa = ((misa & 0x24) == 0x24); // RVC +RVF support
+        if (!is_ext_en_check_misa)
+            strcat(c_other_error_info, "RVC+RVF(imply zcf) not support");
+        if ((!is_ext_en_check_misa) && (!is_ext_en))
+            strcat(c_other_error_info, " or ");
     }
     else if (strncmp(ext, "Zcmp", 4) == 0)
     {
@@ -627,11 +660,25 @@ static bool cpu_support_arch_c_config(reg_t misa, reg_t mrvarch_cfg, const char 
     {
         is_ext_en = ((mrvarch_cfg & 0x80000000) != 0);
     }
+    if (!is_ext_en)
+    {
+        if (strncmp(ext, "Zcd", 3) == 0)
+        {
+            strcat(c_other_error_info, "both ZCE:zcmp and ZCE:zcmt all disable");
+        }
+        else
+        {
+            strcat(c_other_error_info, "ZCE:");
+            strcat(c_other_error_info, ext);
+            strcat(c_other_error_info, " not support");
+        }
+    }
 
-    if (is_ext_en_check_misa)
+    if ((is_ext_en && is_mrvarch_cfg_exist) || (is_ext_en_check_misa))
+    {
+        memset(c_other_error_info, 0, strlen(c_other_error_info));
         return true;
-    else if (is_ext_en && is_mrvarch_cfg_exist)
-        return true;
+    }
     else
         return false;
 }
@@ -904,6 +951,31 @@ static int parse_riscv_base_isa(const char **s)
 static bool is_multi_letter_extension(const char c)
 {
     return c == 'z' || c == 's' || c == 'h' || c == 'x';
+}
+
+// complement ELF attribute: C imply zca, C+F imply zca +zcf, C+D  imply  zca +zcf +zcd
+static void set_riscv_CEXT_subset_atrribute_accroding_ELF_CDF()
+{
+
+    if (nds_info.ext_use[5]) // C
+    {
+        nds_info.c_ext_use[C_EXT_ZCA] = true;
+
+        if (((nds_info.base_isa_index == BASE_ISA_RV32E) || (nds_info.base_isa_index == BASE_ISA_RV32I)) &&
+            (nds_info.ext_use[2] || nds_info.ext_use[3])) // F or D
+            nds_info.c_ext_use[C_EXT_ZCF] = true;
+
+        if (nds_info.ext_use[3] && !(nds_info.c_ext_use[C_EXT_ZCMP] || nds_info.c_ext_use[C_EXT_ZCMT]))
+            nds_info.c_ext_use[C_EXT_ZCD] = true;
+    }
+    // debug
+#if ELFCHECK_DEBUG
+    printf("Debug: RVC ZCE ELF attribute");
+    for (int i = 0; i < C_EXT_COUNT; i++)
+    {
+        printf(": %d", nds_info.c_ext_use[i]);
+    }
+#endif
 }
 
 static int parse_riscv_isa_string(const char *s)
@@ -1189,6 +1261,7 @@ static int parse_riscv_isa_string(const char *s)
         while (*s == '_')
             ++s;
     }
+    set_riscv_CEXT_subset_atrribute_accroding_ELF_CDF();
     --indent;
     return 0;
 }
@@ -1463,7 +1536,7 @@ static int elf_check(void *file_data, unsigned int file_size, CALLBACK_FUNC reg_
 
     reg_t CSR_misa;
     reg_t CSR_mmsc_cfg, CSR_mmsc_cfg2;
-    reg_t CSR_mrvarch_cfg;
+    reg_t CSR_mrvarch_cfg = reg_read_callback(0xFCA);
     CSR_misa = reg_read_callback(0x301);
     CSR_mmsc_cfg = reg_read_callback(0xFC2);
     mxl = (CSR_misa >> 30) & 0x3;
@@ -1500,8 +1573,9 @@ static int elf_check(void *file_data, unsigned int file_size, CALLBACK_FUNC reg_
     for (i = 0; i < EXT_COUNT; i++)
     {
         ext_str[0] = riscv_extensions[i];
-        // ignore c flag checking if zc flag is defined
-        if (('C' == ext_str[0]) && (elf_use_ext_i(RISCV_C_EXT::C_EXT_ZCA, ext_type::C_EXT)))
+        //(CSR_misa &8) && ((CSR_mrvarch_cfg & 0x80000000) ||(CSR_mrvarch_cfg&0x40000000)) => CPU, d && (zcmt ||zcmp) is enable . misa.c
+        // will disable At this sisuation,  misa.c not enough to represent ELF 'C' instruction set so ignore it.
+        if ('C' == ext_str[0] && (nds_info.c_ext_use[C_EXT_ZCMP] || nds_info.c_ext_use[C_EXT_ZCMT]))
             continue;
 
         NEC_snprintf(temp, sizeof(temp), "Extension '%s'", ext_str);
@@ -1519,7 +1593,7 @@ static int elf_check(void *file_data, unsigned int file_size, CALLBACK_FUNC reg_
             CSR_mmsc_cfg2 = reg_read_callback(0xFC3);
             if ((CSR_mmsc_cfg2 & 0x100000) != 0)
             {
-                CSR_mrvarch_cfg = reg_read_callback(0xFCA);
+                // CSR_mrvarch_cfg = reg_read_callback(0xFCA);
                 is_mrvarch_exist = true;
             }
         }
@@ -1528,7 +1602,7 @@ static int elf_check(void *file_data, unsigned int file_size, CALLBACK_FUNC reg_
     {
         if ((CSR_mmsc_cfg & 0x10000000000000) != 0)
         {
-            CSR_mrvarch_cfg = reg_read_callback(0xFCA);
+            // CSR_mrvarch_cfg = reg_read_callback(0xFCA);
             is_mrvarch_exist = true;
         }
     }
@@ -1546,14 +1620,17 @@ static int elf_check(void *file_data, unsigned int file_size, CALLBACK_FUNC reg_
     }
 
     // check c-ext
+    char c_other_error_info[100];
     for (i = 0; i < C_EXT_COUNT; i++)
     {
         if (elf_use_ext_i(i, ext_type::C_EXT))
         {
             NEC_snprintf(temp, sizeof(temp), "'%s' extension", riscv_c_extensions[i]);
-            if (NEC_check_bool(EFT_ERROR, temp,
-                    cpu_support_arch_c_config(CSR_misa, CSR_mrvarch_cfg, riscv_c_extensions[i], is_mrvarch_exist), nds_info.c_ext_use[i]))
+            if (NEC_check_bool_for_C(EFT_ERROR, temp, c_other_error_info,
+                    cpu_support_arch_c_config(CSR_misa, CSR_mrvarch_cfg, riscv_c_extensions[i], is_mrvarch_exist, c_other_error_info),
+                    nds_info.c_ext_use[i]))
                 n_error++;
+            memset(c_other_error_info, 0, sizeof(c_other_error_info));
         }
     }
 
