@@ -1536,7 +1536,7 @@ static int elf_check(void *file_data, unsigned int file_size, CALLBACK_FUNC reg_
 
     reg_t CSR_misa;
     reg_t CSR_mmsc_cfg, CSR_mmsc_cfg2;
-    reg_t CSR_mrvarch_cfg = reg_read_callback(0xFCA);
+    reg_t CSR_mrvarch_cfg;
     CSR_misa = reg_read_callback(0x301);
     CSR_mmsc_cfg = reg_read_callback(0xFC2);
     mxl = (CSR_misa >> 30) & 0x3;
@@ -1593,7 +1593,7 @@ static int elf_check(void *file_data, unsigned int file_size, CALLBACK_FUNC reg_
             CSR_mmsc_cfg2 = reg_read_callback(0xFC3);
             if ((CSR_mmsc_cfg2 & 0x100000) != 0)
             {
-                // CSR_mrvarch_cfg = reg_read_callback(0xFCA);
+                CSR_mrvarch_cfg = reg_read_callback(0xFCA);
                 is_mrvarch_exist = true;
             }
         }
@@ -1602,7 +1602,7 @@ static int elf_check(void *file_data, unsigned int file_size, CALLBACK_FUNC reg_
     {
         if ((CSR_mmsc_cfg & 0x10000000000000) != 0)
         {
-            // CSR_mrvarch_cfg = reg_read_callback(0xFCA);
+            CSR_mrvarch_cfg = reg_read_callback(0xFCA);
             is_mrvarch_exist = true;
         }
     }
