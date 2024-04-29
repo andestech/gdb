@@ -1575,7 +1575,7 @@ static int elf_check(void *file_data, unsigned int file_size, CALLBACK_FUNC reg_
         ext_str[0] = riscv_extensions[i];
         //(CSR_misa &8) && ((CSR_mrvarch_cfg & 0x80000000) ||(CSR_mrvarch_cfg&0x40000000)) => CPU, d && (zcmt ||zcmp) is enable . misa.c
         // will disable At this sisuation,  misa.c not enough to represent ELF 'C' instruction set so ignore it.
-        if ('C' == ext_str[0] && (nds_info.c_ext_use[C_EXT_ZCMP] || nds_info.c_ext_use[C_EXT_ZCMT]))
+        if ('C' == ext_str[0])
             continue;
 
         NEC_snprintf(temp, sizeof(temp), "Extension '%s'", ext_str);
