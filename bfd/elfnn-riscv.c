@@ -2155,7 +2155,7 @@ perform_relocation (const reloc_howto_type *howto,
       {
 	bfd_signed_vma test = value;
 	test >>= howto->bitsize;
-	if (test == -1LL)
+	if (test == -1LL && execit.htab->andes.set_truncation_check)
 	  {
 	    relosign.is_minus = true;
 	    relosign.rel = rel;
@@ -3048,7 +3048,7 @@ riscv_elf_relocate_section (bfd *output_bfd,
 	      }
 	    relocation = old_value + relocation;
 	    /* check overflow.  */
-	    if (r_type == R_RISCV_ADD32)
+	    if (r_type == R_RISCV_ADD32 && andes->set_truncation_check)
 	      {
 		bfd_signed_vma test = relocation;
 		bfd_vma mask = (1LL << howto->bitsize) - 1;
@@ -3075,7 +3075,7 @@ riscv_elf_relocate_section (bfd *output_bfd,
 	      }
 	    relocation = old_value - relocation;
 	    /* check underflow.  */
-	    if (r_type == R_RISCV_SUB32)
+	    if (r_type == R_RISCV_SUB32 && andes->set_truncation_check)
 	      {
 		bfd_signed_vma test = relocation;
 		bfd_vma mask = (1LL << howto->bitsize) - 1;

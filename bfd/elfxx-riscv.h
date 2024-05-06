@@ -303,6 +303,8 @@ typedef struct andes_ld_options
   int set_relax_cross_section_call;
   /* Defalut do workaround.  */
   int set_workaround;
+  /* Defalut do truncation check.  */
+  int set_truncation_check;
   /* Default page size  */
   int set_relax_page_size;
   /* For EXECIT.  */
