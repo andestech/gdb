@@ -1665,6 +1665,8 @@ static struct riscv_implicit_subset riscv_implicit_subsets[] =
   {"zcf", "zca",	check_implicit_always},
   {"zcb", "zca",	check_implicit_always},
   {"zcb", "xnexecit",	check_implicit_for_xandes_execit},
+  {"zcmlsd", "zilsd",	check_implicit_always},
+  {"zcmlsd", "zca",	check_implicit_always},
   {NULL, NULL, NULL}
 };
 
@@ -1735,6 +1737,7 @@ static struct riscv_supported_ext riscv_supported_std_z_ext[] =
   {"zifencei",		ISA_SPEC_CLASS_20190608,	2, 0,  0 },
   {"zihintpause",	ISA_SPEC_CLASS_DRAFT,		1, 0,  0 },
   {"zilsd",		ISA_SPEC_CLASS_DRAFT,		0, 8,  0 },
+  {"zcmlsd",		ISA_SPEC_CLASS_DRAFT,		0, 8,  0 },
   {"zfinx",		ISA_SPEC_CLASS_DRAFT,		1, 0,  0 },
   {"zdinx",		ISA_SPEC_CLASS_DRAFT,		1, 0,  0 },
   {"zqinx",		ISA_SPEC_CLASS_DRAFT,		1, 0,  0 },
@@ -2563,7 +2566,7 @@ riscv_parse_check_conflicts (riscv_parse_subset_t *rps)
       && xlen > 32)
     {
       rps->error_handler
-	(_("rv%d does not support the `zilsd' extension"), xlen);
+	(_("rv%d does not support the `zilsd' or `zcmlsd' extension"), xlen);
       no_conflict = false;
     }
 
@@ -2618,7 +2621,7 @@ riscv_parse_check_conflicts (riscv_parse_subset_t *rps)
       no_conflict = false;
     }
 
-  if (riscv_lookup_subset (rps->subset_list, "zilsd", &subset)
+  if (riscv_lookup_subset (rps->subset_list, "zcmlsd", &subset)
       && riscv_lookup_subset (rps->subset_list, "zcf", &subset))
     {
       static bool is_warned = false;
@@ -2626,7 +2629,7 @@ riscv_parse_check_conflicts (riscv_parse_subset_t *rps)
 	{
 	  is_warned = true;
 	  rps->error_handler
-	    (_("`zilsd' is conflict with `zcf' extension"));
+	    (_("`zcmlsd' is conflict with `zcf' extension"));
 	}
       no_conflict = false;
     }
@@ -2827,6 +2830,10 @@ andes_is_hidden_implicit_subset (riscv_subset_t *sub)
     }
 
   /* suppress implict subsets.  */
+  /* zcmlsd is auto-complemented.  */
+  if (0 == strcmp (sub->name, "zcmlsd"))
+    return false;
+
   pre = (const char **) implied;
   while (*pre)
     { /* check prefix only.  */
@@ -2911,7 +2918,8 @@ riscv_arch_str_ext (unsigned xlen, const riscv_subset_list_t *subset,
       if (strncmp (subset_t->name, "zc", 2) == 0
 	  && subset_t->is_implicit == false)
 	{
-	  has_zc = true;
+	  if (strcmp (subset_t->name, "zcmlsd"))
+	    has_zc = true;
 	  break;
 	}
       subset_t = subset_t->next;
@@ -3150,10 +3158,10 @@ riscv_multi_subset_supports (riscv_parse_subset_t *rps,
       return riscv_subset_supports (rps, "zihintpause");
     case INSN_CLASS_ZILSD:
       return riscv_subset_supports (rps, "zilsd");
-    case INSN_CLASS_ZILSD_AND_C:
-      return (riscv_subset_supports (rps, "zilsd")
-	      && (riscv_subset_supports (rps, "c")
-		  || riscv_subset_supports (rps, "zca")));
+    case INSN_CLASS_ZCMLSD:
+      return (riscv_subset_supports (rps, "zcmlsd")
+	      && riscv_subset_supports (rps, "zilsd")
+	      && riscv_subset_supports (rps, "zca"));
     case INSN_CLASS_M:
       return riscv_subset_supports (rps, "m");
     case INSN_CLASS_A:

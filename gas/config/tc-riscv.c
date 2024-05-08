@@ -386,7 +386,7 @@ struct riscv_set_options
   int full_arch;
   int no_branch_relax;
   int no_rvc_convert;
-  int no_zilsd_auto;
+  int zxlsd_auto;
   int is_linux;
   /* } Andes  */
 };
@@ -418,7 +418,7 @@ static struct riscv_set_options riscv_opts =
   0, /* full arch */
   0, /* no_branch_relax */
   0, /* no_rvc_convert */
-  0, /* no_zilsd_auto */
+  1, /* zxlsd_auto */
   0, /* is_linux */
   /* } Andes  */
 };
@@ -3425,7 +3425,6 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
   const char *error = "unrecognized opcode";
   /* Indicate we are assembling instruction with CSR.  */
   bool insn_with_csr = false;
-  bool has_zilsd = riscv_subset_supports (&riscv_rps_as, "zilsd");
 
   /* Parse the name of the instruction.  Terminate the string if whitespace
      is found so that str_hash_find only sees the name part of the string.  */
@@ -3445,11 +3444,12 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
       if ((insn->xlen_requirement != 0) && (xlen != insn->xlen_requirement))
 	continue;
 
-      if (xlen == 32 && !has_zilsd && !riscv_opts.no_zilsd_auto
-	  && (insn->insn_class == INSN_CLASS_ZILSD
-	      || (insn->insn_class == INSN_CLASS_ZILSD_AND_C
-	          && riscv_multi_subset_supports (&riscv_rps_as, INSN_CLASS_C))))
-	/* try zilsd (auto add).  */;
+      /* xlen checked.  */
+      if ((insn->insn_class == INSN_CLASS_ZILSD
+	   || (insn->insn_class == INSN_CLASS_ZCMLSD
+	       && riscv_multi_subset_supports (&riscv_rps_as, INSN_CLASS_C)))
+	  && riscv_opts.zxlsd_auto)
+	/* try zxlsd (auto complement).  */;
       else if (!riscv_multi_subset_supports (&riscv_rps_as, insn->insn_class))
 	continue;
 
@@ -3457,7 +3457,8 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
       if (riscv_opts.no_rvc_convert
 	  && (insn->insn_class == INSN_CLASS_C
 	      || insn->insn_class == INSN_CLASS_F_AND_C
-	      || insn->insn_class == INSN_CLASS_D_AND_C)
+	      || insn->insn_class == INSN_CLASS_D_AND_C
+	      || insn->insn_class == INSN_CLASS_ZCMLSD)
 	  && 0 != strncmp (insn->name, "c.", 2))
 	continue;
 
@@ -4858,13 +4859,24 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
   if (save_c)
     *(asargStart  - 1) = save_c;
 
-  if (!has_zilsd && error == NULL && !riscv_opts.no_zilsd_auto
-      && (insn->insn_class == INSN_CLASS_ZILSD
-	  || insn->insn_class == INSN_CLASS_ZILSD_AND_C))
-    { /* auto add zilsd.  */
-      int ver = RISCV_UNKNOWN_VERSION;
-      riscv_parse_add_subset (&riscv_rps_as, "zilsd", ver, ver, true);
-      riscv_parse_check_conflicts (&riscv_rps_as);
+  if (error == NULL && riscv_opts.zxlsd_auto)
+    { /* zxlsd auto complement.  */
+      if (insn->insn_class == INSN_CLASS_ZILSD
+	  && !riscv_subset_supports (&riscv_rps_as, "zilsd"))
+	{
+	  int ver = RISCV_UNKNOWN_VERSION;
+	  riscv_parse_add_subset (&riscv_rps_as, "zilsd", ver, ver, true);
+	  riscv_parse_add_implicit_subsets (&riscv_rps_as);
+	  riscv_parse_check_conflicts (&riscv_rps_as);
+	}
+      else if (insn->insn_class == INSN_CLASS_ZCMLSD
+	       && !riscv_subset_supports (&riscv_rps_as, "zcmlsd"))
+	{
+	  int ver = RISCV_UNKNOWN_VERSION;
+	  riscv_parse_add_subset (&riscv_rps_as, "zcmlsd", ver, ver, true);
+	  riscv_parse_add_implicit_subsets (&riscv_rps_as);
+	  riscv_parse_check_conflicts (&riscv_rps_as);
+	}
     }
 
   if (error == NULL && riscv_opts.workaround)
@@ -5136,7 +5148,7 @@ enum options
   OPTION_MNEXECIT_OP,
   OPTION_MNO_BRANCH_RELAX,
   OPTION_MNO_RVC_CONVERT,
-  OPTION_MNO_ZILSD_AUTO,
+  OPTION_MNO_ZXLSD_AUTO,
   /* } Andes  */
   OPTION_END_OF_ENUM
 };
@@ -5183,7 +5195,7 @@ struct option md_longopts[] =
   {"mfull-arch", no_argument, NULL, OPTION_FULL_ARCH},
   {"mno-branch-relax", no_argument, NULL, OPTION_MNO_BRANCH_RELAX},
   {"mno-rvc-convert", no_argument, NULL, OPTION_MNO_RVC_CONVERT},
-  {"mno-zilsd-auto", no_argument, NULL, OPTION_MNO_ZILSD_AUTO},
+  {"mno-zxlsd-auto", no_argument, NULL, OPTION_MNO_ZXLSD_AUTO},
   /* } Andes  */
 
   {NULL, no_argument, NULL, 0}
@@ -5332,8 +5344,8 @@ md_parse_option (int c, const char *arg)
       riscv_opts.no_rvc_convert = true;
       break;
 
-    case OPTION_MNO_ZILSD_AUTO:
-      riscv_opts.no_zilsd_auto = true;
+    case OPTION_MNO_ZXLSD_AUTO:
+      riscv_opts.zxlsd_auto = false;
       break;
     /* } Andes  */
 
@@ -5948,8 +5960,8 @@ s_riscv_option (int x ATTRIBUTE_UNUSED)
     riscv_opts.no_branch_relax = true;
   else if (strcmp (name, "no_rvc_convert") == 0)
     riscv_opts.no_rvc_convert = true;
-  else if (strcmp (name, "no_zilsd_auto") == 0)
-    riscv_opts.no_zilsd_auto = true;
+  else if (strcmp (name, "no_zxlsd_auto") == 0)
+    riscv_opts.zxlsd_auto = false;
   else if (strncmp (name, "cmodel_", 7) == 0)
     {
       if (strcmp (name+7, "large") == 0 && xlen > 32)
