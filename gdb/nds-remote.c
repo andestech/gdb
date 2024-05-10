@@ -471,6 +471,9 @@ nds_elf_check_get_register (unsigned int csr_no)
     case 0xfca: /* mrvarch_cfg */
       regnum = user_reg_map_name_to_regnum (gdbarch, "mrvarch_cfg", -1);
       break;
+    case 0xfcb: /* mrvarch_cfg2 */
+      regnum = user_reg_map_name_to_regnum (gdbarch, "mrvarch_cfg2", -1);
+      break;
     default:
       break;
     }

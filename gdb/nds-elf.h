@@ -302,6 +302,7 @@ static const char *riscv_k_extensions[] = {"Zkn", "Zks", "Zkt", "Zkr", "Zk"};
 static const char *riscv_s_extensions[] = {"Zkn", "Zks", "Zkt", "Zkr", "Zk"};
 static const char *riscv_cmo_extensions[] = {"Zicbom", "Zicbop", "Zicboz"};
 static const char *riscv_misc_extensions[] = {"Svinval"};
+static const char *riscv_zilsd_extensions[] = {"Zilsd", "Zcmlsd"};
 
 enum RISCV_EXT
 {
@@ -320,6 +321,7 @@ enum ext_type
     K_EXT,
     CMO_EXT,
     MISC_EXT,
+    ZILSD_EXT,
     EXT_TYPE_COUNT
 };
 
@@ -378,6 +380,13 @@ enum RISCV_MISC_EXT
     MISC_EXT_COUNT
 };
 
+enum RISCV_ZILSD_EXT
+{
+    ZILSD_EXT_ZILSD,
+    ZILSD_EXT_ZCMLSD,
+    ZILSD_EXT_COUNT
+};
+
 typedef struct
 {
     int base_isa_index;
@@ -394,7 +403,7 @@ typedef struct
     bool k_ext_use[K_EXT_COUNT];
     bool cmo_ext_use[CMO_EXT_COUNT];
     bool misc_ext_use[MISC_EXT_COUNT];
-
+    bool zilsd_ext_use[ZILSD_EXT_COUNT];
 } riscv_elf_info;
 
 static riscv_elf_info nds_info;
@@ -518,6 +527,9 @@ static bool elf_use_ext_i(int i, ext_type type)
     case MISC_EXT:
         use = nds_info.misc_ext_use[i];
         break;
+    case ZILSD_EXT:
+        use = nds_info.zilsd_ext_use[i];
+        break;
     default:
         break;
     }
@@ -573,6 +585,14 @@ static bool cpu_support_arch_config(reg_t mrvarch_cfg, const char *ext, bool is_
     else if (strncmp(ext, "Svinval", 7) == 0)
     {
         is_ext_en = ((mrvarch_cfg & 0x20) != 0);
+    }
+    else if (strncmp(ext, "Zilsd", 5) == 0)
+    {
+        is_ext_en = ((mrvarch_cfg & 0x100) != 0);
+    }
+    else if (strncmp(ext, "Zcmlsd", 6) == 0)
+    {
+        is_ext_en = ((mrvarch_cfg & 0x2000) != 0);
     }
     else if (strncmp(ext, "Zicbom", 6) == 0)
     {
@@ -1231,6 +1251,20 @@ static int parse_riscv_isa_string(const char *s)
                 type = ext_type::MISC_EXT;
                 nds_info.misc_ext_use[MISC_EXT_SVINVAL] = true;
             }
+            else if (strncasecmp(s, "zilsd", 5) == 0)
+            {
+                print_indent("%.5s ", s);
+                s += 5;
+                type = ext_type::ZILSD_EXT;
+                nds_info.zilsd_ext_use[ZILSD_EXT_ZILSD] = true;
+            }
+            else if (strncasecmp(s, "zcmlsd", 6) == 0)
+            {
+                print_indent("%.6s ", s);
+                s += 6;
+                type = ext_type::ZILSD_EXT;
+                nds_info.zilsd_ext_use[ZILSD_EXT_ZCMLSD] = true;
+            }
             else
             {
                 const char *end = s;
@@ -1532,11 +1566,13 @@ static int elf_check(void *file_data, unsigned int file_size, CALLBACK_FUNC reg_
     get_riscv_base_isa_info(&elf_base_isa, &base_isa_major, &base_isa_minor);
 
     int mxl = 0;
-    bool is_mrvarch_exist = false;
+    bool is_mrvarch_exist = false;  // 0xFCA
+    bool is_mrvarch2_exist = false; // 0xFCB
 
     reg_t CSR_misa;
     reg_t CSR_mmsc_cfg, CSR_mmsc_cfg2;
     reg_t CSR_mrvarch_cfg;
+    reg_t CSR_mrvarch_cfg2;
     CSR_misa = reg_read_callback(0x301);
     CSR_mmsc_cfg = reg_read_callback(0xFC2);
     mxl = (CSR_misa >> 30) & 0x3;
@@ -1573,8 +1609,7 @@ static int elf_check(void *file_data, unsigned int file_size, CALLBACK_FUNC reg_
     for (i = 0; i < EXT_COUNT; i++)
     {
         ext_str[0] = riscv_extensions[i];
-        //(CSR_misa &8) && ((CSR_mrvarch_cfg & 0x80000000) ||(CSR_mrvarch_cfg&0x40000000)) => CPU, d && (zcmt ||zcmp) is enable . misa.c
-        // will disable At this sisuation,  misa.c not enough to represent ELF 'C' instruction set so ignore it.
+        // misa.c not enough to represent ELF 'C' instruction set so ignore it.
         if ('C' == ext_str[0])
             continue;
 
@@ -1595,6 +1630,11 @@ static int elf_check(void *file_data, unsigned int file_size, CALLBACK_FUNC reg_
             {
                 CSR_mrvarch_cfg = reg_read_callback(0xFCA);
                 is_mrvarch_exist = true;
+            }
+            if ((CSR_mmsc_cfg2 & 0x10000000) != 0)
+            {
+                CSR_mrvarch_cfg2 = reg_read_callback(0xFCB);
+                is_mrvarch2_exist = true;
             }
         }
     }
@@ -1666,6 +1706,18 @@ static int elf_check(void *file_data, unsigned int file_size, CALLBACK_FUNC reg_
             NEC_snprintf(temp, sizeof(temp), "'%s' extension", riscv_misc_extensions[i]);
             if (NEC_check_bool(EFT_ERROR, temp, cpu_support_arch_config(CSR_mrvarch_cfg, riscv_misc_extensions[i], is_mrvarch_exist),
                     nds_info.misc_ext_use[i]))
+                n_error++;
+        }
+    }
+
+    // check zilsd-ext
+    for (i = 0; i < ZILSD_EXT_COUNT; i++)
+    {
+        if (elf_use_ext_i(i, ext_type::ZILSD_EXT))
+        {
+            NEC_snprintf(temp, sizeof(temp), "'%s' extension", riscv_zilsd_extensions[i]);
+            if (NEC_check_bool(EFT_ERROR, temp, cpu_support_arch_config(CSR_mrvarch_cfg2, riscv_zilsd_extensions[i], is_mrvarch_exist),
+                    nds_info.zilsd_ext_use[i]))
                 n_error++;
         }
     }
