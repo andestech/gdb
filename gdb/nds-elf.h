@@ -1687,16 +1687,16 @@ static int elf_check(void *file_data, unsigned int file_size, CALLBACK_FUNC reg_
     }
 
     // check cmo-ext
-    for (i = 0; i < CMO_EXT_COUNT; i++)
-    {
-        if (elf_use_ext_i(i, ext_type::CMO_EXT))
-        {
-            NEC_snprintf(temp, sizeof(temp), "'%s' extension", riscv_cmo_extensions[i]);
-            if (NEC_check_bool(EFT_ERROR, temp, cpu_support_arch_config(CSR_mrvarch_cfg, riscv_cmo_extensions[i], is_mrvarch_exist),
-                    nds_info.cmo_ext_use[i]))
-                n_error++;
-        }
-    }
+    //for (i = 0; i < CMO_EXT_COUNT; i++)
+    //{
+    //    if (elf_use_ext_i(i, ext_type::CMO_EXT))
+    //    {
+    //        NEC_snprintf(temp, sizeof(temp), "'%s' extension", riscv_cmo_extensions[i]);
+    //        if (NEC_check_bool(EFT_ERROR, temp, cpu_support_arch_config(CSR_mrvarch_cfg, riscv_cmo_extensions[i], is_mrvarch_exist),
+    //                nds_info.cmo_ext_use[i]))
+    //            n_error++;
+    //    }
+    //}
 
     // check misc-ext
     for (i = 0; i < MISC_EXT_COUNT; i++)
