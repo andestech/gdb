@@ -1,3 +1,10 @@
+This repository is **no longer maintained**.  
+Please visit our new combined repository:  
+👉 [https://github.com/andestech/binutils](https://github.com/andestech/binutils)
+
+This repo is archived to preserve issue and pull request history.
+
+-----------------------------------------------------------------------------
 		   README for GNU development tools
 
 This directory contains various GNU compilers, assemblers, linkers, 
