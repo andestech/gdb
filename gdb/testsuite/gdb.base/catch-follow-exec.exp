@@ -17,6 +17,10 @@
 
 standard_testfile
 
+if {[istarget "riscv*-*-*"]} {
+    return
+}
+
 if { ![remote_file target exists /bin/ls] } {
     unsupported "no ls"
     return

@@ -791,7 +791,7 @@ generic_value_print_char (struct value *value, struct ui_file *stream,
       else
 	fprintf_filtered (stream, "%d", (int) val);
       fputs_filtered (" ", stream);
-      LA_PRINT_CHAR (val, unresolved_type, stream);
+      current_language->printchar (val, unresolved_type, stream);
     }
 }
 
@@ -989,16 +989,27 @@ generic_value_print (struct value *val, struct ui_file *stream, int recurse,
     }
 }
 
-/* Helper function for val_print and common_val_print that does the
-   work.  Arguments are as to val_print, but FULL_VALUE, if given, is
-   the value to be printed.  */
+/* Print using the given LANGUAGE the value VAL onto stream STREAM according
+   to OPTIONS.
 
-static void
-do_val_print (struct value *value, struct ui_file *stream, int recurse,
-	      const struct value_print_options *options,
-	      const struct language_defn *language)
+   This is a preferable interface to val_print, above, because it uses
+   GDB's value mechanism.  */
+
+void
+common_val_print (struct value *value, struct ui_file *stream, int recurse,
+		  const struct value_print_options *options,
+		  const struct language_defn *language)
 {
-  int ret = 0;
+  if (language->la_language == language_ada)
+    /* The value might have a dynamic type, which would cause trouble
+       below when trying to extract the value contents (since the value
+       size is determined from the type size which is unknown).  So
+       get a fixed representation of our value.  */
+    value = ada_to_fixed_value (value);
+
+  if (value_lazy (value))
+    value_fetch_lazy (value);
+
   struct value_print_options local_opts = *options;
   struct type *type = value_type (value);
   struct type *real_type = check_typedef (type);
@@ -1024,9 +1035,8 @@ do_val_print (struct value *value, struct ui_file *stream, int recurse,
 
   if (!options->raw)
     {
-      ret = apply_ext_lang_val_pretty_printer (value, stream, recurse, options,
-					       language);
-      if (ret)
+      if (apply_ext_lang_val_pretty_printer (value, stream, recurse, options,
+					     language))
 	return;
     }
 
@@ -1125,30 +1135,6 @@ value_check_printable (struct value *val, struct ui_file *stream,
     }
 
   return 1;
-}
-
-/* Print using the given LANGUAGE the value VAL onto stream STREAM according
-   to OPTIONS.
-
-   This is a preferable interface to val_print, above, because it uses
-   GDB's value mechanism.  */
-
-void
-common_val_print (struct value *val, struct ui_file *stream, int recurse,
-		  const struct value_print_options *options,
-		  const struct language_defn *language)
-{
-  if (language->la_language == language_ada)
-    /* The value might have a dynamic type, which would cause trouble
-       below when trying to extract the value contents (since the value
-       size is determined from the type size which is unknown).  So
-       get a fixed representation of our value.  */
-    val = ada_to_fixed_value (val);
-
-  if (value_lazy (val))
-    value_fetch_lazy (val);
-
-  do_val_print (val, stream, recurse, options, language);
 }
 
 /* See valprint.h.  */
@@ -1946,7 +1932,7 @@ value_print_array_elements (struct value *val, struct ui_file *stream,
 	  fprintf_filtered (stream, "\n");
 	  print_spaces_filtered (2 + 2 * recurse, stream);
 	}
-      wrap_here (n_spaces (2 + 2 * recurse));
+      stream->wrap_here (2 + 2 * recurse);
       maybe_print_array_index (index_type, i + low_bound,
 			       stream, options);
 
@@ -2781,10 +2767,9 @@ val_print_string (struct type *elttype, const char *encoding,
      But if we fetch something and then get an error, print the string
      and then the error message.  */
   if (err == 0 || bytes_read > 0)
-    {
-      LA_PRINT_STRING (stream, elttype, buffer.get (), bytes_read / width,
-		       encoding, force_ellipsis, options);
-    }
+    current_language->printstr (stream, elttype, buffer.get (),
+				bytes_read / width,
+				encoding, force_ellipsis, options);
 
   if (err != 0)
     {

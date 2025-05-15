@@ -841,7 +841,6 @@ echo_command (const char *text, int from_tty)
   reset_terminal_style (gdb_stdout);
 
   /* Force this output to appear now.  */
-  wrap_here ("");
   gdb_flush (gdb_stdout);
 }
 
@@ -1002,7 +1001,7 @@ edit_command (const char *arg, int from_tty)
 	    error (_("No source file for address %s."),
 		   paddress (get_current_arch (), sal.pc));
 
-	  gdbarch = SYMTAB_OBJFILE (sal.symtab)->arch ();
+	  gdbarch = sal.symtab->compunit ()->objfile ()->arch ();
 	  sym = find_pc_function (sal.pc);
 	  if (sym)
 	    printf_filtered ("%s is in %s (%s:%d).\n",
@@ -1329,7 +1328,7 @@ list_command (const char *arg, int from_tty)
 	error (_("No source file for address %s."),
 	       paddress (get_current_arch (), sal.pc));
 
-      gdbarch = SYMTAB_OBJFILE (sal.symtab)->arch ();
+      gdbarch = sal.symtab->compunit ()->objfile ()->arch ();
       sym = find_pc_function (sal.pc);
       if (sym)
 	printf_filtered ("%s is in %s (%s:%d).\n",
@@ -2033,8 +2032,8 @@ ambiguous_line_spec (gdb::array_view<const symtab_and_line> sals,
 static int
 cmp_symtabs (const symtab_and_line &sala, const symtab_and_line &salb)
 {
-  const char *dira = SYMTAB_DIRNAME (sala.symtab);
-  const char *dirb = SYMTAB_DIRNAME (salb.symtab);
+  const char *dira = sala.symtab->compunit ()->dirname ();
+  const char *dirb = salb.symtab->compunit ()->dirname ();
   int r;
 
   if (dira == NULL)

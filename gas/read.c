@@ -1196,6 +1196,12 @@ read_a_source_file (const char *name)
 		      if (next_char == ' ' || next_char == '\t')
 			input_line_pointer++;
 
+                      /* Avoid emitting a cached instruction
+                         after a directive.  */
+#ifdef md_cleanup
+                      md_cleanup ();
+#endif
+
 		      /* Input_line is restored.
 			 Input_line_pointer->1st non-blank char
 			 after pseudo-operation.  */
@@ -2386,8 +2392,11 @@ s_globl (int ignore ATTRIBUTE_UNUSED)
       if ((name = read_symbol_name ()) == NULL)
 	return;
 
-      symbolP = symbol_find_or_make (name);
-      S_SET_EXTERNAL (symbolP);
+      if (! is_lto_discarded (name))
+	{
+	  symbolP = symbol_find_or_make (name);
+	  S_SET_EXTERNAL (symbolP);
+	}
 
       SKIP_WHITESPACE ();
       c = *input_line_pointer;
@@ -3308,7 +3317,13 @@ s_set (int equiv)
     }
 
   input_line_pointer++;
-  assign_symbol (name, equiv);
+  if (is_lto_discarded (name))
+    {
+      expressionS exp;
+      get_known_segmented_expression (&exp);
+    }
+  else
+    assign_symbol (name, equiv);
   demand_empty_rest_of_line ();
   free (name);
 }
@@ -3851,6 +3866,9 @@ s_weakref (int ignore ATTRIBUTE_UNUSED)
   if ((name = read_symbol_name ()) == NULL)
     return;
 
+  if (is_lto_discarded (name))
+    goto err_out;
+
   symbolP = symbol_find_or_make (name);
 
   if (S_IS_DEFINED (symbolP) || symbol_equated_p (symbolP))
@@ -4245,6 +4263,10 @@ cons_worker (int nbytes,	/* 1=.byte, 2=.word, 4=.long.  */
       ++c;
     }
   while (*input_line_pointer++ == ',');
+
+#ifdef TC_CONS_COUNT_CHECK
+      TC_CONS_COUNT_CHECK (c);
+#endif
 
   /* In MRI mode, after an odd number of bytes, we must align to an
      even word boundary, unless the next instruction is a dc.b, ds.b
@@ -4744,6 +4766,7 @@ void
 emit_expr_fix (expressionS *exp, unsigned int nbytes, fragS *frag, char *p,
 	       TC_PARSE_CONS_RETURN_TYPE r ATTRIBUTE_UNUSED)
 {
+  fixS *fix = NULL;
   int offset = 0;
   unsigned int size = nbytes;
 
@@ -4794,8 +4817,11 @@ emit_expr_fix (expressionS *exp, unsigned int nbytes, fragS *frag, char *p,
 	as_bad (_("unsupported BFD relocation size %u"), size);
 	return;
       }
-  fix_new_exp (frag, p - frag->fr_literal + offset, size,
-	       exp, 0, r);
+  fix = fix_new_exp (frag, p - frag->fr_literal + offset, size,
+		     exp, 0, r);
+#endif
+#ifdef TC_CONS_FIX_NEW_POST
+  TC_CONS_FIX_NEW_POST (fix, exp);
 #endif
 }
 

@@ -255,12 +255,12 @@ typedef_hash_table::add_template_parameters (struct type *t)
       void **slot;
 
       /* We only want type-valued template parameters in the hash.  */
-      if (SYMBOL_CLASS (TYPE_TEMPLATE_ARGUMENT (t, i)) != LOC_TYPEDEF)
+      if (TYPE_TEMPLATE_ARGUMENT (t, i)->aclass () != LOC_TYPEDEF)
 	continue;
 
       tf = XOBNEW (&m_storage, struct decl_field);
       tf->name = TYPE_TEMPLATE_ARGUMENT (t, i)->linkage_name ();
-      tf->type = SYMBOL_TYPE (TYPE_TEMPLATE_ARGUMENT (t, i));
+      tf->type = TYPE_TEMPLATE_ARGUMENT (t, i)->type ();
 
       slot = htab_find_slot (m_table.get (), tf, INSERT);
       if (*slot == NULL)
@@ -392,7 +392,8 @@ void
 type_print (struct type *type, const char *varstring, struct ui_file *stream,
 	    int show)
 {
-  LA_PRINT_TYPE (type, varstring, stream, show, 0, &default_ptype_flags);
+  current_language->print_type (type, varstring, stream, show, 0,
+				&default_ptype_flags);
 }
 
 /* Print TYPE to a string, returning it.  The caller is responsible for
@@ -554,7 +555,7 @@ whatis_exp (const char *exp, int show)
   if (flags.print_offsets
       && (type->code () == TYPE_CODE_STRUCT
 	  || type->code () == TYPE_CODE_UNION))
-    fprintf_filtered (gdb_stdout, "/* offset      |    size */  ");
+    printf_filtered ("/* offset      |    size */  ");
 
   printf_filtered ("type = ");
 
@@ -578,7 +579,7 @@ whatis_exp (const char *exp, int show)
       printf_filtered (" */\n");    
     }
 
-  LA_PRINT_TYPE (type, "", gdb_stdout, show, 0, &flags);
+  current_language->print_type (type, "", gdb_stdout, show, 0, &flags);
   printf_filtered ("\n");
 }
 
@@ -646,7 +647,7 @@ print_type_scalar (struct type *type, LONGEST val, struct ui_file *stream)
       break;
 
     case TYPE_CODE_CHAR:
-      LA_PRINT_CHAR ((unsigned char) val, type, stream);
+      current_language->printchar ((unsigned char) val, type, stream);
       break;
 
     case TYPE_CODE_BOOL:

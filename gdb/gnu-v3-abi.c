@@ -483,7 +483,7 @@ gnuv3_baseclass_offset (struct type *type, int index,
 
       CORE_ADDR result;
       if (dwarf2_evaluate_property (&prop, nullptr, &addr_stack, &result,
-				    true))
+				    {addr_stack.addr}))
 	return (int) (result - addr_stack.addr);
     }
 
@@ -1071,7 +1071,7 @@ gnuv3_get_typeid_type (struct gdbarch *gdbarch)
     typeinfo_type
       = (struct type *) gdbarch_data (gdbarch, std_type_info_gdbarch_data);
   else
-    typeinfo_type = SYMBOL_TYPE (typeinfo);
+    typeinfo_type = typeinfo->type ();
 
   return typeinfo_type;
 }

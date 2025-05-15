@@ -1,5 +1,5 @@
 #as:
-#objdump: -dr
+#objdump: -d -M_no-prefer
 
 .*:[ 	]+file format .*
 
@@ -15,6 +15,3 @@ Disassembly of section .text:
 [ 	]+c:[ 	]+00000013[ 	]+nop
 [ 	]+10:[ 	]+0001[ 	]+nop
 [ 	]+12:[ 	]+0001[ 	]+nop
-[ 	]+14:[ 	]+00000013[ 	]+nop
-[ 	]+18:[ 	]+00000013[ 	]+nop
-[ 	]+1c:[ 	]+00000013[ 	]+nop

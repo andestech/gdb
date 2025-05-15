@@ -185,6 +185,7 @@ extern void elf_file_symbol (const char *, int);
 extern void obj_elf_section_change_hook (void);
 
 extern void obj_elf_section (int);
+extern void obj_elf_popsection (int);
 extern const char * obj_elf_section_name (void);
 extern void obj_elf_previous (int);
 extern void obj_elf_version (int);

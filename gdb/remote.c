@@ -10859,7 +10859,9 @@ remote_target::stopped_data_address (CORE_ADDR *addr_p)
 	  == TARGET_STOPPED_BY_WATCHPOINT))
     {
       *addr_p = get_remote_thread_info (thread)->watch_data_address;
-      return true;
+      /* If the addr is 0x0, we assume multiple hits.
+	 Pretend data_address is unknown and let GDB figure it out.  */
+      return (*addr_p) != 0x0;
     }
 
   return false;

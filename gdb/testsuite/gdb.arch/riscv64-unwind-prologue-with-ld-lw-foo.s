@@ -53,7 +53,8 @@ __canary:
 	.type	foo, @function
 foo:
 	addi	sp,sp,-32
-	lla	a5,__canary  # Load the fake canary address.
+	#lla	a5,__canary  # Load the fake canary address.
+	addi	a5,sp,-16    # use stack to dummy read/write
 	lw	t4,0(a5)     # Load a 32 bit canary (use t4 to force the use of
 			     # the non compressed instruction).
 	ld	t4,0(a5)     # Load a 64 bit canary (use t4 to force the use of

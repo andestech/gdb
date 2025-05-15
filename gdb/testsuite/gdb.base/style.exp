@@ -308,6 +308,11 @@ proc run_style_tests { } {
 # currently be disabled (the text is printed too early in GDB's
 # startup process).
 proc test_startup_version_string { } {
+    global INTERNAL_GDBFLAGS
+    if [string match *Andesgdbinit* $INTERNAL_GDBFLAGS] {
+        send_user "UNTESTED: gdb.base/style.exp: version is styled at startup, skipping tests due to loading .Andesgdbinit\n"
+        return
+    }
     gdb_exit
     gdb_spawn
 

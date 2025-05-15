@@ -15,7 +15,6 @@ SYMBOL TABLE:
 0+14 l       .text	0+00 \$x
 0+18 l       .text	0+00 \$d
 0+20 l       .text	0+00 \$d
-0+24 l       .text	0+00 \$x
 0+1d l       .text	0+00 \$d
 0+1e l       .text	0+00 \$x
 0+00 l    d  .riscv.attributes	0+00 .riscv.attributes

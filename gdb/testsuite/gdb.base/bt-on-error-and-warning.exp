@@ -86,6 +86,10 @@ proc run_test {problem_type mode} {
 		incr bt_lines
 		exp_continue
 	    }
+		-early -re "^---------------------\r\n" {
+		incr bt_lines
+		exp_continue
+	    }
 	    eof {
 		fail ${gdb_test_name}
 		return

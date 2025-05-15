@@ -1,6 +1,6 @@
 #as: -march=rv64ima_zfinx
 #source: zfinx.s
-#objdump: -dr
+#objdump: -d
 
 .*:[ 	]+file format .*
 
